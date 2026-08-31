@@ -1,0 +1,9 @@
+*.bak
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.sqlite
+*.sqlite-journal
+.DS_Store
