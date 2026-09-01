@@ -34,12 +34,17 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 
 ## Session 1 — `0.1.0` — The raw catalog
 
-**Runs**: `trainer catalog --equipment dumbbells` lists the exercises.
+**Runs**: `trainer catalog --equipment dumbbell` lists the exercises.
 
 1. Skeleton: Python package, SQLite with versioned migrations, CLI, `engine/` laid out as a pure library separate from everything else.
 2. Import free-exercise-db into `exercises` — native fields, instructions and images included, retrievable by id.
 3. `catalog` command with filters on the native fields.
 4. Markdown dump of the catalog, versioned — the first half of the *«the DB is the truth, the snapshot is the readable history»* mechanism.
+5. Catalog profile: counts by category, equipment, level, mechanic and force.
+
+> The equipment value is `dumbbell`, singular — the source's vocabulary, verified against the dataset. Normalising it to something more natural in the CLI would introduce a private vocabulary at the very first command of the project, and everything downstream would inherit it.
+
+> Issue 5 is the one addition to what this session originally listed. *«~800 exercises»* counts stretching, cardio, plyometrics and strongman: how many are actually strength work is unknown, and that number is both the real size of the pool the admissible set is drawn from and the multiplier on session 2's enrichment cost — the only external cost in the project. The session should end with it.
 
 ## Session 2 — `0.2.0` — The enriched catalog
 
@@ -170,6 +175,7 @@ Session 12 is the only one that **ships nothing to the end user**, and that shou
 | supervisor golden set | step 1, before everything | session 11 | this is the most debatable call in this file: *«if the supervisor gets this wrong, everything downstream is poisoned»* is still true. But the supervisor does not run until 11, and sixty rows written at session 1 would be rewritten once the real state exists. The risk is mitigated by the admission gate (session 9) being code, not a model |
 | MCP | does not appear | session 4 | costs half a day and pays back over seven sessions |
 | methodology document | absent from «First steps» | session 8, issue 4 | it is in the v1 scope but had no slot |
+| demonstration videos | absent from «First steps» | a nullable `demo_url` added by session 2's migration, filled by hand from session 5 | in the v1 scope with no slot, and no candidate catalog closes it: free-exercise-db has two static images per exercise and no video, ExerciseDB has video under AGPL with undeclared media terms, and Zenith Fits — the one that had real demonstration videos — is dead. So the field holds a **link**, never hosted media: linking is not distribution. It cannot be model-generated either — asked for a video URL, a model returns a well-formed dead link, which is the *«plausible and wrong»* failure in its most silent form. Curated human work, like the methodology document. The volume is small enough for that to work: one person meets 40-60 distinct exercises in eight weeks, not 800 |
 
 ## Risks
 
