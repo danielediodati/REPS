@@ -1,609 +1,609 @@
 # REPS
 
-> *Reasoning Engine for Personal Strength. v1 personale.*
+> *Reasoning Engine for Personal Strength. Personal v1.*
 
-## Principio
+## Principle
 
-Ogni volta che si decide **se una cosa la fa il codice o la fa l'agente**, si guarda a quale categoria appartiene.
+Every time you decide **whether something is done by the code or by the agent**, you look at which category it belongs to.
 
-| categoria | chi | cosa |
+| category | who | what |
 |---|---|---|
-| **analitico** | motore | deterministico, riproducibile, verificabile |
-| ⤷ *vincolato* | | confini che l'agente non può **scavalcare**. Un confine spostabile non è un confine. |
-| ⤷ *derivativo* | | grandezze che l'agente non deve **ricalcolare**: si ricavano da regole o da dati. Gli LLM producono numeri plausibili e sbagliati, e non te ne accorgi. |
-| **deliberativo** | agente | giudizio, dentro lo spazio che l'analitico lascia libero |
+| **analytic** | engine | deterministic, reproducible, verifiable |
+| ⤷ *constrained* | | boundaries the agent cannot **step over**. A movable boundary is not a boundary. |
+| ⤷ *derived* | | quantities the agent must not **recompute**: they follow from rules or from data. LLMs produce plausible, wrong numbers, and you do not notice. |
+| **deliberative** | agent | judgement, inside the space the analytic layer leaves free |
 
-> **L'analitico definisce lo spazio. L'agente si muove dentro.**
+> **The analytic layer defines the space. The agent moves inside it.**
 
-Questa regola esiste perché l'errore ricorrente in fase di progettazione è scrivere come regole di codice ciò che è una decisione dell'agente — trasformando un sistema agentico in una pipeline.
+This rule exists because the recurring design mistake is writing as code rules what is really an agent decision — turning an agentic system into a pipeline.
 
-Da cui altre due regole operative, che dicono *come* si applica la prima senza ricadere nella pipeline.
+From which two further operating rules, which say *how* the first one is applied without falling back into a pipeline.
 
-### Vincola la forma, mai il contenuto
+### Constrain the form, never the content
 
-Il sistema garantisce una **forma verificabile**; l'agente riempie il **contenuto**.
+The system guarantees a **verifiable form**; the agent fills in the **content**.
 
-| | il sistema garantisce | l'agente riempie |
+| | the system guarantees | the agent fills in |
 |---|---|---|
-| scheda | id ammissibile + serie + ripetizioni | quale, quanti, in che ordine |
-| ipotesi | esiste una prova che la discrimina | cosa ipotizza, cosa tiene fermo |
-| conclusione | ha una fonte | cosa dice |
-| osservazione | esiste una misura che dice se è stata ascoltata | cosa osserva |
+| plan | admissible id + sets + reps | which one, how many, in what order |
+| hypothesis | a trial exists that discriminates it | what it hypothesizes, what it holds fixed |
+| conclusion | it has a source | what it says |
+| observation | a measure exists that says whether it was heeded | what it observes |
 
-### Enumeri solo ciò che è già enumerato nel mondo
+### Enumerate only what is already enumerated in the world
 
-Gli esercizi sono un mondo chiuso: il catalogo esiste, è finito, ed è un fatto del dominio. Pre-calcolarne l'insieme ammissibile è corretto.
+Exercises are a closed world: the catalog exists, it is finite, and it is a fact of the domain. Pre-computing its admissible set is correct.
 
-I motivi per cui una persona salta una seduta, le cose che le piacciono, le cause di un fastidio: mondo aperto. **Nessuno ha la lista.** Enumerare un mondo aperto ha una proprietà velenosa: quando la risposta vera è fuori lista non ottieni un errore, ottieni una risposta plausibile e sbagliata.
+The reasons a person skips a workout, the things they like, the causes of a niggle: open world. **Nobody has the list.** Enumerating an open world has a poisonous property: when the true answer is off the list you do not get an error, you get a plausible, wrong answer.
 
-Il test da applicare a ogni pezzo che si progetta:
+The test to apply to every piece you design:
 
-> **Ho enumerato in anticipo l'insieme delle risposte possibili?**
-> Se sì, quello che ho costruito è un classificatore, non un agente.
+> **Did I enumerate the set of possible answers in advance?**
+> If yes, what I have built is a classifier, not an agent.
 
-### E sotto a tutto
+### And underneath everything
 
-> **Niente entra nel sistema se non si può verificare che fosse sbagliato.**
+> **Nothing enters the system unless you can verify that it was wrong.**
 
 ---
 
-## Cos'è
+## What it is
 
-Non un generatore di schede. **Un ciclo.**
+Not a plan generator. **A loop.**
 
-Una scheda è un prompt: attrezzi + tempo + limitazioni → tabella. Il valore non sta nella generazione, sta nell'adattamento nel tempo: alla settimana 3 gli affondi in fondo alla seduta hanno fatto saltare tre allenamenti, e il sistema **cambia**.
+A plan is a prompt: equipment + time + limitations → table. The value is not in the generation, it is in the adaptation over time: at week 3 the lunges at the end of the workout have cost three missed sessions, and the system **changes**.
 
-Stato persistente, feedback dopo ogni seduta, progressione, deload, sostituzione.
+Persistent state, feedback after every workout, progression, deload, substitution.
 
-### I vincoli non sono patologie
+### Constraints are not pathologies
 
-La maggior parte di ciò che limita una scheda non è medico:
+Most of what limits a plan is not medical:
 
-- *«le spinte non mi piacciono»*
-- *«la cyclette mi annoia»*
-- *«il giovedì non ho tempo»*
-- *«voglio finire entro le 19»*
-- *«gli affondi mi stancano più di quanto rendano»*
+- *«I don't like pressing»*
+- *«the exercise bike bores me»*
+- *«on Thursdays I have no time»*
+- *«I want to be done by 7pm»*
+- *«lunges tire me more than they give me»*
 
-Sono **più importanti** dei fastidi, perché si smette di allenarsi per noia molto più spesso che per dolore. I fastidi sono un caso particolare del problema generale — *l'utente ha preferenze, vanno rispettate e vanno capite* — non il caso centrale.
+They are **more important** than the aches, because people stop training out of boredom far more often than out of pain. Aches are a special case of the general problem — *the user has preferences, they must be respected and they must be understood* — not the central case.
 
-## Successo
+## Success
 
-Congiuntamente, a 8 settimane:
+Jointly, at 8 weeks:
 
-1. **stai ancora loggando** — collo di bottiglia reale: i progetti di fitness personale non muoiono per consigli sbagliati, muoiono perché smetti di registrare;
-2. i carichi sui pattern principali sono saliti;
-3. i fastidi non sono aumentati.
+1. **you are still logging** — the real bottleneck: personal fitness projects do not die from bad advice, they die because you stop recording;
+2. loads on the main patterns have gone up;
+3. the aches have not got worse.
 
-Il criterio 1 è il criterio del prodotto e richiede due mesi. Non è la dimostrazione che il sistema funziona: quella è nella sezione **Valutazione**, e si ottiene in un pomeriggio.
+Criterion 1 is the product criterion and takes two months. It is not the proof that the system works: that is in the **Evaluation** section, and you get it in an afternoon.
 
 ---
 
 ## Scope
 
-**Dentro (v1)**: uso personale; preferenze e vincoli di ogni natura; fastidi e piccoli recuperi; catalogo arricchito; motore analitico esposto come libreria di tool; agente deliberativo che guida il ciclo; memoria con ciclo di vita; supervisore; documento metodologico; video dimostrativi; log conversazionale.
+**In (v1)**: personal use; preferences and constraints of every kind; aches and small recoveries; enriched catalog; analytic engine exposed as a tool library; deliberative agent driving the loop; memory with a life cycle; supervisor; methodology document; demonstration videos; conversational log.
 
-**Fuori, dichiarato**:
+**Out, declared**:
 
-- **Patologie diagnosticate** (ernie, post-operatorio, patologie croniche) → **v2**. In v1: se l'utente dichiara una patologia, si consiglia il medico e si prosegue solo se insiste. In generale si consiglia sempre il medico quando l'utente lamenta dolori importanti.
-- **Controllo dell'esecuzione via video** (pose estimation, valgo del ginocchio, ecc.) → **v2**. È un progetto più grande di tutto il resto.
-- Nutrizione.
-- Multi-utente e distribuzione (comporterebbe GDPR categoria particolare sui dati sanitari).
-
----
-
-## Glossario
-
-- **pattern motorio** — la classe di movimento, non l'esercizio. Undici valori: spinta orizzontale/verticale, trazione orizzontale/verticale, squat, hinge d'anca, monopodalico, core anti-estensione, core anti-rotazione, portata, isolamento. È il livello a cui si programma, si esclude e si contabilizza.
-- **vincolo** — tutto ciò che limita la scheda: preferenza, tempo, attrezzatura, noia, fastidio. La maggior parte non è medica.
-- **insieme ammissibile** — la risposta a una domanda che l'agente ha scelto di fare al motore: gli esercizi compatibili con esclusioni, attrezzatura di oggi e tempo disponibile. L'agente sceglie dentro; non lo allarga mai.
-- **esclusione** — un confine **duro** del motore, riservato alla sicurezza: un pattern o un'ampiezza non prescrivibile, con una data di ri-test. Una preferenza non diventa mai un'esclusione — altrimenti muri un pattern per sempre e nessuno potrà riaprirlo.
-- **ipotesi** — un'affermazione falsificabile su questo utente, formulata dall'agente. Ammissibile solo se esiste una prova che la discrimina.
-- **prova** — una modifica alla scheda progettata per far cadere un'ipotesi: tiene ferme tutte le variabili tranne una, ha una durata, e ha un esito che rientra.
-- **conclusione** — un fatto **su questa persona**, con una fonte (una sua frase, o l'esito di una prova). Ha uno stato, e può essere ritirata.
-- **osservazione** — un fatto **sull'agente**, scritto dal supervisore guardando la traiettoria.
-- **triage** — l'intervista sui *movimenti*, mai sui sintomi clinici: *fa male quando spingi sopra la testa? a che ampiezza? sotto carico o anche a vuoto?* Produce esclusioni, non diagnosi. È uno degli ingressi, non il principale.
-- **mesociclo** — 4-6 settimane con uno schema di progressione fisso e un obiettivo fisso. È il confine a cui l'agente rivaluta le politiche.
-- **deficit di volume** — la differenza tra volume previsto e volume eseguito su un pattern. Assorbe quattro meccanismi diversi (sostituzione, taglio per tempo, seduta ridotta, seduta saltata) in una sola grandezza.
-- **rodaggio** — seduta a schema normale con volume ridotto e carichi guidati da sensazione, usata al rientro da una pausa per riallineare i carichi senza stimarli.
+- **Diagnosed pathologies** (herniated discs, post-op, chronic conditions) → **v2**. In v1: if the user declares a pathology, recommend a doctor and continue only if they insist. In general, always recommend a doctor when the user reports significant pain.
+- **Form checking via video** (pose estimation, knee valgus, etc.) → **v2**. It is a bigger project than everything else put together.
+- Nutrition.
+- Multi-user and distribution (which would bring GDPR special-category health data into play).
 
 ---
 
-## Architettura
+## Glossary
 
-### Chi tiene il flusso di controllo
-
-- **Pipeline** — il codice chiama l'LLM. L'LLM è una funzione dentro un programma che sa già in che ordine succedono le cose.
-- **Agentico** — l'LLM chiama il codice. Il codice è un insieme di tool, e il programma **non sa in anticipo** quante chiamate ci saranno né in che ordine.
-
-> **Riesci a disegnare il diagramma di flusso prima di eseguire?**
-> Se sì, è una pipeline. Se il diagramma lo scopri solo guardando l'esecuzione, è un agente.
-
-Qui il flusso lo tiene l'agente. Il motore non chiama mai il modello: espone tool, e risponde.
-
-```
-Settimana 2 — tutto liscio
-  insieme_ammissibile(...)  →  storico_pattern(spinta)  →  emette
-  3 chiamate
-
-Settimana 7 — 40 minuti invece di 60, e tre sedute saltate
-  storico_aderenza(4)                    → salta sempre le sedute lunghe
-  storico_pattern(monopodalico, 4)       → gli affondi non li ha mai fatti
-  insieme_ammissibile(...)
-  simula_taglio(selezione, 40)           → non ci sta
-  storico_pattern(trazione, 4)           → qui posso togliere
-  emette
-  6 chiamate, ordine deciso lì
-```
-
-La seconda traccia **non era disegnabile prima**. È questo che rende il progetto agentico.
-
-L'unica cosa fissa è il **validatore in uscita**.
-
-### Motore — analitico / vincolato
-
-Una **libreria di tool**, chiamata dall'agente.
-
-- **Filtro di ammissibilità**: dato lo stato, l'attrezzatura del giorno e il tempo, restituisce gli esercizi prescrivibili. L'agente non può prescrivere fuori da qui.
-- **Mai un test di massimale.** In nessuna circostanza, in v1.
-- **Innesco medico**: patologia dichiarata → si consiglia il medico. L'agente chiede lo stato di salute **a ogni seduta**; l'escalation però legge la *tabella di stato*, non la risposta di oggi — altrimenti sei settimane di *«tira un po'»* non vengono mai viste. Secondo innesco, più forte, dal ciclo: *ho tolto ampiezza, volume e carico, e il fastidio è rimasto. Non è una variabile che io controllo.*
-
-### Motore — analitico / derivativo
-
-- **Volume** per pattern e per settimana, contato **sul pattern eseguito**, mai su quello previsto.
-- **Durata**: `Σ [ setup + serie × (lavoro + recupero) ]`, con `lavoro ≈ rip × 3s`, recupero dallo schema (forza 2.5-3 min, ipertrofia 90-120 s, isolamento 60 s), setup dal catalogo.
-  Se non ci sta, il taglio è: **isolamenti → pattern secondari → serie sui primari**. **Mai i recuperi**: accorciarli non riduce la seduta, cambia lo stimolo, e il motore continuerebbe a progredire come se nulla fosse.
-- **Progressione**: incrementi secondo lo schema scelto per il mesociclo.
-- **Rientro**, dalla data dell'ultima seduta: ≤10 giorni nessun rodaggio; 11-21 una seduta; 22-45 due sedute; >45 calibrazione piena.
-
-### La superficie di tool
-
-```
-insieme_ammissibile(esclusioni, attrezzi, budget)
-budget_residuo(selezione_parziale)
-storico_pattern(pattern, settimane)
-storico_aderenza(settimane)
-carico_ultima_esecuzione(esercizio_id)
-confronta_varianti(id_a, id_b)          # ampiezza, stabilità, costo setup, pattern
-simula_taglio(selezione, minuti)
-conclusioni_attive()
-```
-
-Sono chiamate a una libreria Python locale: zero rete, zero token per l'esecuzione. Il costo è il round-trip di contesto, e si limita con un **budget di chiamate**. Quando il budget finisce, l'agente **emette comunque** una scheda valida con quello che ha.
-
-### Agente — deliberativo
-
-- Decide **quali tool chiamare, in che ordine, quante volte**.
-- Sceglie **quale** esercizio dell'insieme ammissibile prescrivere, in che ordine, con che enfasi — e motiva.
-- Formula **ipotesi** e progetta le **prove** che le discriminano.
-- Decide, a ogni turno, **cosa di quello che l'utente ha detto va ricordato**.
-- Sceglie lo **schema di progressione** all'inizio del mesociclo, tra quelli implementati, e dichiara perché. In v1 se ne implementano **due**: doppia progressione e autoregolato su sensazione.
-- Sceglie l'**obiettivo** in onboarding: primario forzato (uno solo), il resto diventa vincolo. Se l'utente ne porta due in conflitto, l'agente lo dice e fa scegliere.
-- Decide **seduta piena / seduta ridotta / riposo**. La via di mezzo è quella da usare quasi sempre: protegge l'aderenza, che è il criterio di successo principale.
-- **Calibra** conversando. Chiede cosa alzi, guarda le prime sedute, aggiusta. I carichi restano marcati *incerti* finché una seduta non li conferma.
-
-### L'agente non può aggirare i vincoli, per costruzione
-
-Non vede il catalogo: vede `insieme_ammissibile`, già filtrato. Non può prescrivere un esercizio escluso più di quanto si possa ordinare un piatto fuori menù.
-
-L'unico punto di fuga è il formato dell'output, e si chiude così:
-
-> **L'agente emette una selezione (id + serie + ripetizioni), non un testo. Il motore rende la scheda.**
-
-Un id fuori dall'insieme viene rifiutato dal motore, deterministicamente. Dieci righe, costo zero, recall 100%. **Per un vincolo decidibile, un validatore batte sempre un agente giudice** — che costerebbe soldi, latenza, e ne prenderebbe il 90%.
-
-Il non determinismo sta nella **traiettoria**, mai nell'insieme dei risultati ammissibili.
+- **movement pattern** — the class of movement, not the exercise. Eleven values: horizontal/vertical push, horizontal/vertical pull, squat, hip hinge, single-leg, core anti-extension, core anti-rotation, carry, isolation. It is the level at which you program, exclude and count.
+- **constraint** — anything that limits the plan: preference, time, equipment, boredom, a niggle. Most of it is not medical.
+- **admissible set** — the answer to a question the agent chose to ask the engine: the exercises compatible with the exclusions, today's equipment and the time available. The agent chooses inside it; it never widens it.
+- **exclusion** — a **hard** engine boundary, reserved for safety: a pattern or a range of motion that cannot be prescribed, with a re-test date. A preference never becomes an exclusion — otherwise you wall off a pattern forever and nobody will be able to reopen it.
+- **hypothesis** — a falsifiable statement about this user, formulated by the agent. Admissible only if a trial exists that discriminates it.
+- **trial** — a modification to the plan designed to knock down a hypothesis: it holds every variable fixed but one, it has a duration, and it has an outcome that comes back in.
+- **conclusion** — a fact **about this person**, with a source (something they said, or the outcome of a trial). It has a state, and it can be retired.
+- **observation** — a fact **about the agent**, written by the supervisor looking at the trajectory.
+- **triage** — the interview about *movements*, never about clinical symptoms: *does it hurt when you press overhead? at what range? under load or unloaded too?* It produces exclusions, not diagnoses. It is one of the inputs, not the main one.
+- **mesocycle** — 4-6 weeks with a fixed progression scheme and a fixed goal. It is the boundary at which the agent re-evaluates its policies.
+- **volume deficit** — the difference between planned volume and performed volume on a pattern. It absorbs four different mechanisms (substitution, cut for time, shortened workout, skipped workout) into a single quantity.
+- **ramp-in** — a workout on the normal scheme with reduced volume and loads guided by feel, used on returning from a break to realign the loads without estimating them.
 
 ---
 
-## Il ciclo: ipotesi → prova → esito
+## Architecture
 
-È il cuore del progetto, e serve per la classe di problemi che **non è decidibile**: perché questa persona salta le sedute, perché quell'esercizio non le piace, da dove viene quel fastidio.
+### Who holds the control flow
 
-Una frase come *«gli affondi non mi vanno»* ammette molte spiegazioni, e sono cose diverse da fare: è l'esercizio, è la posizione in fondo alla seduta, è la stanchezza accumulata, è che quel giorno ha fretta. **Non si enumerano**: nessuno ha la lista, e la spiegazione vera è quasi sempre fuori da quella che avresti scritto.
+- **Pipeline** — the code calls the LLM. The LLM is a function inside a program that already knows the order in which things happen.
+- **Agentic** — the LLM calls the code. The code is a set of tools, and the program **does not know in advance** how many calls there will be or in what order.
 
-Quello che si vincola è la **forma**:
+> **Can you draw the flowchart before you run it?**
+> If yes, it is a pipeline. If you only discover the diagram by watching the execution, it is an agent.
 
-> **Un'ipotesi è ammissibile se esiste una prova che la discrimina, esprimibile come una modifica alla scheda.**
+Here the agent holds the flow. The engine never calls the model: it exposes tools, and answers.
 
-La prova tiene ferme tutte le variabili tranne una: *stessa scheda, affondi al secondo posto invece che in fondo, due sedute*. Se il problema sparisce è la posizione; se resta, non è la posizione.
+```
+Week 2 — everything smooth
+  admissible_set(...)  →  pattern_history(push)  →  emits
+  3 calls
 
-E l'**esito rientra**: alla seduta dopo il sistema sa qualcosa che prima non sapeva, e sa anche di aver sbagliato se ha sbagliato.
+Week 7 — 40 minutes instead of 60, and three skipped workouts
+  adherence_history(4)                 → always skips the long workouts
+  pattern_history(single_leg, 4)       → never actually did the lunges
+  admissible_set(...)
+  simulate_cut(selection, 40)          → does not fit
+  pattern_history(pull, 4)             → here is where I can cut
+  emits
+  6 calls, order decided on the spot
+```
 
-Un'ipotesi per cui **non esiste una prova** non è falsa: è **fuori dal programma**, e va instradata altrove — all'utente, o al medico. È lì che vive l'escalation medica seria, molto più affidabile di *«l'utente dichiara una patologia»*, che dipende dal fatto che l'utente sappia già di averla.
+The second trace **was not drawable in advance**. That is what makes the project agentic.
 
-`ampiezza_richiesta` strutturata (vedi appendice) esiste per questo: non per filtrare, ma per **isolare una variabile alla volta**.
+The only fixed thing is the **validator on the way out**.
+
+### Engine — analytic / constrained
+
+A **tool library**, called by the agent.
+
+- **Admissibility filter**: given the state, today's equipment and the time, it returns the prescribable exercises. The agent cannot prescribe outside it.
+- **Never a max-effort test.** Under no circumstances, in v1.
+- **Medical trigger**: a declared pathology → recommend a doctor. The agent asks about health status **at every workout**; the escalation, though, reads the *state table*, not today's answer — otherwise six weeks of *«it pulls a bit»* are never seen. A second, stronger trigger comes from the loop: *I removed range of motion, volume and load, and the niggle stayed. It is not a variable I control.*
+
+### Engine — analytic / derived
+
+- **Volume** per pattern and per week, counted **on the pattern performed**, never on the planned one.
+- **Duration**: `Σ [ setup + sets × (work + rest) ]`, with `work ≈ reps × 3s`, rest from the scheme (strength 2.5-3 min, hypertrophy 90-120 s, isolation 60 s), setup from the catalog.
+  If it does not fit, the cut order is: **isolation → secondary patterns → sets on the primaries**. **Never the rest periods**: shortening them does not make the workout shorter, it changes the stimulus, and the engine would keep progressing as if nothing had happened.
+- **Progression**: increments according to the scheme chosen for the mesocycle.
+- **Return**, from the date of the last workout: ≤10 days no ramp-in; 11-21 one workout; 22-45 two workouts; >45 full calibration.
+
+### The tool surface
+
+```
+admissible_set(exclusions, equipment, budget)
+remaining_budget(partial_selection)
+pattern_history(pattern, weeks)
+adherence_history(weeks)
+last_performed_load(exercise_id)
+compare_variants(id_a, id_b)          # range of motion, stability, setup cost, pattern
+simulate_cut(selection, minutes)
+active_conclusions()
+```
+
+These are calls into a local Python library: zero network, zero tokens to execute. The cost is the context round-trip, and it is bounded with a **call budget**. When the budget runs out, the agent **emits anyway** a valid plan with what it has.
+
+### Agent — deliberative
+
+- Decides **which tools to call, in what order, how many times**.
+- Chooses **which** exercise from the admissible set to prescribe, in what order, with what emphasis — and gives its reasons.
+- Formulates **hypotheses** and designs the **trials** that discriminate them.
+- Decides, at every turn, **what of what the user said should be remembered**.
+- Chooses the **progression scheme** at the start of the mesocycle, among those implemented, and states why. In v1 **two** are implemented: double progression and autoregulated by feel.
+- Chooses the **goal** during onboarding: primary forced (one only), the rest become constraints. If the user brings two that conflict, the agent says so and makes them choose.
+- Decides **full workout / reduced workout / rest**. The middle option is the one to use almost always: it protects adherence, which is the main success criterion.
+- **Calibrates** by talking. It asks what you lift, watches the first workouts, adjusts. Loads stay marked *uncertain* until a workout confirms them.
+
+### The agent cannot route around the constraints, by construction
+
+It does not see the catalog: it sees `admissible_set`, already filtered. It can no more prescribe an excluded exercise than you can order a dish that is not on the menu.
+
+The only escape hatch is the output format, and it is closed like this:
+
+> **The agent emits a selection (id + sets + reps), not text. The engine renders the plan.**
+
+An id outside the set is rejected by the engine, deterministically. Ten lines, zero cost, 100% recall. **For a decidable constraint, a validator always beats an agent judge** — which would cost money, latency, and would catch 90% of them.
+
+The non-determinism lives in the **trajectory**, never in the set of admissible results.
 
 ---
 
-## Memoria
+## The loop: hypothesis → trial → outcome
 
-### Non impara: è istruito
+This is the heart of the project, and it exists for the class of problems that is **not decidable**: why this person skips workouts, why they do not like that exercise, where that niggle comes from.
 
-Due fonti, che scrivono nello stesso posto:
+A sentence like *«lunges don't work for me»* admits many explanations, and they are different things to do about it: it is the exercise, it is the position at the end of the workout, it is accumulated fatigue, it is that they were in a hurry that day. **They are not enumerable**: nobody has the list, and the true explanation is almost always outside the one you would have written.
 
-- **l'utente dichiara** — *«le spinte non mi piacciono, preferisco l'Arnold»*
-- **la realtà risponde** — l'esito di una prova
+What gets constrained is the **form**:
 
-La seconda non è più nobile della prima. È solo un'istruzione che arriva da un'altra parte, e più lenta.
+> **A hypothesis is admissible if a trial exists that discriminates it, expressible as a modification to the plan.**
 
-### La regola d'ingresso
+The trial holds every variable fixed but one: *same plan, lunges in second position instead of last, two workouts*. If the problem disappears it is the position; if it stays, it is not the position.
 
-> Ci finisce solo ciò che ha una **fonte**: una frase dell'utente, o l'esito di una prova. **Mai una deduzione dell'agente.**
+And the **outcome comes back in**: at the next workout the system knows something it did not know before, and it also knows it was wrong if it was wrong.
 
-Serve perché altrimenti l'agente comincia a scriverci le sue impressioni — *«questo utente risponde bene al volume alto»*, sulla base di niente — e in tre mesi la memoria è piena di frasi inventate a cui il sistema crede. Sono i «numeri plausibili e sbagliati» del principio, in forma di prosa.
+A hypothesis for which **no trial exists** is not false: it is **outside the program**, and it has to be routed elsewhere — to the user, or to the doctor. That is where the serious medical escalation lives, far more reliable than *«the user declares a pathology»*, which depends on the user already knowing they have one.
 
-Il controllo è decidibile: questa conclusione punta a una frase o a un esito, sì o no. **Dieci righe di codice, nessun LLM.**
+Structured `required_rom` (see appendix) exists for this: not to filter, but to **isolate one variable at a time**.
 
-### «Va ricordato?» è una decisione dell'agente
+---
 
-| frase | va tenuta? |
+## Memory
+
+### It does not learn: it is instructed
+
+Two sources, writing into the same place:
+
+- **the user declares** — *«I don't like pressing, I prefer the Arnold»*
+- **reality answers** — the outcome of a trial
+
+The second is no nobler than the first. It is just an instruction arriving from somewhere else, and more slowly.
+
+### The admission rule
+
+> Only what has a **source** gets in: a sentence from the user, or the outcome of a trial. **Never an inference by the agent.**
+
+This is needed because otherwise the agent starts writing its impressions in there — *«this user responds well to high volume»*, on the basis of nothing — and in three months the memory is full of invented sentences the system believes. They are the «plausible, wrong numbers» from the principle, in prose form.
+
+The check is decidable: does this conclusion point at a sentence or at an outcome, yes or no. **Ten lines of code, no LLM.**
+
+### «Should this be remembered?» is an agent decision
+
+| sentence | keep it? |
 |---|---|
-| *«oggi sono cotto»* | no — è oggi |
-| *«questa settimana lavoro tardi»* | no — temporaneo |
-| *«sono in hotel»* | no — vale per oggi |
-| *«ho comprato i manubri»* | sì — cambia il profilo |
-| *«le spinte non mi piacciono»* | sì — preferenza stabile |
-| *«il giovedì non ce la faccio mai»* | sì — vincolo ricorrente |
-| *«oggi la cyclette mi ha annoiato»* | no — un episodio |
-| *«la cyclette mi annoia»* | sì — preferenza |
+| *«I'm wrecked today»* | no — that is today |
+| *«this week I'm working late»* | no — temporary |
+| *«I'm in a hotel»* | no — applies to today |
+| *«I bought dumbbells»* | yes — it changes the profile |
+| *«I don't like pressing»* | yes — stable preference |
+| *«Thursdays never work for me»* | yes — recurring constraint |
+| *«the exercise bike bored me today»* | no — one episode |
+| *«the exercise bike bores me»* | yes — preference |
 
-Nessuna regola sintattica le separa. È giudizio, e va all'agente, **a ogni turno**: *c'è qualcosa, qui, che devo ricordarmi?*
+No syntactic rule separates them. It is judgement, and it goes to the agent, **at every turn**: *is there anything here I need to remember?*
 
-Questo sostituisce la vecchia regola *«l'override attrezzatura è temporaneo per default»*: non era una questione di attrezzatura, era la stessa domanda per ogni informazione che l'utente dà, e una regola fissa ci prende sull'hotel e fallisce in silenzio su tutto il resto.
+This replaces the old rule *«an equipment override is temporary by default»*: it was never a question about equipment, it was the same question for every piece of information the user gives, and a fixed rule gets the hotel right and fails silently on everything else.
 
-### Il perché conta più della frase
+### The why matters more than the sentence
 
-*«Le spinte non mi piacciono»* e *«le spinte mi danno fastidio alla spalla»* portano alla stessa scelta di oggi, ma non sono la stessa conclusione:
+*«I don't like pressing»* and *«pressing bothers my shoulder»* lead to the same choice today, but they are not the same conclusion:
 
-- la prima è **rinegoziabile**: fra due mesi l'agente può proporre *«proviamo l'Arnold, stesso pattern, presa diversa»*
-- la seconda **no**, finché una prova non dice il contrario
+- the first is **renegotiable**: in two months the agent can propose *«let's try the Arnold, same pattern, different grip»*
+- the second is **not**, until a trial says otherwise
 
-La differenza non sta in una colonna enumerata a priori: sta nel testo, che porta la sua origine.
+The difference does not live in a column enumerated in advance: it lives in the text, which carries its own origin.
 
-### Conclusioni ≠ esclusioni
+### Conclusions ≠ exclusions
 
-Le esclusioni del motore sono **sicurezza**: cosa è possibile. Le conclusioni sono **conoscenza della persona**: cosa è sensato. Due piani diversi.
+Engine exclusions are **safety**: what is possible. Conclusions are **knowledge of the person**: what makes sense. Two different planes.
 
-Arnold e military sono lo stesso pattern: per il motore sono intercambiabili, entrambe ammissibili. È la memoria a dire *«questa persona preferisce l'Arnold»*, ed è l'agente a sceglierla. Niente di cablato.
+The Arnold and the military press are the same pattern: to the engine they are interchangeable, both admissible. It is memory that says *«this person prefers the Arnold»*, and the agent that picks it. Nothing hardwired.
 
-### Ciclo di vita
+### Life cycle
 
 ```
-proposta → provvisoria → confermata → usata → ritirata
+proposed → provisional → confirmed → used → retired
 ```
 
-Una conclusione **si ritira, non si cancella**, con la data e la prova che l'ha smentita. Cancellarla significherebbe perdere il fatto che *era vera*. Il registro dei ritiri è ciò che dimostra che il meccanismo è vivo: un sistema che non ritira mai niente non sta imparando, sta accumulando.
+A conclusion is **retired, not deleted**, with the date and the trial that refuted it. Deleting it would mean losing the fact that *it was true*. The retirement log is what proves the mechanism is alive: a system that never retires anything is not learning, it is accumulating.
 
-### Perché niente vector DB
+### Why no vector DB
 
-Una conclusione costa una prova, e una prova costa due sedute. La memoria cresce al ritmo degli esperimenti: una o due al mese. **Dopo tre anni sono cinquanta frasi, e stanno in un prompt.**
+A conclusion costs a trial, and a trial costs two workouts. The memory grows at the rate of the experiments: one or two a month. **After three years that is fifty sentences, and they fit in a prompt.**
 
-Il retrieval entra quando il corpus supera il contesto — non prima, e a quel punto si saprà già cosa ci deve stare dentro. Non è una scelta difensiva: è una conseguenza del meccanismo che ne limita la crescita.
+Retrieval comes in when the corpus outgrows the context — not before, and by then you will already know what belongs in it. This is not a defensive choice: it is a consequence of the mechanism that bounds the growth.
 
 ---
 
-## Il supervisore
+## The supervisor
 
-### Cosa nessuno sta guardando
+### What nobody is watching
 
-> Il motore verifica **ogni scelta**. Nessuno verifica **l'insieme delle scelte**, né la loro **direzione nel tempo**.
+> The engine verifies **every choice**. Nobody verifies **the set of choices**, nor their **direction over time**.
 
-Spalla esclusa sopra 120°, l'agente prescrive cinque esercizi tutti a 118°: ogni scelta ammissibile, l'insieme sbagliato. Il vincolo è locale, la violazione è aggregata, e un `WHERE` che guarda una riga alla volta non può vederla.
+Shoulder excluded above 120°, the agent prescribes five exercises all at 118°: every choice admissible, the set wrong. The constraint is local, the violation is aggregate, and a `WHERE` that looks at one row at a time cannot see it.
 
-Il gemello temporale è più insidioso e non è medico: dodici settimane in cui l'agente sposta lentamente il programma verso ciò che l'utente riporta con entusiasmo — sedute corte e piacevoli, feedback sempre ottimo — ogni settimana difendibile, e l'obiettivo di gennaio non è più quello che il programma persegue a marzo.
+The temporal twin is more insidious and is not medical: twelve weeks in which the agent slowly moves the program toward whatever the user reports enthusiastically — short, pleasant workouts, feedback always great — every week defensible, and January's goal is no longer what the program is pursuing in March.
 
-### Gira **tra** le sedute, non dentro
+### It runs **between** workouts, not inside them
 
-> Il danno che il supervisore esiste per prevenire è **per definizione lento**. Se fosse veloce sarebbe decidibile, e lo prenderebbe il motore.
+> The damage the supervisor exists to prevent is **by definition slow**. If it were fast it would be decidable, and the engine would catch it.
 
-Quindi non sta nel percorso caldo: **latenza zero** tra l'utente e il logging, e in cambio guadagna l'orizzonte che gli serve — guarda le ultime N settimane, non la scheda di stasera.
+So it is not on the hot path: **zero latency** between the user and the logging, and in exchange it gains the horizon it needs — it looks at the last N weeks, not at tonight's plan.
 
-Questo sostituisce il vecchio gate *«gira solo se ci sono esclusioni attive»*: la deriva verso il comodo non ha bisogno di esclusioni per esistere.
+This replaces the old gate *«run only if there are active exclusions»*: drifting toward the comfortable does not need exclusions in order to exist.
 
-### Non legge le motivazioni
+### It does not read the reasoning
 
-Vede la **forma** della traiettoria — pattern, ampiezze, carichi, volumi, aderenza, settimana per settimana — più l'obiettivo dichiarato e le conclusioni attive. **Non vede la prosa dell'agente.**
+It sees the **shape** of the trajectory — patterns, ranges of motion, loads, volumes, adherence, week by week — plus the declared goal and the active conclusions. **It does not see the agent's prose.**
 
-Se leggesse *«ho scelto l'inclinata perché a 118° rispetta il vincolo»*, si farebbe convincere. Dare al supervisore l'argomentazione significa aprirgli un canale di persuasione.
+If it read *«I chose the incline because at 118° it respects the constraint»*, it would let itself be persuaded. Giving the supervisor the argument means opening a channel of persuasion into it.
 
-> Il supervisore legge **affermazioni verificabili**, mai **giustificazioni**.
+> The supervisor reads **verifiable statements**, never **justifications**.
 
-Una conclusione è un'affermazione: punta a dei dati, e lui quei dati ce li ha. Una motivazione è un'argomentazione: non punta a niente, chiede solo di essere creduta.
+A conclusion is a statement: it points at data, and it has that data. A justification is an argument: it points at nothing, it only asks to be believed.
 
-### È anche il gate della memoria
+### It is also the memory gate
 
-Perché c'è una classe di errore che solo lui può vedere: **la deriva che si scrive in memoria**.
+Because there is a class of error only it can see: **the drift that writes itself into memory**.
 
-1. L'agente sposta il programma verso sedute leggere. Il feedback è ottimo.
-2. L'utente dice *«così mi trovo bene»*.
-3. L'agente la persiste: fonte valida, è una frase dell'utente. Passa il validatore.
-4. Da quel momento è un'anagrafica della persona, e nessuno la rimetterà più in discussione.
+1. The agent moves the program toward light workouts. The feedback is great.
+2. The user says *«this suits me well»*.
+3. The agent persists it: valid source, it is a sentence from the user. It passes the validator.
+4. From that moment it is a fact on file about the person, and nobody will ever question it again.
 
-Il validatore vede una fonte vera. L'agente l'ha proposta lui. L'utente l'ha detta in buona fede. Solo chi guarda **la traiettoria e la base insieme** può chiedersi *«è una preferenza, o è la mia deriva che si è fatta ricordare?»*.
+The validator sees a real source. The agent proposed it itself. The user said it in good faith. Only someone looking at **the trajectory and the base together** can ask *«is this a preference, or is it my drift that got itself remembered?»*.
 
-Il gate si spezza in due, sulla solita linea decidibile / non decidibile:
+The gate splits in two, along the usual decidable / not decidable line:
 
-| | quando | chi | cosa |
+| | when | who | what |
 |---|---|---|---|
-| **ammissione** | in linea, subito | codice, 10 righe | ha una fonte? → entra come **provvisoria**, usabile immediatamente |
-| **consolidamento** | tra le sedute | supervisore | conferma, fonde, marca sospetta, ritira con motivo |
+| **admission** | inline, immediately | code, 10 lines | does it have a source? → enters as **provisional**, usable immediately |
+| **consolidation** | between workouts | supervisor | confirms, merges, marks suspect, retires with a reason |
 
-Latenza zero dove conta, giudizio dove serve. È lo stesso pattern dei carichi *incerti* finché una seduta non li conferma.
+Zero latency where it counts, judgement where it is needed. It is the same pattern as loads staying *uncertain* until a workout confirms them.
 
-Il criterio del consolidamento è essenzialmente uno, ed è quello che nessun altro può applicare: **coerenza** — questa conclusione contraddice qualcosa già in base, o la mia stessa osservazione sulla traiettoria?
+The consolidation criterion is essentially one, and it is the one nobody else can apply: **coherence** — does this conclusion contradict something already in the base, or my own observation of the trajectory?
 
-Nota: il criterio di **generalità** di ASHBY qui **non si applica**. Là una regola dev'essere un pattern e mai un episodio; qui una conclusione dev'essere specifica di questa persona — è esattamente il suo valore.
+Note: ASHBY's **generality** criterion does **not apply** here. There a rule has to be a pattern and never an episode; here a conclusion has to be specific to this person — that is exactly its value.
 
-### I denti
+### The teeth
 
-- prima volta → **osservazione**, iniettata nella seduta successiva
-- l'agente la legge e fa uguale → **si converte in un vincolo del motore**: un limite numerico, un'esclusione vera
+- first time → **observation**, injected into the next workout
+- the agent reads it and does the same thing → **it converts into an engine constraint**: a numeric limit, a real exclusion
 
-Il veto non è un potere posseduto: è qualcosa che **l'agente si guadagna ignorandolo due volte**. E «l'ha ignorata» è decidibile, quindi lo verifica il codice.
+The veto is not a power held: it is something **the agent earns for it by ignoring it twice**. And «it ignored it» is decidable, so the code checks it.
 
-Perché quel controllo sia possibile:
+For that check to be possible:
 
-> Un'**osservazione** è ammissibile se esiste una **misura** che dice se è stata ascoltata.
+> An **observation** is admissible if a **measure** exists that says whether it was heeded.
 
-*«Carico articolare sulla spalla entro il 5% del limite in 5 sedute su 6»*, non *«mi sembra rischioso»*. È la stessa condizione dell'ipotesi, su un altro oggetto.
+*«Joint load on the shoulder within 5% of the limit in 5 workouts out of 6»*, not *«this feels risky to me»*. It is the same condition as the hypothesis, on a different object.
 
-### Separazione dell'autorità
+### Separation of authority
 
-| | origina | fa da gate a |
+| | originates | gates |
 |---|---|---|
-| **agente** | conclusioni (sull'utente) | — |
-| **supervisore** | osservazioni (sull'agente) | le conclusioni |
-| **umano** | metodologia | — |
+| **agent** | conclusions (about the user) | — |
+| **supervisor** | observations (about the agent) | the conclusions |
+| **human** | methodology | — |
 
-Chi propone non conferma. Chi conferma non propone.
+Whoever proposes does not confirm. Whoever confirms does not propose.
 
-**Modello diverso da quello dell'agente**: lo stesso modello che supervisiona sé stesso eredita gli stessi punti ciechi. Gira una volta a settimana su dati strutturati, quindi costa poco e si può usare il modello buono.
+**A different model from the agent's**: the same model supervising itself inherits the same blind spots. It runs once a week over structured data, so it is cheap and you can use the good model.
 
 ---
 
-## Metodologia
+## Methodology
 
-Conoscenza metodologica, letta dall'agente **al confine del mesociclo** — non a ogni seduta. Cioè 6-10 volte l'anno.
+Methodological knowledge, read by the agent **at the mesocycle boundary** — not at every workout. That is 6-10 times a year.
 
-Fonti: **letteratura e position stand** (ACSM, NSCA, meta-analisi, testi di programmazione) e **divulgazione di qualità** di autori riconosciuti. **Ogni passaggio porta la sua fonte**, così ogni motivazione dell'agente è risalibile.
+Sources: **literature and position stands** (ACSM, NSCA, meta-analyses, programming texts) and **quality writing** by recognized authors. **Every passage carries its source**, so every piece of the agent's reasoning is traceable.
 
-Documento di sintesi curato a mano, iniettato per intero al confine del mesociclo. Non è memoria e non ci finisce mai dentro: la metodologia vale per tutti, le conclusioni valgono per una persona sola.
+A hand-curated synthesis document, injected in full at the mesocycle boundary. It is not memory and it never ends up in there: methodology holds for everyone, conclusions hold for one person only.
 
-### I tre depositi
+### The three stores
 
-| | cos'è | viene da | chi scrive |
+| | what it is | where it comes from | who writes it |
 |---|---|---|---|
-| **stato** | fatti di oggi | derivato dai log | motore |
-| **metodologia** | conoscenza generale | letteratura curata | umano |
-| **conclusioni** | fatti **su questa persona** | una sua frase, o una prova | agente, con gate del supervisore |
+| **state** | today's facts | derived from the logs | engine |
+| **methodology** | general knowledge | curated literature | human |
+| **conclusions** | facts **about this person** | something they said, or a trial | agent, with the supervisor's gate |
 
-La terza colonna è la sola cosa nel sistema che nessun altro potrebbe avere.
+The third column is the only thing in the system nobody else could have.
 
 ---
 
-## Stato persistente
+## Persistent state
 
-Un solo file **SQLite**:
+A single **SQLite** file:
 
-| tabella | contenuto |
+| table | content |
 |---|---|
-| `profilo` | obiettivo primario e vincoli, storia, attrezzatura base, vincoli permanenti |
-| `mesociclo` | schema scelto + motivazione + data inizio + split |
-| `stato_pattern` | per pattern: volume settimanale, trend carico, dolore, esclusioni attive + data di ri-test |
-| `sedute` | luogo, override attrezzi, carichi, RPE, dolore, deviazioni, aderenza |
-| `esercizi` | gli 800 arricchiti |
-| `ipotesi` | testo, data, stato |
-| `prove` | ipotesi, variabile variata, variabili tenute ferme, durata, esito |
-| `conclusioni` | testo, fonte (frase o prova), stato, date, quante volte usata |
-| `osservazioni` | testo, misura a cui punta, stato (aperta / ascoltata / ignorata / convertita) |
-| `decisioni` | **append-only**: ogni cambio dell'agente, una riga, con il motivo |
+| `profile` | primary goal and constraints, history, base equipment, permanent constraints |
+| `mesocycle` | chosen scheme + rationale + start date + split |
+| `pattern_state` | per pattern: weekly volume, load trend, pain, active exclusions + re-test date |
+| `workouts` | location, equipment overrides, loads, RPE, pain, deviations, adherence |
+| `exercises` | the 800 enriched |
+| `hypotheses` | text, date, state |
+| `trials` | hypothesis, variable varied, variables held fixed, duration, outcome |
+| `conclusions` | text, source (sentence or trial), state, dates, how many times used |
+| `observations` | text, the measure it points at, state (open / heeded / ignored / converted) |
+| `decisions` | **append-only**: every agent change, one row, with the reason |
 
-`decisioni` e `conclusioni` sembrano simili e fanno due lavori diversi:
+`decisions` and `conclusions` look similar and do two different jobs:
 
-- **`decisioni`** è un diario: *il 5 marzo ho fatto questo perché in quel momento pensavo così*. Si legge per ricostruire. Ha una data ed è consumata.
-- **`conclusioni`** è ciò che resta vero dopo: *questa persona è fatta così*. Si rilegge **prima di ogni scelta futura**.
+- **`decisions`** is a diary: *on 5 March I did this because at that moment I thought this way*. It is read to reconstruct. It has a date and it is consumed.
+- **`conclusions`** is what stays true afterwards: *this person is like this*. It is re-read **before every future choice**.
 
-Senza `conclusioni`, a settimana 20 l'agente rilegge lo stato, non vede più nessuna esclusione attiva, riprescrive quello che era stato tolto a marzo, e rifà l'indagine da capo. Aveva scritto cosa aveva fatto, non cosa aveva scoperto.
+Without `conclusions`, at week 20 the agent re-reads the state, no longer sees any active exclusion, re-prescribes what was removed in March, and redoes the whole investigation from scratch. It had written down what it did, not what it had discovered.
 
-SQLite e non file perché **il livello vincolato è una query**:
+SQLite and not files because **the constrained layer is a query**:
 
 ```sql
-SELECT * FROM esercizi
-WHERE pattern_motorio NOT IN (:esclusi)
-  AND attrezzo IN (:disponibili_oggi)
-  AND NOT (articolazione='spalla' AND movimento='flessione' AND gradi > 120)
-  AND costo_setup_min <= :budget
+SELECT * FROM exercises
+WHERE movement_pattern NOT IN (:excluded)
+  AND equipment IN (:available_today)
+  AND NOT (joint='shoulder' AND movement='flexion' AND degrees > 120)
+  AND setup_cost_min <= :budget
 ```
 
-Il filtro di ammissibilità è un `WHERE`. Con dei file andrebbe scritto a mano.
+The admissibility filter is a `WHERE`. With files it would have to be written by hand.
 
-Costo: il `.sqlite` in git è un blob e i diff sono inutili. Si recupera con un **dump leggibile** — snapshot markdown di `stato_pattern`, `conclusioni` e `decisioni`, rigenerato a fine settimana e versionato. Il DB è la verità, lo snapshot è la storia leggibile.
-
----
-
-## Interazione
-
-Chat. Il log avviene **per deviazione**: il default è *«ho fatto quello che c'era scritto»*, si riporta solo cosa è cambiato più un numero di fatica o fastidio. *«Panca ok, solo 3 serie di military perché la spalla tirava, 4 su 10»* — venti secondi.
-
-Il motore deve **funzionare con i dati mancanti**: salterai delle settimane, e il sistema deve assumere l'aderenza e segnalare l'incertezza invece di bloccarsi.
-
-**Onboarding**: una sola sessione lunga, dieci-dodici domande — obiettivo (prima), storia, disponibilità reale, attrezzatura, **cosa ti piace e cosa non sopporti**, triage sui fastidi (dopo l'obiettivo: aprire con gli acciacchi imposta il tono su ciò che non puoi fare) — e **finisce producendo la scheda della settimana 1**. Se l'onboarding non produce nulla di allenabile, l'utente non torna.
-
-**L'agente gira solo quando gli scrivi.** Nessuno scheduler, nessun processo sempre acceso, nessuna notifica. Tutte le logiche temporali — confine di mesociclo, rientro, ri-test scaduto, passata del supervisore — sono **derivative dalle date** e si calcolano all'apertura della conversazione. Quando passerà a Telegram, il bot è puramente reattivo.
-
-**Locale per costruire, poi server + bot.** Il telefono è indispensabile per l'aderenza, ma prima serve sapere se motore e agente funzionano, e lo si scopre più in fretta davanti al portatile con tutto ispezionabile. Vincolo da rispettare da subito: **il nucleo non assume niente sul client**.
+Cost: the `.sqlite` in git is a blob and the diffs are useless. That is recovered with a **readable dump** — a markdown snapshot of `pattern_state`, `conclusions` and `decisions`, regenerated at the end of the week and versioned. The DB is the truth, the snapshot is the readable history.
 
 ---
 
-## Architettura tecnica
+## Interaction
+
+Chat. Logging happens **by deviation**: the default is *«I did what it said»*, you only report what changed plus a number for effort or discomfort. *«Bench fine, only 3 sets of military because the shoulder was pulling, 4 out of 10»* — twenty seconds.
+
+The engine has to **work with missing data**: you will skip weeks, and the system has to assume adherence and flag the uncertainty instead of locking up.
+
+**Onboarding**: a single long session, ten to twelve questions — goal (first), history, real availability, equipment, **what you like and what you cannot stand**, triage on the aches (after the goal: opening with the aches sets the tone around what you cannot do) — and it **ends by producing the week 1 plan**. If onboarding produces nothing trainable, the user does not come back.
+
+**The agent only runs when you write to it.** No scheduler, no always-on process, no notifications. All the time-based logic — mesocycle boundary, return, expired re-test, supervisor pass — is **derived from the dates** and computed when the conversation opens. When it moves to Telegram, the bot is purely reactive.
+
+**Local to build, then server + bot.** The phone is indispensable for adherence, but first you need to know whether the engine and the agent work, and you find that out faster in front of the laptop with everything inspectable. Constraint to respect from day one: **the core assumes nothing about the client**.
+
+---
+
+## Technical architecture
 
 | | |
 |---|---|
-| linguaggio | Python |
-| stato + catalogo | SQLite |
-| motore | **libreria Python pura, zero LLM dentro, esposta come superficie di tool** |
-| framework agentico | **LangGraph** |
-| output dell'agente | strutturato (Pydantic), mai prosa per la scheda |
-| agente deliberativo | il modello migliore disponibile |
-| supervisore | modello **diverso** da quello dell'agente |
-| tracing | LangSmith (o OTel) — la traccia è un artefatto, non un log |
-| metodologia | documento curato, niente vector DB |
-| MCP | wrapper sottile sulla libreria di tool |
-| arricchimento | job batch, vedi appendice |
+| language | Python |
+| state + catalog | SQLite |
+| engine | **pure Python library, zero LLM inside, exposed as a tool surface** |
+| agent framework | **LangGraph** |
+| agent output | structured (Pydantic), never prose for the plan |
+| deliberative agent | the best model available |
+| supervisor | a **different** model from the agent's |
+| tracing | LangSmith (or OTel) — the trace is an artifact, not a log |
+| methodology | a curated document, no vector DB |
+| MCP | thin wrapper over the tool library |
+| enrichment | batch job, see appendix |
 
-### Il motore è una libreria, non un servizio
+### The engine is a library, not a service
 
-Zero righe di LLM dentro. Questo rende veri per costruzione i test senza modello, e tiene aperte tutte le forme di esposizione: tool LangGraph, tool MCP o chiamata diretta sono tre wrapper sottili sulla **stessa** libreria.
+Zero lines of LLM inside. This makes the model-free tests true by construction, and keeps every form of exposure open: LangGraph tools, MCP tools or a direct call are three thin wrappers over the **same** library.
 
-### Dove entra LangGraph
+### Where LangGraph comes in
 
-Entra sul serio, e per i motivi che erano già scritti come segnali:
+It comes in for real, and for the reasons that were already written down as signals:
 
-- **onboarding** — macchina a stati multi-turno: se rispondi a metà e torni domani riparti dalla domanda 7. Serve **checkpointing e resume**.
-- **la prova** — nasce in una seduta, vive due settimane, si chiude in un'altra. È una macchina a stati con resume che altrimenti scriveresti a mano.
-- **la passata del supervisore** — flusso separato, innesco diverso, esegue tra le sedute.
-- **il consolidamento della memoria** — segue la passata del supervisore.
+- **onboarding** — multi-turn state machine: if you answer halfway and come back tomorrow you resume from question 7. It needs **checkpointing and resume**.
+- **the trial** — born in one workout, alive for two weeks, closed in another. It is a state machine with resume that you would otherwise write by hand.
+- **the supervisor pass** — separate flow, different trigger, runs between workouts.
+- **memory consolidation** — follows the supervisor pass.
 
-**Non entra** nel ciclo dell'agente durante la seduta: quello è un nodo che cicla su una superficie di tool, e un grafo non aggiunge nulla a un nodo che cicla. I vincoli sono applicati a monte, quindi non esiste il ciclo *proponi → verifica → correggi*.
+It does **not** come into the agent's loop during the workout: that is a node looping over a tool surface, and a graph adds nothing to a node that loops. The constraints are applied upstream, so the *propose → check → correct* loop does not exist.
 
-**Vincolo non negoziabile**: LangGraph non persiste mai un dato di dominio, SQLite non persiste mai un dato di conversazione. Se i due depositi si sovrappongono, a settimana 6 non sai più quale dice la verità sul volume di spinta.
+**Non-negotiable constraint**: LangGraph never persists a domain fact, SQLite never persists a conversation fact. If the two stores overlap, at week 6 you no longer know which one tells the truth about push volume.
 
 ### MCP
 
-Non per la casella: la libreria è **già** una superficie di tool, quindi il wrapper è mezza giornata e ti fa guidare lo stesso motore da un client generico durante lo sviluppo. Ispezione gratuita.
+Not for the checkbox: the library is **already** a tool surface, so the wrapper is half a day and it lets you drive the same engine from a generic client during development. Free inspection.
 
 ---
 
-## Valutazione
+## Evaluation
 
-Il criterio a otto settimane misura il prodotto, non il sistema. Il sistema si misura prima, e si misura **un componente alla volta**.
+The eight-week criterion measures the product, not the system. The system is measured earlier, and it is measured **one component at a time**.
 
-### Livello 1 — il supervisore: esempi etichettati
+### Level 1 — the supervisor: labeled examples
 
-Due assi, etichetta umana ovvia nella maggior parte dei casi.
+Two axes, with an obvious human label in most cases.
 
-**Asse A — va in memoria?**
+**Axis A — does it go into memory?**
 
-| situazione | va | perché |
+| situation | goes in | why |
 |---|---|---|
-| *«oggi sono cotto»* | no | stato di oggi |
-| *«questa settimana lavoro tardi»* | no | temporaneo |
-| *«ho comprato i manubri»* | **sì** | cambia il profilo |
-| *«le spinte non mi piacciono»* | **sì** | preferenza stabile |
-| *«il giovedì non ce la faccio mai»* | **sì** | vincolo ricorrente |
-| *«oggi la cyclette mi ha annoiato»* | no | un episodio |
-| *«questo utente risponde bene al volume alto»* (dedotta) | **no** | nessuna fonte |
-| *«mi trovo bene così»*, dopo 6 settimane di volume in calo | **sospetta** | deriva che si autocertifica |
+| *«I'm wrecked today»* | no | today's state |
+| *«this week I'm working late»* | no | temporary |
+| *«I bought dumbbells»* | **yes** | it changes the profile |
+| *«I don't like pressing»* | **yes** | stable preference |
+| *«Thursdays never work for me»* | **yes** | recurring constraint |
+| *«the exercise bike bored me today»* | no | one episode |
+| *«this user responds well to high volume»* (inferred) | **no** | no source |
+| *«this suits me well»*, after 6 weeks of falling volume | **suspect** | drift certifying itself |
 
-**Asse B — è pericoloso tra le sessioni?**
+**Axis B — is it dangerous across sessions?**
 
-| situazione | segnala |
+| situation | flag |
 |---|---|
-| giovedì saltato 4 volte su 4 | **sì** |
-| volume in calo costante da 6 settimane | **sì** |
-| una settimana leggera dopo una vacanza | **no** |
-| stesso esercizio scelto 8 volte di fila **perché è la preferenza dichiarata** | **no** |
+| Thursday skipped 4 times out of 4 | **yes** |
+| volume falling steadily for 6 weeks | **yes** |
+| one light week after a holiday | **no** |
+| the same exercise chosen 8 times in a row **because it is the stated preference** | **no** |
 
-L'ultima riga è la più importante della suite: il supervisore deve distinguere **rispettare una preferenza** da **derivare**, e nei dati sono identici — una scelta che si ripete. Se sbaglia questa, il sistema contesta all'utente le cose che l'utente ha chiesto, e diventa insopportabile in due settimane.
+The last row is the most important in the suite: the supervisor has to distinguish **respecting a preference** from **drifting**, and in the data they are identical — a choice that repeats. If it gets this wrong, the system argues with the user about the things the user asked for, and becomes unbearable within two weeks.
 
-Quaranta-sessanta esempi etichettati a mano. Girano in un minuto, costano centesimi, si rilanciano a ogni modifica del prompt. Metriche: accuratezza, e **falsi positivi sulle righe «no»**, che pesano il doppio.
+Forty to sixty hand-labeled examples. They run in a minute, cost cents, and get re-run at every prompt change. Metrics: accuracy, and **false positives on the «no» rows**, which count double.
 
-Se un esempio non si riesce a etichettare con sicurezza, **non va nel golden set**: va in una lista di cose da decidere. Un caso ambiguo etichettato a caso avvelena la misura invece di informarla.
+If an example cannot be labeled with confidence, it **does not go into the golden set**: it goes into a list of things to decide. An ambiguous case labeled at random poisons the measurement instead of informing it.
 
-### Livello 1 — l'agente: invarianti
+### Level 1 — the agent: invariants
 
-Non si etichetta «bella scheda / brutta scheda». Si verificano proprietà che devono valere **sempre**, controllate dal codice:
+You do not label «good plan / bad plan». You verify properties that must hold **always**, checked by the code:
 
-1. **termina** — produce una scheda in ≤ K chiamate di tool. Un agente che guida i tool *può* girare a vuoto: chiede l'insieme, non gli piace, chiede lo storico, riprova, taglia, ricomincia. Quando il budget finisce **emette comunque**.
-2. **rispetta il tempo** — durata stimata dentro il budget dichiarato.
-3. **rispetta i vincoli** — niente fuori dall'insieme ammissibile.
-4. **rispetta le preferenze** — niente che l'utente ha rifiutato; e se lo ripropone, lo dichiara e chiede.
-5. **usa solo l'attrezzatura di oggi**.
-6. **non degenera** — copre i pattern previsti dallo split, non riempie la seduta di isolamenti perché era la strada breve.
+1. **it terminates** — produces a plan in ≤ K tool calls. An agent driving the tools *can* spin: it asks for the set, does not like it, asks for the history, retries, cuts, starts again. When the budget runs out it **emits anyway**.
+2. **it respects the time** — estimated duration inside the declared budget.
+3. **it respects the constraints** — nothing outside the admissible set.
+4. **it respects the preferences** — nothing the user has refused; and if it proposes it again, it says so and asks.
+5. **it uses only today's equipment**.
+6. **it does not degenerate** — it covers the patterns the split calls for, it does not fill the workout with isolation work because that was the short path.
 
-Situazioni su cui farli girare, scritte a mano e cattive apposta:
+Situations to run them against, written by hand and deliberately nasty:
 
-- 15 minuti, nessun attrezzo
-- metà catalogo fuori per preferenze dichiarate
-- richieste contraddittorie: *«30 minuti, ma voglio allenare tutto»*
-- report precedente ambiguo o assente
-- l'utente rifiuta la scheda: *«non mi va»* → deve riproporre, senza insistere e senza arrendersi
-- una preferenza in conflitto con l'obiettivo dichiarato
+- 15 minutes, no equipment
+- half the catalog out on stated preferences
+- contradictory requests: *«30 minutes, but I want to train everything»*
+- previous report ambiguous or missing
+- the user refuses the plan: *«I don't feel like it»* → it has to propose again, without pushing and without giving up
+- a preference in conflict with the declared goal
 
-Metrica unica e cruda: **percentuale di situazioni che producono una scheda valida entro budget. Deve essere 100%.** Qualunque numero sotto è un bug, non una regolazione.
+A single, crude metric: **percentage of situations that produce a valid plan within budget. It has to be 100%.** Any number below is a bug, not a tuning knob.
 
-### Livello 2 — la traiettoria (dopo, non prima)
+### Level 2 — the trajectory (later, not first)
 
-Solo quando i due livelli sopra passano, altrimenti si misura un ciclo costruito su componenti di cui non si sa niente.
+Only once the two levels above pass, otherwise you are measuring a loop built on components you know nothing about.
 
-Un **utente simulato** con una **verità nascosta**: codice deterministico, non un modello.
+A **simulated user** with a **hidden truth**: deterministic code, not a model.
 
-> *Questo utente salta le sedute che superano i 45 minuti, qualunque cosa dichiari.*
-> *Questo utente logga sempre quando la seduta apre con qualcosa che gli piace.*
+> *This user skips workouts that go over 45 minutes, whatever they say.*
+> *This user always logs when the workout opens with something they like.*
 
-Il golden set non è fatto di output attesi — sarebbe testare esattamente la libertà che il flusso di controllo ha creato. **È fatto di verità nascoste**: l'etichetta è ciò che il sistema deve scoprire, non ciò che deve produrre, e non vincola in alcun modo il percorso.
+The golden set is not made of expected outputs — that would be testing exactly the freedom the control flow created. **It is made of hidden truths**: the label is what the system has to discover, not what it has to produce, and it constrains the path in no way at all.
 
-E non si giudica il **testo** della conclusione: si guardano le **conseguenze**. Se ha concluso «è la durata», le sedute successive stanno sotto i 45 minuti *e* il volume settimanale non è calato. Tre conclusioni diverse hanno tre firme diverse nei dati, tutte verificabili con una query. Nessun giudice.
+And you do not judge the **text** of the conclusion: you look at the **consequences**. If it concluded «it is the duration», the following workouts stay under 45 minutes *and* weekly volume has not dropped. Three different conclusions have three different signatures in the data, all verifiable with a query. No judge.
 
-Due casi che valgono da soli metà della suite:
+Two cases that are worth half the suite on their own:
 
-- **utente senza verità**: report puliti → pass è **zero prove, zero conclusioni, zero osservazioni**
-- **rumore**: la lamentela compare 1 volta su 4, a caso → pass è **nessuna conclusione entro la seduta 3**
+- **user with no truth**: clean reports → pass is **zero trials, zero conclusions, zero observations**
+- **noise**: the complaint shows up 1 time in 4, at random → pass is **no conclusion within workout 3**
 
-Misurano i falsi positivi, ed è l'errore più probabile di qualunque sistema LLM: concludere da un dato solo, con una fonte formalmente valida.
+They measure false positives, which is the most likely error of any LLM system: concluding from a single data point, with a formally valid source.
 
-Non determinismo: un caso non è un pass/fail, è una distribuzione. **k run** (5 bastano), criterio *«passa in 4 su 5»*, e budget largo — se il pass è «entro 6 sedute» e il sistema oscilla tra 5 e 7, hai un test di cui smetterai di fidarti.
+Non-determinism: a case is not a pass/fail, it is a distribution. **k runs** (5 is enough), criterion *«passes 4 out of 5»*, and a wide budget — if the pass is «within 6 workouts» and the system oscillates between 5 and 7, you have a test you will stop trusting.
 
-### L'insieme di regressione
+### The regression set
 
-Dai run del livello 2 si **raccolgono** i momenti interessanti e si congelano come fixture: *dato questo stato, la prova proposta tiene ferma una variabile sola?* Girano in trenta secondi.
+From the level 2 runs you **harvest** the interesting moments and freeze them as fixtures: *given this state, does the proposed trial hold exactly one variable fixed?* They run in thirty seconds.
 
-| | **golden set** | **regressione** |
+| | **golden set** | **regression** |
 |---|---|---|
-| chi lo scrive | tu, a mano | si raccoglie dai run |
-| cosa contiene | verità nascoste | situazioni congelate |
-| cosa misura | il sistema | i componenti |
-| cambia | mai | cresce da solo |
-| quando gira | fine iterazione | sempre |
+| who writes it | you, by hand | harvested from the runs |
+| what it contains | hidden truths | frozen situations |
+| what it measures | the system | the components |
+| changes | never | grows on its own |
+| when it runs | end of iteration | always |
 
-### Il limite, dichiarato
+### The limit, declared
 
-> L'utente simulato obbedisce a una regola. Le persone vere no. Questa suite dimostra che **il ciclo funziona** — che il sistema forma ipotesi, progetta prove che discriminano, si corregge e ricorda. Non dimostra che i consigli di allenamento siano buoni. Quello lo dice solo il criterio a otto settimane, su una persona vera.
-
----
-
-## Primi passi
-
-1. **Esempi etichettati del supervisore.** Le due tabelle dell'asse A e B, sessanta righe. Non dipendono da nessuna scelta di implementazione, e se il supervisore sbaglia qui tutto quello che c'è a valle è avvelenato.
-2. **Catalogo.** free-exercise-db arricchito, caricato in SQLite, filtrato sull'attrezzatura reale. Deliverable: una tabella `esercizi` interrogabile. *(Appendice.)*
-3. **Motore.** La libreria vincolato + derivativo esposta come superficie di tool: ammissibilità, volume, durata, taglio, rientro, storico. **Unit test che girano senza alcun LLM** — è il pezzo di cui ti devi fidare a otto settimane.
-4. **Agente e invarianti.** Il ciclo di tool, il budget di chiamate, il validatore in uscita, e le sei proprietà sulle situazioni avverse. Solo qui entra il modello.
-5. **Memoria, prove, supervisore.** Onboarding e prove su LangGraph, `conclusioni` e `osservazioni`, passata di consolidamento.
-6. **Livello 2.** Utente simulato e verità nascoste.
+> The simulated user obeys a rule. Real people do not. This suite proves that **the loop works** — that the system forms hypotheses, designs trials that discriminate, corrects itself and remembers. It does not prove that the training advice is good. Only the eight-week criterion says that, on a real person.
 
 ---
 
-## Appendice — catalogo e arricchimento
+## First steps
 
-Base: **free-exercise-db** — ~800 esercizi, dominio pubblico, immagini, nessun rischio di licenza.
+1. **Labeled examples for the supervisor.** The two tables for axis A and B, sixty rows. They do not depend on any implementation choice, and if the supervisor gets this wrong everything downstream is poisoned.
+2. **Catalog.** free-exercise-db enriched, loaded into SQLite, filtered on the real equipment. Deliverable: a queryable `exercises` table. *(Appendix.)*
+3. **Engine.** The constrained + derived library exposed as a tool surface: admissibility, volume, duration, cut, return, history. **Unit tests that run with no LLM at all** — this is the piece you have to trust at eight weeks.
+4. **Agent and invariants.** The tool loop, the call budget, the validator on the way out, and the six properties over the adverse situations. Only here does the model come in.
+5. **Memory, trials, supervisor.** Onboarding and trials on LangGraph, `conclusions` and `observations`, the consolidation pass.
+6. **Level 2.** Simulated user and hidden truths.
 
-Nessun catalogo pubblico ha i campi necessari. `force: "push"` non distingue panca da military press. Gli altri candidati: wger ha solo ID relazionali (e AGPL); ExerciseDB ha un grafo di sostituzione nativo ma AGPL con media non dichiarati; Zenith Fits è morto (HTTP 410).
+---
 
-**Arricchimento** — sette campi aggiunti:
+## Appendix — catalog and enrichment
 
-| campo | valori |
+Base: **free-exercise-db** — ~800 exercises, public domain, images, no licensing risk.
+
+No public catalog has the necessary fields. `force: "push"` does not distinguish a bench press from a military press. The other candidates: wger has only relational IDs (and AGPL); ExerciseDB has a native substitution graph but is AGPL with undeclared media; Zenith Fits is dead (HTTP 410).
+
+**Enrichment** — seven fields added:
+
+| field | values |
 |---|---|
-| `pattern_motorio` | gli 11 del glossario |
-| `articolazioni_caricate` | spalla, gomito, polso, rachide lombare, anca, ginocchio, caviglia |
-| `ampiezza_richiesta` | terna `(articolazione, movimento, gradi)` — es. military press `(spalla, flessione, 180)`, inclinata `(spalla, flessione, 120)`, panca piana `(spalla, flessione, 90)` |
-| `carico_assiale_rachide` | sì / no |
-| `stabilità_richiesta` | alta / media / bassa |
-| `costo_setup_min` | minuti |
-| `regressione_di` / `variante_di` | id |
+| `movement_pattern` | the 11 from the glossary |
+| `loaded_joints` | shoulder, elbow, wrist, lumbar spine, hip, knee, ankle |
+| `required_rom` | triple `(joint, movement, degrees)` — e.g. military press `(shoulder, flexion, 180)`, incline press `(shoulder, flexion, 120)`, flat bench `(shoulder, flexion, 90)` |
+| `spinal_axial_load` | yes / no |
+| `required_stability` | high / medium / low |
+| `setup_cost_min` | minutes |
+| `regression_of` / `variant_of` | id |
 
-`ampiezza_richiesta` è strutturata e non testuale perché serve a **isolare una variabile alla volta** nelle prove, non solo a filtrare.
+`required_rom` is structured and not textual because it exists to **isolate one variable at a time** in the trials, not just to filter.
 
-**Procedura**: tre passate con tre modelli, vince la maggioranza. Se le prime due convergono, il terzo — il più costoso — non viene chiamato. Due modelli economici di **provider diversi** + uno forte sui disaccordi.
+**Procedure**: three passes with three models, majority wins. If the first two agree, the third — the most expensive — is not called. Two cheap models from **different providers** + one strong one on the disagreements.
 
-È un job batch, gira una volta. Istruzioni e immagini stanno nelle stesse righe SQLite ma non si interrogano: si recuperano per id quando l'agente le mostra.
+It is a batch job, it runs once. Instructions and images live in the same SQLite rows but are not queried: they are fetched by id when the agent shows them.

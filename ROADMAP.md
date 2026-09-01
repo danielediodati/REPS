@@ -1,180 +1,180 @@
-# Roadmap — sessioni
+# Roadmap — sessions
 
-> *Ipotesi di lavoro. Compagno di [TRAINER.md](TRAINER.md): quello dice **cosa** si costruisce e perché, questo dice **in che ordine** e dove si taglia.*
+> *A working hypothesis. Companion to [TRAINER.md](TRAINER.md): that one says **what** gets built and why, this one says **in what order** and where the cuts fall.*
 
-## Regola di taglio
+## Slicing rule
 
-Una **sessione** finisce con un binario che parte e che puoi esercitare. Non con un componente finito.
+A **session** ends with a binary that runs and that you can exercise. Not with a finished component.
 
-> **Se alla fine della sessione non c'è un comando da lanciare, la sessione è tagliata male.**
+> **If there is no command to run at the end of the session, the session was sliced wrong.**
 
-Ogni sessione si spacchetta in **non più di cinque issue**. Ogni issue si chiude con `/implement` in un contesto pulito, quindi deve stare in piedi da sola e puntare alle sezioni di TRAINER.md che le servono.
+Every session unpacks into **no more than five issues**. Each issue closes with `/implement` in a clean context, so it has to stand on its own and point at the sections of TRAINER.md it needs.
 
-Una nota onesta sul senso di *«testabile dall'utente finale»*: fino alla sessione 5 l'utente finale sei **tu davanti a una CLI**, e quello che verifichi è che il motore risponda il vero. Dalla 5 in poi è qualcuno che vuole allenarsi, e quello che verifichi è la scheda. Il salto è alla 5, non prima, e va messo in conto.
+An honest note on what *«testable by the end user»* means: until session 5 the end user is **you in front of a CLI**, and what you verify is that the engine answers truthfully. From 5 onward it is someone who wants to train, and what you verify is the plan. The jump is at 5, not before, and it has to be budgeted for.
 
-## Il percorso
+## The path
 
-| # | versione | alla fine puoi |
+| # | version | at the end you can |
 |---|---|---|
-| 1 | `0.1.0` | sfogliare 800 esercizi filtrando per attrezzo |
-| 2 | `0.2.0` | interrogare il catalogo per pattern motorio e ampiezza |
-| 3 | `0.3.0` | chiedere *«cosa posso fare oggi»* e ricevere l'insieme ammissibile |
-| 4 | `0.4.0` | sapere quanto dura una selezione e cosa verrebbe tagliato |
-| 5 | `0.5.0` | **ricevere una scheda vera** da un agente che non può sbagliare i vincoli |
-| 6 | `0.6.0` | riportare la seduta in venti secondi e vedere lo stato muoversi |
-| 7 | `0.7.0` | partire da zero: dieci domande, e in fondo la scheda della settimana 1 |
-| 8 | `0.8.0` | attraversare le settimane — progressione, deload, rientro dalla pausa |
-| 9 | `0.9.0` | essere ricordato: preferenze e vincoli sopravvivono alla sessione |
-| 10 | `0.10.0` | vedere il sistema formulare un'ipotesi su di te e progettare la prova |
-| 11 | **`1.0.0`** | **allenarti per otto settimane senza che il programma derivi** |
+| 1 | `0.1.0` | browse 800 exercises filtering by equipment |
+| 2 | `0.2.0` | query the catalog by movement pattern and range of motion |
+| 3 | `0.3.0` | ask *«what can I do today»* and get the admissible set back |
+| 4 | `0.4.0` | know how long a selection takes and what would get cut |
+| 5 | `0.5.0` | **get a real plan** from an agent that cannot break the constraints |
+| 6 | `0.6.0` | report the workout in twenty seconds and watch the state move |
+| 7 | `0.7.0` | start from nothing: ten questions, and a week 1 plan at the end |
+| 8 | `0.8.0` | cross the weeks — progression, deload, return from a break |
+| 9 | `0.9.0` | be remembered: preferences and constraints survive the session |
+| 10 | `0.10.0` | watch the system form a hypothesis about you and design the trial |
+| 11 | **`1.0.0`** | **train for eight weeks without the program drifting** |
 
-`1.0.0` è definito dal criterio di TRAINER.md: *stai ancora loggando, i carichi sono saliti, i fastidi non sono aumentati*. Tutto ciò che serve a reggere due mesi sta dentro. Tutto ciò che serve a **dimostrare** che il ciclo funziona sta dopo, ed è la sessione 12.
+`1.0.0` is defined by TRAINER.md's criterion: *you are still logging, the loads have gone up, the aches have not got worse*. Everything needed to hold up for two months is inside. Everything needed to **demonstrate** that the loop works comes after, and that is session 12.
 
 ---
 
-## Sessione 1 — `0.1.0` — Il catalogo grezzo
+## Session 1 — `0.1.0` — The raw catalog
 
-**Gira**: `trainer catalogo --attrezzo manubri` elenca gli esercizi.
+**Runs**: `trainer catalog --equipment dumbbells` lists the exercises.
 
-1. Scheletro: pacchetto Python, SQLite con migrazioni versionate, CLI, layout `motore/` come libreria pura separata da tutto il resto.
-2. Import di free-exercise-db in `esercizi` — campi nativi, istruzioni e immagini incluse, recuperabili per id.
-3. Comando `catalogo` con filtri sui campi nativi.
-4. Dump markdown del catalogo, versionato — la prima metà del meccanismo *«il DB è la verità, lo snapshot è la storia leggibile»*.
+1. Skeleton: Python package, SQLite with versioned migrations, CLI, `engine/` laid out as a pure library separate from everything else.
+2. Import free-exercise-db into `exercises` — native fields, instructions and images included, retrievable by id.
+3. `catalog` command with filters on the native fields.
+4. Markdown dump of the catalog, versioned — the first half of the *«the DB is the truth, the snapshot is the readable history»* mechanism.
 
-## Sessione 2 — `0.2.0` — Il catalogo arricchito
+## Session 2 — `0.2.0` — The enriched catalog
 
-**Gira**: `trainer catalogo --pattern hinge --ampiezza-max spalla:flessione:120`.
+**Runs**: `trainer catalog --pattern hinge --max-rom shoulder:flexion:120`.
 
-1. Migrazione con i sette campi dell'appendice; `ampiezza_richiesta` strutturata come terna, non testo.
-2. Prompt di arricchimento con output Pydantic e rifiuto di ciò che non valida.
-3. Job a tre passate: due modelli economici di provider diversi, il forte solo sui disaccordi, voto di maggioranza.
-4. Girata completa sugli ~800 + report dei disaccordi residui.
-5. Verifica a mano su 50 righe campionate, e i filtri nuovi esposti sulla CLI.
+1. Migration with the seven fields from the appendix; `required_rom` structured as a triple, not text.
+2. Enrichment prompt with Pydantic output, rejecting anything that does not validate.
+3. Three-pass job: two cheap models from different providers, the strong one only on the disagreements, majority vote.
+4. Full run over the ~800 + a report of the residual disagreements.
+5. Manual verification on 50 sampled rows, and the new filters exposed on the CLI.
 
-> Il campo che vale la verifica a mano è `pattern_motorio`: se sbaglia lì, ogni conteggio di volume a valle è sbagliato e non te ne accorgi.
+> The field worth verifying by hand is `movement_pattern`: get it wrong there and every downstream volume count is wrong without you noticing.
 
-## Sessione 3 — `0.3.0` — L'insieme ammissibile
+## Session 3 — `0.3.0` — The admissible set
 
-**Gira**: `trainer ammissibili --attrezzi corpo-libero --tempo 45 --escludi spinta_verticale`.
+**Runs**: `trainer admissible --equipment bodyweight --time 45 --exclude vertical_push`.
 
-1. Tabelle `profilo` e `stato_pattern`, con le esclusioni e la loro data di ri-test.
-2. `insieme_ammissibile(esclusioni, attrezzi, budget)` — il `WHERE` di TRAINER.md, funzione di libreria.
-3. Unit test **senza alcun LLM**: un pattern escluso non compare mai, un attrezzo assente non compare mai, un'esclusione scaduta smette di escludere.
-4. Il comando che la espone.
+1. `profile` and `pattern_state` tables, with the exclusions and their re-test date.
+2. `admissible_set(exclusions, equipment, budget)` — the `WHERE` from TRAINER.md, as a library function.
+3. Unit tests with **no LLM at all**: an excluded pattern never shows up, absent equipment never shows up, an expired exclusion stops excluding.
+4. The command that exposes it.
 
-## Sessione 4 — `0.4.0` — Tempo
+## Session 4 — `0.4.0` — Time
 
-**Gira**: dai una selezione, ti dice quanto dura e cosa toglierebbe per starci in 40 minuti.
+**Runs**: give it a selection, it tells you how long it takes and what it would drop to fit into 40 minutes.
 
-1. Modello di durata: `Σ [ setup + serie × (lavoro + recupero) ]`, recuperi dallo schema, setup dal catalogo.
-2. `budget_residuo` e `simula_taglio`, con l'ordine isolamenti → pattern secondari → serie sui primari.
-3. Test che il taglio **non tocchi mai i recuperi**, in nessun ramo.
-4. `storico_pattern` e `carico_ultima_esecuzione` su stato ancora vuoto — devono rispondere «non so», non rompersi.
-5. Wrapper MCP sulla libreria. Mezza giornata, e da qui in avanti ispezioni il motore da un client generico mentre sviluppi.
+1. Duration model: `Σ [ setup + sets × (work + rest) ]`, rest from the scheme, setup from the catalog.
+2. `remaining_budget` and `simulate_cut`, with the order isolation → secondary patterns → sets on the primaries.
+3. Tests that the cut **never touches the rest periods**, on any branch.
+4. `pattern_history` and `last_performed_load` against still-empty state — they have to answer «I don't know», not break.
+5. MCP wrapper over the library. Half a day, and from here on you inspect the engine from a generic client while developing.
 
-> L'MCP è anticipato rispetto a TRAINER.md apposta: costa poco e il ritorno è tutto nelle sessioni successive, quando l'agente comincia a sbagliare e vuoi vedere cosa vede lui.
+> MCP is pulled in earlier than TRAINER.md has it, on purpose: it costs little and the return is all in the later sessions, when the agent starts getting things wrong and you want to see what it sees.
 
-## Sessione 5 — `0.5.0` — La prima scheda
+## Session 5 — `0.5.0` — The first plan
 
-**Gira**: `trainer scheda` e ti arriva un allenamento che puoi fare stasera.
+**Runs**: `trainer plan` and you get a workout you can do tonight.
 
-La sessione più grande e la meno divisibile: l'agente senza il validatore non è consegnabile, quindi restano insieme.
+The biggest session and the least divisible: the agent without the validator is not shippable, so they stay together.
 
-1. La superficie di tool esposta all'agente — wrapper sottili sulla stessa libreria, zero logica nuova.
-2. Nodo agente che cicla sui tool, con **budget di chiamate**; a budget esaurito **emette comunque**.
-3. Output strutturato: l'agente emette `(id, serie, ripetizioni)`, mai prosa. Il motore rende la scheda.
-4. Validatore deterministico in uscita: id fuori dall'insieme → rifiuto. Dieci righe.
-5. Le sei invarianti sulle sei situazioni avverse di TRAINER.md. **Metrica: 100%.** Sotto è un bug, non una regolazione.
+1. The tool surface exposed to the agent — thin wrappers over the same library, zero new logic.
+2. Agent node that loops over the tools, with a **call budget**; when the budget runs out it **emits anyway**.
+3. Structured output: the agent emits `(id, sets, reps)`, never prose. The engine renders the plan.
+4. Deterministic validator on the way out: id outside the set → rejected. Ten lines.
+5. The six invariants over the six adverse situations from TRAINER.md. **Metric: 100%.** Anything below is a bug, not a tuning knob.
 
-## Sessione 6 — `0.6.0` — Il log per deviazione
+## Session 6 — `0.6.0` — Logging by deviation
 
-**Gira**: fai la seduta, scrivi *«panca ok, solo 3 serie di military, spalla 4 su 10»*, e lo stato si muove.
+**Runs**: do the workout, write *«bench fine, only 3 sets of military because the shoulder was pulling, 4 out of 10»*, and the state moves.
 
-1. Tabella `sedute`; il default è l'aderenza, si riporta solo la deviazione.
-2. Parsing conversazionale → righe strutturate, con conferma quando è ambiguo.
-3. Volume contato **sul pattern eseguito**, mai sul previsto; `stato_pattern` aggiornato di conseguenza.
-4. `storico_pattern` e `storico_aderenza` veri, più il **deficit di volume** come grandezza unica.
+1. `workouts` table; the default is adherence, you only report the deviation.
+2. Conversational parsing → structured rows, with confirmation when it is ambiguous.
+3. Volume counted **on the pattern performed**, never on the planned one; `pattern_state` updated accordingly.
+4. Real `pattern_history` and `adherence_history`, plus the **volume deficit** as a single quantity.
 
-> Va provato subito il caso che TRAINER.md dichiara centrale: **saltare due settimane**. Il motore deve assumere l'aderenza e segnalare l'incertezza, non bloccarsi.
+> The case TRAINER.md declares central should be tried immediately: **skipping two weeks**. The engine has to assume adherence and flag the uncertainty, not lock up.
 
-## Sessione 7 — `0.7.0` — Onboarding
+## Session 7 — `0.7.0` — Onboarding
 
-**Gira**: da database vuoto a scheda della settimana 1, in una conversazione sola.
+**Runs**: from an empty database to a week 1 plan, in a single conversation.
 
-1. Grafo multi-turno su LangGraph con checkpointing: rispondi a metà, torni domani, riparti dalla domanda 7.
-2. Le dieci-dodici domande, nell'ordine di TRAINER.md — obiettivo per primo, acciacchi per ultimi.
-3. Obiettivo primario forzato a uno; gli altri diventano vincoli. Due obiettivi in conflitto → l'agente lo dice e fa scegliere.
-4. Triage sui **movimenti**, mai sui sintomi: produce esclusioni con data di ri-test, non diagnosi. Più l'innesco medico.
-5. Test del vincolo non negoziabile: **LangGraph non persiste dominio, SQLite non persiste conversazione**.
+1. Multi-turn graph on LangGraph with checkpointing: answer halfway, come back tomorrow, resume from question 7.
+2. The ten-to-twelve questions, in TRAINER.md's order — goal first, aches last.
+3. Primary goal forced to one; the others become constraints. Two goals in conflict → the agent says so and makes you choose.
+4. Triage on **movements**, never on symptoms: it produces exclusions with a re-test date, not diagnoses. Plus the medical trigger.
+5. Test of the non-negotiable constraint: **LangGraph never persists domain, SQLite never persists conversation**.
 
-## Sessione 8 — `0.8.0` — Il tempo lungo
+## Session 8 — `0.8.0` — The long timescale
 
-**Gira**: la settimana 4 è diversa dalla 1, e se sparisci tre settimane il rientro è graduale.
+**Runs**: week 4 is different from week 1, and if you disappear for three weeks the return is gradual.
 
-1. Tabella `mesociclo`: l'agente sceglie lo schema e **dichiara perché**.
-2. I due schemi di v1 — doppia progressione e autoregolato su sensazione.
-3. Rientro dalle date: ≤10 giorni niente, 11-21 un rodaggio, 22-45 due, oltre calibrazione piena.
-4. **Il documento metodologico.** Sintesi curata a mano con le fonti in linea, iniettata per intero al confine del mesociclo. Lavoro umano, non generabile.
-5. `decisioni` append-only: ogni cambio, una riga, col motivo.
+1. `mesocycle` table: the agent picks the scheme and **states why**.
+2. The two v1 schemes — double progression and autoregulated by feel.
+3. Return computed from the dates: ≤10 days nothing, 11-21 one ramp-in, 22-45 two, beyond that a full calibration.
+4. **The methodology document.** A hand-curated synthesis with inline sources, injected in full at the mesocycle boundary. Human work, not generatable.
+5. Append-only `decisions`: every change, one row, with the reason.
 
-> L'issue 4 non è in «Primi passi» di TRAINER.md pur essendo dentro allo scope v1. È l'unica cosa su cui l'agente delibera al confine del mesociclo: senza, la sessione 8 consegna un motore di progressione, non un allenatore.
+> Issue 4 is not in TRAINER.md's «First steps» even though it is inside the v1 scope. It is the one thing the agent deliberates on at the mesocycle boundary: without it, session 8 ships a progression engine, not a trainer.
 
-## Sessione 9 — `0.9.0` — Conclusioni
+## Session 9 — `0.9.0` — Conclusions
 
-**Gira**: gli dici che odi le spinte, e alla settimana 6 se lo ricorda ancora.
+**Runs**: you tell it you hate pressing, and at week 6 it still remembers.
 
-1. Tabella `conclusioni` e la **regola d'ingresso**: ha una fonte? Validatore da dieci righe, in linea, entra come *provvisoria*.
-2. L'agente decide a ogni turno cosa va ricordato — e il *perché*, non solo la frase.
-3. `conclusioni_attive()` come tool, riletto **prima di ogni scelta**.
-4. Ciclo di vita: stati, ritiro con motivo, contatore di utilizzi.
-5. Il test che separa i due depositi: `decisioni` si legge per ricostruire, `conclusioni` per decidere. Una conclusione dedotta senza fonte deve essere **rifiutata**.
+1. `conclusions` table and the **admission rule**: does it have a source? Ten-line validator, inline, it enters as *provisional*.
+2. The agent decides at every turn what should be remembered — and the *why*, not just the sentence.
+3. `active_conclusions` as a tool, re-read **before every choice**.
+4. Life cycle: states, retirement with a reason, usage counter.
+5. The test that separates the two stores: `decisions` is read to reconstruct, `conclusions` to decide. A conclusion inferred without a source has to be **rejected**.
 
-## Sessione 10 — `0.10.0` — Ipotesi, prova, esito
+## Session 10 — `0.10.0` — Hypothesis, trial, outcome
 
-**Gira**: *«gli affondi non mi vanno»* → il sistema non conclude, progetta una prova.
+**Runs**: *«lunges don't work for me»* → the system does not conclude, it designs a trial.
 
-1. Tabelle `ipotesi` e `prove`; la forma vincolata: **ammissibile solo se esiste una prova che la discrimina**.
-2. La prova come modifica alla scheda che tiene ferme tutte le variabili tranne una, con una durata.
-3. Macchina a stati su LangGraph: nasce in una seduta, vive due settimane, si chiude in un'altra.
-4. L'esito **rientra**: alla seduta dopo il sistema sa qualcosa che prima non sapeva, e sa di aver sbagliato se ha sbagliato.
-5. Instradamento: un'ipotesi senza prova possibile non è falsa, è fuori dal programma → all'utente o al medico.
+1. `hypotheses` and `trials` tables; the constrained form: **admissible only if a trial exists that discriminates it**.
+2. The trial as a modification to the plan that holds every variable fixed but one, with a duration.
+3. State machine on LangGraph: born in one workout, alive for two weeks, closed in another.
+4. The outcome **comes back in**: at the next workout the system knows something it did not know before, and knows it was wrong if it was wrong.
+5. Routing: a hypothesis with no possible trial is not false, it is outside the program → to the user, or to the doctor.
 
-## Sessione 11 — `1.0.0` — Il supervisore
+## Session 11 — `1.0.0` — The supervisor
 
-**Gira**: il ciclo completo, e adesso è sicuro tenerlo acceso otto settimane.
+**Runs**: the full loop, and now it is safe to leave it running for eight weeks.
 
-1. **Golden set**: 40-60 esempi etichettati a mano, asse A e asse B. Falsi positivi sulle righe «no» pesati doppio. Un esempio che non sai etichettare non entra.
-2. Passata su LangGraph **tra** le sedute, innescata dalle date all'apertura della conversazione. Latenza zero sul percorso caldo.
-3. Isolamento verificato: vede forma della traiettoria, obiettivo, conclusioni attive — **mai la prosa dell'agente**.
-4. Gate del consolidamento: conferma, fonde, marca sospetta, ritira con motivo. Criterio unico, la coerenza.
-5. I denti: osservazione iniettata → se l'agente fa uguale una seconda volta, si converte in un vincolo del motore. «L'ha ignorata» è decidibile, quindi lo verifica il codice.
+1. **Golden set**: 40-60 hand-labeled examples, axis A and axis B. False positives on the «no» rows weighted double. An example you cannot label does not go in.
+2. A pass on LangGraph **between** workouts, triggered by the dates when the conversation opens. Zero latency on the hot path.
+3. Verified isolation: it sees the shape of the trajectory, the goal, the active conclusions — **never the agent's prose**.
+4. Consolidation gate: confirms, merges, marks suspect, retires with a reason. A single criterion, coherence.
+5. The teeth: observation injected → if the agent does the same thing a second time, it converts into an engine constraint. «It ignored it» is decidable, so the code checks it.
 
-> La riga più importante di tutta la suite è nell'issue 1: *stesso esercizio otto volte di fila perché è la preferenza dichiarata* → **non segnalare**. Rispettare una preferenza e derivare sono identici nei dati. Se il supervisore sbaglia questa, il sistema contesta all'utente ciò che l'utente ha chiesto, ed è insopportabile in due settimane.
+> The single most important row in the whole suite is in issue 1: *the same exercise eight times in a row because it is the stated preference* → **do not flag**. Respecting a preference and drifting are identical in the data. If the supervisor gets this one wrong, the system argues with the user about what the user asked for, and that is unbearable within two weeks.
 
 ---
 
-## Dopo 1.0.0
+## After 1.0.0
 
-| # | versione | cosa |
+| # | version | what |
 |---|---|---|
-| 12 | `1.1.0` | **Livello 2** — utente simulato con verità nascoste, i due casi di controllo (utente senza verità, rumore), k=5 run, e l'insieme di regressione raccolto dai run |
-| 13 | `1.2.0` | Server + bot Telegram. Puramente reattivo, nessuno scheduler. Il nucleo non cambia: non ha mai assunto niente sul client |
-| 14 | `2.0.0` | Patologie diagnosticate; controllo dell'esecuzione via video |
+| 12 | `1.1.0` | **Level 2** — simulated user with hidden truths, the two control cases (user with no truth, noise), k=5 runs, and the regression set harvested from the runs |
+| 13 | `1.2.0` | Server + Telegram bot. Purely reactive, no scheduler. The core does not change: it never assumed anything about the client |
+| 14 | `2.0.0` | Diagnosed pathologies; form checking via video |
 
-La 12 è l'unica sessione che **non consegna niente all'utente finale**, e va detto. Consegna il diritto di fidarsi del ciclo. Sta dopo la 1.0.0 e non prima perché TRAINER.md è esplicito: il livello 2 si misura solo quando i componenti sotto passano, altrimenti misuri un ciclo costruito su pezzi di cui non sai niente — e i pezzi non passano tutti prima della sessione 11.
+Session 12 is the only one that **ships nothing to the end user**, and that should be said out loud. It ships the right to trust the loop. It comes after 1.0.0 and not before because TRAINER.md is explicit: level 2 can only be measured once the components underneath pass, otherwise you are measuring a loop built on parts you know nothing about — and the parts do not all pass before session 11.
 
-## Deviazioni dichiarate da TRAINER.md
+## Declared deviations from TRAINER.md
 
-| | «Primi passi» dice | qui | perché |
+| | «First steps» says | here | why |
 |---|---|---|---|
-| golden set del supervisore | passo 1, prima di tutto | sessione 11 | è la scelta più discutibile di questo file: *«se il supervisore sbaglia qui tutto quello a valle è avvelenato»* resta vero. Ma il supervisore non gira fino alla 11, e sessanta righe scritte alla 1 verrebbero riscritte quando lo stato reale esiste. Il rischio è mitigato dal fatto che il gate d'ammissione (sessione 9) è codice, non modello |
-| MCP | non compare | sessione 4 | costa mezza giornata e ripaga per sette sessioni |
-| documento metodologico | assente da «Primi passi» | sessione 8, issue 4 | è nello scope v1 ma non aveva uno slot |
+| supervisor golden set | step 1, before everything | session 11 | this is the most debatable call in this file: *«if the supervisor gets this wrong, everything downstream is poisoned»* is still true. But the supervisor does not run until 11, and sixty rows written at session 1 would be rewritten once the real state exists. The risk is mitigated by the admission gate (session 9) being code, not a model |
+| MCP | does not appear | session 4 | costs half a day and pays back over seven sessions |
+| methodology document | absent from «First steps» | session 8, issue 4 | it is in the v1 scope but had no slot |
 
-## Rischi
+## Risks
 
-**La sessione 5 è più grossa delle altre e non si divide bene.** L'agente senza validatore non si consegna. Se sfonda, il taglio da fare è l'issue 5 (le invarianti) in una sessione `0.5.1` a sé — mai l'issue 4.
+**Session 5 is bigger than the others and does not divide well.** The agent without the validator cannot ship. If it overruns, the cut to make is issue 5 (the invariants) into a `0.5.1` of its own — never issue 4.
 
-**Le sessioni 1-4 non hanno modelli dentro e le 5-11 sì.** Il ritmo cambia bruscamente: le prime sono deterministiche e veloci, dalla 5 ogni verifica diventa una distribuzione. Non stimare le seconde con la velocità delle prime.
+**Sessions 1-4 have no models in them and 5-11 do.** The rhythm changes abruptly: the first ones are deterministic and fast, from 5 onward every verification becomes a distribution. Do not estimate the second group at the speed of the first.
 
-**L'arricchimento (sessione 2) è l'unico punto con un costo esterno vero** e gira una volta sola. Vale la pena farlo girare prima su 30 esercizi e leggere i disaccordi a mano, prima di lanciarlo sugli 800.
+**Enrichment (session 2) is the only point with a real external cost** and it runs exactly once. It is worth running it first on 30 exercises and reading the disagreements by hand, before launching it on the 800.
