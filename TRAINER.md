@@ -588,7 +588,7 @@ From the level 2 runs you **harvest** the interesting moments and freeze them as
 
 Base: **free-exercise-db** — ~800 exercises, public domain, images, no licensing risk.
 
-No public catalog has the necessary fields. `force: "push"` does not distinguish a bench press from a military press. The other candidates: wger has only relational IDs (and AGPL); ExerciseDB has a native substitution graph but is AGPL with undeclared media; Zenith Fits is dead (HTTP 410).
+No public catalog has the necessary fields. `force: "push"` does not distinguish a bench press from a military press. The other candidates: wger has only relational IDs, and its exercise data is Creative Commons licensed per individual entry — share-alike, which would carry through to the enriched dataset (the AGPL there covers the application code); ExerciseDB has a native substitution graph but is AGPL-3.0 with undeclared media terms; Zenith Fits is dead (HTTP 410).
 
 **Enrichment** — seven fields added:
 
