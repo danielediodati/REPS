@@ -8,7 +8,7 @@ All documentation, code, identifiers and commit messages are written in **Englis
 
 ### Issue tracker
 
-Issues live as markdown files under `.scratch/<feature-slug>/`, one file per ticket — this repo has no remote. See `docs/agents/issue-tracker.md`.
+Issues live as markdown files under `docs/work/<feature-slug>/`, one file per ticket — this repo has no remote. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
