@@ -39,13 +39,13 @@ Run through this every time, in order. A ticket is not done because the code wor
    - it constrains a later ticket → write it into that ticket
    - it changes how the project is used → README
    - it is the reasoning behind what you built → the commit message, which is permanent and greppable
-5. **Write the user a report**, in English, in the conversation rather than in a file. Use these headings, in this order, and keep it factual — a reader who was not here has to be able to follow it:
+5. **Write the user a report, in Italian** — the one artefact of this project that is not in English, because it is written for the user to read rather than for the repo to keep. In the conversation, never in a file. Use these headings, in this order, and keep it factual — a reader who was not here has to be able to follow it:
 
-   - **What was built** — two or three sentences. What the code now does, in plain terms, before any detail.
-   - **What you can run** — the commands, with their real output pasted in.
-   - **Files** — a table: path, lines, what it does.
-   - **What broke against previously working code** — **regressions only**: something that worked before this ticket and does not now, or an existing test that failed. A bug you wrote and fixed inside the ticket is not a regression, it is development, and it does not belong here. If nothing broke, say so in one line.
-   - **Where it stands** — test count, type check, what is now unblocked.
+   - **Cosa è stato costruito** — two or three sentences. What the code now does, in plain terms, before any detail.
+   - **Cosa puoi lanciare** — the commands, with their real output pasted in.
+   - **File** — a table: path, lines, what it does.
+   - **Cosa si è rotto rispetto a prima** — **regressions only**: something that worked before this ticket and does not now, or an existing test that failed. A bug you wrote and fixed inside the ticket is not a regression, it is development, and it does not belong here. If nothing broke, say so in one line.
+   - **Dove siamo** — test count, type check, what is now unblocked.
 
    Anything genuinely surprising goes in one short paragraph at the end. Not an essay: no aphorisms, no narrative, no sentence that exists because it sounds good. If a line would not help someone decide what to do next, cut it.
 6. **Mark the issue done in ROADMAP.md**, with the short hash of the commit that closed it:
