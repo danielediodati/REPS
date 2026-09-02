@@ -52,13 +52,15 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 
 **Runs**: `trainer catalog --pattern hinge --max-rom shoulder:flexion:120`.
 
-1. Migration with the seven fields from the appendix; `required_rom` structured as a triple, not text.
-2. Enrichment prompt with Pydantic output, rejecting anything that does not validate.
-3. Three-pass job: two cheap models from different providers, the strong one only on the disagreements, majority vote.
-4. Full run over the ~800 + a report of the residual disagreements.
-5. Manual verification on 50 sampled rows, and the new filters exposed on the CLI.
+1. Migration with the seven fields from the appendix; `required_rom` structured as a triple, in a child table because one exercise loads more than one joint. Plus per-field provenance — a value written by a rule, by hand or by a vote is not worth the same.
+2. The vocabulary definitions written out, and the deterministic pass that applies whatever the native fields already decide.
+3. 60-80 movements decided by hand as the reference set, the command that scores the database against it, and the new filters exposed on the CLI.
+4. Enrichment prompt with typed output, rejecting anything that does not validate. One model, one exercise, nothing written.
+5. Three-pass job — two cheap models from different providers, the strong one only on the disagreements, majority vote — measured against the reference set before it runs, then the full run over the strength rows and a report of the residual disagreements.
 
 > The field worth verifying by hand is `movement_pattern`: get it wrong there and every downstream volume count is wrong without you noticing.
+
+> **This session was re-sliced before it was started.** The original order — prompt, three passes, full run, *then* verify fifty rows by hand — measured quality only after the one external spend in the project had already happened. Two changes. A deterministic pass first, because `spinal_axial_load`, `setup_cost_min` and a good share of `movement_pattern` are already implied by columns the catalog holds, and a rule is auditable, free and reproducible where a vote is none of the three. And a hand-built reference set *before* the run instead of a hand check after it, so the accuracy figure exists while the decision to spend is still open. What made this cheap to decide: two cheap models over 584 rows is single-digit dollars, so the case for the three passes was never the money — it is that disagreement between two different providers is the only signal that says which rows are unreliable, and one model working alone produces one confident opinion and no signal at all.
 
 > Concretely, from the imported catalog: `Arnold Dumbbell Press` and `Standing Military Press` share `force: push`, `mechanic: compound` and `category: strength`, and differ only on equipment. Nothing in the raw fields says they are the same movement. TRAINER.md's running example — *«the Arnold and the military press are the same pattern, to the engine they are interchangeable»* — has no field to rest on until this session supplies one. The Arnold also exists in two rows, dumbbell and kettlebell, which is why a conclusion points at a movement and never at an id.
 
@@ -187,4 +189,4 @@ Session 12 is the only one that **ships nothing to the end user**, and that shou
 
 **Sessions 1-4 have no models in them and 5-11 do.** The rhythm changes abruptly: the first ones are deterministic and fast, from 5 onward every verification becomes a distribution. Do not estimate the second group at the speed of the first.
 
-**Enrichment (session 2) is the only point with a real external cost** and it runs exactly once. It is worth running it first on 30 exercises and reading the disagreements by hand, before launching it on the 800.
+**Enrichment (session 2) is the only point with a real external cost** and it runs exactly once — but the cost is single-digit dollars over 584 rows, so the risk was never the money. It is that the run is only as good as the vocabulary it applies and nobody would know otherwise. That is what the reference set in session 2's issue 3 is for: the accuracy figure comes before the spend, not after it.
