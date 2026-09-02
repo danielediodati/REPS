@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import closing
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from click.testing import CliRunner
 
 from trainer import __version__
 from trainer.cli import main
-from trainer.engine import database, migrations
+from trainer.engine import catalog, database, migrations
 
 
 @pytest.fixture()
@@ -33,8 +34,9 @@ def test_init_creates_the_database_and_migrates(
 
     assert result.exit_code == 0, result.output
     assert database_file.exists()
+    latest = migrations.latest_version(migrations.discover())
     assert "applied migration 0001" in result.output
-    assert "now at schema version 1" in result.output
+    assert f"now at schema version {latest}" in result.output
 
 
 def test_init_a_second_time_changes_nothing_and_says_so(
@@ -68,8 +70,9 @@ def test_status_reports_the_applied_version(
     result = runner.invoke(main, ["db", "status"])
 
     assert result.exit_code == 0, result.output
-    assert "schema version: 1" in result.output
-    assert "latest available: 1" in result.output
+    latest = migrations.latest_version(migrations.discover())
+    assert f"schema version: {latest}" in result.output
+    assert f"latest available: {latest}" in result.output
 
 
 def test_the_database_path_is_overridable(
@@ -119,3 +122,108 @@ def test_a_database_ahead_of_the_checkout_is_flagged(
     assert result.exit_code == 0, result.output
     assert "WARNING" in result.output
     assert "newer version of trainer" in result.output
+
+
+def test_import_reports_the_number_of_records(
+    runner: CliRunner, database_file: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code == 0, result.output
+    expected = len(catalog.load())
+    assert f"read {expected} records" in result.output
+    assert f"{expected} exercises in the catalog" in result.output
+
+
+def test_importing_twice_reports_no_growth(
+    runner: CliRunner, database_file: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+    runner.invoke(main, ["db", "import"])
+
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code == 0, result.output
+    assert "inserted" not in result.output
+    assert "removed" not in result.output
+    with closing(database.connect(database_file)) as connection:
+        assert catalog.count(connection) == len(catalog.load())
+
+
+def test_importing_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_a_broken_dataset_is_a_message_not_a_traceback(
+    runner: CliRunner, database_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(main, ["db", "init"])
+    absent = tmp_path / "gone.json"
+    monkeypatch.setattr(catalog, "DATASET_PATH", absent)
+    monkeypatch.setattr(catalog, "load", lambda path=absent: _load_missing(path))
+
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code != 0
+    assert "the dataset is unusable" in result.output
+    assert "Traceback" not in result.output
+
+
+def _load_missing(path: Path) -> tuple[catalog.Exercise, ...]:
+    raise catalog.CatalogError(f"no dataset at {path}")
+
+
+def test_import_into_a_database_that_does_not_exist_leaves_no_file(
+    runner: CliRunner, database_file: Path
+) -> None:
+    """Connecting would create it, and a stray empty file reads as version 0."""
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+    assert not database_file.exists()
+
+
+def test_an_import_that_would_gut_the_catalog_is_refused(
+    runner: CliRunner, database_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner.invoke(main, ["db", "init"])
+    runner.invoke(main, ["db", "import"])
+
+    truncated = tmp_path / "truncated.json"
+    truncated.write_text(json.dumps([_as_record(catalog.load()[0])]), encoding="utf-8")
+
+    # Captured before the patch: resolving it afterwards would find the patch.
+    real_load = catalog.load
+    monkeypatch.setattr(catalog, "load", lambda *a, **k: real_load(truncated))
+
+    result = runner.invoke(main, ["db", "import"])
+
+    assert result.exit_code != 0
+    assert "looks more like a truncated dataset" in result.output
+    with closing(database.connect(database_file)) as connection:
+        assert catalog.count(connection) > 1
+
+
+def _as_record(exercise: catalog.Exercise) -> dict[str, object]:
+    return {
+        "id": exercise.id,
+        "name": exercise.name,
+        "force": exercise.force,
+        "level": exercise.level,
+        "mechanic": exercise.mechanic,
+        "equipment": exercise.equipment,
+        "category": exercise.category,
+        "primaryMuscles": list(exercise.primary_muscles),
+        "secondaryMuscles": list(exercise.secondary_muscles),
+        "instructions": list(exercise.instructions),
+        "images": list(exercise.images),
+    }

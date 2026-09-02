@@ -1,0 +1,4 @@
+# The vendored dataset must stay byte-identical to what upstream published:
+# PROVENANCE.md names a commit, and a line-ending rewrite would quietly make
+# that claim false.
+src/trainer/data/free-exercise-db/** -text

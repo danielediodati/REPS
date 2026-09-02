@@ -5,6 +5,16 @@ wrapper and a direct call are all thin wrappers over this same surface, and a
 test enforces that rather than trusting the convention.
 """
 
+from trainer.engine.catalog import (
+    DATASET_PATH,
+    CatalogError,
+    Exercise,
+    ImportResult,
+    count,
+    exercise,
+    import_exercises,
+    load,
+)
 from trainer.engine.database import DATABASE_ENV_VAR, connect, database_path
 from trainer.engine.migrations import (
     Migration,
@@ -17,6 +27,14 @@ from trainer.engine.migrations import (
 
 __all__ = [
     "DATABASE_ENV_VAR",
+    "DATASET_PATH",
+    "CatalogError",
+    "Exercise",
+    "ImportResult",
+    "count",
+    "exercise",
+    "import_exercises",
+    "load",
     "Migration",
     "MigrationError",
     "applied_version",
