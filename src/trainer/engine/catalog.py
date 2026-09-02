@@ -408,7 +408,10 @@ def search(
     they are simply not being asked about, and they appear like any other.
 
     Ordering is by name, always: a caller that shows the rows, diffs them or
-    slices them with `limit` needs the same answer twice.
+    slices them with `limit` needs the same answer twice. `id` breaks the tie,
+    because `name` is not unique in the schema and every listing is limited --
+    without it, which of two identically named rows falls inside the window is
+    left to SQLite.
     """
     where, parameters = _where(connection, name, dict(filters or {}))
 
@@ -424,6 +427,6 @@ def search(
         parameters = [*parameters, limit]
 
     rows = connection.execute(
-        f"SELECT * FROM exercises {where} ORDER BY name {clause}", parameters
+        f"SELECT * FROM exercises {where} ORDER BY name, id {clause}", parameters
     )
     return SearchResult(tuple(_from_row(row) for row in rows), total)

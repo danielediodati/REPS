@@ -10,6 +10,8 @@ Reference: ROADMAP.md § Session 2 (the enrichment cost), TRAINER.md § Appendix
 
 **Blocked by:** 02 — Import the free-exercise-db catalog
 
+> **Naming, decided in ticket 04.** `trainer catalog` is a command with options, not a group, and `trainer catalog --equipment dumbbell` is the command this session is defined by — turning `catalog` into a group to hang `stats` off it would break it. Either add the subcommand without losing the bare invocation, or put the aggregates where ticket 04 put the snapshot: `trainer catalog --stats`, or a sibling under `db`.
+
 **Status:** ready-for-agent
 
 - [ ] The command reports counts broken down by `category`, `equipment`, `level`, `mechanic` and `force`

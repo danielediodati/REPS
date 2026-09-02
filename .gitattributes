@@ -2,3 +2,9 @@
 # PROVENANCE.md names a commit, and a line-ending rewrite would quietly make
 # that claim false.
 src/trainer/data/free-exercise-db/** -text
+
+# The snapshot is written with LF and compared byte for byte before it is
+# rewritten. With core.autocrlf=true git would check it out as CRLF, and every
+# `trainer db snapshot` would then rewrite the whole file -- the churn the
+# snapshot exists to avoid.
+snapshots/*.md text eol=lf

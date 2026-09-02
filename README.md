@@ -15,7 +15,7 @@ The engine is deterministic, reproducible and verifiable, and it answers questio
 
 ## Status
 
-**`0.1.0` — session 1 of 11, tickets 01-03 done.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db — and you can query it from the command line. Still to come in this session: a versioned markdown snapshot of the catalog, and a profile of what it actually contains.
+**`0.1.0` — session 1 of 11, tickets 01-04 done.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db — you can query it from the command line, and `snapshots/catalog.md` carries its readable history in git. Still to come in this session: a profile of what the catalog actually contains.
 
 ## Getting started
 
@@ -30,6 +30,8 @@ uv run trainer db status    # which schema version it is on
 
 uv run trainer catalog --equipment dumbbell --level beginner
 uv run trainer catalog --values equipment     # what that field actually holds
+
+uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 ```
 
 ## The catalog
@@ -46,7 +48,9 @@ Enrichment — the seven fields the catalog does not have, and which the whole e
 
 A single SQLite file, `trainer.sqlite` in the working directory. Override it with the `TRAINER_DB` environment variable — that is what the test suite does, so tests never touch a real one.
 
-The file is never committed: `git` diffs of a binary blob are useless. The readable history is a regenerated markdown snapshot beside it. **The DB is the truth, the snapshot is the readable history.**
+The file is never committed: `git` diffs of a binary blob are useless. The readable history is `snapshots/catalog.md`, regenerated beside it by `trainer db snapshot` and committed. **The DB is the truth, the snapshot is the readable history.**
+
+That snapshot is never hand-edited and never read back by the engine — it exists to be diffed. Regenerating against an unchanged database produces a byte-identical file, so `git diff` stays empty and a diff that does appear means the catalog moved. One exercise is one line and its text depends on nothing but that exercise, so a rename changes one line rather than reflowing the table around it. Instructions and images are counts, not text: the file is for reading, not a second copy of the database. `TRAINER_SNAPSHOT` overrides where it goes.
 
 ## Development
 

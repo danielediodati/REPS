@@ -478,3 +478,20 @@ def test_omitting_a_filter_does_not_exclude_the_rows_without_that_value(
     assert any(e.equipment is None for e in everything.exercises)
 
 
+def test_two_exercises_sharing_a_name_are_ordered_by_id(migrated: Path) -> None:
+    """`name` is not unique and every listing is limited, so it cannot be the
+    whole ordering: which of the two lands inside the window would be SQLite's
+    choice, and a caller that slices needs the same answer twice."""
+    with closing(database.connect(migrated)) as connection:
+        catalog.import_exercises(
+            connection,
+            (
+                catalog.load(dataset(migrated.parent, record(id="Zzz_Curl", name="Curl")))[0],
+                catalog.load(dataset(migrated.parent, record(id="Aaa_Curl", name="Curl")))[0],
+            ),
+        )
+
+        first = catalog.search(connection, limit=1)
+
+    assert [found.id for found in first.exercises] == ["Aaa_Curl"]
+    assert first.total == 2

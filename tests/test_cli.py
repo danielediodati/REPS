@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from trainer import __version__
 from trainer.cli import main
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, migrations, snapshot
 
 
 @pytest.fixture()
@@ -374,3 +374,87 @@ def test_a_short_result_does_not_pretend_to_be_truncated(
 
     assert "showing 14" in result.output
     assert "of" not in result.output.splitlines()[-1]
+
+
+@pytest.fixture()
+def snapshot_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Never the repo's own snapshot: a test must not rewrite what git carries."""
+    path = tmp_path / "snapshots" / "catalog.md"
+    monkeypatch.setenv(snapshot.SNAPSHOT_ENV_VAR, str(path))
+    return path
+
+
+def test_snapshot_writes_the_file(
+    runner: CliRunner, stocked: Path, snapshot_file: Path
+) -> None:
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert result.exit_code == 0, result.output
+    assert "regenerated" in result.output
+    assert snapshot_file.read_text(encoding="utf-8").startswith("# Catalog snapshot")
+
+
+def test_snapshot_a_second_time_writes_nothing_and_says_so(
+    runner: CliRunner, stocked: Path, snapshot_file: Path
+) -> None:
+    """The whole mechanism: unchanged database, empty `git diff`."""
+    runner.invoke(main, ["db", "snapshot"])
+    before = snapshot_file.read_bytes()
+
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert result.exit_code == 0, result.output
+    assert "unchanged" in result.output
+    assert snapshot_file.read_bytes() == before
+
+
+def test_snapshot_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path, snapshot_file: Path
+) -> None:
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+    assert not snapshot_file.exists()
+
+
+def test_snapshot_on_an_empty_catalog_says_to_import(
+    runner: CliRunner, database_file: Path, snapshot_file: Path
+) -> None:
+    """A snapshot of nothing would read as a catalog that had been emptied."""
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db import` first" in result.output
+    assert not snapshot_file.exists()
+
+
+def test_snapshot_output_is_ascii(
+    runner: CliRunner, stocked: Path, snapshot_file: Path
+) -> None:
+    runner.invoke(main, ["db", "snapshot"]).output.encode("ascii")
+    runner.invoke(main, ["db", "snapshot", "--help"]).output.encode("ascii")
+
+
+def test_a_snapshot_that_cannot_be_written_is_a_message_not_a_traceback(
+    runner: CliRunner, stocked: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read-only volume or a path pointing at a directory is still user error."""
+    monkeypatch.setenv(snapshot.SNAPSHOT_ENV_VAR, str(tmp_path))  # a directory
+
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert result.exit_code != 0
+    assert "a file could not be used" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_snapshot_names_the_database_it_read(
+    runner: CliRunner, stocked: Path, snapshot_file: Path
+) -> None:
+    """The committed file is only as trustworthy as the database behind it."""
+    result = runner.invoke(main, ["db", "snapshot"])
+
+    assert str(stocked) in result.output

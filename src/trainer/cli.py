@@ -17,7 +17,7 @@ from contextlib import closing, contextmanager
 import click
 
 from trainer import __version__
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, migrations, snapshot
 
 
 @contextmanager
@@ -31,6 +31,11 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the dataset is unusable: {error}") from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
+    except OSError as error:
+        # A read-only volume, a TRAINER_SNAPSHOT pointing at a directory, a
+        # dataset the account cannot read: the user caused it and can fix it,
+        # so it is a message. Last, because sqlite3.Error is not an OSError.
+        raise click.ClickException(f"a file could not be used: {error}") from error
 
 
 @click.group()
@@ -41,7 +46,7 @@ def main() -> None:
 
 @main.group()
 def db() -> None:
-    """Inspect and migrate the database."""
+    """Inspect, migrate and dump the database."""
 
 
 @db.command("init")
@@ -139,6 +144,30 @@ def db_import(allow_pruning: bool) -> None:
     if result.removed:
         click.echo(f"  removed  {result.removed}")
     click.echo(f"{result.total} exercises in the catalog")
+
+
+@db.command("snapshot")
+def db_snapshot() -> None:
+    """Regenerate the readable markdown snapshot of the catalog.
+
+    The database is the truth and the snapshot is the history of it, so this
+    only ever writes: an edit made to the file by hand is lost here.
+    """
+    # Both paths, because the committed file is only as trustworthy as the
+    # database it came from, and TRAINER_DB can point anywhere.
+    click.echo(f"database: {database.database_path()}")
+    path = snapshot.snapshot_path()
+    click.echo(f"snapshot: {path}")
+
+    with _opened() as connection:
+        changed = snapshot.write(connection, path)
+
+    if changed:
+        click.echo("regenerated")
+    else:
+        # The normal outcome, and the one worth naming: an unchanged file is
+        # the evidence that the snapshot does not churn.
+        click.echo("unchanged, nothing to commit")
 
 
 def _require_current_schema(connection: sqlite3.Connection) -> None:
