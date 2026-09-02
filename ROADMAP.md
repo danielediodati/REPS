@@ -39,7 +39,9 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 1. Skeleton: Python package, SQLite with versioned migrations, CLI, `engine/` laid out as a pure library separate from everything else. — **done** `35d2d1f`
 2. Import free-exercise-db into `exercises` — native fields, instructions and images included, retrievable by id. — **done** `c6f11f3`
 3. `catalog` command with filters on the native fields. — **done** `c5a5060`
-4. Markdown dump of the catalog, versioned — the first half of the *«the DB is the truth, the snapshot is the readable history»* mechanism.
+4. Markdown dump of the catalog, versioned — the first half of the *«the DB
+   is the truth, the snapshot is the readable history»* mechanism. — **done**
+   `a2d3ecc`
 5. Catalog profile: counts by category, equipment, level, mechanic and force.
 
 > The equipment value is `dumbbell`, singular — the source's vocabulary, verified against the dataset. Normalising it to something more natural in the CLI would introduce a private vocabulary at the very first command of the project, and everything downstream would inherit it.
