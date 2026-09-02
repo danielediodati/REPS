@@ -61,3 +61,13 @@ Run through this every time, in order. A ticket is not done because the code wor
 8. **Commit.**
 
 Step 4 is the one that costs you if you skip it. Steps 1-3 fail loudly; a decision buried in a deleted file fails silently, weeks later, when someone rebuilds the reasoning from scratch.
+
+## Closing a session
+
+A session closes when its last ticket does — every issue under that heading in ROADMAP.md marked **done**. It ships a version. Three more steps, after the closing commit:
+
+1. **Bump the minor version in `pyproject.toml`** — session N ends at `0.N.0`, which is what the roadmap's table already promises. That file is the only place the number lives: `trainer.__version__` reads the installed package metadata, so run `uv sync` afterwards or `trainer --version` goes on reporting the old one. Commit it on its own, `Release 0.N.0`.
+2. **Tag that commit**, annotated, `v0.N.0`. The subject is the line the roadmap's table gives for the session — *what you can do at the end* — and the body says what actually shipped, in two or three lines.
+3. **Point README's Status at the new version** and at what the next session opens with.
+
+The tag is what answers *«it used to work»* when a later session breaks something the roadmap says was finished. `git diff v0.1.0..v0.2.0` is the only view of the project that is neither one commit nor all of them.
