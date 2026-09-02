@@ -58,6 +58,8 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 
 > The field worth verifying by hand is `movement_pattern`: get it wrong there and every downstream volume count is wrong without you noticing.
 
+> Concretely, from the imported catalog: `Arnold Dumbbell Press` and `Standing Military Press` share `force: push`, `mechanic: compound` and `category: strength`, and differ only on equipment. Nothing in the raw fields says they are the same movement. TRAINER.md's running example — *«the Arnold and the military press are the same pattern, to the engine they are interchangeable»* — has no field to rest on until this session supplies one. The Arnold also exists in two rows, dumbbell and kettlebell, which is why a conclusion points at a movement and never at an id.
+
 ## Session 3 — `0.3.0` — The admissible set
 
 **Runs**: `trainer admissible --equipment bodyweight --time 45 --exclude vertical_push`.

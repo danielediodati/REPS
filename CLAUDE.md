@@ -18,6 +18,14 @@ The five canonical roles, unchanged, recorded as a `Status:` line in each issue 
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Standing rules
+
+Each of these was learned by getting it wrong once. They are cheap to follow and expensive to rediscover.
+
+- **Anything the CLI prints is ASCII.** An em dash renders as a replacement character in the Windows console. The documents keep their typography; output does not.
+- **Vocabulary that exists in the data is read from the data**, never restated as a constant in code. The catalog's equipment list was hand-copied once from a partial read of the file and was wrong in three places; a CLI holding that copy would have rejected a real value as a typo.
+- **Tests derive the expected schema version from the migration set.** Two tests hardcoded version 1 and broke the moment a second migration existed. An assertion about today's schema is not an assertion about behaviour.
+
 ## Closing a ticket
 
 Run through this every time, in order. A ticket is not done because the code works.
