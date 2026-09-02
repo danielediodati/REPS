@@ -42,7 +42,7 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 4. Markdown dump of the catalog, versioned — the first half of the *«the DB
    is the truth, the snapshot is the readable history»* mechanism. — **done**
    `a2d3ecc`
-5. Catalog profile: counts by category, equipment, level, mechanic and force.
+5. Catalog profile: counts by category, equipment, level, mechanic and force. — **done** `8ba09c4`
 
 > The equipment value is `dumbbell`, singular — the source's vocabulary, verified against the dataset. Normalising it to something more natural in the CLI would introduce a private vocabulary at the very first command of the project, and everything downstream would inherit it.
 
