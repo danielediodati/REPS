@@ -30,7 +30,6 @@ uv run trainer db status    # which schema version it is on
 
 uv run trainer catalog --equipment dumbbell --level beginner
 uv run trainer catalog --values equipment     # what that field actually holds
-uv run trainer catalog --missing equipment    # the 77 with none recorded
 ```
 
 ## The catalog

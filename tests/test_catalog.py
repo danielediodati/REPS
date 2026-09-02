@@ -356,8 +356,8 @@ def test_a_single_filter(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
         found = catalog.search(connection, filters={"equipment": "dumbbell"})
 
-    assert found
-    assert all(exercise.equipment == "dumbbell" for exercise in found)
+    assert found.total == len(found.exercises) > 0
+    assert all(e.equipment == "dumbbell" for e in found.exercises)
 
 
 def test_filters_compose_as_and(stocked: Path) -> None:
@@ -367,23 +367,25 @@ def test_filters_compose_as_and(stocked: Path) -> None:
             connection, filters={"equipment": "dumbbell", "level": "beginner"}
         )
 
-    assert 0 < len(both) < len(one)
-    assert all(e.equipment == "dumbbell" and e.level == "beginner" for e in both)
+    assert 0 < both.total < one.total
+    assert all(
+        e.equipment == "dumbbell" and e.level == "beginner" for e in both.exercises
+    )
 
 
 def test_a_muscle_filter_matches_membership(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
         found = catalog.search(connection, filters={"primary_muscles": "chest"})
 
-    assert found
-    assert all("chest" in exercise.primary_muscles for exercise in found)
+    assert found.total > 0
+    assert all("chest" in e.primary_muscles for e in found.exercises)
 
 
 def test_a_name_filter_is_a_case_insensitive_substring(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
         found = catalog.search(connection, name="ARNOLD")
 
-    assert {exercise.id for exercise in found} == {
+    assert {exercise.id for exercise in found.exercises} == {
         "Arnold_Dumbbell_Press",
         "Kettlebell_Arnold_Press",
     }
@@ -394,22 +396,15 @@ def test_a_name_filter_does_not_treat_its_argument_as_a_pattern(
 ) -> None:
     """`%` is a wildcard to LIKE and nothing to a person typing it."""
     with closing(database.connect(stocked)) as connection:
-        assert catalog.search(connection, name="%") == ()
-
-
-def test_missing_reaches_the_rows_with_no_value(stocked: Path) -> None:
-    with closing(database.connect(stocked)) as connection:
-        found = catalog.search(connection, missing=("equipment",))
-
-    assert len(found) == 77
-    assert all(exercise.equipment is None for exercise in found)
+        assert catalog.search(connection, name="%").total == 0
 
 
 def test_results_are_ordered_by_name(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
         found = catalog.search(connection, filters={"category": "cardio"})
 
-    assert [e.name for e in found] == sorted(e.name for e in found)
+    names = [e.name for e in found.exercises]
+    assert names == sorted(names)
 
 
 def test_limit_takes_the_first_rows_of_that_same_order(stocked: Path) -> None:
@@ -417,12 +412,13 @@ def test_limit_takes_the_first_rows_of_that_same_order(stocked: Path) -> None:
         everything = catalog.search(connection, filters={"category": "cardio"})
         limited = catalog.search(connection, filters={"category": "cardio"}, limit=3)
 
-    assert limited == everything[:3]
+    assert limited.exercises == everything.exercises[:3]
+    assert limited.total == everything.total, "the total ignores the limit"
 
 
 def test_no_filters_returns_the_whole_catalog(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
-        assert len(catalog.search(connection)) == VENDORED_RECORDS
+        assert catalog.search(connection).total == VENDORED_RECORDS
 
 
 def test_an_unknown_value_is_refused_with_what_the_field_holds(
@@ -445,7 +441,7 @@ def test_a_filter_that_legitimately_matches_nothing_is_not_an_error(
     with closing(database.connect(stocked)) as connection:
         assert catalog.search(
             connection, filters={"equipment": "foam roll", "category": "cardio"}
-        ) == ()
+        ).total == 0
 
 
 @pytest.mark.parametrize("field", ["instructions", "images", "id", "nonsense"])
@@ -460,24 +456,25 @@ def test_a_field_name_cannot_smuggle_sql(stocked: Path) -> None:
     """Field names reach SQL by interpolation, so they are checked, not trusted."""
     with closing(database.connect(stocked)) as connection:
         with pytest.raises(catalog.CatalogError):
-            catalog.search(connection, missing=("equipment; DROP TABLE exercises",))
+            catalog.search(
+                connection, filters={"equipment; DROP TABLE exercises": "x"}
+            )
         assert catalog.count(connection) == VENDORED_RECORDS
 
 
-def test_missing_refuses_a_field_that_can_never_be_null(stocked: Path) -> None:
-    """`level` is NOT NULL, so asking for the ones without it is unanswerable.
-
-    Allowing it would return an ordinary empty result, which is precisely the
-    confusion this command exists to prevent.
-    """
+def test_omitting_a_filter_does_not_exclude_the_rows_without_that_value(
+    stocked: Path,
+) -> None:
+    """The 77 with no equipment are not hidden; they are simply not asked about."""
     with closing(database.connect(stocked)) as connection:
-        for field in ("level", "category"):
-            with pytest.raises(catalog.CatalogError):
-                catalog.search(connection, missing=(field,))
+        everything = catalog.search(connection)
+        by_value = sum(
+            catalog.search(connection, filters={"equipment": value}).total
+            for value in catalog.values(connection, "equipment")
+        )
+        absent = catalog.missing_count(connection, "equipment")
+
+    assert everything.total == by_value + absent
+    assert any(e.equipment is None for e in everything.exercises)
 
 
-def test_every_nullable_filter_actually_has_null_rows(stocked: Path) -> None:
-    with closing(database.connect(stocked)) as connection:
-        for field in catalog.NULLABLE_FILTERS:
-            assert catalog.missing_count(connection, field) > 0
-            assert catalog.search(connection, missing=(field,))

@@ -324,11 +324,10 @@ def test_a_field_that_is_not_filterable_is_rejected_as_a_bad_argument(
     runner: CliRunner, stocked: Path
 ) -> None:
     """User input, not a corrupt dataset -- and it must not read like one."""
-    for arguments in (["catalog", "--values", "nonsense"], ["catalog", "--missing", "level"]):
-        result = runner.invoke(main, arguments)
-        assert result.exit_code != 0
-        assert "the dataset is unusable" not in result.output
-        assert "Invalid value" in result.output
+    result = runner.invoke(main, ["catalog", "--values", "nonsense"])
+    assert result.exit_code != 0
+    assert "the dataset is unusable" not in result.output
+    assert "Invalid value" in result.output
 
 
 def test_the_listing_is_ordered_by_the_column_it_shows(
@@ -346,6 +345,32 @@ def test_every_catalog_output_is_ascii(runner: CliRunner, stocked: Path) -> None
         ["catalog", "--values", "equipment"],
         ["catalog", "--equipment", "dumbbells"],
         ["catalog", "--help"],
-        ["catalog", "--missing", "equipment"],
     ):
         runner.invoke(main, arguments).output.encode("ascii")
+
+
+def test_the_listing_stops_at_a_hundred_by_default(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog"])
+
+    assert result.exit_code == 0, result.output
+    assert "showing 100 of 876" in result.output
+    assert len(result.output.splitlines()) == 102  # header + 100 rows + footer
+
+
+def test_limit_zero_shows_everything(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--limit", "0"])
+
+    assert result.exit_code == 0, result.output
+    assert "showing 876" in result.output
+    assert "of 876" not in result.output, "nothing was withheld, so say nothing"
+
+
+def test_a_short_result_does_not_pretend_to_be_truncated(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--category", "cardio"])
+
+    assert "showing 14" in result.output
+    assert "of" not in result.output.splitlines()[-1]

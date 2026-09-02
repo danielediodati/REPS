@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -276,13 +276,6 @@ SCALAR_FILTERS = ("force", "level", "mechanic", "equipment", "category")
 LIST_FILTERS = ("primary_muscles", "secondary_muscles")
 """Native fields holding a JSON array, filtered by membership."""
 
-NULLABLE_FILTERS = ("force", "mechanic", "equipment")
-"""The three the source leaves empty. `missing` reaches those rows.
-
-Without it 77 exercises with no recorded equipment are unreachable from every
-equipment query, present in the table and invisible from the command line.
-"""
-
 FILTERABLE = SCALAR_FILTERS + LIST_FILTERS
 
 # `instructions` and `images` are deliberately not filterable. The appendix is
@@ -355,25 +348,24 @@ def check_value(connection: sqlite3.Connection, field: str, value: str) -> None:
     raise UnknownFilterValue(field, value, valid, missing)
 
 
-def search(
-    connection: sqlite3.Connection,
-    *,
-    name: str | None = None,
-    filters: Mapping[str, str] | None = None,
-    missing: Sequence[str] = (),
-    limit: int | None = None,
-) -> tuple[Exercise, ...]:
-    """Exercises matching every criterion given. Filters compose as AND.
+@dataclass(frozen=True)
+class SearchResult:
+    """The rows asked for, and how many there were before the limit.
 
-    `filters` maps a field in `FILTERABLE` to one of the values that field
-    holds; `missing` names scalar fields the exercise must have no value for.
-    Both are checked against the table before any SQL is built, so an unknown
-    field or value fails as itself rather than as an empty result.
-
-    Ordering is by name, always: a caller that shows the rows, diffs them or
-    slices them with `limit` needs the same answer twice.
+    A listing that silently stops at its limit is a listing that lies about the
+    size of the answer, so the total travels with the rows.
     """
-    filters = dict(filters or {})
+
+    exercises: tuple[Exercise, ...]
+    total: int
+
+
+def _where(
+    connection: sqlite3.Connection,
+    name: str | None,
+    filters: Mapping[str, str],
+) -> tuple[str, list[object]]:
+    """Build the shared WHERE once, so the rows and the count cannot disagree."""
     conditions: list[str] = []
     parameters: list[object] = []
 
@@ -388,28 +380,50 @@ def search(
         check_value(connection, field, value)
         if field in LIST_FILTERS:
             conditions.append(
-                f"EXISTS (SELECT 1 FROM json_each(exercises.{field}) AS item "  # field checked above
-                f"WHERE item.value = ?)"
+                f"EXISTS (SELECT 1 FROM json_each(exercises.{field}) AS item "
+                f"WHERE item.value = ?)"  # field checked above
             )
         else:
             conditions.append(f"{field} = ?")  # field checked above
         parameters.append(value)
 
-    for field in missing:
-        # NULLABLE_FILTERS, not SCALAR_FILTERS: `level` and `category` are NOT
-        # NULL, so asking for the ones without a value is unsatisfiable by
-        # construction and would come back as an ordinary empty result -- the
-        # exact confusion this command exists to prevent.
-        _check_field(field, NULLABLE_FILTERS)
-        conditions.append(f"{field} IS NULL")  # field checked above
-
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    clause = "LIMIT ?" if limit is not None else ""
+    return where, parameters
+
+
+def search(
+    connection: sqlite3.Connection,
+    *,
+    name: str | None = None,
+    filters: Mapping[str, str] | None = None,
+    limit: int | None = None,
+) -> SearchResult:
+    """Exercises matching every criterion given. Filters compose as AND.
+
+    `filters` maps a field in `FILTERABLE` to one of the values that field
+    holds, checked against the table before any SQL is built, so an unknown
+    field or value fails as itself rather than as an empty result.
+
+    Omitting a filter does not exclude the rows with no value for that field:
+    they are simply not being asked about, and they appear like any other.
+
+    Ordering is by name, always: a caller that shows the rows, diffs them or
+    slices them with `limit` needs the same answer twice.
+    """
+    where, parameters = _where(connection, name, dict(filters or {}))
+
+    total = int(
+        connection.execute(
+            f"SELECT COUNT(*) AS total FROM exercises {where}", parameters
+        ).fetchone()["total"]
+    )
+
+    clause = ""
     if limit is not None:
-        parameters.append(limit)
+        clause = "LIMIT ?"
+        parameters = [*parameters, limit]
 
     rows = connection.execute(
-        f"SELECT * FROM exercises {where} ORDER BY name {clause}",  # field checked above
-        parameters,
+        f"SELECT * FROM exercises {where} ORDER BY name {clause}", parameters
     )
-    return tuple(_from_row(row) for row in rows)
+    return SearchResult(tuple(_from_row(row) for row in rows), total)

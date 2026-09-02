@@ -169,12 +169,12 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
 @click.option("--primary-muscle", metavar="VALUE", help="Worked as a primary muscle.")
 @click.option("--secondary-muscle", metavar="VALUE", help="Worked as a secondary muscle.")
 @click.option(
-    "--missing",
-    type=click.Choice(catalog.NULLABLE_FILTERS),
-    multiple=True,
-    help="Only exercises with no value recorded for this field.",
+    "--limit",
+    type=click.IntRange(min=0),
+    default=100,
+    show_default=True,
+    help="Show at most this many rows; 0 for all of them.",
 )
-@click.option("--limit", type=click.IntRange(min=1), help="Show at most this many.")
 @click.option(
     "--values",
     "show_values",
@@ -190,8 +190,7 @@ def catalog_command(
     category: str | None,
     primary_muscle: str | None,
     secondary_muscle: str | None,
-    missing: tuple[str, ...],
-    limit: int | None,
+    limit: int,
     show_values: str | None,
 ) -> None:
     """List exercises, filtered on the catalog's own fields.
@@ -219,18 +218,25 @@ def catalog_command(
             return
         try:
             found = catalog.search(
-                connection, name=name, filters=filters, missing=missing, limit=limit
+                connection,
+                name=name,
+                filters=filters,
+                limit=limit or None,
             )
         except catalog.UnknownFilterValue as error:
             raise _rejected(error) from error
 
-        total = len(found)
-        if not total:
+        if not found.total:
             click.echo("no exercise matches those filters")
             return
-        _print_table(found)
-        shown = f"showing {total}" if limit is None else f"showing {total} (limit {limit})"
-        click.echo(shown)
+        _print_table(found.exercises)
+        shown = len(found.exercises)
+        if shown < found.total:
+            # Never just "showing 100": a listing that stops at its limit
+            # without saying so is lying about the size of the answer.
+            click.echo(f"showing {shown} of {found.total} (--limit 0 for all)")
+        else:
+            click.echo(f"showing {shown}")
 
 
 @contextmanager
@@ -261,10 +267,8 @@ def _rejected(error: catalog.UnknownFilterValue) -> click.ClickException:
         f"valid values: {', '.join(error.valid)}",
     ]
     if error.missing:
-        lines.append(
-            f"{error.missing} exercises have no {error.field} recorded "
-            f"(--missing {error.field})"
-        )
+        # Says why the values above do not add up to the size of the catalog.
+        lines.append(f"{error.missing} exercises have no {error.field} recorded")
     return click.ClickException("\n".join(lines))
 
 
