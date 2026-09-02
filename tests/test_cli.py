@@ -227,3 +227,125 @@ def _as_record(exercise: catalog.Exercise) -> dict[str, object]:
         "instructions": list(exercise.instructions),
         "images": list(exercise.images),
     }
+
+
+@pytest.fixture()
+def stocked(runner: CliRunner, database_file: Path) -> Path:
+    runner.invoke(main, ["db", "init"])
+    runner.invoke(main, ["db", "import"])
+    return database_file
+
+
+def test_catalog_lists_matching_exercises(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--equipment", "dumbbell", "--limit", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert "dumbbell" in result.output
+    assert "showing 5" in result.output
+
+
+def test_catalog_rejects_a_near_miss_with_the_real_values(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """`dumbbells` is the trap this command exists to spring."""
+    result = runner.invoke(main, ["catalog", "--equipment", "dumbbells"])
+
+    assert result.exit_code != 0
+    assert "no such equipment: 'dumbbells'" in result.output
+    assert "dumbbell" in result.output
+    assert "e-z curl bar" in result.output
+    assert "77 exercises have no equipment recorded" in result.output
+
+
+def test_catalog_says_so_when_nothing_matches(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(
+        main, ["catalog", "--equipment", "foam roll", "--category", "cardio"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no exercise matches" in result.output
+
+
+def test_catalog_values_prints_what_a_field_holds(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--values", "equipment"])
+
+    assert result.exit_code == 0, result.output
+    assert "e-z curl bar" in result.output
+    assert "77 exercises have no equipment recorded" in result.output
+
+
+def test_catalog_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    result = runner.invoke(main, ["catalog"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+    assert not database_file.exists()
+
+
+def test_catalog_output_is_ascii(runner: CliRunner, stocked: Path) -> None:
+    """An em dash renders as a replacement character in the Windows console."""
+    result = runner.invoke(main, ["catalog", "--limit", "20"])
+    result.output.encode("ascii")
+
+
+def test_catalog_help_is_ascii(runner: CliRunner) -> None:
+    runner.invoke(main, ["catalog", "--help"]).output.encode("ascii")
+
+
+def test_catalog_on_an_empty_database_says_to_import(
+    runner: CliRunner, database_file: Path
+) -> None:
+    """Otherwise a correct value is rejected against an empty vocabulary."""
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["catalog", "--equipment", "dumbbell"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db import` first" in result.output
+    assert "no such equipment" not in result.output
+
+
+def test_catalog_unfiltered_on_an_empty_database_says_to_import(
+    runner: CliRunner, database_file: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["catalog"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db import` first" in result.output
+
+
+def test_a_field_that_is_not_filterable_is_rejected_as_a_bad_argument(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """User input, not a corrupt dataset -- and it must not read like one."""
+    for arguments in (["catalog", "--values", "nonsense"], ["catalog", "--missing", "level"]):
+        result = runner.invoke(main, arguments)
+        assert result.exit_code != 0
+        assert "the dataset is unusable" not in result.output
+        assert "Invalid value" in result.output
+
+
+def test_the_listing_is_ordered_by_the_column_it_shows(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--category", "cardio"])
+
+    names = [line.split("  ")[0].strip() for line in result.output.splitlines()[1:-1]]
+    assert names == sorted(names)
+
+
+def test_every_catalog_output_is_ascii(runner: CliRunner, stocked: Path) -> None:
+    for arguments in (
+        ["catalog"],
+        ["catalog", "--values", "equipment"],
+        ["catalog", "--equipment", "dumbbells"],
+        ["catalog", "--help"],
+        ["catalog", "--missing", "equipment"],
+    ):
+        runner.invoke(main, arguments).output.encode("ascii")

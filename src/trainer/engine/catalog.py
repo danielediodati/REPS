@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -267,3 +268,148 @@ def _from_row(row: sqlite3.Row) -> Exercise:
         instructions=tuple(json.loads(row["instructions"])),
         images=tuple(json.loads(row["images"])),
     )
+
+
+SCALAR_FILTERS = ("force", "level", "mechanic", "equipment", "category")
+"""Native fields holding one value per exercise, each usable as a filter."""
+
+LIST_FILTERS = ("primary_muscles", "secondary_muscles")
+"""Native fields holding a JSON array, filtered by membership."""
+
+NULLABLE_FILTERS = ("force", "mechanic", "equipment")
+"""The three the source leaves empty. `missing` reaches those rows.
+
+Without it 77 exercises with no recorded equipment are unreachable from every
+equipment query, present in the table and invisible from the command line.
+"""
+
+FILTERABLE = SCALAR_FILTERS + LIST_FILTERS
+
+# `instructions` and `images` are deliberately not filterable. The appendix is
+# explicit that they are never queried: they are fetched by id when something
+# needs to show the exercise.
+
+
+class UnknownFilterValue(CatalogError):
+    """A filter value that is not in the catalog.
+
+    Carries the valid values so the CLI can show them. A typo and a genuinely
+    empty result must not look alike, and the only way to tell them apart is to
+    say what the field actually holds.
+    """
+
+    def __init__(self, field: str, value: str, valid: tuple[str, ...], missing: int):
+        super().__init__(f"no such {field}: {value!r}")
+        self.field = field
+        self.value = value
+        self.valid = valid
+        self.missing = missing
+
+
+def _check_field(field: str, allowed: tuple[str, ...]) -> str:
+    """Field names reach SQL by interpolation, so they are checked, not trusted."""
+    if field not in allowed:
+        raise CatalogError(
+            f"{field!r} is not a filterable field; try one of {', '.join(allowed)}"
+        )
+    return field
+
+
+def values(connection: sqlite3.Connection, field: str) -> tuple[str, ...]:
+    """The values this field actually holds, read from the table.
+
+    Never a constant in the code: the hand-copied vocabulary in ticket 02 missed
+    `e-z curl bar` and `olympic weightlifting`, and a CLI carrying that copy
+    would reject a real value as a typo.
+    """
+    _check_field(field, FILTERABLE)
+    if field in LIST_FILTERS:
+        rows = connection.execute(
+            f"SELECT DISTINCT item.value AS value "  # field checked above
+            f"FROM exercises, json_each(exercises.{field}) AS item "
+            f"ORDER BY value"
+        )
+    else:
+        rows = connection.execute(
+            f"SELECT DISTINCT {field} AS value FROM exercises "  # field checked above
+            f"WHERE {field} IS NOT NULL ORDER BY value"
+        )
+    return tuple(str(row["value"]) for row in rows)
+
+
+def missing_count(connection: sqlite3.Connection, field: str) -> int:
+    """How many exercises have no value for this field."""
+    _check_field(field, SCALAR_FILTERS)
+    row = connection.execute(
+        f"SELECT COUNT(*) AS total FROM exercises WHERE {field} IS NULL"  # field checked above
+    ).fetchone()
+    return int(row["total"])
+
+
+def check_value(connection: sqlite3.Connection, field: str, value: str) -> None:
+    """Raise unless the catalog actually holds this value for this field."""
+    valid = values(connection, field)
+    if value in valid:
+        return
+    missing = missing_count(connection, field) if field in SCALAR_FILTERS else 0
+    raise UnknownFilterValue(field, value, valid, missing)
+
+
+def search(
+    connection: sqlite3.Connection,
+    *,
+    name: str | None = None,
+    filters: Mapping[str, str] | None = None,
+    missing: Sequence[str] = (),
+    limit: int | None = None,
+) -> tuple[Exercise, ...]:
+    """Exercises matching every criterion given. Filters compose as AND.
+
+    `filters` maps a field in `FILTERABLE` to one of the values that field
+    holds; `missing` names scalar fields the exercise must have no value for.
+    Both are checked against the table before any SQL is built, so an unknown
+    field or value fails as itself rather than as an empty result.
+
+    Ordering is by name, always: a caller that shows the rows, diffs them or
+    slices them with `limit` needs the same answer twice.
+    """
+    filters = dict(filters or {})
+    conditions: list[str] = []
+    parameters: list[object] = []
+
+    if name is not None:
+        # instr() rather than LIKE: no % or _ to escape, and no way for a
+        # search term to become a pattern by accident.
+        conditions.append("instr(lower(name), lower(?)) > 0")
+        parameters.append(name)
+
+    for field, value in filters.items():
+        _check_field(field, FILTERABLE)
+        check_value(connection, field, value)
+        if field in LIST_FILTERS:
+            conditions.append(
+                f"EXISTS (SELECT 1 FROM json_each(exercises.{field}) AS item "  # field checked above
+                f"WHERE item.value = ?)"
+            )
+        else:
+            conditions.append(f"{field} = ?")  # field checked above
+        parameters.append(value)
+
+    for field in missing:
+        # NULLABLE_FILTERS, not SCALAR_FILTERS: `level` and `category` are NOT
+        # NULL, so asking for the ones without a value is unsatisfiable by
+        # construction and would come back as an ordinary empty result -- the
+        # exact confusion this command exists to prevent.
+        _check_field(field, NULLABLE_FILTERS)
+        conditions.append(f"{field} IS NULL")  # field checked above
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    clause = "LIMIT ?" if limit is not None else ""
+    if limit is not None:
+        parameters.append(limit)
+
+    rows = connection.execute(
+        f"SELECT * FROM exercises {where} ORDER BY name {clause}",  # field checked above
+        parameters,
+    )
+    return tuple(_from_row(row) for row in rows)

@@ -154,6 +154,152 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
             f"the database is at schema version {current} and this checkout "
             f"expects {latest}; run `trainer db init` first"
         )
-    # Ahead is the direction that matters more here than anywhere else: this
-    # command writes, and `db status` already warns for merely reading.
+    # Ahead is worth saying wherever this check runs: `db import` writes into
+    # the schema, and `catalog` reads columns it may not understand.
     _warn_if_ahead(current, latest)
+
+
+@main.command("catalog")
+@click.option("--name", help="Match part of the exercise name, case-insensitively.")
+@click.option("--force", "force_", metavar="VALUE", help="push, pull, static.")
+@click.option("--level", metavar="VALUE", help="beginner, intermediate, expert.")
+@click.option("--mechanic", metavar="VALUE", help="compound, isolation.")
+@click.option("--equipment", metavar="VALUE", help="barbell, dumbbell, cable.")
+@click.option("--category", metavar="VALUE", help="strength, stretching, cardio.")
+@click.option("--primary-muscle", metavar="VALUE", help="Worked as a primary muscle.")
+@click.option("--secondary-muscle", metavar="VALUE", help="Worked as a secondary muscle.")
+@click.option(
+    "--missing",
+    type=click.Choice(catalog.NULLABLE_FILTERS),
+    multiple=True,
+    help="Only exercises with no value recorded for this field.",
+)
+@click.option("--limit", type=click.IntRange(min=1), help="Show at most this many.")
+@click.option(
+    "--values",
+    "show_values",
+    type=click.Choice(catalog.FILTERABLE),
+    help="List what this field holds, and stop.",
+)
+def catalog_command(
+    name: str | None,
+    force_: str | None,
+    level: str | None,
+    mechanic: str | None,
+    equipment: str | None,
+    category: str | None,
+    primary_muscle: str | None,
+    secondary_muscle: str | None,
+    missing: tuple[str, ...],
+    limit: int | None,
+    show_values: str | None,
+) -> None:
+    """List exercises, filtered on the catalog's own fields.
+
+    Filters compose: every one given has to match. Values are the source's own
+    -- `dumbbell`, not `dumbbells` -- and `--values FIELD` prints them.
+    """
+    filters = {
+        field: value
+        for field, value in (
+            ("force", force_),
+            ("level", level),
+            ("mechanic", mechanic),
+            ("equipment", equipment),
+            ("category", category),
+            ("primary_muscles", primary_muscle),
+            ("secondary_muscles", secondary_muscle),
+        )
+        if value is not None
+    }
+
+    with _opened() as connection:
+        if show_values is not None:
+            _print_values(connection, show_values)
+            return
+        try:
+            found = catalog.search(
+                connection, name=name, filters=filters, missing=missing, limit=limit
+            )
+        except catalog.UnknownFilterValue as error:
+            raise _rejected(error) from error
+
+        total = len(found)
+        if not total:
+            click.echo("no exercise matches those filters")
+            return
+        _print_table(found)
+        shown = f"showing {total}" if limit is None else f"showing {total} (limit {limit})"
+        click.echo(shown)
+
+
+@contextmanager
+def _opened() -> Iterator[sqlite3.Connection]:
+    """Open the database for reading, refusing the states that are not ready."""
+    path = database.database_path()
+    if not path.exists():
+        raise click.ClickException(
+            "the database does not exist yet; run `trainer db init` first"
+        )
+    with reported():
+        with closing(database.connect(path)) as connection:
+            _require_current_schema(connection)
+            # An empty catalog would otherwise answer every query as though the
+            # user had mistyped: the vocabulary read from an empty table is
+            # empty, so a correct value gets rejected against nothing at all.
+            if catalog.count(connection) == 0:
+                raise click.ClickException(
+                    "the catalog is empty; run `trainer db import` first"
+                )
+            yield connection
+
+
+def _rejected(error: catalog.UnknownFilterValue) -> click.ClickException:
+    """Say what the field holds, so a typo cannot look like an empty result."""
+    lines = [
+        f"no such {error.field}: {error.value!r}",
+        f"valid values: {', '.join(error.valid)}",
+    ]
+    if error.missing:
+        lines.append(
+            f"{error.missing} exercises have no {error.field} recorded "
+            f"(--missing {error.field})"
+        )
+    return click.ClickException("\n".join(lines))
+
+
+def _print_values(connection: sqlite3.Connection, field: str) -> None:
+    with reported():
+        for value in catalog.values(connection, field):
+            click.echo(value)
+        if field in catalog.SCALAR_FILTERS:
+            absent = catalog.missing_count(connection, field)
+            if absent:
+                click.echo(f"({absent} exercises have no {field} recorded)")
+
+
+def _print_table(found: tuple[catalog.Exercise, ...]) -> None:
+    rows = [
+        (
+            exercise.name,
+            exercise.equipment or "-",
+            exercise.force or "-",
+            exercise.mechanic or "-",
+            exercise.level,
+            exercise.category,
+        )
+        for exercise in found
+    ]
+    headers = ("name", "equipment", "force", "mechanic", "level", "category")
+    widths = [
+        max(len(headers[column]), *(len(row[column]) for row in rows))
+        for column in range(len(headers))
+    ]
+    click.echo(_line(headers, widths))
+    for row in rows:
+        click.echo(_line(row, widths))
+
+
+def _line(cells: tuple[str, ...], widths: list[int]) -> str:
+    """Padded columns, but no trailing run of spaces at the end of the line."""
+    return "  ".join(cell.ljust(width) for cell, width in zip(cells, widths)).rstrip()

@@ -15,7 +15,7 @@ The engine is deterministic, reproducible and verifiable, and it answers questio
 
 ## Status
 
-**`0.1.0` — session 1 of 11, tickets 01-02 done.** The package runs, the database migrates, and the catalog is in it: 876 exercises from free-exercise-db, retrievable by id with their instructions and images. Still to come in this session: filtering the catalog from the command line, a versioned markdown snapshot of it, and a profile of what it actually contains.
+**`0.1.0` — session 1 of 11, tickets 01-03 done.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db — and you can query it from the command line. Still to come in this session: a versioned markdown snapshot of the catalog, and a profile of what it actually contains.
 
 ## Getting started
 
@@ -27,6 +27,10 @@ uv run trainer --version
 uv run trainer db init      # create the database and migrate it
 uv run trainer db import    # load the exercise catalog into it
 uv run trainer db status    # which schema version it is on
+
+uv run trainer catalog --equipment dumbbell --level beginner
+uv run trainer catalog --values equipment     # what that field actually holds
+uv run trainer catalog --missing equipment    # the 77 with none recorded
 ```
 
 ## The catalog
@@ -34,6 +38,8 @@ uv run trainer db status    # which schema version it is on
 876 exercises from [free-exercise-db](https://github.com/yuhonas/free-exercise-db), vendored into the package so the import needs no network and cannot change underneath the work between one session and the next. Public domain, checksum and upstream commit recorded in `src/trainer/data/free-exercise-db/PROVENANCE.md`.
 
 Images are references into the upstream repository, never bytes. Re-running the import changes nothing; an import that would remove most of the catalog is refused, because a truncated re-vendor otherwise deletes rows and reports success.
+
+`trainer catalog` filters on the source's own fields, and the filters compose. The vocabulary is the source's — `dumbbell`, not `dumbbells` — and `--values FIELD` prints what a field holds, read from the table rather than from a list in the code. A value that is not in the catalog is rejected with the valid ones, so a typo never looks like a legitimately empty result.
 
 Enrichment — the seven fields the catalog does not have, and which the whole engine depends on — is session 2.
 

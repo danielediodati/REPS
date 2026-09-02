@@ -24,6 +24,7 @@ Each of these was learned by getting it wrong once. They are cheap to follow and
 
 - **Anything the CLI prints is ASCII.** An em dash renders as a replacement character in the Windows console. The documents keep their typography; output does not.
 - **Vocabulary that exists in the data is read from the data**, never restated as a constant in code. The catalog's equipment list was hand-copied once from a partial read of the file and was wrong in three places; a CLI holding that copy would have rejected a real value as a typo.
+- **A missing precondition is reported as a state, never as a user error.** Against a database with no catalog in it, `catalog --equipment dumbbell` rejected a correct value as a typo, because the vocabulary read from an empty table is empty. Check the state first and name it: *run `trainer db import` first*.
 - **Tests derive the expected schema version from the migration set.** Two tests hardcoded version 1 and broke the moment a second migration existed. An assertion about today's schema is not an assertion about behaviour.
 
 ## Closing a ticket
