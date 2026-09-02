@@ -36,8 +36,8 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 
 **Runs**: `trainer catalog --equipment dumbbell` lists the exercises.
 
-1. Skeleton: Python package, SQLite with versioned migrations, CLI, `engine/` laid out as a pure library separate from everything else.
-2. Import free-exercise-db into `exercises` — native fields, instructions and images included, retrievable by id.
+1. Skeleton: Python package, SQLite with versioned migrations, CLI, `engine/` laid out as a pure library separate from everything else. — **done** `35d2d1f`
+2. Import free-exercise-db into `exercises` — native fields, instructions and images included, retrievable by id. — **done** `c6f11f3`
 3. `catalog` command with filters on the native fields.
 4. Markdown dump of the catalog, versioned — the first half of the *«the DB is the truth, the snapshot is the readable history»* mechanism.
 5. Catalog profile: counts by category, equipment, level, mechanic and force.

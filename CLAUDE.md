@@ -39,7 +39,16 @@ Run through this every time, in order. A ticket is not done because the code wor
    - it changes how the project is used → README
    - it is the reasoning behind what you built → the commit message, which is permanent and greppable
 5. **Write the user a detailed report** — what was delivered, what the review found, what surprised you, what you decided and why. In the conversation, not in a file.
-6. **Delete the ticket file.** A finished ticket is a work item, not an archive: git still has it, and the durable record is the commit plus whatever step 4 moved. Delete the feature directory too when its last ticket goes.
-7. **Commit.**
+6. **Mark the issue done in ROADMAP.md**, with the short hash of the commit that closed it:
+
+   ```markdown
+   2. Import free-exercise-db into `exercises` — native fields, instructions and
+      images included, retrievable by id. — **done** `c6f11f3`
+   ```
+
+   That is where finished work stays visible. The roadmap already lists every session's issues in order, so someone opening the repo sees what is built and what is not without reading git history, and the hash puts the full record one `git show` away.
+
+7. **Delete the ticket file.** A finished ticket is a work item, not an archive: the roadmap carries the status, the commit carries the record, and git still has the file. Delete the feature directory too when its last ticket goes.
+8. **Commit.**
 
 Step 4 is the one that costs you if you skip it. Steps 1-3 fail loudly; a decision buried in a deleted file fails silently, weeks later, when someone rebuilds the reasoning from scratch.

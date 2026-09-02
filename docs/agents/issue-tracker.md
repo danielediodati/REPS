@@ -11,7 +11,7 @@ This repo has no git remote, so there is no GitHub/GitLab issue tracker to talk 
 - Implementation issues are one file per ticket at `docs/work/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
-- A ticket is **deleted** when it closes, following the closing procedure in [CLAUDE.md](../../CLAUDE.md). Anything that outlives the ticket has to be moved somewhere it will be read before the file goes
+- A ticket is **deleted** when it closes, following the closing procedure in [CLAUDE.md](../../CLAUDE.md). The matching issue in [ROADMAP.md](../../ROADMAP.md) is marked `**done**` with the closing commit, which is where finished work stays visible; anything else that outlives the ticket has to be moved somewhere it will be read before the file goes
 
 ## Mapping onto the roadmap
 
