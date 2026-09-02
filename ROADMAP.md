@@ -46,7 +46,7 @@ An honest note on what *«testable by the end user»* means: until session 5 the
 
 > The equipment value is `dumbbell`, singular — the source's vocabulary, verified against the dataset. Normalising it to something more natural in the CLI would introduce a private vocabulary at the very first command of the project, and everything downstream would inherit it.
 
-> Issue 5 is the one addition to what this session originally listed. *«~800 exercises»* counts stretching, cardio, plyometrics and strongman: how many are actually strength work is unknown, and that number is both the real size of the pool the admissible set is drawn from and the multiplier on session 2's enrichment cost — the only external cost in the project. The session should end with it.
+> Issue 5 is the one addition to what this session originally listed. *«~800 exercises»* counts stretching, cardio, plyometrics and strongman: how many are actually strength work is both the real size of the pool the admissible set is drawn from and the multiplier on session 2's enrichment cost — the only external cost in the project. The session ended with it: **584 of 876**, the other 292 being stretching (123), plyometrics (61), powerlifting (38), olympic weightlifting (35), strongman (21) and cardio (14). Run `trainer catalog --stats` for the rest.
 
 ## Session 2 — `0.2.0` — The enriched catalog
 

@@ -15,7 +15,7 @@ The engine is deterministic, reproducible and verifiable, and it answers questio
 
 ## Status
 
-**`0.1.0` — session 1 of 11, tickets 01-04 done.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db — you can query it from the command line, and `snapshots/catalog.md` carries its readable history in git. Still to come in this session: a profile of what the catalog actually contains.
+**`0.1.0` — session 1 of 11, complete.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db, of which **584 are strength work** — you can query and count it from the command line, and `snapshots/catalog.md` carries its readable history in git. Next: session 2, the seven enrichment fields the whole engine depends on.
 
 ## Getting started
 
@@ -30,6 +30,7 @@ uv run trainer db status    # which schema version it is on
 
 uv run trainer catalog --equipment dumbbell --level beginner
 uv run trainer catalog --values equipment     # what that field actually holds
+uv run trainer catalog --stats                # what the catalog actually holds
 
 uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 ```
@@ -41,6 +42,8 @@ uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 Images are references into the upstream repository, never bytes. Re-running the import changes nothing; an import that would remove most of the catalog is refused, because a truncated re-vendor otherwise deletes rows and reports success.
 
 `trainer catalog` filters on the source's own fields, and the filters compose. The vocabulary is the source's — `dumbbell`, not `dumbbells` — and `--values FIELD` prints what a field holds, read from the table rather than from a list in the code. A value that is not in the catalog is rejected with the valid ones, so a typo never looks like a legitimately empty result.
+
+`trainer catalog --stats` counts those same rows instead of listing them: **584 of the 876 are `category: strength`**, and the other 292 are stretching, plyometrics, powerlifting, olympic weightlifting, strongman and cardio. That is the real size of the pool the admissible set is drawn from, and the multiplier on session 2's enrichment. The filters narrow the counts too, so a filtered question never gets an answer about the whole catalog. Rows holding no value are counted as `(none)`, shown even when there are none, so every column visibly adds up to the total: 87 exercises have no `mechanic`, 77 no `equipment` and 30 no `force`, while every one of them has a `level` and a `category`. Coverage is worth knowing before a field is relied on — `force` in particular, which TRAINER.md's appendix already judges insufficient on its own terms (*«`force: "push"` does not distinguish a bench press from a military press»*), and which is missing outright for thirty of them.
 
 Enrichment — the seven fields the catalog does not have, and which the whole engine depends on — is session 2.
 

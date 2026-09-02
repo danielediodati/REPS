@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 
 import click
+from click.core import ParameterSource
 
 from trainer import __version__
 from trainer.engine import catalog, database, migrations, snapshot
@@ -189,6 +190,7 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
 
 
 @main.command("catalog")
+@click.pass_context
 @click.option("--name", help="Match part of the exercise name, case-insensitively.")
 @click.option("--force", "force_", metavar="VALUE", help="push, pull, static.")
 @click.option("--level", metavar="VALUE", help="beginner, intermediate, expert.")
@@ -210,7 +212,14 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
     type=click.Choice(catalog.FILTERABLE),
     help="List what this field holds, and stop.",
 )
+@click.option(
+    "--stats",
+    "show_stats",
+    is_flag=True,
+    help="Count what the catalog holds instead of listing it.",
+)
 def catalog_command(
+    context: click.Context,
     name: str | None,
     force_: str | None,
     level: str | None,
@@ -221,12 +230,25 @@ def catalog_command(
     secondary_muscle: str | None,
     limit: int,
     show_values: str | None,
+    show_stats: bool,
 ) -> None:
     """List exercises, filtered on the catalog's own fields.
 
     Filters compose: every one given has to match. Values are the source's own
     -- `dumbbell`, not `dumbbells` -- and `--values FIELD` prints them.
+
+    `--stats` counts the same rows instead of listing them, which is how you
+    find out how much of the catalog is actually strength work.
     """
+    if show_stats:
+        # Every option that would be quietly discarded is named rather than
+        # ignored. --limit bounds a listing and there is no listing here; the
+        # source has to be asked, because its default makes it always present.
+        if show_values is not None:
+            raise click.UsageError("give one of --stats and --values, not both")
+        if context.get_parameter_source("limit") is ParameterSource.COMMANDLINE:
+            raise click.UsageError("--limit bounds a listing; --stats counts them all")
+
     filters = {
         field: value
         for field, value in (
@@ -244,6 +266,12 @@ def catalog_command(
     with _opened() as connection:
         if show_values is not None:
             _print_values(connection, show_values)
+            return
+        if show_stats:
+            try:
+                _print_stats(catalog.stats(connection, name=name, filters=filters))
+            except catalog.UnknownFilterValue as error:
+                raise _rejected(error) from error
             return
         try:
             found = catalog.search(
@@ -309,6 +337,43 @@ def _print_values(connection: sqlite3.Connection, field: str) -> None:
             absent = catalog.missing_count(connection, field)
             if absent:
                 click.echo(f"({absent} exercises have no {field} recorded)")
+
+
+def _print_stats(stats: catalog.CatalogStats) -> None:
+    """Counts, and nothing derived from them.
+
+    Every number here was computed by the engine. The `(none)` row is printed
+    even when it is zero: it is the line that makes each column add up to the
+    total, and a reader who cannot see it has to take the arithmetic on trust.
+    """
+    if not stats.total:
+        click.echo("no exercise matches those filters")
+        return
+
+    click.echo(f"{stats.total} exercises")
+    click.echo(
+        "\n".join(
+            _aligned(
+                [("of which strength", stats.strength), ("everything else", stats.other)]
+            )
+        )
+    )
+    for breakdown in stats.breakdowns:
+        click.echo("")
+        click.echo(f"{breakdown.field}:")
+        click.echo(
+            "\n".join(_aligned([*breakdown.counts, ("(none)", breakdown.missing)]))
+        )
+
+
+def _aligned(rows: list[tuple[str, int]]) -> list[str]:
+    """Labels left, counts right, indented. Widths are per block, not global."""
+    label_width = max(len(label) for label, _ in rows)
+    count_width = max(len(str(count)) for _, count in rows)
+    return [
+        f"  {label.ljust(label_width)}  {str(count).rjust(count_width)}"
+        for label, count in rows
+    ]
 
 
 def _print_table(found: tuple[catalog.Exercise, ...]) -> None:

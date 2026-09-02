@@ -14,6 +14,10 @@ from trainer.cli import main
 from trainer.engine import catalog, database, migrations, snapshot
 
 
+BLANK = "\n\n"
+"""A blank line: what separates one stats block from the next."""
+
+
 @pytest.fixture()
 def runner() -> CliRunner:
     return CliRunner()
@@ -458,3 +462,122 @@ def test_snapshot_names_the_database_it_read(
     result = runner.invoke(main, ["db", "snapshot"])
 
     assert str(stocked) in result.output
+
+
+def test_stats_reports_the_number_the_session_exists_for(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "876 exercises" in result.output
+    assert "of which strength  584" in result.output
+    assert "everything else    292" in result.output
+
+
+def test_stats_breaks_every_scalar_field_down(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    for field in catalog.SCALAR_FILTERS:
+        assert f"{field}:" in result.output
+
+
+def test_stats_shows_the_rows_with_no_value(runner: CliRunner, stocked: Path) -> None:
+    """Coverage of the thin fields, which is what makes them worth checking."""
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    assert "(none)   30" in result.output  # force
+    assert "(none)      87" in result.output  # mechanic
+
+
+def test_every_column_of_stats_adds_up_to_the_total(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """The reader can check the arithmetic, which is why (none) is always shown."""
+    blocks = runner.invoke(main, ["catalog", "--stats"]).output.split(BLANK)
+
+    counted = 0
+    for block in blocks[1:]:
+        lines = block.strip().splitlines()
+        assert lines[0].endswith(":"), lines[0]
+        assert sum(int(line.rsplit("  ", 1)[1]) for line in lines[1:]) == 876
+        counted += 1
+    assert counted == len(catalog.SCALAR_FILTERS)
+
+
+def test_stats_counts_the_rows_the_filters_leave(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """A filtered question must not get an answer about the whole catalog."""
+    result = runner.invoke(main, ["catalog", "--equipment", "dumbbell", "--stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "123 exercises" in result.output
+    assert "876" not in result.output
+
+
+def test_stats_rejects_a_near_miss_like_the_listing_does(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--equipment", "dumbbells", "--stats"])
+
+    assert result.exit_code != 0
+    assert "no such equipment: 'dumbbells'" in result.output
+
+
+def test_stats_says_so_when_the_filters_match_nothing(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(
+        main, ["catalog", "--equipment", "foam roll", "--category", "cardio", "--stats"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no exercise matches" in result.output
+
+
+def test_stats_and_values_together_are_refused(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """Both print and stop; running one and ignoring the other would be a lie."""
+    result = runner.invoke(main, ["catalog", "--stats", "--values", "force"])
+
+    assert result.exit_code != 0
+    assert "not both" in result.output
+
+
+def test_stats_before_import_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db import` first" in result.output
+
+
+def test_stats_output_is_ascii(runner: CliRunner, stocked: Path) -> None:
+    runner.invoke(main, ["catalog", "--stats"]).output.encode("ascii")
+
+
+def test_stats_refuses_a_limit_rather_than_discarding_it(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """--limit bounds a listing, and counting is not listing."""
+    result = runner.invoke(main, ["catalog", "--stats", "--limit", "5"])
+
+    assert result.exit_code != 0
+    assert "--limit bounds a listing" in result.output
+
+
+def test_the_default_limit_does_not_count_as_asking_for_one(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """--limit is always present, so only the command line may trigger the guard."""
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "876 exercises" in result.output

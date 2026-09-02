@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -348,6 +349,28 @@ def check_value(connection: sqlite3.Connection, field: str, value: str) -> None:
     raise UnknownFilterValue(field, value, valid, missing)
 
 
+@contextmanager
+def _one_snapshot(connection: sqlite3.Connection) -> Iterator[None]:
+    """Read every query inside this block against the same state.
+
+    Connections are opened in autocommit, so several reads in a row are several
+    transactions, and an import committing between two of them makes the
+    answers disagree with each other: a listing that says `showing 100 of 875`
+    after showing 100 of a different 876, or a breakdown that no longer adds up
+    to the total it is printed under. DEFERRED because nothing here writes.
+    """
+    connection.execute("BEGIN DEFERRED")
+    try:
+        yield
+    finally:
+        # Read-only, so there is nothing to undo and ending it either way is
+        # correct; SQLite may already have ended it itself after an error.
+        try:
+            connection.execute("COMMIT")
+        except sqlite3.Error:
+            pass
+
+
 @dataclass(frozen=True)
 class SearchResult:
     """The rows asked for, and how many there were before the limit.
@@ -415,18 +438,134 @@ def search(
     """
     where, parameters = _where(connection, name, dict(filters or {}))
 
-    total = int(
-        connection.execute(
-            f"SELECT COUNT(*) AS total FROM exercises {where}", parameters
-        ).fetchone()["total"]
-    )
-
     clause = ""
+    limited = parameters
     if limit is not None:
         clause = "LIMIT ?"
-        parameters = [*parameters, limit]
+        limited = [*parameters, limit]
 
-    rows = connection.execute(
-        f"SELECT * FROM exercises {where} ORDER BY name, id {clause}", parameters
-    )
+    with _one_snapshot(connection):
+        total = int(
+            connection.execute(
+                f"SELECT COUNT(*) AS total FROM exercises {where}", parameters
+            ).fetchone()["total"]
+        )
+        rows = connection.execute(
+            f"SELECT * FROM exercises {where} ORDER BY name, id {clause}", limited
+        ).fetchall()
     return SearchResult(tuple(_from_row(row) for row in rows), total)
+
+
+STRENGTH_CATEGORY = "strength"
+"""The one category value the rest of the project is about.
+
+Named here rather than read from the data because it is not a vocabulary being
+validated -- it is the partition TRAINER.md draws. The catalog's `category`
+also holds stretching, cardio, plyometrics, powerlifting and strongman, and how
+much of the 876 is left once those are set aside is the number this module
+exists to produce. A catalog holding none of it counts zero, honestly.
+"""
+
+
+@dataclass(frozen=True)
+class Breakdown:
+    """How one scalar field's values are distributed.
+
+    `counts` is ordered by count descending, then value ascending, so two runs
+    over the same rows cannot disagree. `missing` is the rows holding no value
+    at all: they belong to the field's story as much as any value does, and
+    dropping them would make the breakdown stop adding up to the total.
+    """
+
+    field: str
+    counts: tuple[tuple[str, int], ...]
+    missing: int
+
+
+@dataclass(frozen=True)
+class CatalogStats:
+    """What the catalog contains, counted.
+
+    Only the scalar fields get a breakdown. A row has exactly one value or none
+    for each, which is what lets every breakdown reconcile with `total`; the
+    list-valued fields would count one row several times and the sum would mean
+    nothing.
+
+    Called stats and not profile on purpose: `profile` is already spoken for by
+    session 3's table, and that one is the user, not the catalog.
+    """
+
+    total: int
+    strength: int
+    breakdowns: tuple[Breakdown, ...]
+
+    @property
+    def other(self) -> int:
+        """Everything that is not strength work: stretching, cardio, the rest."""
+        return self.total - self.strength
+
+
+def stats(
+    connection: sqlite3.Connection,
+    *,
+    name: str | None = None,
+    filters: Mapping[str, str] | None = None,
+) -> CatalogStats:
+    """Count the catalog, over exactly the rows `search` would have listed.
+
+    It takes the same criteria for the same reason the listing reports its own
+    total: a summary of the whole table shown in answer to a filtered question
+    would be answering something nobody asked.
+    """
+    where, parameters = _where(connection, name, dict(filters or {}))
+
+    # Seven queries, one state. Split across seven transactions, an import
+    # landing in the middle would make the breakdowns stop reconciling with the
+    # total -- and if the strength rows arrived after the total was counted,
+    # `other` would come out negative.
+    with _one_snapshot(connection):
+        total = int(
+            connection.execute(
+                f"SELECT COUNT(*) AS total FROM exercises {where}", parameters
+            ).fetchone()["total"]
+        )
+        strength = int(
+            connection.execute(
+                f"SELECT COUNT(*) AS total FROM exercises {where} "
+                f"{'AND' if where else 'WHERE'} category = ?",
+                [*parameters, STRENGTH_CATEGORY],
+            ).fetchone()["total"]
+        )
+        breakdowns = tuple(
+            _breakdown(connection, field, where, parameters)
+            for field in SCALAR_FILTERS
+        )
+
+    return CatalogStats(total=total, strength=strength, breakdowns=breakdowns)
+
+
+def _breakdown(
+    connection: sqlite3.Connection,
+    field: str,
+    where: str,
+    parameters: list[object],
+) -> Breakdown:
+    _check_field(field, SCALAR_FILTERS)
+    rows = connection.execute(
+        f"SELECT {field} AS value, COUNT(*) AS total "  # field checked above
+        f"FROM exercises {where} "
+        f"GROUP BY {field} ORDER BY total DESC, value ASC",  # field checked above
+        parameters,
+    ).fetchall()
+
+    # The NULL group arrives as one row among the others; it is the same fact
+    # as missing_count(), counted over the filtered set rather than the table.
+    return Breakdown(
+        field=field,
+        counts=tuple(
+            (str(row["value"]), int(row["total"]))
+            for row in rows
+            if row["value"] is not None
+        ),
+        missing=sum(int(row["total"]) for row in rows if row["value"] is None),
+    )
