@@ -15,7 +15,7 @@ The engine is deterministic, reproducible and verifiable, and it answers questio
 
 ## Status
 
-**`0.1.0` — session 1 of 10, complete.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db, of which **584 are strength work** — you can query and count it from the command line, and `snapshots/catalog.md` carries its readable history in git. Next: session 2, which enriches the catalog and ends at `trainer admissible` — *«what can I do today»*.
+**`0.2.0` — session 2 of 10, complete.** All 584 strength rows carry a `movement_pattern` and the five fields that follow from it — a rule decides 546, a person reading the exercise's own instructions decides the other 38, each citing the line it rests on — and the `variant_of`/`regression_of` graph links equivalent movements across equipment. `trainer admissible --equipment "body only" --time 45 --exclude "vertical push"` answers *«what can I do today»*: exclusions live in their own table, two granularities only (a pattern or a joint, never an exercise id), each with a re-test date that lets it expire. No model and no network anywhere in the session. Next: session 3, which adds the duration model and ends at telling a selection how long it takes and what it would drop to fit a shorter budget.
 
 ## Getting started
 
@@ -31,6 +31,12 @@ uv run trainer db status    # which schema version it is on
 uv run trainer catalog --equipment dumbbell --level beginner
 uv run trainer catalog --values equipment     # what that field actually holds
 uv run trainer catalog --stats                # what the catalog actually holds
+
+uv run trainer enrich derive                  # the rule: movement_pattern for 546 of 584
+uv run trainer enrich curated                 # the other 38, read by hand, plus the graph
+uv run trainer enrich check                   # score both against the hand-built reference set
+
+uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
 uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 ```
@@ -50,6 +56,12 @@ Enrichment — the six fields the catalog does not have, and which the whole eng
 There is no model and no network anywhere in it. The first model in the project is the agent that writes plans, in session 4.
 
 A seventh field, `required_rom` — a range of motion in degrees per joint — was specified and then dropped from v1. It needed a number the catalog cannot supply and a number the user does not know, multiplied together into a safety boundary. Exclusion works at pattern and joint granularity instead, which is what a person can actually report. See TRAINER.md § Appendix.
+
+## What can I do today
+
+`trainer admissible` is the answer: the exercises today's equipment, the time available and every active exclusion leave standing. Exclusions live in their own table, at exactly two granularities and no third — a movement pattern (*«it hurts when I press overhead»* excludes `vertical push`) or a joint (*«the shoulder is bad»* excludes everything with `shoulder` among its `loaded_joints`) — never an exercise id, and always with a re-test date, so a wall placed today does not stand forever by accident. `--exclude` classifies a value against the catalog's own vocabulary for a single query without persisting it; a persisted exclusion is read automatically once its re-test date has not yet arrived.
+
+This is the sentence the rest of the architecture rests on: *the analytic layer defines the space, the agent moves inside it*. From session 4 on, an agent chooses inside whatever `admissible_set` returns and cannot prescribe outside it — not by instruction, but because nothing outside the set exists for it to choose.
 
 ## The database
 
