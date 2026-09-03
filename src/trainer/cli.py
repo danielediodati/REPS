@@ -18,7 +18,16 @@ import click
 from click.core import ParameterSource
 
 from trainer import __version__
-from trainer.engine import catalog, database, enrichment, migrations, reference_set, snapshot
+from trainer.engine import (
+    catalog,
+    database,
+    enrichment,
+    graph,
+    migrations,
+    reference_set,
+    residue,
+    snapshot,
+)
 
 
 @contextmanager
@@ -32,6 +41,10 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the dataset is unusable: {error}") from error
     except reference_set.ReferenceSetError as error:
         raise click.ClickException(f"the reference set is unusable: {error}") from error
+    except residue.ResidueError as error:
+        raise click.ClickException(f"the residue file is unusable: {error}") from error
+    except graph.GraphError as error:
+        raise click.ClickException(f"the graph file is unusable: {error}") from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
     except OSError as error:
@@ -232,6 +245,46 @@ def enrich_check() -> None:
             continue
         click.echo("")
         _print_field_check(by_field[field])
+
+
+@enrich.command("curated")
+def enrich_curated() -> None:
+    """Load the hand-read residue and the variant_of/regression_of graph.
+
+    docs/enrichment/residue.md decides movement_pattern for the rows the
+    rules could not, each quoting the instruction it rests on; docs/
+    enrichment/graph.md is the variant_of/regression_of graph. Both are read
+    by a person, once, and everything this writes carries `curated`
+    provenance -- a rule can never overwrite it afterwards.
+    """
+    click.echo(f"database: {database.database_path()}")
+    click.echo(f"residue:  {residue.residue_path()}")
+    click.echo(f"graph:    {graph.graph_path()}")
+
+    # residue.apply and graph.apply are each their own transaction -- two
+    # independent, idempotent artifacts, safe to commit one at a time and to
+    # re-run. Reporting each as soon as it lands means a later failure (a
+    # broken graph.md, say) never reads as "nothing happened": the output
+    # above the error already shows what did.
+    with reported():
+        residue_rows = residue.load()
+        with _opened() as connection:
+            residue_report = residue.apply(connection, residue_rows)
+
+    click.echo("")
+    click.echo(f"residue: {residue_report.considered} rows read")
+    click.echo(f"  decided  {len(residue_report.decided)}")
+    click.echo(f"  null     {len(residue_report.null)}")
+
+    with reported():
+        variants, regressions = graph.load()
+        with _opened() as connection:
+            graph_report = graph.apply(connection, variants, regressions)
+
+    click.echo("")
+    click.echo(f"graph: {graph_report.variant_groups} variant groups")
+    click.echo(f"  variant_of rows written     {len(graph_report.variant_rows)}")
+    click.echo(f"  regression_of rows written  {len(graph_report.regression_rows)}")
 
 
 def _print_field_check(result: reference_set.FieldCheck) -> None:

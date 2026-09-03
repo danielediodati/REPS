@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from trainer import __version__
 from trainer.cli import main
-from trainer.engine import catalog, database, migrations, reference_set, snapshot
+from trainer.engine import catalog, database, graph, migrations, reference_set, residue, snapshot
 
 
 BLANK = "\n\n"
@@ -893,6 +893,117 @@ def test_catalog_values_reads_what_enrich_derive_wrote(
     assert result.exit_code == 0, result.output
     assert "not enriched yet" not in result.output
     assert "hip hinge" in result.output
+
+
+# --- enrich curated ---------------------------------------------------------
+
+
+def test_enrich_curated_reports_residue_and_graph(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["enrich", "curated"])
+
+    assert result.exit_code == 0, result.output
+    assert "residue:" in result.output
+    assert "decided" in result.output
+    assert "graph:" in result.output
+    assert "variant_of rows written" in result.output
+
+
+def test_enrich_curated_closes_every_remaining_strength_row(
+    runner: CliRunner, enriched: Path
+) -> None:
+    runner.invoke(main, ["enrich", "curated"])
+
+    with closing(database.connect(enriched)) as connection:
+        left = connection.execute(
+            "SELECT COUNT(*) AS total FROM exercises WHERE category = 'strength' "
+            "AND movement_pattern_source IS NULL"
+        ).fetchone()
+    assert left["total"] == 0
+
+
+def test_enrich_curated_resolves_trainers_running_example(
+    runner: CliRunner, enriched: Path
+) -> None:
+    runner.invoke(main, ["enrich", "curated"])
+
+    with closing(database.connect(enriched)) as connection:
+        rows = {
+            str(r["id"]): r["variant_of"]
+            for r in connection.execute(
+                "SELECT id, variant_of FROM exercises WHERE id IN "
+                "('Arnold_Dumbbell_Press', 'Kettlebell_Arnold_Press', "
+                "'Standing_Military_Press')"
+            )
+        }
+    assert rows["Arnold_Dumbbell_Press"] == rows["Kettlebell_Arnold_Press"]
+    assert rows["Arnold_Dumbbell_Press"] == "Standing_Military_Press"
+
+
+def test_enrich_curated_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "curated"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+
+
+def test_enrich_curated_without_a_residue_file_says_so(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(residue.RESIDUE_ENV_VAR, str(tmp_path / "missing.md"))
+
+    result = runner.invoke(main, ["enrich", "curated"])
+
+    assert result.exit_code != 0
+    assert "the residue file is unusable" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_enrich_curated_without_a_graph_file_says_so(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(graph.GRAPH_ENV_VAR, str(tmp_path / "missing.md"))
+
+    result = runner.invoke(main, ["enrich", "curated"])
+
+    assert result.exit_code != 0
+    assert "the graph file is unusable" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_enrich_curated_reports_residue_before_a_later_graph_failure(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """residue and graph are two separate commits: a graph.md that fails
+    must not read as though the residue load never happened either."""
+    monkeypatch.setenv(graph.GRAPH_ENV_VAR, str(tmp_path / "missing.md"))
+
+    result = runner.invoke(main, ["enrich", "curated"])
+
+    assert result.exit_code != 0
+    assert "residue: 38 rows read" in result.output
+    assert "decided  36" in result.output
+    with closing(database.connect(enriched)) as connection:
+        left = connection.execute(
+            "SELECT COUNT(*) AS total FROM exercises WHERE category = 'strength' "
+            "AND movement_pattern_source IS NULL"
+        ).fetchone()
+    assert left["total"] == 0  # the residue commit landed despite the later failure
+
+
+def test_enrich_curated_twice_reports_the_same_result(runner: CliRunner, enriched: Path) -> None:
+    first = runner.invoke(main, ["enrich", "curated"])
+    second = runner.invoke(main, ["enrich", "curated"])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert first.output == second.output
+
+
+def test_enrich_curated_output_is_ascii(runner: CliRunner, enriched: Path) -> None:
+    runner.invoke(main, ["enrich", "curated"]).output.encode("ascii")
+    runner.invoke(main, ["enrich", "curated", "--help"]).output.encode("ascii")
 
 
 def test_catalog_stats_shows_real_coverage_after_deriving(

@@ -508,6 +508,60 @@ class DeriveReport:
         return len(self.decided) / self.considered if self.considered else 0.0
 
 
+def write(
+    connection: sqlite3.Connection,
+    exercise_id: str,
+    derived: Derived,
+    source: str,
+    *,
+    only_if_not_curated: bool,
+) -> int:
+    """The one place a decision -- a rule's or a curated one -- lands on the
+    five columns together. `residue.apply` uses this too: a sixth field only
+    has to be added to this one query, not to a second copy of it guessing
+    at the same five names.
+
+    `only_if_not_curated` repeats, in SQL, the guarantee a caller already
+    gave by construction -- `run()`'s own pre-filter never reaches a curated
+    row -- so the guarantee holds even if that filter is ever loosened.
+    `residue.apply` passes `False`: curated always wins over whatever a row
+    currently holds, rule included.
+
+    Returns the number of rows changed -- `0` means the guard above refused
+    the write, not that anything went wrong.
+    """
+    guard = (
+        " AND (movement_pattern_source IS NULL OR movement_pattern_source = 'rule')"
+        if only_if_not_curated
+        else ""
+    )
+    cursor = connection.execute(
+        f"""
+        UPDATE exercises SET
+            movement_pattern = ?, movement_pattern_source = ?,
+            loaded_joints = ?, loaded_joints_source = ?,
+            spinal_axial_load = ?, spinal_axial_load_source = ?,
+            required_stability = ?, required_stability_source = ?,
+            setup_cost_min = ?, setup_cost_min_source = ?
+        WHERE id = ?{guard}
+        """,
+        (
+            derived.movement_pattern,
+            source,
+            json.dumps(list(derived.loaded_joints or ())),
+            source,
+            derived.spinal_axial_load,
+            source,
+            derived.required_stability,
+            source,
+            derived.setup_cost_min,
+            source,
+            exercise_id,
+        ),
+    )
+    return cursor.rowcount
+
+
 def run(connection: sqlite3.Connection) -> DeriveReport:
     """Fill every field a rule can decide, across the strength rows.
 
@@ -550,31 +604,8 @@ def run(connection: sqlite3.Connection) -> DeriveReport:
                 undecided.append(exercise.id)
                 continue
 
-            # The WHERE clause repeats the guarantee the `curated` check
-            # above already gives: a rule must never overwrite a curated
-            # value, and this must hold even if a caller changes the loop
-            # above, not only while it reads as written today.
-            cursor = connection.execute(
-                """
-                UPDATE exercises SET
-                    movement_pattern = ?, movement_pattern_source = 'rule',
-                    loaded_joints = ?, loaded_joints_source = 'rule',
-                    spinal_axial_load = ?, spinal_axial_load_source = 'rule',
-                    required_stability = ?, required_stability_source = 'rule',
-                    setup_cost_min = ?, setup_cost_min_source = 'rule'
-                WHERE id = ?
-                  AND (movement_pattern_source IS NULL OR movement_pattern_source = 'rule')
-                """,
-                (
-                    result.movement_pattern,
-                    json.dumps(list(result.loaded_joints or ())),
-                    result.spinal_axial_load,
-                    result.required_stability,
-                    result.setup_cost_min,
-                    exercise.id,
-                ),
-            )
-            if cursor.rowcount:
+            rowcount = write(connection, exercise.id, result, "rule", only_if_not_curated=True)
+            if rowcount:
                 decided.append(exercise.id)
             else:
                 skipped += 1

@@ -243,6 +243,12 @@ def count(connection: sqlite3.Connection) -> int:
     return int(row["total"])
 
 
+def known_ids(connection: sqlite3.Connection) -> set[str]:
+    """Every id currently in the table -- what `residue.py` and `graph.py`
+    check a curated file's own ids against before writing any of them."""
+    return {str(row["id"]) for row in connection.execute("SELECT id FROM exercises")}
+
+
 def exercise(connection: sqlite3.Connection, exercise_id: str) -> Exercise | None:
     """One exercise, whole — instructions and images included.
 
