@@ -15,7 +15,7 @@ The engine is deterministic, reproducible and verifiable, and it answers questio
 
 ## Status
 
-**`0.1.0` — session 1 of 11, complete.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db, of which **584 are strength work** — you can query and count it from the command line, and `snapshots/catalog.md` carries its readable history in git. Next: session 2, the seven enrichment fields the whole engine depends on.
+**`0.1.0` — session 1 of 10, complete.** The package runs, the database migrates, the catalog is in it — 876 exercises from free-exercise-db, of which **584 are strength work** — you can query and count it from the command line, and `snapshots/catalog.md` carries its readable history in git. Next: session 2, which enriches the catalog and ends at `trainer admissible` — *«what can I do today»*.
 
 ## Getting started
 
@@ -45,7 +45,9 @@ Images are references into the upstream repository, never bytes. Re-running the 
 
 `trainer catalog --stats` counts those same rows instead of listing them: **584 of the 876 are `category: strength`**, and the other 292 are stretching, plyometrics, powerlifting, olympic weightlifting, strongman and cardio. That is the real size of the pool the admissible set is drawn from, and the multiplier on session 2's enrichment. The filters narrow the counts too, so a filtered question never gets an answer about the whole catalog. Rows holding no value are counted as `(none)`, shown even when there are none, so every column visibly adds up to the total: 87 exercises have no `mechanic`, 77 no `equipment` and 30 no `force`, while every one of them has a `level` and a `category`. Coverage is worth knowing before a field is relied on — `force` in particular, which TRAINER.md's appendix already judges insufficient on its own terms (*«`force: "push"` does not distinguish a bench press from a military press»*), and which is missing outright for thirty of them.
 
-Enrichment — the seven fields the catalog does not have, and which the whole engine depends on — is session 2.
+Enrichment — the six fields the catalog does not have, and which the whole engine depends on — is session 2. They are produced in three ways, and every value records which: a **rule** over the native columns decides most of `movement_pattern` and all of the fields that follow from it, a **model** reading each exercise's own instructions settles what the rules cannot and re-checks what they claimed, and 60-80 movements are **decided by hand** as the reference set both are measured against.
+
+A seventh field, `required_rom` — a range of motion in degrees per joint — was specified and then dropped from v1. It needed a number the catalog cannot supply and a number the user does not know, multiplied together into a safety boundary. Exclusion works at pattern and joint granularity instead, which is what a person can actually report. See TRAINER.md § Appendix.
 
 ## The database
 

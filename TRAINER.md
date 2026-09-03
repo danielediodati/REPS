@@ -86,6 +86,7 @@ Criterion 1 is the product criterion and takes two months. It is not the proof t
 **Out, declared**:
 
 - **Diagnosed pathologies** (herniated discs, post-op, chronic conditions) → **v2**. In v1: if the user declares a pathology, recommend a doctor and continue only if they insist. In general, always recommend a doctor when the user reports significant pain.
+- **Range-of-motion limits in degrees** → **v2**, with the pathologies. Exclusion works at pattern granularity and at joint granularity, which is what the triage can actually elicit. The appendix carries the argument.
 - **Form checking via video** (pose estimation, knee valgus, etc.) → **v2**. It is a bigger project than everything else put together.
 - Nutrition.
 - Multi-user and distribution (which would bring GDPR special-category health data into play).
@@ -97,7 +98,7 @@ Criterion 1 is the product criterion and takes two months. It is not the proof t
 - **movement pattern** — the class of movement, not the exercise. Eleven values: horizontal/vertical push, horizontal/vertical pull, squat, hip hinge, single-leg, core anti-extension, core anti-rotation, carry, isolation. It is the level at which you program, exclude and count.
 - **constraint** — anything that limits the plan: preference, time, equipment, boredom, a niggle. Most of it is not medical.
 - **admissible set** — the answer to a question the agent chose to ask the engine: the exercises compatible with the exclusions, today's equipment and the time available. The agent chooses inside it; it never widens it.
-- **exclusion** — a **hard** engine boundary, reserved for safety: a pattern or a range of motion that cannot be prescribed, with a re-test date. A preference never becomes an exclusion — otherwise you wall off a pattern forever and nobody will be able to reopen it.
+- **exclusion** — a **hard** engine boundary, reserved for safety: a movement pattern, or everything loading a named joint, that cannot be prescribed, with a re-test date. Those are the two granularities a person can actually report at. A preference never becomes an exclusion — otherwise you wall off a pattern forever and nobody will be able to reopen it.
 - **hypothesis** — a falsifiable statement about this user, formulated by the agent. Admissible only if a trial exists that discriminates it.
 - **trial** — a modification to the plan designed to knock down a hypothesis: it holds every variable fixed but one, it has a duration, and it has an outcome that comes back in.
 - **conclusion** — a fact **about this person**, with a source (something they said, or the outcome of a trial). It has a state, and it can be retired.
@@ -164,7 +165,7 @@ remaining_budget(partial_selection)
 pattern_history(pattern, weeks)
 adherence_history(weeks)
 last_performed_load(exercise_id)
-compare_variants(id_a, id_b)          # range of motion, stability, setup cost, pattern
+compare_variants(id_a, id_b)          # pattern, loaded joints, stability, setup cost
 simulate_cut(selection, minutes)
 active_conclusions()
 ```
@@ -212,7 +213,7 @@ And the **outcome comes back in**: at the next workout the system knows somethin
 
 A hypothesis for which **no trial exists** is not false: it is **outside the program**, and it has to be routed elsewhere — to the user, or to the doctor. That is where the serious medical escalation lives, far more reliable than *«the user declares a pathology»*, which depends on the user already knowing they have one.
 
-Structured `required_rom` (see appendix) exists for this: not to filter, but to **isolate one variable at a time**.
+The appendix once carried a structured `required_rom` for this — not to filter, but to **isolate one variable at a time**. It was removed from v1, and the variables a trial holds fixed are the ones a user can report on: pattern, exercise, position in the workout, volume, load, scheme. Range of motion in degrees was never one of them, which is the same reason it failed as a filter.
 
 ---
 
@@ -412,7 +413,8 @@ SQLite and not files because **the constrained layer is a query**:
 SELECT * FROM exercises
 WHERE movement_pattern NOT IN (:excluded)
   AND equipment IN (:available_today)
-  AND NOT (joint='shoulder' AND movement='flexion' AND degrees > 120)
+  AND NOT EXISTS (SELECT 1 FROM exercise_joints j
+                  WHERE j.exercise_id = exercises.id AND j.joint IN (:excluded_joints))
   AND setup_cost_min <= :budget
 ```
 
@@ -590,22 +592,27 @@ Base: **free-exercise-db** — ~800 exercises, public domain, images, no licensi
 
 No public catalog has the necessary fields. `force: "push"` does not distinguish a bench press from a military press. The other candidates: wger has only relational IDs, and its exercise data is Creative Commons licensed per individual entry — share-alike, which would carry through to the enriched dataset (the AGPL there covers the application code); ExerciseDB has a native substitution graph but is AGPL-3.0 with undeclared media terms; Zenith Fits is dead (HTTP 410).
 
-**Enrichment** — seven fields added:
+**Enrichment** — six fields added:
 
 | field | values |
 |---|---|
 | `movement_pattern` | the 11 from the glossary |
 | `loaded_joints` | shoulder, elbow, wrist, lumbar spine, hip, knee, ankle |
-| `required_rom` | triple `(joint, movement, degrees)` — e.g. military press `(shoulder, flexion, 180)`, incline press `(shoulder, flexion, 120)`, flat bench `(shoulder, flexion, 90)` |
 | `spinal_axial_load` | yes / no |
 | `required_stability` | high / medium / low |
 | `setup_cost_min` | minutes |
 | `regression_of` / `variant_of` | id |
 
-`required_rom` is structured and not textual because it exists to **isolate one variable at a time** in the trials, not just to filter.
+**A seventh field was specified here and has been removed from v1**: `required_rom`, the triple `(joint, movement, degrees)` — military press `(shoulder, flexion, 180)`, flat bench `(shoulder, flexion, 90)` — filtered by `NOT (joint='shoulder' AND movement='flexion' AND degrees > 120)`.
 
-**Procedure**: a deterministic pass, then hand work on what is left. The definitions of the eleven patterns and the six other vocabularies are written once, and the code executes them: `movement_pattern` falls out of `name`, `primary_muscles`, `force` and `mechanic` for at least 90% of the strength rows — measured, not assumed — and `loaded_joints`, `spinal_axial_load`, `required_stability` and `setup_cost_min` are functions of pattern and equipment once the pattern is fixed. The rows the rules cannot decide are decided by hand, in a committed file. `required_rom` is hand research throughout: it is what the safety exclusions rest on, and it is the field a model returns plausibly and wrong.
+It needs two numbers and neither can be had honestly. The catalog side exists in no source and would be invented for 584 rows. The user side is worse: the triage above asks *«does it hurt when you press overhead? at what range?»* and a person answers *«yes, at the top»*, never *«120 degrees»* — nobody knows their own range without a goniometer and someone holding it. Two invented estimates, multiplied, used as a safety boundary.
 
-This replaces what this appendix originally prescribed — three passes with three models, two cheap ones from different providers and a strong one on the disagreements, majority wins. The case for it was never the money, it was that disagreement between providers is the only signal saying which rows are unreliable; the rules produce that signal better and for nothing, because the rows a rule cannot decide *are* the unreliable rows. ROADMAP.md § Session 2 carries the measurement and the argument.
+The coarse version does the same job with data that exists: *«it hurts overhead»* excludes the `vertical push` pattern with a re-test date, *«the shoulder is bad»* excludes everything with `shoulder` among its loaded joints. Degree granularity was not more safety, it was false precision. It returns in v2 alongside diagnosed pathologies, where the number comes from a clinician instead of a guess.
+
+**Procedure**: rules first, a model on what is left and on what the rules claimed, a hand-built reference set measuring both.
+
+The definitions of the eleven patterns and the five other vocabularies are written once, and the code executes them — `movement_pattern` falls out of `name`, `primary_muscles`, `force` and `mechanic` for **at least 90% of the strength rows**, measured before the pass was written, and the other five are functions of pattern and equipment once the pattern is fixed. Then a model decides the rows the rules could not, **reading the exercise's own `instructions`**: the name `Spell Caster` says nothing, its instructions say *«pull both dumbbells to one side, rotating your torso»*, and that is a rotation. The same model re-decides the rows the rules did decide, as an audit — two independent readings of the data, one over columns and one over prose, and their disagreements are the confidence map.
+
+This replaces what this appendix originally prescribed: three passes with three models, two cheap ones from different providers and a strong one on the disagreements, majority wins. The case for it was never the money, it was that disagreement between providers is the only signal saying which rows are unreliable. The rules produce that signal better and for nothing, because the rows a rule cannot decide *are* the unreliable rows — and a rule disagreeing with a model is a sharper signal than two models of the same generation disagreeing with each other. ROADMAP.md § Session 2 carries the measurement and the argument.
 
 It is a batch job, it runs once. Instructions and images live in the same SQLite rows but are not queried: they are fetched by id when the agent shows them.
