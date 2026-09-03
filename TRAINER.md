@@ -604,6 +604,8 @@ No public catalog has the necessary fields. `force: "push"` does not distinguish
 
 `required_rom` is structured and not textual because it exists to **isolate one variable at a time** in the trials, not just to filter.
 
-**Procedure**: three passes with three models, majority wins. If the first two agree, the third — the most expensive — is not called. Two cheap models from **different providers** + one strong one on the disagreements.
+**Procedure**: a deterministic pass, then hand work on what is left. The definitions of the eleven patterns and the six other vocabularies are written once, and the code executes them: `movement_pattern` falls out of `name`, `primary_muscles`, `force` and `mechanic` for at least 90% of the strength rows — measured, not assumed — and `loaded_joints`, `spinal_axial_load`, `required_stability` and `setup_cost_min` are functions of pattern and equipment once the pattern is fixed. The rows the rules cannot decide are decided by hand, in a committed file. `required_rom` is hand research throughout: it is what the safety exclusions rest on, and it is the field a model returns plausibly and wrong.
+
+This replaces what this appendix originally prescribed — three passes with three models, two cheap ones from different providers and a strong one on the disagreements, majority wins. The case for it was never the money, it was that disagreement between providers is the only signal saying which rows are unreliable; the rules produce that signal better and for nothing, because the rows a rule cannot decide *are* the unreliable rows. ROADMAP.md § Session 2 carries the measurement and the argument.
 
 It is a batch job, it runs once. Instructions and images live in the same SQLite rows but are not queried: they are fetched by id when the agent shows them.
