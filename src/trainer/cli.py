@@ -209,7 +209,7 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
 @click.option(
     "--values",
     "show_values",
-    type=click.Choice(catalog.FILTERABLE),
+    type=click.Choice(catalog.FILTERABLE + catalog.ENRICHMENT_VALUE_FIELDS),
     help="List what this field holds, and stop.",
 )
 @click.option(
@@ -331,9 +331,20 @@ def _rejected(error: catalog.UnknownFilterValue) -> click.ClickException:
 
 def _print_values(connection: sqlite3.Connection, field: str) -> None:
     with reported():
-        for value in catalog.values(connection, field):
+        found = catalog.values(connection, field)
+        # Empty and enrichment-only means every row is null for this field --
+        # a catalog that has not been enriched yet, not a field with a
+        # legitimately empty vocabulary. The distinction matters the same way
+        # it does for an empty database: a correct value must never be
+        # rejected against a vocabulary that is empty because nobody has
+        # written to it, rather than because it holds nothing.
+        if not found and field in catalog.ENRICHMENT_VALUE_FIELDS:
+            raise click.ClickException(
+                "the catalog is not enriched yet; run `trainer enrich derive` first"
+            )
+        for value in found:
             click.echo(value)
-        if field in catalog.SCALAR_FILTERS:
+        if field in catalog.SCALAR_FILTERS or field in catalog.ENRICHMENT_VALUE_FIELDS:
             absent = catalog.missing_count(connection, field)
             if absent:
                 click.echo(f"({absent} exercises have no {field} recorded)")
@@ -363,6 +374,20 @@ def _print_stats(stats: catalog.CatalogStats) -> None:
         click.echo(f"{breakdown.field}:")
         click.echo(
             "\n".join(_aligned([*breakdown.counts, ("(none)", breakdown.missing)]))
+        )
+    for coverage in stats.enrichment:
+        click.echo("")
+        click.echo(f"{coverage.field}:")
+        click.echo(
+            "\n".join(
+                _aligned(
+                    [
+                        ("rule", coverage.rule),
+                        ("curated", coverage.curated),
+                        ("(none)", coverage.unfilled),
+                    ]
+                )
+            )
         )
 
 

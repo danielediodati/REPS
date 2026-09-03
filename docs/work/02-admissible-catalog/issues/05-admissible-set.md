@@ -12,6 +12,8 @@
 
 **The empty-state case is not an edge case, it is the first run.** Against a database with a catalog and nothing else — no profile, no exclusions — `admissible_set` has to return the equipment-and-budget answer, not fail and not return nothing. And against a catalog with no enrichment it has to name that state: *run `trainer enrich derive` first*. This project has already been bitten once by a vocabulary read from an empty table rejecting a correct value as a typo.
 
+**The joint half of exclusion does not need to be built here.** Ticket 01 already added `catalog.exercises_with_joint(connection, joint)` and `catalog.exercises_without_joint(connection, joint)`, queried through `json_each()` over `loaded_joints` — the second is precisely "everything with `shoulder` among its loaded joints out". `admissible_set` composes it with the pattern exclusion and the equipment/budget filter rather than re-deriving the query. Ticket 01 also established the exact wording for the unenriched-catalog message this ticket's own criterion asks for (`trainer catalog --values movement_pattern` on an empty vocabulary) — reuse it rather than inventing a second phrasing for the same state.
+
 Reference: TRAINER.md § Persistent state (the `WHERE`), § Glossary (exclusion, admissible set), § Engine — analytic / constrained; ROADMAP.md § Session 2.
 
 **Blocked by:** 01 — The six enrichment fields; 02 — What the twelve patterns mean; 04 — The rows the columns cannot answer

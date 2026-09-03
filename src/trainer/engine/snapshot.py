@@ -46,7 +46,21 @@ _COLUMNS = (
     "secondary muscles",
     "instructions",
     "images",
+    "movement pattern",
+    "loaded joints",
+    "spinal axial load",
+    "required stability",
+    "setup cost min",
+    "regression of",
+    "variant of",
+    "demo url",
 )
+"""The last eight are session 2's enrichment fields, appended rather than
+interleaved so a rename never moves a column that already existed. Every row
+shows `-` for all eight until something actually enriches it; provenance is
+not here -- `trainer catalog --stats` is where a source is worth a query,
+this file is for reading one exercise, not auditing where its values came
+from."""
 
 _ABSENT = "-"
 """What an empty cell reads as. A blank one is ambiguous with a broken row."""
@@ -89,7 +103,10 @@ def render(connection: sqlite3.Connection) -> str:
     rows = connection.execute(
         """
         SELECT id, name, category, equipment, force, mechanic, level,
-               primary_muscles, secondary_muscles, instructions, images
+               primary_muscles, secondary_muscles, instructions, images,
+               movement_pattern, loaded_joints, spinal_axial_load,
+               required_stability, setup_cost_min, regression_of, variant_of,
+               demo_url
         FROM exercises ORDER BY id
         """
     ).fetchall()
@@ -154,6 +171,14 @@ def _cells(row: sqlite3.Row) -> tuple[str, ...]:
         _joined(row["secondary_muscles"]),
         str(len(json.loads(row["instructions"]))),
         str(len(json.loads(row["images"]))),
+        row["movement_pattern"] or _ABSENT,
+        _joined(row["loaded_joints"]),
+        row["spinal_axial_load"] or _ABSENT,
+        row["required_stability"] or _ABSENT,
+        _ABSENT if row["setup_cost_min"] is None else str(row["setup_cost_min"]),
+        row["regression_of"] or _ABSENT,
+        row["variant_of"] or _ABSENT,
+        row["demo_url"] or _ABSENT,
     )
 
 

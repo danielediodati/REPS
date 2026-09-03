@@ -283,6 +283,69 @@ FILTERABLE = SCALAR_FILTERS + LIST_FILTERS
 # explicit that they are never queried: they are fetched by id when something
 # needs to show the exercise.
 
+ENRICHMENT_FIELDS = (
+    "movement_pattern",
+    "loaded_joints",
+    "spinal_axial_load",
+    "required_stability",
+    "setup_cost_min",
+    "regression_of",
+    "variant_of",
+)
+"""The six enrichment fields from TRAINER.md's appendix, `regression_of` and
+`variant_of` counted separately since each is its own column and its own
+provenance. Every one of them has a matching `<field>_source` column, checked
+in SQL to hold nothing but `rule` or `curated` -- session 2 opens no network
+and calls no model, so those are the only two sources that can exist.
+
+`required_rom` is not here. TRAINER.md § Appendix and ROADMAP.md § Session 2
+carry why it was dropped from v1; this tuple is what stops it from quietly
+reappearing as a third source of truth."""
+
+ENRICHMENT_VALUE_FIELDS = ("movement_pattern",)
+"""Enrichment fields whose vocabulary `--values` can list.
+
+Not all of `ENRICHMENT_FIELDS` belongs here: `loaded_joints` is a set rather
+than a scalar, `setup_cost_min` is a number, and `regression_of` / `variant_of`
+hold ids rather than a vocabulary. `movement_pattern` is the one this session's
+filters are built on, so it is the one wired up now; a later ticket adds
+another the day something actually reads it."""
+
+
+def exercises_with_joint(connection: sqlite3.Connection, joint: str) -> tuple[str, ...]:
+    """Ids of the exercises whose `loaded_joints` set contains this joint.
+
+    `json_each()`, not string matching -- the same mechanism `LIST_FILTERS`
+    already uses for `primary_muscles`. Kept separate from that machinery
+    because `loaded_joints` is enrichment, not a native field: mixing the two
+    would let a filter meant for the source's own vocabulary silently start
+    answering questions about a vocabulary this project invented.
+    """
+    rows = connection.execute(
+        "SELECT id FROM exercises WHERE EXISTS "
+        "(SELECT 1 FROM json_each(exercises.loaded_joints) AS item WHERE item.value = ?) "
+        "ORDER BY id",
+        (joint,),
+    )
+    return tuple(str(row["id"]) for row in rows)
+
+
+def exercises_without_joint(connection: sqlite3.Connection, joint: str) -> tuple[str, ...]:
+    """Ids of the exercises whose `loaded_joints` set does not contain this joint.
+
+    Includes rows nothing has enriched yet -- an empty set does not load any
+    joint, so it does not load this one either. Exclusion by joint is the
+    coarse replacement for the range-of-motion filter TRAINER.md's appendix
+    dropped, and this is the half of it that says what stays admissible.
+    """
+    rows = connection.execute(
+        "SELECT id FROM exercises WHERE NOT EXISTS "
+        "(SELECT 1 FROM json_each(exercises.loaded_joints) AS item WHERE item.value = ?) "
+        "ORDER BY id",
+        (joint,),
+    )
+    return tuple(str(row["id"]) for row in rows)
+
 
 class UnknownFilterValue(CatalogError):
     """A filter value that is not in the catalog.
@@ -316,7 +379,7 @@ def values(connection: sqlite3.Connection, field: str) -> tuple[str, ...]:
     `e-z curl bar` and `olympic weightlifting`, and a CLI carrying that copy
     would reject a real value as a typo.
     """
-    _check_field(field, FILTERABLE)
+    _check_field(field, FILTERABLE + ENRICHMENT_VALUE_FIELDS)
     if field in LIST_FILTERS:
         rows = connection.execute(
             f"SELECT DISTINCT item.value AS value "  # field checked above
@@ -333,7 +396,7 @@ def values(connection: sqlite3.Connection, field: str) -> tuple[str, ...]:
 
 def missing_count(connection: sqlite3.Connection, field: str) -> int:
     """How many exercises have no value for this field."""
-    _check_field(field, SCALAR_FILTERS)
+    _check_field(field, SCALAR_FILTERS + ENRICHMENT_VALUE_FIELDS)
     row = connection.execute(
         f"SELECT COUNT(*) AS total FROM exercises WHERE {field} IS NULL"  # field checked above
     ).fetchone()
@@ -483,6 +546,21 @@ class Breakdown:
 
 
 @dataclass(frozen=True)
+class EnrichmentCoverage:
+    """How much of one enrichment field is filled, and by which source.
+
+    `rule + curated + unfilled` always equals the filtered total, the same
+    invariant a native `Breakdown` holds -- every row has exactly one source
+    for a given field or none, so nothing here can go missing either.
+    """
+
+    field: str
+    rule: int
+    curated: int
+    unfilled: int
+
+
+@dataclass(frozen=True)
 class CatalogStats:
     """What the catalog contains, counted.
 
@@ -498,6 +576,7 @@ class CatalogStats:
     total: int
     strength: int
     breakdowns: tuple[Breakdown, ...]
+    enrichment: tuple[EnrichmentCoverage, ...]
 
     @property
     def other(self) -> int:
@@ -519,7 +598,7 @@ def stats(
     """
     where, parameters = _where(connection, name, dict(filters or {}))
 
-    # Seven queries, one state. Split across seven transactions, an import
+    # Many queries, one state. Split across separate transactions, an import
     # landing in the middle would make the breakdowns stop reconciling with the
     # total -- and if the strength rows arrived after the total was counted,
     # `other` would come out negative.
@@ -540,8 +619,14 @@ def stats(
             _breakdown(connection, field, where, parameters)
             for field in SCALAR_FILTERS
         )
+        enrichment = tuple(
+            _enrichment_coverage(connection, field, where, parameters)
+            for field in ENRICHMENT_FIELDS
+        )
 
-    return CatalogStats(total=total, strength=strength, breakdowns=breakdowns)
+    return CatalogStats(
+        total=total, strength=strength, breakdowns=breakdowns, enrichment=enrichment
+    )
 
 
 def _breakdown(
@@ -568,4 +653,28 @@ def _breakdown(
             if row["value"] is not None
         ),
         missing=sum(int(row["total"]) for row in rows if row["value"] is None),
+    )
+
+
+def _enrichment_coverage(
+    connection: sqlite3.Connection,
+    field: str,
+    where: str,
+    parameters: list[object],
+) -> EnrichmentCoverage:
+    _check_field(field, ENRICHMENT_FIELDS)
+    source_column = f"{field}_source"  # field checked above, so is the column it derives
+    rows = connection.execute(
+        f"SELECT {source_column} AS source, COUNT(*) AS total "
+        f"FROM exercises {where} "
+        f"GROUP BY {source_column}",
+        parameters,
+    ).fetchall()
+
+    counted = {row["source"]: int(row["total"]) for row in rows}
+    return EnrichmentCoverage(
+        field=field,
+        rule=counted.get("rule", 0),
+        curated=counted.get("curated", 0),
+        unfilled=counted.get(None, 0),
     )

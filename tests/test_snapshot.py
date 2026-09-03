@@ -166,7 +166,8 @@ def test_a_row_is_the_exercise_reduced_to_what_can_be_read(
 
     assert last_row(snapshot.render(connection)) == (
         "| Bench_Press | Bench Press | strength | barbell | push | compound "
-        "| beginner | chest | triceps, shoulders | 2 | 2 |"
+        "| beginner | chest | triceps, shoulders | 2 | 2"
+        " | - | - | - | - | - | - | - | - |"
     )
 
 
@@ -178,7 +179,41 @@ def test_absent_values_read_as_absent(connection: sqlite3.Connection) -> None:
 
     assert last_row(snapshot.render(connection)) == (
         "| Bench_Press | Bench Press | strength | - | - | - "
-        "| beginner | chest | - | 2 | 2 |"
+        "| beginner | chest | - | 2 | 2"
+        " | - | - | - | - | - | - | - | - |"
+    )
+
+
+def test_enriched_values_are_read_from_their_own_columns(
+    connection: sqlite3.Connection,
+) -> None:
+    """Structural presence is not enough -- the column has to carry the value."""
+    stock(connection, exercise(), exercise(id="Incline_Bench_Press", name="Incline Bench Press"))
+    connection.execute(
+        """
+        UPDATE exercises SET
+            movement_pattern = 'horizontal push',
+            loaded_joints = '["shoulder", "elbow"]',
+            spinal_axial_load = 'no',
+            required_stability = 'low',
+            setup_cost_min = 2,
+            variant_of = 'Incline_Bench_Press',
+            demo_url = 'https://example.invalid/bench-press'
+        WHERE id = 'Bench_Press'
+        """
+    )
+
+    (row,) = [
+        line
+        for line in snapshot.render(connection).splitlines()
+        if line.startswith("| Bench_Press |")
+    ]
+
+    assert row == (
+        "| Bench_Press | Bench Press | strength | barbell | push | compound "
+        "| beginner | chest | triceps, shoulders | 2 | 2"
+        " | horizontal push | shoulder, elbow | no | low | 2"
+        " | - | Incline_Bench_Press | https://example.invalid/bench-press |"
     )
 
 
@@ -191,7 +226,7 @@ def test_instructions_and_images_are_counted_not_copied(
 
     assert "Lie on the bench." not in text
     assert "Bench_Press/0.jpg" not in text
-    assert text.rstrip().endswith("| 2 | 2 |")
+    assert text.rstrip().endswith("| 2 | 2 | - | - | - | - | - | - | - | - |")
 
 
 def test_a_pipe_in_a_value_cannot_break_the_table(
@@ -202,7 +237,7 @@ def test_a_pipe_in_a_value_cannot_break_the_table(
     row = last_row(snapshot.render(connection))
 
     assert r"Press \| Pull" in row
-    assert row.count("|") == 12 + row.count(r"\|")  # 11 columns, 12 delimiters
+    assert row.count("|") == 20 + row.count(r"\|")  # 19 columns, 20 delimiters
 
 
 def test_a_newline_in_a_value_cannot_split_a_row(
@@ -223,7 +258,8 @@ def test_a_newline_in_a_value_cannot_split_a_row(
 
     assert rows == [
         "| Bench_Press | Press and Pull | strength | barbell | push "
-        "| compound | beginner | chest | triceps, shoulders | 2 | 2 |"
+        "| compound | beginner | chest | triceps, shoulders | 2 | 2"
+        " | - | - | - | - | - | - | - | - |"
     ]
 
 

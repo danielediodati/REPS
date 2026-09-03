@@ -280,6 +280,34 @@ def test_catalog_values_prints_what_a_field_holds(
     assert "77 exercises have no equipment recorded" in result.output
 
 
+def test_catalog_values_of_an_unenriched_field_says_so(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """A missing precondition, named -- not a vocabulary that happens to be empty."""
+    result = runner.invoke(main, ["catalog", "--values", "movement_pattern"])
+
+    assert result.exit_code != 0
+    assert "not enriched yet" in result.output
+    assert "trainer enrich derive" in result.output
+
+
+def test_catalog_values_lists_a_pattern_once_something_is_enriched(
+    runner: CliRunner, stocked: Path
+) -> None:
+    with closing(database.connect(stocked)) as connection:
+        connection.execute(
+            "UPDATE exercises SET movement_pattern = 'core rotation', "
+            "movement_pattern_source = 'rule' WHERE id = "
+            "(SELECT id FROM exercises LIMIT 1)"
+        )
+
+    result = runner.invoke(main, ["catalog", "--values", "movement_pattern"])
+
+    assert result.exit_code == 0, result.output
+    assert "core rotation" in result.output
+    assert "875 exercises have no movement_pattern recorded" in result.output
+
+
 def test_catalog_before_init_says_what_to_do(
     runner: CliRunner, database_file: Path
 ) -> None:
@@ -492,6 +520,34 @@ def test_stats_shows_the_rows_with_no_value(runner: CliRunner, stocked: Path) ->
     assert "(none)      87" in result.output  # mechanic
 
 
+def test_stats_breaks_every_enrichment_field_down_by_source(
+    runner: CliRunner, stocked: Path
+) -> None:
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    for field in catalog.ENRICHMENT_FIELDS:
+        assert f"{field}:" in result.output
+    assert "rule" in result.output
+    assert "curated" in result.output
+
+
+def test_stats_shows_the_whole_catalog_unenriched(runner: CliRunner, stocked: Path) -> None:
+    """Nothing has run `enrich derive` yet -- every field is `(none)` for all 876."""
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    blocks = result.output.split(BLANK)
+    enrichment_blocks = [
+        block
+        for block in blocks
+        if block.strip().splitlines() and block.strip().splitlines()[0].rstrip(":") in catalog.ENRICHMENT_FIELDS
+    ]
+    assert len(enrichment_blocks) == len(catalog.ENRICHMENT_FIELDS)
+    for block in enrichment_blocks:
+        lines = block.strip().splitlines()[1:]
+        counted = {line.split()[0]: int(line.rsplit(None, 1)[1]) for line in lines}
+        assert counted == {"rule": 0, "curated": 0, "(none)": 876}
+
+
 def test_every_column_of_stats_adds_up_to_the_total(
     runner: CliRunner, stocked: Path
 ) -> None:
@@ -504,7 +560,7 @@ def test_every_column_of_stats_adds_up_to_the_total(
         assert lines[0].endswith(":"), lines[0]
         assert sum(int(line.rsplit("  ", 1)[1]) for line in lines[1:]) == 876
         counted += 1
-    assert counted == len(catalog.SCALAR_FILTERS)
+    assert counted == len(catalog.SCALAR_FILTERS) + len(catalog.ENRICHMENT_FIELDS)
 
 
 def test_stats_counts_the_rows_the_filters_leave(

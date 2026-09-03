@@ -2,7 +2,8 @@
 
 The number this exists for is how many of the 876 are strength work. It is the
 real size of the pool the admissible set is drawn from, and the multiplier on
-session 2's enrichment -- the only step in the project with an external cost.
+session 2's enrichment -- deterministic rules and hand decisions, with no
+model and no network anywhere in it.
 """
 
 from __future__ import annotations
@@ -206,6 +207,120 @@ def test_an_empty_catalog_counts_to_zero(connection: sqlite3.Connection) -> None
     assert stats.total == 0
     assert stats.strength == 0
     assert [one.counts for one in stats.breakdowns] == [()] * len(catalog.SCALAR_FILTERS)
+    assert [
+        (one.rule, one.curated, one.unfilled) for one in stats.enrichment
+    ] == [(0, 0, 0)] * len(catalog.ENRICHMENT_FIELDS)
+
+
+# --- enrichment coverage, by source ------------------------------------------
+
+
+def coverage(stats: catalog.CatalogStats, field: str) -> catalog.EnrichmentCoverage:
+    (found,) = [one for one in stats.enrichment if one.field == field]
+    return found
+
+
+def test_every_enrichable_field_gets_a_coverage_row(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    stock(connection, *loaded(tmp_path, record()))
+
+    stats = catalog.stats(connection)
+
+    assert [one.field for one in stats.enrichment] == list(catalog.ENRICHMENT_FIELDS)
+
+
+def test_an_unenriched_catalog_is_all_unfilled(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    stock(connection, *loaded(tmp_path, record(id="a"), record(id="b")))
+
+    stats = catalog.stats(connection)
+
+    for one in stats.enrichment:
+        assert (one.rule, one.curated, one.unfilled) == (0, 0, 2)
+
+
+def test_coverage_counts_rule_and_curated_separately(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    stock(
+        connection,
+        *loaded(tmp_path, record(id="a"), record(id="b"), record(id="c")),
+    )
+    connection.execute(
+        "UPDATE exercises SET movement_pattern = 'isolation', "
+        "movement_pattern_source = 'rule' WHERE id = 'a'"
+    )
+    connection.execute(
+        "UPDATE exercises SET movement_pattern = 'core rotation', "
+        "movement_pattern_source = 'curated' WHERE id = 'b'"
+    )
+
+    stats = catalog.stats(connection)
+
+    assert coverage(stats, "movement_pattern") == catalog.EnrichmentCoverage(
+        field="movement_pattern", rule=1, curated=1, unfilled=1
+    )
+
+
+def test_enrichment_coverage_respects_the_active_filters(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """`catalog --equipment barbell --stats` must not answer for the whole table."""
+    stock(
+        connection,
+        *loaded(
+            tmp_path,
+            record(id="a", equipment="barbell"),
+            record(id="b", equipment="dumbbell"),
+        ),
+    )
+    connection.execute(
+        "UPDATE exercises SET movement_pattern = 'isolation', "
+        "movement_pattern_source = 'rule' WHERE id = 'a'"
+    )
+    connection.execute(
+        "UPDATE exercises SET movement_pattern = 'isolation', "
+        "movement_pattern_source = 'rule' WHERE id = 'b'"
+    )
+
+    stats = catalog.stats(connection, filters={"equipment": "barbell"})
+
+    assert coverage(stats, "movement_pattern") == catalog.EnrichmentCoverage(
+        field="movement_pattern", rule=1, curated=0, unfilled=0
+    )
+
+
+def test_enrichment_coverage_reconciles_with_the_total(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    stock(
+        connection,
+        *loaded(tmp_path, record(id="a"), record(id="b"), record(id="c")),
+    )
+    connection.execute(
+        "UPDATE exercises SET spinal_axial_load = 'no', "
+        "spinal_axial_load_source = 'rule' WHERE id = 'a'"
+    )
+
+    stats = catalog.stats(connection)
+
+    for one in stats.enrichment:
+        assert one.rule + one.curated + one.unfilled == stats.total
+
+
+def test_the_vendored_catalog_enrichment_reconciles_too(
+    connection: sqlite3.Connection,
+) -> None:
+    stock(connection, *catalog.load())
+
+    stats = catalog.stats(connection)
+
+    for one in stats.enrichment:
+        assert one.rule + one.curated + one.unfilled == stats.total
+        assert one.rule == 0
+        assert one.curated == 0
 
 
 # --- the same rows the listing would show -----------------------------------
@@ -271,7 +386,7 @@ def executed(connection: sqlite3.Connection) -> list[str]:
 def test_the_counts_are_read_inside_a_single_transaction(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """Seven queries against seven states would not reconcile.
+    """Many queries against many states would not reconcile.
 
     Connections are autocommit, so without an explicit transaction an import
     landing between the total and a breakdown makes the printed arithmetic
