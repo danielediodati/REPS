@@ -18,7 +18,7 @@ import click
 from click.core import ParameterSource
 
 from trainer import __version__
-from trainer.engine import catalog, database, migrations, snapshot
+from trainer.engine import catalog, database, enrichment, migrations, snapshot
 
 
 @contextmanager
@@ -169,6 +169,37 @@ def db_snapshot() -> None:
         # The normal outcome, and the one worth naming: an unchanged file is
         # the evidence that the snapshot does not churn.
         click.echo("unchanged, nothing to commit")
+
+
+@main.group()
+def enrich() -> None:
+    """Fill the catalog's enrichment fields."""
+
+
+@enrich.command("derive")
+def enrich_derive() -> None:
+    """Fill every field the rules can decide, across the strength rows.
+
+    Deterministic and idempotent: running it again re-derives the same
+    values and never overwrites a value a person decided by hand.
+    docs/enrichment/definitions.md is what it executes.
+    """
+    click.echo(f"database: {database.database_path()}")
+
+    with _opened() as connection:
+        report = enrichment.run(connection)
+
+    click.echo(f"{report.considered} strength rows considered")
+    click.echo(f"  decided    {len(report.decided)} ({report.coverage:.1%})")
+    click.echo(f"  undecided  {len(report.undecided)}")
+    if report.skipped_curated:
+        click.echo(f"  curated    {report.skipped_curated} (left alone)")
+
+    if report.undecided:
+        click.echo("")
+        click.echo("left undecided, for a person to read:")
+        for exercise_id in sorted(report.undecided):
+            click.echo(f"  {exercise_id}")
 
 
 def _require_current_schema(connection: sqlite3.Connection) -> None:

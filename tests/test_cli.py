@@ -637,3 +637,114 @@ def test_the_default_limit_does_not_count_as_asking_for_one(
 
     assert result.exit_code == 0, result.output
     assert "876 exercises" in result.output
+
+
+# --- enrich derive ------------------------------------------------------------
+
+
+def test_enrich_derive_reports_coverage(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(main, ["enrich", "derive"])
+
+    assert result.exit_code == 0, result.output
+    assert "584 strength rows considered" in result.output
+    assert "decided" in result.output
+    assert "undecided" in result.output
+
+
+def test_enrich_derive_beats_the_measured_floor(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(main, ["enrich", "derive"])
+
+    assert result.exit_code == 0, result.output
+    # "decided    546 (93.5%)" -- parsed rather than matched as a substring,
+    # so this fails loudly the day the rules regress instead of a percentage
+    # nobody is reading drifting under the floor unnoticed.
+    line = next(line for line in result.output.splitlines() if line.strip().startswith("decided"))
+    percentage = float(line.split("(")[1].rstrip("%)\n"))
+    assert percentage > 90.0
+
+
+def test_enrich_derive_lists_the_undecided_rows_by_name(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """ticket 04's reading list -- named, not just counted."""
+    result = runner.invoke(main, ["enrich", "derive"])
+
+    assert result.exit_code == 0, result.output
+    assert "Spell_Caster" in result.output
+
+
+def test_enrich_derive_twice_reports_the_same_coverage(runner: CliRunner, stocked: Path) -> None:
+    first = runner.invoke(main, ["enrich", "derive"])
+    second = runner.invoke(main, ["enrich", "derive"])
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert first.output == second.output
+
+
+def test_enrich_derive_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "derive"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+
+
+def test_enrich_derive_on_an_empty_catalog_says_to_import(
+    runner: CliRunner, database_file: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(main, ["enrich", "derive"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db import` first" in result.output
+
+
+def test_enrich_derive_leaves_a_curated_value_alone(runner: CliRunner, stocked: Path) -> None:
+    with closing(database.connect(stocked)) as connection:
+        connection.execute(
+            "UPDATE exercises SET movement_pattern = 'isolation', "
+            "movement_pattern_source = 'curated' WHERE id = 'Barbell_Deadlift'"
+        )
+
+    runner.invoke(main, ["enrich", "derive"])
+
+    with closing(database.connect(stocked)) as connection:
+        row = connection.execute(
+            "SELECT movement_pattern, movement_pattern_source FROM exercises "
+            "WHERE id = 'Barbell_Deadlift'"
+        ).fetchone()
+    assert row["movement_pattern"] == "isolation"
+    assert row["movement_pattern_source"] == "curated"
+
+
+def test_enrich_derive_output_is_ascii(runner: CliRunner, stocked: Path) -> None:
+    runner.invoke(main, ["enrich", "derive"]).output.encode("ascii")
+    runner.invoke(main, ["enrich", "derive", "--help"]).output.encode("ascii")
+
+
+def test_catalog_values_reads_what_enrich_derive_wrote(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """The precondition from ticket 01 lifts once this ticket runs."""
+    runner.invoke(main, ["enrich", "derive"])
+
+    result = runner.invoke(main, ["catalog", "--values", "movement_pattern"])
+
+    assert result.exit_code == 0, result.output
+    assert "not enriched yet" not in result.output
+    assert "hip hinge" in result.output
+
+
+def test_catalog_stats_shows_real_coverage_after_deriving(
+    runner: CliRunner, stocked: Path
+) -> None:
+    runner.invoke(main, ["enrich", "derive"])
+
+    result = runner.invoke(main, ["catalog", "--stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "movement_pattern:" in result.output
+    assert "rule     546" in result.output
