@@ -1006,6 +1006,172 @@ def test_enrich_curated_output_is_ascii(runner: CliRunner, enriched: Path) -> No
     runner.invoke(main, ["enrich", "curated", "--help"]).output.encode("ascii")
 
 
+# --- admissible ---------------------------------------------------------
+
+
+def test_admissible_answers_on_equipment_and_time(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" in result.output
+    assert "showing" in result.output
+
+
+def test_admissible_excludes_by_pattern(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(
+        main,
+        ["admissible", "--equipment", "barbell", "--time", "5", "--exclude", "vertical push"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" not in result.output
+
+
+def test_admissible_excludes_by_joint(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(
+        main,
+        ["admissible", "--equipment", "barbell", "--time", "5", "--exclude", "shoulder"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" not in result.output
+
+
+def test_admissible_combines_several_equipment_values(
+    runner: CliRunner, enriched: Path
+) -> None:
+    only_barbell = runner.invoke(
+        main, ["admissible", "--equipment", "barbell", "--time", "5"]
+    )
+    barbell_and_dumbbell = runner.invoke(
+        main,
+        ["admissible", "--equipment", "barbell", "--equipment", "dumbbell", "--time", "5"],
+    )
+
+    def shown(output: str) -> int:
+        return int(output.rsplit("showing ", 1)[1].split()[0])
+
+    assert shown(barbell_and_dumbbell.output) > shown(only_barbell.output)
+
+
+def test_admissible_rejects_an_unknown_equipment_value(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "dumbbells", "--time", "5"])
+
+    assert result.exit_code != 0
+    assert "no such equipment: 'dumbbells'" in result.output
+    assert "dumbbell" in result.output
+
+
+def test_admissible_rejects_an_exercise_id_as_an_exclusion(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        [
+            "admissible",
+            "--equipment",
+            "barbell",
+            "--time",
+            "5",
+            "--exclude",
+            "Standing_Military_Press",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not a movement pattern or a loaded joint" in result.output
+
+
+def test_admissible_rejects_an_unknown_exclude_value(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(
+        main, ["admissible", "--equipment", "barbell", "--time", "5", "--exclude", "nonsense"]
+    )
+
+    assert result.exit_code != 0
+    assert "not a movement pattern or a loaded joint" in result.output
+
+
+def test_admissible_reads_a_stored_exclusion_automatically(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """A persisted exclusion applies without being repeated on the command
+    line -- `--exclude` is for an ad-hoc addition, not the only way in."""
+    with closing(database.connect(enriched)) as connection:
+        connection.execute(
+            "INSERT INTO exclusions (granularity, value, retest_date) "
+            "VALUES ('pattern', 'vertical push', '2099-01-01')"
+        )
+
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" not in result.output
+
+
+def test_admissible_an_expired_stored_exclusion_stops_excluding(
+    runner: CliRunner, enriched: Path
+) -> None:
+    with closing(database.connect(enriched)) as connection:
+        connection.execute(
+            "INSERT INTO exclusions (granularity, value, retest_date) "
+            "VALUES ('pattern', 'vertical push', '2000-01-01')"
+        )
+
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" in result.output
+
+
+def test_admissible_says_so_when_nothing_matches(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "foam roll", "--time", "0"])
+
+    assert result.exit_code == 0, result.output
+    assert "no exercise is admissible" in result.output
+
+
+def test_admissible_requires_equipment(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["admissible", "--time", "5"])
+
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+
+
+def test_admissible_requires_time(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell"])
+
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+
+
+def test_admissible_before_deriving_names_the_state(runner: CliRunner, stocked: Path) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"])
+
+    assert result.exit_code != 0
+    assert "not enriched yet" in result.output
+    assert "trainer enrich derive" in result.output
+
+
+def test_admissible_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path
+) -> None:
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+
+
+def test_admissible_output_is_ascii(runner: CliRunner, enriched: Path) -> None:
+    runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "5"]).output.encode(
+        "ascii"
+    )
+    runner.invoke(main, ["admissible", "--help"]).output.encode("ascii")
+
+
 def test_catalog_stats_shows_real_coverage_after_deriving(
     runner: CliRunner, stocked: Path
 ) -> None:

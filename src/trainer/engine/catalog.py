@@ -258,10 +258,14 @@ def exercise(connection: sqlite3.Connection, exercise_id: str) -> Exercise | Non
     row = connection.execute(
         "SELECT * FROM exercises WHERE id = ?", (exercise_id,)
     ).fetchone()
-    return None if row is None else _from_row(row)
+    return None if row is None else from_row(row)
 
 
-def _from_row(row: sqlite3.Row) -> Exercise:
+def from_row(row: sqlite3.Row) -> Exercise:
+    """Hydrate one `SELECT * FROM exercises` row. Public so a caller that
+    needs a `SELECT * ... WHERE` of its own -- `admissible.admissible_set`,
+    for a compound condition `search`'s filter composition cannot express --
+    is not forced into one row-by-id lookup per id to get the same result."""
     return Exercise(
         id=row["id"],
         name=row["name"],
@@ -351,6 +355,23 @@ def exercises_without_joint(connection: sqlite3.Connection, joint: str) -> tuple
         (joint,),
     )
     return tuple(str(row["id"]) for row in rows)
+
+
+def joint_values(connection: sqlite3.Connection) -> tuple[str, ...]:
+    """Which of the seven joints the catalog actually has a row loading.
+
+    Read from the data, the same reason `values()` reads `movement_pattern`
+    from the table rather than trusting a copy of the twelve patterns: an
+    unenriched catalog must answer with nothing, not with a taxonomy that
+    happens to live in code. Kept out of `values()`/`FILTERABLE` for the same
+    reason `exercises_with_joint` is -- `loaded_joints` is enrichment, not a
+    native field, and this is a read of it, not a generic filter.
+    """
+    rows = connection.execute(
+        "SELECT DISTINCT item.value AS value FROM exercises, "
+        "json_each(exercises.loaded_joints) AS item ORDER BY value"
+    )
+    return tuple(str(row["value"]) for row in rows)
 
 
 class UnknownFilterValue(CatalogError):
@@ -526,7 +547,7 @@ def search(
         rows = connection.execute(
             f"SELECT * FROM exercises {where} ORDER BY name, id {clause}", limited
         ).fetchall()
-    return SearchResult(tuple(_from_row(row) for row in rows), total)
+    return SearchResult(tuple(from_row(row) for row in rows), total)
 
 
 STRENGTH_CATEGORY = "strength"

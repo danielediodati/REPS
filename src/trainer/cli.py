@@ -13,15 +13,18 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
+from datetime import date
 
 import click
 from click.core import ParameterSource
 
 from trainer import __version__
 from trainer.engine import (
+    admissible,
     catalog,
     database,
     enrichment,
+    exclusions,
     graph,
     migrations,
     reference_set,
@@ -45,6 +48,10 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
         raise click.ClickException(f"the graph file is unusable: {error}") from error
+    except exclusions.ExclusionError as error:
+        raise click.ClickException(str(error)) from error
+    except admissible.AdmissibleError as error:
+        raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
     except OSError as error:
@@ -444,6 +451,62 @@ def catalog_command(
             click.echo(f"showing {shown} of {found.total} (--limit 0 for all)")
         else:
             click.echo(f"showing {shown}")
+
+
+@main.command("admissible")
+@click.option(
+    "--equipment",
+    "equipment",
+    metavar="VALUE",
+    multiple=True,
+    required=True,
+    help="Today's equipment; repeat for more than one.",
+)
+@click.option(
+    "--time",
+    "budget",
+    metavar="MINUTES",
+    type=click.IntRange(min=0),
+    required=True,
+    help="Minutes available, compared against each exercise's setup cost.",
+)
+@click.option(
+    "--exclude",
+    "exclude",
+    metavar="VALUE",
+    multiple=True,
+    help="A movement pattern or a loaded joint to keep out -- never an exercise id.",
+)
+def admissible_command(
+    equipment: tuple[str, ...], budget: int, exclude: tuple[str, ...]
+) -> None:
+    """The exercises today's equipment, the time available and every active
+    exclusion leave standing -- the answer to "what can I do today".
+
+    `--exclude` classifies a value against the catalog's own vocabulary for
+    this one query -- a movement pattern or a loaded joint, never an
+    exercise id -- and is not persisted. An exclusion with a re-test date
+    lives in the `exclusions` table instead, and is read automatically
+    alongside it.
+    """
+    with _opened() as connection:
+        if not catalog.values(connection, "movement_pattern"):
+            raise click.ClickException(admissible.UNENRICHED_MESSAGE)
+
+        classified = [exclusions.classify(connection, value) for value in exclude]
+        standing = exclusions.active(connection, date.today().isoformat())
+        try:
+            found = admissible.admissible_set(
+                connection, [*standing, *classified], equipment, budget
+            )
+        except catalog.UnknownFilterValue as error:
+            raise _rejected(error) from error
+
+    if not found:
+        click.echo("no exercise is admissible under those constraints")
+        return
+    _print_table(found)
+    click.echo(f"showing {len(found)}")
 
 
 @contextmanager

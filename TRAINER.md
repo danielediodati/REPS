@@ -396,7 +396,8 @@ A single **SQLite** file:
 |---|---|
 | `profile` | primary goal and constraints, history, base equipment, permanent constraints |
 | `mesocycle` | chosen scheme + rationale + start date + split |
-| `pattern_state` | per pattern: weekly volume, load trend, pain, active exclusions + re-test date |
+| `pattern_state` | per pattern: weekly volume, load trend, pain |
+| `exclusions` | granularity (pattern or joint), value, re-test date |
 | `workouts` | location, equipment overrides, loads, RPE, pain, deviations, adherence |
 | `exercises` | the 800 enriched |
 | `hypotheses` | text, date, state |
@@ -404,6 +405,8 @@ A single **SQLite** file:
 | `conclusions` | text, source (sentence or trial), state, dates, how many times used |
 | `observations` | text, the measure it points at, state (open / heeded / ignored / converted) |
 | `decisions` | **append-only**: every agent change, one row, with the reason |
+
+`exclusions` is its own table rather than a column on `pattern_state`, because a **joint** exclusion has no single pattern to live on — excluding `shoulder` cuts across every push and pull pattern at once. Session 2 carries the detail.
 
 `decisions` and `conclusions` look similar and do two different jobs:
 
@@ -416,14 +419,14 @@ SQLite and not files because **the constrained layer is a query**:
 
 ```sql
 SELECT * FROM exercises
-WHERE movement_pattern NOT IN (:excluded)
+WHERE movement_pattern NOT IN (:excluded_patterns)
   AND equipment IN (:available_today)
-  AND NOT EXISTS (SELECT 1 FROM exercise_joints j
-                  WHERE j.exercise_id = exercises.id AND j.joint IN (:excluded_joints))
+  AND NOT EXISTS (SELECT 1 FROM json_each(loaded_joints) j
+                  WHERE j.value IN (:excluded_joints))
   AND setup_cost_min <= :budget
 ```
 
-The admissibility filter is a `WHERE`. With files it would have to be written by hand.
+The admissibility filter is a `WHERE`. With files it would have to be written by hand. `loaded_joints` is a JSON array on `exercises` itself, not a separate join table — session 2 carries why.
 
 Cost: the `.sqlite` in git is a blob and the diffs are useless. That is recovered with a **readable dump** — a markdown snapshot of `pattern_state`, `conclusions` and `decisions`, regenerated at the end of the week and versioned. The DB is the truth, the snapshot is the readable history.
 

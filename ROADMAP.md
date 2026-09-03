@@ -49,7 +49,7 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 
 ## Session 2 — `0.2.0` — The admissible catalog
 
-**Runs**: `trainer admissible --equipment bodyweight --time 45 --exclude vertical_push`.
+**Runs**: `trainer admissible --equipment "body only" --time 45 --exclude "vertical push"`.
 
 1. Migration for the six enrichment fields, plus `demo_url`, plus per-field provenance — a value a rule derived from the columns and a value someone decided by reading are not worth the same, and a re-import must not touch either of them. — **done** `5a6a64f`
 2. The vocabulary definitions written out, and the deterministic pass that applies them. The definitions *are* the rules: one document, read by a person and executed by the code. — **done** `213582c`
