@@ -87,7 +87,7 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 
 **Runs**: give it a selection, it tells you how long it takes and what it would drop to fit into 40 minutes.
 
-1. Duration model: `Σ [ setup + sets × (work + rest) ]`, rest from the scheme, setup from the catalog.
+1. Duration model: `Σ [ setup + sets × (work + rest) ]`, rest from the scheme, setup from the catalog. — **done** `9e21b10`
 2. `remaining_budget` and `simulate_cut`, with the order isolation → secondary patterns → sets on the primaries.
 3. Tests that the cut **never touches the rest periods**, on any branch.
 4. `pattern_history` and `last_performed_load` against still-empty state — they have to answer «I don't know», not break.
