@@ -8,17 +8,17 @@
 
 **Why sixty to eighty.** ROADMAP.md's note on `demo_url` puts the number of distinct exercises one person meets in eight weeks at 40-60. A reference set that size is both a measuring stick and a meaningful share of what will really get prescribed, so the hand work is not spent twice.
 
-The sample has to span the eleven patterns and the equipment range on purpose. Sixty barbell compounds would score the rules on the easy half of the catalog and say nothing about the half that has to be read.
+The sample has to span the twelve patterns and the equipment range on purpose. Sixty barbell compounds would score the rules on the easy half of the catalog and say nothing about the half that has to be read.
 
 **No `--max-rom`.** The session originally shipped `trainer catalog --max-rom shoulder:flexion:120` alongside `--pattern`, and with it a decision about what to do with an exercise having no recorded requirement. `required_rom` was removed from v1 — TRAINER.md § Appendix carries why — so neither the filter nor the decision exists. `--pattern` is the whole of the new filtering surface here; the joint-level exclusion lands in ticket 05, where it belongs, as part of the admissible set rather than as a catalog filter.
 
 Reference: TRAINER.md § Glossary, § Persistent state; ROADMAP.md § Session 2, § Risks.
 
-**Blocked by:** 01 — The six enrichment fields; 02 — What the eleven patterns mean
+**Blocked by:** 01 — The six enrichment fields; 02 — What the twelve patterns mean
 
 **Status:** ready-for-agent
 
-- [ ] 60-80 distinct movements, chosen to span the eleven patterns and the equipment range, every enrichment field decided by hand and recorded as `curated`
+- [ ] 60-80 distinct movements, chosen to span the twelve patterns and the equipment range, every enrichment field decided by hand and recorded as `curated`
 - [ ] **The decisions are made before the rules' output on those rows is read**, and the file says so — that is what makes every accuracy figure in this session mean anything
 - [ ] The decisions are reviewable as a committed file, not only as rows in a database, so a disagreement about one of them is a diff
 - [ ] Where a decision was genuinely uncertain, the file says so — a reference set that hides its own soft spots overstates every figure computed against it

@@ -8,9 +8,9 @@
 
 **The spot-check is the second half.** The rules decided 90% by looking at `force`, `mechanic` and `primary_muscles`. Reading a sample of those rows' instructions is a genuinely independent second look — prose against columns — and it is the only thing in the session that can catch a rule that is confidently and uniformly wrong. Ticket 03's reference set catches that too, on the rows it covers; this catches it on rows it does not. Where the reading disagrees with the rule, the row is named and the rule in ticket 02's document is the thing that gets fixed, not the row.
 
-**Where honesty has to be.** These decisions have one reader and no second opinion behind them. An uncertain one is marked uncertain rather than smoothed over, and a row with no honest answer among the eleven patterns keeps its null — `Battling Ropes` may well be one of those, and a null is a state ticket 01 made readable. A wrong pattern is a volume count that stays wrong forever without anyone noticing.
+**Where honesty has to be.** These decisions have one reader and no second opinion behind them. An uncertain one is marked uncertain rather than smoothed over, and a row with no honest answer among the twelve patterns keeps its null — `Battling Ropes` may well be one of those, and a null is a state ticket 01 made readable. A wrong pattern is a volume count that stays wrong forever without anyone noticing.
 
-**The 292 non-strength rows keep their nulls.** No honest value among the eleven patterns exists for a hamstring stretch.
+**The 292 non-strength rows keep their nulls.** No honest value among the twelve patterns exists for a hamstring stretch.
 
 **If the session overruns, the graph is the cut.** ROADMAP.md § Risks names it: `variant_of` / `regression_of` has no consumer until substitution in session 4, and it slides there intact. The residue does not slide — ticket 05 needs a `movement_pattern` on every strength row.
 
@@ -18,7 +18,7 @@ Reference: TRAINER.md § Appendix (the enrichment procedure), § Glossary; ROADM
 
 **Most of this ticket is already written.** `docs/enrichment/residue.md` holds all 60 rows decided, each with the sentence from its own instructions, 21 marked uncertain, 2 left null and the six boundary rules the reading forced. What is left here is to re-run it against the *real* rules rather than the throwaway ones — the residue will be smaller, because plain gaps like `Barbell Deadlift` and `Weighted Pull Ups` will have been caught by a rule — to reconcile it with whatever ticket 02's document decided about B1-B6, to load it into the database with `curated` provenance, and to do the spot-check and the graph.
 
-**Blocked by:** 02 — What the eleven patterns mean; 03 — Sixty movements decided by hand
+**Blocked by:** 02 — What the twelve patterns mean; 03 — Sixty movements decided by hand
 
 **Status:** ready-for-agent
 

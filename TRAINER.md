@@ -95,7 +95,12 @@ Criterion 1 is the product criterion and takes two months. It is not the proof t
 
 ## Glossary
 
-- **movement pattern** — the class of movement, not the exercise. Eleven values: horizontal/vertical push, horizontal/vertical pull, squat, hip hinge, single-leg, core anti-extension, core anti-rotation, carry, isolation. It is the level at which you program, exclude and count.
+- **movement pattern** — the class of movement, not the exercise. Twelve values: horizontal/vertical push, horizontal/vertical pull, squat, hip hinge, single-leg, core anti-extension, core rotation, core lateral flexion, carry, isolation. It is the level at which you program, exclude and count.
+  - `core anti-extension` — the trunk holds a fixed position while resisting lumbar extension: a plank, an ab-wheel rollout.
+  - `core rotation` — the trunk produces or resists rotation in the transverse plane: a cable chop, a Pallof press, a landmine 180.
+  - `core lateral flexion` — the trunk produces or resists a lean in the frontal plane: a kettlebell windmill, a side plank, a suitcase carry held on one side.
+
+  These were one merged slot for a day, under the name `core rotation`, covering both qualities. The merge did not survive contact with the catalog: a cable chop is not lateral flexion and a windmill is not rotation, so the single name was accurate for half its members and not the other half. `movement_pattern` is prompt surface for the agent from session 4 on — the difference has to be visible in the name, not buried in a paragraph nobody reads before writing a prompt. Twelve patterns, not eleven.
 - **constraint** — anything that limits the plan: preference, time, equipment, boredom, a niggle. Most of it is not medical.
 - **admissible set** — the answer to a question the agent chose to ask the engine: the exercises compatible with the exclusions, today's equipment and the time available. The agent chooses inside it; it never widens it.
 - **exclusion** — a **hard** engine boundary, reserved for safety: a movement pattern, or everything loading a named joint, that cannot be prescribed, with a re-test date. Those are the two granularities a person can actually report at. A preference never becomes an exclusion — otherwise you wall off a pattern forever and nobody will be able to reopen it.
@@ -596,7 +601,7 @@ No public catalog has the necessary fields. `force: "push"` does not distinguish
 
 | field | values |
 |---|---|
-| `movement_pattern` | the 11 from the glossary |
+| `movement_pattern` | the 12 from the glossary |
 | `loaded_joints` | shoulder, elbow, wrist, lumbar spine, hip, knee, ankle |
 | `spinal_axial_load` | yes / no |
 | `required_stability` | high / medium / low |
@@ -611,7 +616,7 @@ The coarse version does the same job with data that exists: *«it hurts overhead
 
 **Procedure**: rules over the columns, reading over the prose, a hand-built reference set measuring both. **No model, and no network.**
 
-The definitions of the eleven patterns and the five other vocabularies are written once, and the code executes them — `movement_pattern` falls out of `name`, `primary_muscles`, `force` and `mechanic` for **at least 90% of the strength rows**, measured before the pass was written, and the other five are functions of pattern and equipment once the pattern is fixed.
+The definitions of the twelve patterns and the five other vocabularies are written once, and the code executes them — `movement_pattern` falls out of `name`, `primary_muscles`, `force` and `mechanic` for **at least 90% of the strength rows**, measured before the pass was written, and the other five are functions of pattern and equipment once the pattern is fixed.
 
 What the rules cannot decide, they cannot decide because the answer is in the prose and not in the columns: `Spell Caster` is a name that says nothing, and its own `instructions` say *«pull both dumbbells to one side, rotating your torso»*. Those rows are read and decided, and **each decision quotes the sentence it rests on**, so it stays checkable afterwards without re-reading the catalog. That is the one thing a label returned by a model never comes with.
 
