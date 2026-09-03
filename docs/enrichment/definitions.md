@@ -155,6 +155,18 @@ spine while lying, and this document calls it `no` anyway, because the
 rule is deliberately keyed on pattern, equipment and standing-or-not — the
 three inputs cheap enough to be worth one written judgement rather than 584.
 
+**Known gap, found by the reference set.** "Standing and unsupported"
+resolves cleanly for the five upright patterns the rule checks (squat, hip
+hinge, single-leg, carry, vertical push) but says nothing about a standing,
+unsupported, really-loaded row (`Bent_Over_Barbell_Row`) or a standing
+rotational movement (`Spell_Caster`, `Landmine_180's`) — bent-over and
+rotational postures the named examples never cover. `trainer enrich derive`
+answers `no` for both today, by omission rather than by a considered
+reading of this rule; docs/enrichment/reference-set.md marks its own
+answers on these rows `?` for the same reason. Left open rather than
+guessed at further — a real decision, not a bug, and one for whoever
+extends this rule next to make deliberately.
+
 ## Required stability
 
 Three values: `high`, `medium`, `low`. High for anything performed on one
@@ -165,6 +177,23 @@ Medium is standing, bilateral, free-weight work in between: a barbell back
 squat is more demanding of balance than a leg press and less than a
 single-leg deadlift.
 
+**Known gap, found by the reference set.** This document says "one leg *or
+one arm*", but `trainer enrich derive` only checks the `single-leg`
+*pattern* — it has no way to tell a two-arm row from a one-arm row, because
+that distinction is not in any native or enriched column, only in the
+name. `Kettlebell_Windmill`, `One-Arm_Dumbbell_Row` and
+`One-Legged_Cable_Kickback` are all genuinely unilateral and the rule
+answers `medium` for them regardless, disagreeing with the reference set on
+thirteen of its seventy rows — most of this field's disagreements trace
+to this one gap. A second cause, smaller: `horizontal push`/`horizontal
+pull` are ruled `low` unconditionally, which is right for a bench or a
+cable but wrong for unsupported bodyweight or free-weight work performed
+standing (`Pushups`, `Bent_Over_Barbell_Row` again) — the equipment was not
+checked before the pattern decided the answer. Neither is fixed here:
+closing them needs either a name-keyword pass for "one-arm"/"one-leg" or a
+narrower joints/equipment cross-check, and either is real rule work for
+whoever picks this up next, not a one-line patch.
+
 ## Setup cost (minutes)
 
 What it takes to get the equipment ready for the set, not how long the set
@@ -173,10 +202,16 @@ A machine is close to ready, left loaded by whoever used it last (1
 minute). Dumbbells, kettlebells, bands, an exercise ball or a medicine ball
 need picking up and nothing more (1 minute). A cable stack needs its pin
 moved and often its handle swapped (2 minutes). Bodyweight needs nothing
-(0 minutes). This is a coarse, equipment-keyed estimate, not a per-exercise
-measurement — TRAINER.md's duration model (`Σ [ setup + sets × (work +
-rest) ]`) needs a number in the right neighbourhood for every row, not a
-perfect one for a few.
+(0 minutes). An e-z curl bar is a small loaded barbell (2 minutes); `other`
+-- sleds, suspension straps, weighted belts, gymnastics rings, ropes -- is
+the one bucket with no single real answer, and gets 2 minutes as a rough
+middle ground rather than a considered one. This is a coarse,
+equipment-keyed estimate, not a per-exercise measurement — TRAINER.md's
+duration model (`Σ [ setup + sets × (work + rest) ]`) needs a number in the
+right neighbourhood for every row, not a perfect one for a few. The
+reference set's own guesses for `other`-equipment rows range from 1 to 3
+minutes depending on the specific implement, which is the honest shape of
+this bucket: right on average, off on any one row.
 
 ## `regression_of` versus `variant_of`
 

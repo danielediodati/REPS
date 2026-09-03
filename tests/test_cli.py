@@ -11,7 +11,7 @@ from click.testing import CliRunner
 
 from trainer import __version__
 from trainer.cli import main
-from trainer.engine import catalog, database, migrations, snapshot
+from trainer.engine import catalog, database, migrations, reference_set, snapshot
 
 
 BLANK = "\n\n"
@@ -238,6 +238,72 @@ def stocked(runner: CliRunner, database_file: Path) -> Path:
     runner.invoke(main, ["db", "init"])
     runner.invoke(main, ["db", "import"])
     return database_file
+
+
+@pytest.fixture()
+def enriched(runner: CliRunner, stocked: Path) -> Path:
+    runner.invoke(main, ["enrich", "derive"])
+    return stocked
+
+
+def test_catalog_pattern_filters_the_listing(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--pattern", "hip hinge", "--limit", "5"])
+
+    assert result.exit_code == 0, result.output
+    assert "Barbell Deadlift" in result.output
+
+
+def test_catalog_pattern_composes_with_a_native_filter(
+    runner: CliRunner, enriched: Path
+) -> None:
+    without = runner.invoke(main, ["catalog", "--pattern", "hip hinge", "--limit", "0"])
+    with_equipment = runner.invoke(
+        main, ["catalog", "--pattern", "hip hinge", "--equipment", "barbell", "--limit", "0"]
+    )
+
+    def shown(output: str) -> int:
+        return int(output.rsplit("showing ", 1)[1].split()[0])
+
+    assert 0 < shown(with_equipment.output) < shown(without.output)
+
+
+def test_catalog_pattern_rejects_an_unknown_value(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--pattern", "nonsense"])
+
+    assert result.exit_code != 0
+    assert "no such movement_pattern" in result.output
+    assert "hip hinge" in result.output
+
+
+def test_catalog_pattern_rejects_a_blank_value(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--pattern", ""])
+
+    assert result.exit_code != 0
+    assert "cannot be blank" in result.output
+
+
+def test_catalog_pattern_before_deriving_says_what_to_do(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """Otherwise a correct pattern is rejected against an empty vocabulary --
+    the same mistake `--values` was already fixed for in ticket 01."""
+    result = runner.invoke(main, ["catalog", "--pattern", "hip hinge"])
+
+    assert result.exit_code != 0
+    assert "not enriched yet" in result.output
+    assert "trainer enrich derive" in result.output
+    assert "no such movement_pattern" not in result.output
+
+
+def test_catalog_pattern_and_stats_together(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["catalog", "--pattern", "hip hinge", "--stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "exercises" in result.output
+
+
+def test_catalog_pattern_output_is_ascii(runner: CliRunner, enriched: Path) -> None:
+    runner.invoke(main, ["catalog", "--pattern", "hip hinge"]).output.encode("ascii")
 
 
 def test_catalog_lists_matching_exercises(runner: CliRunner, stocked: Path) -> None:
@@ -723,6 +789,97 @@ def test_enrich_derive_leaves_a_curated_value_alone(runner: CliRunner, stocked: 
 def test_enrich_derive_output_is_ascii(runner: CliRunner, stocked: Path) -> None:
     runner.invoke(main, ["enrich", "derive"]).output.encode("ascii")
     runner.invoke(main, ["enrich", "derive", "--help"]).output.encode("ascii")
+
+
+# --- enrich check ---------------------------------------------------------
+
+
+@pytest.fixture()
+def reference_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A throwaway reference set, pointed at by the documented env var --
+    the same shape `database_file` gives `TRAINER_DB`."""
+    path = tmp_path / "reference-set.md"
+    path.write_text(
+        "| id | name | equipment | pattern | joints | axial | stability | setup | +/- | note |\n"
+        "|---|---|---|---|---|---|---|---|---|---|\n"
+        "| Barbell_Deadlift | Barbell Deadlift | barbell | hip hinge | hip, lumbar spine "
+        "| yes | medium | 3 | | . |\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(reference_set.REFERENCE_SET_ENV_VAR, str(path))
+    return path
+
+
+def test_enrich_check_reports_movement_pattern_first(
+    runner: CliRunner, enriched: Path, reference_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code == 0, result.output
+    lines = [line for line in result.output.splitlines() if line.endswith(":")]
+    assert lines[0] == "movement_pattern:"
+
+
+def test_enrich_check_counts_a_correct_derivation_as_a_match(
+    runner: CliRunner, enriched: Path, reference_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code == 0, result.output
+    assert "matches        1 of 1 (100.0%)" in result.output
+
+
+def test_enrich_check_names_a_disagreement(
+    runner: CliRunner, stocked: Path, reference_file: Path
+) -> None:
+    with closing(database.connect(stocked)) as connection:
+        connection.execute(
+            "UPDATE exercises SET movement_pattern = 'isolation', "
+            "movement_pattern_source = 'rule' WHERE id = 'Barbell_Deadlift'"
+        )
+
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code == 0, result.output
+    assert "disagreements  1" in result.output
+    assert "Barbell_Deadlift" in result.output
+
+
+def test_enrich_check_before_deriving_reports_everything_undecided(
+    runner: CliRunner, stocked: Path, reference_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code == 0, result.output
+    assert "not yet decided  1" in result.output
+
+
+def test_enrich_check_before_init_says_what_to_do(
+    runner: CliRunner, database_file: Path, reference_file: Path
+) -> None:
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code != 0
+    assert "run `trainer db init` first" in result.output
+
+
+def test_enrich_check_without_a_reference_set_says_so(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(reference_set.REFERENCE_SET_ENV_VAR, str(tmp_path / "missing.md"))
+
+    result = runner.invoke(main, ["enrich", "check"])
+
+    assert result.exit_code != 0
+    assert "the reference set is unusable" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_enrich_check_output_is_ascii(
+    runner: CliRunner, enriched: Path, reference_file: Path
+) -> None:
+    runner.invoke(main, ["enrich", "check"]).output.encode("ascii")
+    runner.invoke(main, ["enrich", "check", "--help"]).output.encode("ascii")
 
 
 def test_catalog_values_reads_what_enrich_derive_wrote(

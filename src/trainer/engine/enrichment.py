@@ -189,7 +189,14 @@ def _shoulder_pattern(name: str) -> str | None:
 
 
 def _triceps_pattern(name: str) -> str | None:
-    if _name_has(name, "dip", "press", "push-up", "pushup", "push up"):
+    if _name_has(name, "dip"):
+        # A dip sits with vertical push, not horizontal: the torso stays
+        # upright and the load travels up, not away from it -- the same
+        # rule `_chest_pattern` applies to the same word, and this branch
+        # disagreed with it and with docs/enrichment/definitions.md until
+        # the reference set's independent read caught it on Dips_-_Triceps_Version.
+        return "vertical push"
+    if _name_has(name, "press", "push-up", "pushup", "push up"):
         return "horizontal push"
     return "isolation"
 

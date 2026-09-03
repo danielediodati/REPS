@@ -408,7 +408,11 @@ def check_value(connection: sqlite3.Connection, field: str, value: str) -> None:
     valid = values(connection, field)
     if value in valid:
         return
-    missing = missing_count(connection, field) if field in SCALAR_FILTERS else 0
+    missing = (
+        missing_count(connection, field)
+        if field in SCALAR_FILTERS or field in ENRICHMENT_VALUE_FIELDS
+        else 0
+    )
     raise UnknownFilterValue(field, value, valid, missing)
 
 
@@ -462,7 +466,7 @@ def _where(
         parameters.append(name)
 
     for field, value in filters.items():
-        _check_field(field, FILTERABLE)
+        _check_field(field, FILTERABLE + ENRICHMENT_VALUE_FIELDS)
         check_value(connection, field, value)
         if field in LIST_FILTERS:
             conditions.append(

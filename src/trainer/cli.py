@@ -18,7 +18,7 @@ import click
 from click.core import ParameterSource
 
 from trainer import __version__
-from trainer.engine import catalog, database, enrichment, migrations, snapshot
+from trainer.engine import catalog, database, enrichment, migrations, reference_set, snapshot
 
 
 @contextmanager
@@ -30,6 +30,8 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the migration set is unusable: {error}") from error
     except catalog.CatalogError as error:
         raise click.ClickException(f"the dataset is unusable: {error}") from error
+    except reference_set.ReferenceSetError as error:
+        raise click.ClickException(f"the reference set is unusable: {error}") from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
     except OSError as error:
@@ -202,6 +204,52 @@ def enrich_derive() -> None:
             click.echo(f"  {exercise_id}")
 
 
+@enrich.command("check")
+def enrich_check() -> None:
+    """Score the database against docs/enrichment/reference-set.md.
+
+    `movement_pattern` is reported first and on its own, never averaged into
+    the other four fields -- it is the number this session is measured by.
+    Safe to run before and after a hand-reading pass: it only reads.
+    """
+    reference_path = reference_set.reference_set_path()
+    click.echo(f"database:       {database.database_path()}")
+    click.echo(f"reference set:  {reference_path}")
+
+    with reported():
+        reference = reference_set.load(reference_path)
+        with _opened() as connection:
+            results = reference_set.check(connection, reference)
+
+    click.echo(f"{len(reference)} movements in the reference set")
+    click.echo("")
+
+    by_field = {result.field: result for result in results}
+    pattern = by_field["movement_pattern"]
+    _print_field_check(pattern)
+    for field in reference_set.FIELDS:
+        if field == "movement_pattern":
+            continue
+        click.echo("")
+        _print_field_check(by_field[field])
+
+
+def _print_field_check(result: reference_set.FieldCheck) -> None:
+    click.echo(f"{result.field}:")
+    if not result.total:
+        click.echo("  the reference set names no value for this field")
+        return
+    click.echo(f"  matches        {result.matches} of {result.total} ({result.accuracy:.1%})")
+    if result.disagreements:
+        click.echo(f"  disagreements  {len(result.disagreements)}")
+        for exercise_id in sorted(result.disagreements):
+            click.echo(f"    {exercise_id}")
+    if result.missing:
+        click.echo(f"  not yet decided  {len(result.missing)}")
+        for exercise_id in sorted(result.missing):
+            click.echo(f"    {exercise_id}")
+
+
 def _require_current_schema(connection: sqlite3.Connection) -> None:
     """Refuse to write into a schema this checkout has not finished building.
 
@@ -230,6 +278,7 @@ def _require_current_schema(connection: sqlite3.Connection) -> None:
 @click.option("--category", metavar="VALUE", help="strength, stretching, cardio.")
 @click.option("--primary-muscle", metavar="VALUE", help="Worked as a primary muscle.")
 @click.option("--secondary-muscle", metavar="VALUE", help="Worked as a secondary muscle.")
+@click.option("--pattern", metavar="VALUE", help="hip hinge, squat, isolation, ...")
 @click.option(
     "--limit",
     type=click.IntRange(min=0),
@@ -259,6 +308,7 @@ def catalog_command(
     category: str | None,
     primary_muscle: str | None,
     secondary_muscle: str | None,
+    pattern: str | None,
     limit: int,
     show_values: str | None,
     show_stats: bool,
@@ -267,6 +317,10 @@ def catalog_command(
 
     Filters compose: every one given has to match. Values are the source's own
     -- `dumbbell`, not `dumbbells` -- and `--values FIELD` prints them.
+
+    `--pattern` is the one enriched filter here, and it reads `movement_pattern`
+    the same way every other filter reads its own field -- run `trainer enrich
+    derive` first.
 
     `--stats` counts the same rows instead of listing them, which is how you
     find out how much of the catalog is actually strength work.
@@ -280,6 +334,9 @@ def catalog_command(
         if context.get_parameter_source("limit") is ParameterSource.COMMANDLINE:
             raise click.UsageError("--limit bounds a listing; --stats counts them all")
 
+    if pattern is not None and not pattern.strip():
+        raise click.UsageError("--pattern cannot be blank")
+
     filters = {
         field: value
         for field, value in (
@@ -290,6 +347,7 @@ def catalog_command(
             ("category", category),
             ("primary_muscles", primary_muscle),
             ("secondary_muscles", secondary_muscle),
+            ("movement_pattern", pattern),
         )
         if value is not None
     }
@@ -298,6 +356,14 @@ def catalog_command(
         if show_values is not None:
             _print_values(connection, show_values)
             return
+        # Checked once, ahead of both --stats and the listing: an
+        # unenriched movement_pattern is a state to name, not a value to
+        # reject, and the two callers below would otherwise report it as an
+        # ordinary "no such pattern" against an empty vocabulary.
+        if pattern is not None and not catalog.values(connection, "movement_pattern"):
+            raise click.ClickException(
+                "the catalog is not enriched yet; run `trainer enrich derive` first"
+            )
         if show_stats:
             try:
                 _print_stats(catalog.stats(connection, name=name, filters=filters))

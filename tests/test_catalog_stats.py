@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, enrichment, migrations
 
 
 def record(**overrides: object) -> dict[str, object]:
@@ -346,6 +346,24 @@ def test_the_counts_describe_the_filtered_set(
     assert stats.total == 2
     assert stats.strength == 1
     assert breakdown(stats, "equipment").counts == (("barbell", 2),)
+
+
+def test_a_pattern_filter_narrows_stats_too(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    stock(
+        connection,
+        *loaded(
+            tmp_path,
+            record(id="a", name="Barbell Deadlift", primaryMuscles=["lower back"]),
+            record(id="b", name="Bench Press", primaryMuscles=["chest"]),
+        ),
+    )
+    enrichment.run(connection)
+
+    stats = catalog.stats(connection, filters={"movement_pattern": "hip hinge"})
+
+    assert stats.total == 1
 
 
 def test_a_name_filter_narrows_the_counts_too(

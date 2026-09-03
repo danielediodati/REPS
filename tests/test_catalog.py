@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, enrichment, migrations
 
 
 @pytest.fixture()
@@ -379,6 +379,56 @@ def test_a_muscle_filter_matches_membership(stocked: Path) -> None:
 
     assert found.total > 0
     assert all("chest" in e.primary_muscles for e in found.exercises)
+
+
+@pytest.fixture()
+def enriched(stocked: Path) -> Path:
+    with closing(database.connect(stocked)) as connection:
+        enrichment.run(connection)
+    return stocked
+
+
+def test_a_pattern_filter(enriched: Path) -> None:
+    """`movement_pattern` is not on `Exercise` -- session 2 added no columns
+    to the native dataclass -- so the result is checked against the table
+    directly rather than against the returned rows."""
+    with closing(database.connect(enriched)) as connection:
+        found = catalog.search(connection, filters={"movement_pattern": "hip hinge"})
+        assert found.total > 0
+
+        for exercise in found.exercises:
+            row = connection.execute(
+                "SELECT movement_pattern FROM exercises WHERE id = ?", (exercise.id,)
+            ).fetchone()
+            assert row["movement_pattern"] == "hip hinge"
+
+
+def test_a_pattern_filter_composes_with_a_native_filter(enriched: Path) -> None:
+    with closing(database.connect(enriched)) as connection:
+        one = catalog.search(connection, filters={"movement_pattern": "hip hinge"})
+        both = catalog.search(
+            connection, filters={"movement_pattern": "hip hinge", "equipment": "barbell"}
+        )
+
+    assert 0 < both.total < one.total
+
+
+def test_an_unknown_pattern_is_rejected_with_the_real_vocabulary(enriched: Path) -> None:
+    with closing(database.connect(enriched)) as connection:
+        with pytest.raises(catalog.UnknownFilterValue) as excinfo:
+            catalog.search(connection, filters={"movement_pattern": "nonsense"})
+
+    assert "hip hinge" in excinfo.value.valid
+    assert excinfo.value.missing > 0
+
+
+def test_an_unenriched_pattern_filter_returns_an_empty_vocabulary(stocked: Path) -> None:
+    """The engine states the fact; naming it as a precondition is the CLI's job."""
+    with closing(database.connect(stocked)) as connection:
+        with pytest.raises(catalog.UnknownFilterValue) as excinfo:
+            catalog.search(connection, filters={"movement_pattern": "hip hinge"})
+
+    assert excinfo.value.valid == ()
 
 
 def test_a_name_filter_is_a_case_insensitive_substring(stocked: Path) -> None:
