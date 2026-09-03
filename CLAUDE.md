@@ -2,7 +2,7 @@
 
 *Reasoning Engine for Personal Strength.* See [TRAINER.md](TRAINER.md) for what gets built and why, and [ROADMAP.md](ROADMAP.md) for the order it gets built in.
 
-All documentation, code, identifiers and commit messages are written in **English**.
+All documentation, code, identifiers and commit messages are written in **English**. Interactive conversation with the user — grilling sessions, interviews, back-and-forth design discussion — is conducted in **Italian**; the closing report is the other standing exception, also Italian.
 
 ## Agent skills
 
