@@ -2,13 +2,13 @@
 
 **What to build:** a reference set of enrichment values for 60-80 distinct movements, decided by hand against the ticket 02 definitions; `trainer enrich check`, which scores whatever is in the database against it; and `trainer catalog --pattern`, the first filter that reads an enriched field.
 
-**Why by hand, and why before the model.** This is the only independent measurement in the session. The rules are one reading of the definitions; ticket 04's model is a second one; the reference set is the thing that says which of them is right when they disagree. Without it, ticket 04 produces a pile of disagreements and no way to adjudicate them.
+**Why by hand, and why before ticket 04.** This is the only independent measurement in the session. The rules read the columns; ticket 04 reads the prose; the reference set is what says which of them is right where they disagree. Without it, ticket 04 produces a pile of disagreements and no way to adjudicate them.
 
 **Decided blind.** The values go in *before* the `enrich derive` output is looked at, on any row. A reference set built while the rules' answers are on screen is fitted to them, and every accuracy figure computed against it afterwards is inflated by an amount nobody can estimate. This is the single constraint the credibility of the whole session rests on. It is cheap to honour and impossible to repair later.
 
 **Why sixty to eighty.** ROADMAP.md's note on `demo_url` puts the number of distinct exercises one person meets in eight weeks at 40-60. A reference set that size is both a measuring stick and a meaningful share of what will really get prescribed, so the hand work is not spent twice.
 
-The sample has to span the eleven patterns and the equipment range on purpose. Sixty barbell compounds would score the rules on the easy half of the catalog and say nothing about the half that needs a model.
+The sample has to span the eleven patterns and the equipment range on purpose. Sixty barbell compounds would score the rules on the easy half of the catalog and say nothing about the half that has to be read.
 
 **No `--max-rom`.** The session originally shipped `trainer catalog --max-rom shoulder:flexion:120` alongside `--pattern`, and with it a decision about what to do with an exercise having no recorded requirement. `required_rom` was removed from v1 — TRAINER.md § Appendix carries why — so neither the filter nor the decision exists. `--pattern` is the whole of the new filtering surface here; the joint-level exclusion lands in ticket 05, where it belongs, as part of the admissible set rather than as a catalog filter.
 

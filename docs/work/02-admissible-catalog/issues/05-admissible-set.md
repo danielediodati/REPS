@@ -14,7 +14,7 @@
 
 Reference: TRAINER.md § Persistent state (the `WHERE`), § Glossary (exclusion, admissible set), § Engine — analytic / constrained; ROADMAP.md § Session 2.
 
-**Blocked by:** 01 — The six enrichment fields; 02 — What the eleven patterns mean; 04 — The model reads the instructions
+**Blocked by:** 01 — The six enrichment fields; 02 — What the eleven patterns mean; 04 — The rows the columns cannot answer
 
 **Status:** ready-for-agent
 
