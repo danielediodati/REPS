@@ -41,6 +41,8 @@ uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical 
 uv run trainer config                         # what you declared: cycle, cap, split
 uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups
 
+uv run trainer mcp                            # serve the engine's tools over MCP, on stdio
+
 uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 ```
 
@@ -76,6 +78,14 @@ The six muscle groups — `chest`, `back`, `shoulders`, `arms`, `legs`, `core` �
 
 **Allocating time is all a muscle group does.** Volume is counted per movement pattern and per *muscle* — `arms` erases exactly the biceps/triceps distinction that axis exists to keep.
 
+## Inspecting the engine from a generic client
+
+`trainer mcp` serves the engine's tool surface over MCP on stdio — `admissible_set`, `remaining_budget`, `allocate`, `pattern_history` and `last_performed_load`. Point the MCP inspector, or any other generic client, at it and you can call the engine exactly as the agent will, without going through the agent.
+
+That is the whole reason MCP is here earlier than TRAINER.md's own plan has it: from session 4 on the agent will get things wrong, and watching the engine answer the same calls it is making — from an inspector, rather than through the agent's own account of what happened — is what makes the difference between debugging the engine and debugging a story about it.
+
+Each tool is a wrapper and nothing else: it unpacks its arguments, opens the connection, calls the library function, and shapes the result for the wire. No validation of its own and no decisions. A failure the library states in words arrives as a tool error with that sentence intact, and the server stays up. `mcp` is in `test_engine_boundary.py`'s forbidden-import list beside `click`, so the engine can never learn that this door exists.
+
 ## The database
 
 A single SQLite file, `trainer.sqlite` in the working directory. Override it with the `TRAINER_DB` environment variable — that is what the test suite does, so tests never touch a real one.
@@ -100,9 +110,10 @@ src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
   data/       what ships with the package: the exercise dataset, the muscle group mapping, the config example
   cli.py      argument parsing and formatting, nothing else
+  mcp_server.py  the same surface over MCP; a wrapper, beside cli.py and never inside engine/
 docs/
   agents/     configuration the engineering skills read
   work/       tickets, one file each
 ```
 
-Every form of exposure — CLI, MCP wrapper, direct call — is a thin wrapper over the same engine. A test enforces that boundary rather than trusting the convention.
+Every form of exposure — CLI, MCP wrapper, direct call — is a thin wrapper over the same engine. A test enforces that boundary rather than trusting the convention: `click` and `mcp` are both in its forbidden-import list, and it checks the loaded module graph as well as the source text.

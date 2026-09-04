@@ -475,6 +475,23 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
+@main.command("mcp")
+def mcp_command() -> None:
+    """Serve the engine's tool surface over MCP, on stdio.
+
+    Point a generic MCP client at `trainer mcp` and it lists the five tools
+    and calls them against this database. That is the whole reason MCP is in
+    the project this early: from session 4 on, the engine can be watched
+    answering the same calls the agent is making, from an inspector rather
+    than through the agent's own account of what happened.
+    """
+    # Imported here rather than at the top: the MCP SDK pulls in a web stack,
+    # and `trainer --help` should not pay for a server nobody asked to start.
+    from trainer import mcp_server
+
+    mcp_server.main()
+
+
 @main.command("config")
 @click.option(
     "--muscle-groups",

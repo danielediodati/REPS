@@ -20,6 +20,8 @@ FORBIDDEN_PREFIXES = (
     # the client layer: the engine must not know it exists
     "trainer.cli",
     "click",
+    "trainer.mcp_server",
+    "mcp",
     # the network, in every form it usually arrives in
     "socket",
     "http",
@@ -85,7 +87,8 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
             sys.executable,
             "-c",
             "import trainer.engine, sys; "
-            "assert 'trainer.cli' not in sys.modules, sorted(sys.modules)",
+            "assert 'trainer.cli' not in sys.modules, sorted(sys.modules); "
+            "assert 'mcp' not in sys.modules, sorted(sys.modules)",
         ],
         capture_output=True,
         text=True,
@@ -100,6 +103,9 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
         "from trainer import cli",
         "from trainer.cli import main",
         "import trainer.cli",
+        "import mcp",
+        "from mcp.server import MCPServer",
+        "from trainer.mcp_server import server",
         "from anthropic import Anthropic",
         "from langgraph.graph import StateGraph",
     ],
