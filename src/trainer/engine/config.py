@@ -127,7 +127,11 @@ def load(path: Path | None = None) -> TrainingConfig:
     if not target.is_file():
         raise NoTrainingConfig(target)
     try:
-        raw = tomllib.loads(target.read_text(encoding="utf-8"))
+        # `utf-8-sig` and not `utf-8`: Notepad writes a byte-order mark by
+        # default, and TOML reads one as part of the first key -- a correct
+        # file coming back as "Invalid statement at line 1, column 1", which
+        # names nothing anyone can act on. Plain UTF-8 decodes the same way.
+        raw = tomllib.loads(target.read_text(encoding="utf-8-sig"))
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{target.name} is not valid TOML: {error}") from error
     except UnicodeDecodeError as error:

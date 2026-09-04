@@ -167,3 +167,23 @@ def test_a_row_missing_the_why_column_is_refused_rather_than_dropped() -> None:
         muscle_groups.parse(
             "| muscle | group | why |\n|---|---|---|\n| `traps` | `back` |\n"
         )
+
+
+def test_a_row_that_names_no_muscle_is_refused_rather_than_skipped() -> None:
+    """Blanking the muscle cell on the three `arms` rows would take `arms` out
+    of the vocabulary entirely, and `allocate` would start refusing it as a
+    typo -- with nothing in the parse saying a row had gone."""
+    with pytest.raises(muscle_groups.MuscleGroupError, match="names no muscle"):
+        muscle_groups.parse(
+            "| muscle | group | why |\n|---|---|---|\n|  | `arms` | elbow flexion |\n"
+        )
+
+
+def test_prose_beginning_with_a_pipe_is_still_not_a_row() -> None:
+    """The blank first cell only means a lost muscle when the rest of the row
+    is filled in; an empty line of table framing is just framing."""
+    parsed = muscle_groups.parse(
+        "| muscle | group | why |\n|---|---|---|\n|  |  |  |\n| `chest` | `chest` | it |\n"
+    )
+
+    assert parsed.muscles == ("chest",)

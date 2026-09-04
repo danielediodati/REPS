@@ -1251,3 +1251,24 @@ def test_config_muscle_groups_prints_all_seventeen(runner: CliRunner) -> None:
         if line and not line.startswith("mapping:")
     )
     assert listed == 17
+
+
+def test_config_muscle_groups_prints_no_empty_group_line(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The day `neck` is assigned somewhere, `(no group)` has no members and a
+    bare line ending in a colon is a line about nobody."""
+    from trainer.engine import muscle_groups
+
+    everything_grouped = muscle_groups.parse(
+        "| muscle | group | why |\n"
+        "|---|---|---|\n"
+        "| `neck` | `shoulders` | suppose it were |\n"
+    )
+    monkeypatch.setattr(muscle_groups, "committed", lambda: everything_grouped)
+
+    result = runner.invoke(main, ["config", "--muscle-groups"])
+
+    assert result.exit_code == 0, result.output
+    assert "(no group)" not in result.output
+    assert "shoulders: neck" in result.output

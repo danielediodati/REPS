@@ -354,3 +354,13 @@ def test_a_file_that_is_not_utf8_is_a_message_and_not_a_traceback(
 
     with pytest.raises(config.ConfigError, match="not UTF-8"):
         config.load(path)
+
+
+def test_a_byte_order_mark_does_not_break_the_file(tmp_path: Path) -> None:
+    """Notepad writes UTF-8 with a BOM by default, and TOML reads one as part
+    of the first key -- a correct file coming back as «Invalid statement at
+    line 1, column 1», which names nothing anyone can act on."""
+    path = tmp_path / "training.toml"
+    path.write_text(VALID, encoding="utf-8-sig")
+
+    assert config.load(path).cycle_length == 3

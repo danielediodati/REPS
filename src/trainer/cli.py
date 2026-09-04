@@ -512,10 +512,15 @@ def _print_muscle_groups(mapping: muscle_groups.MuscleGroups) -> None:
     `(no group)` is printed rather than omitted, for the same reason a
     breakdown prints its `(none)` row: it is the line that makes the seventeen
     add up, and `neck` being in no group is a decision, not an absence of one.
+    A group with no members is skipped, though -- the day `neck` is assigned
+    somewhere, a bare `(no group):` with nothing after the colon would be a
+    line about nobody.
     """
     click.echo(f"mapping: {muscle_groups.MUSCLE_GROUPS_PATH}")
     for group in [*mapping.groups, None]:
         members = [muscle for muscle, assigned in mapping.by_muscle if assigned == group]
+        if not members:
+            continue
         click.echo(f"{group or '(no group)'}: {', '.join(members)}")
 
 

@@ -103,11 +103,22 @@ def parse(text: str) -> MuscleGroups:
             continue
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
         muscle = cells[0].strip("`").strip()
-        # A row is recognised by its first cell alone: the header says
-        # `muscle`, a separator holds nothing but dashes and colons, and prose
-        # beginning with a pipe has an empty first cell. Everything else claims
-        # to be a muscle.
-        if not muscle or muscle.lower() == "muscle" or set(muscle) <= {"-", ":"}:
+        # The header row and the separator row, neither of which claims to be
+        # a muscle. Everything else does.
+        if muscle.lower() == "muscle" or (muscle and set(muscle) <= {"-", ":"}):
+            continue
+        if not muscle:
+            # A blank first cell is prose that happens to start with a pipe --
+            # unless the rest of the row is filled in, in which case it is a
+            # hand-edit that blanked the muscle and the row would otherwise
+            # vanish from the mapping without a word. Blanking `biceps`,
+            # `triceps` and `forearms` would take `arms` out of the vocabulary
+            # and make `allocate` start refusing it as a typo.
+            if any(cell.strip("`").strip() for cell in cells[1:]):
+                raise MuscleGroupError(
+                    f"a row names no muscle but says {' | '.join(cells[1:])!r}; "
+                    "every one of the catalog's muscles is decided here"
+                )
             continue
         # Checked *after* that, never before: a row short of a cell is a
         # hand-edit that dropped the `why` column, and skipping it on its
