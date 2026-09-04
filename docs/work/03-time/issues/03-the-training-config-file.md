@@ -35,3 +35,9 @@ Reference: ADR-0003; CONTEXT.md (*cycle*, *split*, *muscle group*, *volume defic
 - [ ] `tests/test_engine_boundary.py` still passes
 
 ## Comments
+
+**From ticket 02 — `allocate` does not check its group names, and this ticket is why.**
+
+`budget.allocate(40, {"Chest": 0.6, "arms": 0.4})` succeeds today and returns minutes keyed by the typo; the caller who later reads `allocated["chest"]` gets a `KeyError` a long way from the mistake. Raised in ticket 02's review and declined there deliberately: the six groups do not exist anywhere a function can read them yet, and a constant in `budget.py` listing them would be exactly the hand-copied vocabulary CLAUDE.md's standing rule was written about.
+
+This ticket is what creates the mapping from the catalog's seventeen `primary_muscles` values to the six groups. **When it lands, add the check to `allocate`** — reading the vocabulary from the mapping, never from a copy — and a test that a misspelled group is refused with the valid names listed, the way `catalog.check_value` already does it for a filter.

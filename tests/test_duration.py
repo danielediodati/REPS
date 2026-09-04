@@ -10,7 +10,6 @@ seconds rather than checked against a second implementation of the same sum.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -18,52 +17,34 @@ from pathlib import Path
 
 import pytest
 
+from conftest import enrich, make_exercise
 from trainer.engine import catalog, database, duration, migrations
-from trainer.engine.catalog import Exercise
 from trainer.engine.duration import Block, BlockItem
 from trainer.engine.enrichment import MOVEMENT_PATTERNS
 
 
-def exercise(**overrides: object) -> Exercise:
-    base: dict[str, object] = {
-        "id": "Some_Exercise",
-        "name": "Some Exercise",
-        "force": "push",
-        "level": "beginner",
-        "mechanic": "compound",
-        "equipment": "barbell",
-        "category": "strength",
-        "primary_muscles": ("shoulders",),
-        "secondary_muscles": (),
-        "instructions": (),
-        "images": (),
-    }
-    base.update(overrides)
-    return Exercise(**base)  # type: ignore[arg-type]
-
-
 CATALOG = (
-    exercise(id="Standing_Military_Press", name="Standing Military Press"),
-    exercise(id="Bent_Over_Barbell_Row", name="Bent Over Barbell Row"),
-    exercise(
+    make_exercise(id="Standing_Military_Press", name="Standing Military Press"),
+    make_exercise(id="Bent_Over_Barbell_Row", name="Bent Over Barbell Row"),
+    make_exercise(
         id="Bodyweight_Squat",
         name="Bodyweight Squat",
         equipment="body only",
         primary_muscles=("quadriceps",),
     ),
-    exercise(
+    make_exercise(
         id="Dumbbell_Bicep_Curl",
         name="Dumbbell Bicep Curl",
         equipment="dumbbell",
         primary_muscles=("biceps",),
     ),
-    exercise(
+    make_exercise(
         id="Farmers_Walk",
         name="Farmers Walk",
         equipment="dumbbell",
         primary_muscles=("forearms",),
     ),
-    exercise(
+    make_exercise(
         id="Spell_Caster",
         name="Spell Caster",
         equipment="dumbbell",
@@ -88,22 +69,7 @@ def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
     with closing(database.connect(database_file)) as opened:
         migrations.migrate(opened)
         catalog.import_exercises(opened, CATALOG, allow_pruning=True)
-        for exercise_id, (pattern, joints, axial, stability, setup) in _PATTERNS.items():
-            opened.execute(
-                "UPDATE exercises SET movement_pattern = ?, movement_pattern_source = 'rule', "
-                "loaded_joints = ?, loaded_joints_source = 'rule', "
-                "spinal_axial_load = ?, spinal_axial_load_source = 'rule', "
-                "required_stability = ?, required_stability_source = 'rule', "
-                "setup_cost_min = ?, setup_cost_min_source = 'rule' WHERE id = ?",
-                (
-                    pattern,
-                    json.dumps([joint.strip() for joint in joints.split(",")]),
-                    axial,
-                    stability,
-                    setup,
-                    exercise_id,
-                ),
-            )
+        enrich(opened, _PATTERNS)
         yield opened
 
 
