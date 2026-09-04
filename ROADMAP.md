@@ -90,7 +90,7 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 1. Duration model: a plan is a sequence of **blocks**, rest is **prescribed**, setup from the catalog. First shipped costing a flat list at a fixed rest (`9e21b10`) and reworked to blocks in the same session — see ADR-0002. — **done** `ac270f0`
 2. `remaining_budget` and `allocate`: the arithmetic of a declared time budget over declared proportions. **No cut** — see ADR-0001. — **done** `00d09c2`
 3. The training config file: cycle length, duration cap, split, volume denominator. Declared by the user, read by the engine, written by nobody — see ADR-0003. It also created the muscle group mapping the six names are read from, which let ticket 02's declined finding land: `allocate` now refuses a group that is not one of them. — **done** `888e97b`
-4. `pattern_history` and `last_performed_load` against still-empty state — they have to answer «I don't know», not break.
+4. `pattern_history` and `last_performed_load` against still-empty state — they have to answer «I don't know», not break. — **done** `6529537`
 5. MCP wrapper over the library. Half a day, and from here on you inspect the engine from a generic client while developing.
 
 > MCP is pulled in earlier than TRAINER.md has it, on purpose: it costs little and the return is all in the later sessions, when the agent starts getting things wrong and you want to see what it sees.
