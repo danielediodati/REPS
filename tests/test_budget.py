@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from conftest import enrich, make_exercise
-from trainer.engine import budget, catalog, database, duration, migrations
+from trainer.engine import budget, catalog, database, duration, migrations, muscle_groups
 from trainer.engine.duration import Block, BlockItem
 
 
@@ -265,3 +265,60 @@ def test_there_is_no_cut_in_here() -> None:
 
     assert not {name for name in surface if "cut" in name.lower()}
     assert not {name for name in surface if "trim" in name.lower()}
+
+
+# -- the group names are vocabulary, not the caller's ------------------------
+
+
+def test_allocate_refuses_a_group_that_is_not_one_of_the_six() -> None:
+    """Ticket 02 shipped without this check and its review said why: the six
+    did not exist anywhere a function could read them. They do now.
+
+    Left unchecked, `allocate` returns minutes keyed by the typo and the caller
+    who later reads `allocated["chest"]` gets a `KeyError` a long way from the
+    mistake.
+    """
+    with pytest.raises(budget.BudgetError) as raised:
+        budget.allocate(40, {"Chest": 0.6, "arms": 0.4})
+
+    message = str(raised.value)
+    assert "'Chest'" in message
+    for group in muscle_groups.groups():
+        assert group in message
+
+
+def test_allocate_reads_the_six_from_the_mapping() -> None:
+    """Every group the committed mapping names is accepted -- proof the check
+    is reading the vocabulary rather than carrying a copy of it."""
+    groups = muscle_groups.groups()
+    share = 1 / len(groups)
+
+    allocated = budget.allocate(60, {group: share for group in groups})
+
+    assert sorted(allocated) == sorted(groups)
+    assert sum(allocated.values()) == 60
+
+
+def test_a_muscle_is_not_a_muscle_group() -> None:
+    """`biceps` is one of the catalog's seventeen, not one of the six. Time is
+    allocated on the coarse axis; volume is counted on the fine one."""
+    with pytest.raises(budget.BudgetError, match="not a muscle group"):
+        budget.allocate(30, {"biceps": 1.0})
+
+
+def test_an_unreadable_mapping_still_fails_as_a_budget_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reading the vocabulary must not widen this function's failure
+    vocabulary. A caller wrapping the arithmetic in `except BudgetError` --
+    ticket 05's MCP wrapper among them -- would otherwise be handed an
+    uncaught `MuscleGroupError` the day the packaged mapping cannot be read.
+    """
+
+    def unreadable() -> tuple[str, ...]:
+        raise muscle_groups.MuscleGroupError("no muscle group mapping at /nowhere")
+
+    monkeypatch.setattr(muscle_groups, "groups", unreadable)
+
+    with pytest.raises(budget.BudgetError, match="cannot be read"):
+        budget.allocate(40, {"chest": 1.0})

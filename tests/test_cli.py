@@ -1182,3 +1182,72 @@ def test_catalog_stats_shows_real_coverage_after_deriving(
     assert result.exit_code == 0, result.output
     assert "movement_pattern:" in result.output
     assert "rule     546" in result.output
+
+
+# -- `trainer config`: what the user declares ---------------------------------
+
+
+def test_config_shows_what_was_declared(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    declared = tmp_path / "training.toml"
+    declared.write_text(
+        'cycle_length = 2\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
+        'split = [["chest", "arms"], ["legs", "core"]]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
+
+    result = runner.invoke(main, ["config"])
+
+    assert result.exit_code == 0, result.output
+    assert "cycle length: 2 workouts" in result.output
+    assert "duration cap: 45 min" in result.output
+    assert "volume counted per: cycle" in result.output
+    assert "1. chest, arms" in result.output
+    assert "2. legs, core" in result.output
+
+
+def test_config_reports_the_missing_state_and_not_a_field_error(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "training.toml"))
+
+    result = runner.invoke(main, ["config"])
+
+    assert result.exit_code != 0
+    assert "no training configuration yet" in result.output
+    assert "training.example.toml" in result.output
+    assert "cycle_length" not in result.output
+
+
+def test_config_reports_a_broken_file_as_a_broken_file(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    declared = tmp_path / "training.toml"
+    declared.write_text(
+        'cycle_length = 3\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
+        'split = [["chest"]]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
+
+    result = runner.invoke(main, ["config"])
+
+    assert result.exit_code != 0
+    assert "the training configuration is unusable" in result.output
+    assert "1 workout(s)" in result.output and "3 workout(s)" in result.output
+
+
+def test_config_muscle_groups_prints_all_seventeen(runner: CliRunner) -> None:
+    result = runner.invoke(main, ["config", "--muscle-groups"])
+
+    assert result.exit_code == 0, result.output
+    assert "core: abdominals, lower back" in result.output
+    assert "(no group): neck" in result.output
+    listed = sum(
+        len(line.split(":", 1)[1].split(","))
+        for line in result.output.splitlines()
+        if line and not line.startswith("mapping:")
+    )
+    assert listed == 17

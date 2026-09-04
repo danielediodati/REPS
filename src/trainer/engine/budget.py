@@ -19,6 +19,7 @@ import math
 import sqlite3
 from collections.abc import Mapping
 
+from trainer.engine import muscle_groups
 from trainer.engine.duration import Plan, plan_duration
 
 PROPORTION_TOLERANCE = 1e-9
@@ -85,7 +86,14 @@ def allocate(minutes: int, proportions: Mapping[str, float]) -> dict[str, int]:
 
     The proportions are the caller's, over any number of groups; this function
     carries none of its own and never invents one for a group that was left
-    out.
+    out. The *names* are not the caller's: each has to be one of the six
+    muscle groups, read from the mapping that ships with the package
+    (`muscle_groups.MUSCLE_GROUPS_PATH`) rather than from a copy of the six
+    kept here. Ticket 02 shipped without this check because the
+    vocabulary did not exist anywhere a function could read it, and a mapping
+    keyed by a typo returns minutes nobody can look up -- the caller who wrote
+    `Chest` gets a `KeyError` on `allocated["chest"]` a long way from the
+    mistake.
 
     They must describe a whole workout. Proportions summing to anything but 1
     are refused rather than normalised: a caller who typed 0.6 and 0.3 meant
@@ -101,6 +109,22 @@ def allocate(minutes: int, proportions: Mapping[str, float]) -> dict[str, int]:
     _whole("minutes", minutes)
     if not proportions:
         raise BudgetError("allocate needs at least one group")
+
+    # Re-raised as a `BudgetError`, so reading the vocabulary does not widen
+    # this function's failure vocabulary: a caller wrapping the arithmetic in
+    # `except BudgetError` -- ticket 05's MCP wrapper among them -- would
+    # otherwise be handed an uncaught `MuscleGroupError` the day the packaged
+    # mapping cannot be read.
+    try:
+        known = muscle_groups.groups()
+    except muscle_groups.MuscleGroupError as error:
+        raise BudgetError(f"the muscle groups cannot be read: {error}") from error
+
+    for group in proportions:
+        if group not in known:
+            raise BudgetError(
+                f"{group!r} is not a muscle group; they are {', '.join(known)}"
+            )
 
     for group, proportion in proportions.items():
         if proportion <= 0:

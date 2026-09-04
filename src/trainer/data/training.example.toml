@@ -1,0 +1,28 @@
+# The training configuration, hand-written.
+#
+# Copy this file to `training.toml` and edit it. ADR-0003 is why it is a file
+# and not a table: these four values are declared by the user and read back by
+# the user, and `git diff` on them is training history. Nothing in the engine
+# writes this file -- session 6's onboarding is what fills it by talking to you.
+
+# How many workouts one complete rotation holds. Not days of the week: the
+# rotation advances when a workout is performed, never when a date passes.
+cycle_length = 4
+
+# The most a single workout may run.
+duration_cap_min = 60
+
+# What volume is counted over. `cycle` is the value that matches how the user
+# trains; it is written down rather than assumed because it is the user's call.
+volume_denominator = "cycle"
+
+# Which muscle groups each workout of the cycle trains, in order -- one entry
+# per workout, so this list is exactly `cycle_length` long. The six group names
+# are the ones in `src/trainer/data/muscle-groups.md`; anything else is refused
+# with the six listed.
+split = [
+    ["chest", "shoulders", "arms"],  # push
+    ["back", "arms"],                # pull
+    ["legs", "core"],                # lower
+    ["chest", "back", "shoulders"],  # upper
+]

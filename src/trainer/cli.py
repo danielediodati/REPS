@@ -22,11 +22,13 @@ from trainer import __version__
 from trainer.engine import (
     admissible,
     catalog,
+    config,
     database,
     enrichment,
     exclusions,
     graph,
     migrations,
+    muscle_groups,
     reference_set,
     residue,
     snapshot,
@@ -48,12 +50,32 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
         raise click.ClickException(f"the graph file is unusable: {error}") from error
+    except config.NoTrainingConfig as error:
+        # Before ConfigError, which it subclasses: the state has its own
+        # wording and must not be dressed up as a broken file.
+        raise click.ClickException(str(error)) from error
+    except config.ConfigError as error:
+        raise click.ClickException(
+            f"the training configuration is unusable: {error}"
+        ) from error
+    except muscle_groups.MuscleGroupError as error:
+        raise click.ClickException(f"the muscle group mapping is unusable: {error}") from error
     except exclusions.ExclusionError as error:
         raise click.ClickException(str(error)) from error
     except admissible.AdmissibleError as error:
         raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
+    except UnicodeDecodeError as error:
+        # Every curated file this reads is UTF-8 by declaration, and an editor
+        # that saved one as cp1252 is a thing a person did and can undo. Left
+        # uncaught it arrives as a traceback about a codec, which names neither
+        # the file nor the fix. `config` says this itself, with its own
+        # wording; this catches the reference set, the residue and the graph.
+        raise click.ClickException(
+            f"a file is not UTF-8 ({error.reason}); the curated files are "
+            "UTF-8, so re-save it in that encoding"
+        ) from error
     except OSError as error:
         # A read-only volume, a TRAINER_SNAPSHOT pointing at a directory, a
         # dataset the account cannot read: the user caused it and can fix it,
@@ -451,6 +473,50 @@ def catalog_command(
             click.echo(f"showing {shown} of {found.total} (--limit 0 for all)")
         else:
             click.echo(f"showing {shown}")
+
+
+@main.command("config")
+@click.option(
+    "--muscle-groups",
+    "show_groups",
+    is_flag=True,
+    help="Show the muscle group mapping instead: the catalog's seventeen "
+    "primary muscles and the group each is allocated under.",
+)
+def config_command(show_groups: bool) -> None:
+    """Show what the user has declared: cycle, duration cap, split, denominator.
+
+    Read-only. Nothing in trainer writes this file; it is hand-edited until
+    session 6's onboarding fills it by talking to you (ADR-0003).
+    """
+    with reported():
+        if show_groups:
+            _print_muscle_groups(muscle_groups.committed())
+            return
+
+        path = config.config_path()
+        declared = config.load(path)
+
+    click.echo(f"configuration: {path}")
+    click.echo(f"cycle length: {declared.cycle_length} workouts")
+    click.echo(f"duration cap: {declared.duration_cap_min} min")
+    click.echo(f"volume counted per: {declared.volume_denominator}")
+    click.echo("split:")
+    for position, groups in enumerate(declared.split, start=1):
+        click.echo(f"  {position}. {', '.join(groups)}")
+
+
+def _print_muscle_groups(mapping: muscle_groups.MuscleGroups) -> None:
+    """The mapping, grouped by group -- the shape a person reads it in.
+
+    `(no group)` is printed rather than omitted, for the same reason a
+    breakdown prints its `(none)` row: it is the line that makes the seventeen
+    add up, and `neck` being in no group is a decision, not an absence of one.
+    """
+    click.echo(f"mapping: {muscle_groups.MUSCLE_GROUPS_PATH}")
+    for group in [*mapping.groups, None]:
+        members = [muscle for muscle, assigned in mapping.by_muscle if assigned == group]
+        click.echo(f"{group or '(no group)'}: {', '.join(members)}")
 
 
 @main.command("admissible")

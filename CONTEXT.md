@@ -29,8 +29,12 @@ spans many cycles.
 **Muscle group**:
 One of the six units a workout's time is allocated to: **chest**, **back**,
 **shoulders**, **arms**, **legs**, **core**. Each is a curated grouping of the
-catalog's own `primary_muscles` values, decided once and written down —
-`lower back` belongs to core, not to back, because it is trunk musculature.
+catalog's own `primary_muscles` values, decided once and written down in
+`src/trainer/data/muscle-groups.md`, which carries the reason for every one of
+the seventeen assignments — `lower back` belongs to core, not to back, because
+it is trunk musculature, and `neck` belongs to no group at all. **That file is
+the only place the six names exist**: everything that needs the vocabulary
+reads it from there, never from a copy.
 Allocating time is **all** it does: volume is never counted on this axis,
 because `arms` erases exactly the biceps/triceps distinction the muscle axis
 exists to keep.

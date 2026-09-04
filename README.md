@@ -38,6 +38,9 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
+uv run trainer config                         # what you declared: cycle, cap, split
+uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups
+
 uv run trainer db snapshot  # regenerate snapshots/catalog.md, then commit it
 ```
 
@@ -63,6 +66,16 @@ A seventh field, `required_rom` — a range of motion in degrees per joint — w
 
 This is the sentence the rest of the architecture rests on: *the analytic layer defines the space, the agent moves inside it*. From session 4 on, an agent chooses inside whatever `admissible_set` returns and cannot prescribe outside it — not by instruction, but because nothing outside the set exists for it to choose.
 
+## What you declare
+
+Four values are yours to declare, not the system's to measure: how many workouts one complete rotation of your cycle holds, the most a single workout may run, which muscle groups each workout of the cycle trains, and what volume is counted over. They live in `training.toml` in the working directory — copy `src/trainer/data/training.example.toml` and edit it; `trainer config` prints that path when there is nothing to read — because `git diff` on that file is itself training history, and a declaration sitting in a table beside rows the system measured is indistinguishable from a measurement ([ADR-0003](docs/adr/0003-training-requirements-live-in-a-config-file.md)). `TRAINER_CONFIG` overrides where it lives. Nothing in trainer writes it; session 6's onboarding is what will fill it by talking to you.
+
+`trainer config` reads it back, and says *«no training configuration yet»* when there is nothing to read rather than complaining about a field nobody filled in. A split that is not as long as the cycle, or a group name that is not one of the six, is refused with both numbers or with the six listed.
+
+The six muscle groups — `chest`, `back`, `shoulders`, `arms`, `legs`, `core` — are a curated grouping of the catalog's own seventeen `primary_muscles` values, and they exist in exactly one place: `src/trainer/data/muscle-groups.md`, which carries the reason for every assignment. `lower back` is core, not back: the spinal erectors are trunk musculature, and a back day that counts them is counting bracing as pulling. `neck` maps to no group at all — its eight rows stay reachable in the catalog and no split ever asks for them. Everything that needs the vocabulary reads it from that file, so a hand-copied list can never drift from it, and a test fails the day the catalog grows an eighteenth muscle rather than letting it fall silently out of every allocation.
+
+**Allocating time is all a muscle group does.** Volume is counted per movement pattern and per *muscle* — `arms` erases exactly the biceps/triceps distinction that axis exists to keep.
+
 ## The database
 
 A single SQLite file, `trainer.sqlite` in the working directory. Override it with the `TRAINER_DB` environment variable — that is what the test suite does, so tests never touch a real one.
@@ -85,6 +98,7 @@ The suite runs with no network access and no credentials — both are removed in
 ```
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
+  data/       what ships with the package: the exercise dataset, the muscle group mapping, the config example
   cli.py      argument parsing and formatting, nothing else
 docs/
   agents/     configuration the engineering skills read
