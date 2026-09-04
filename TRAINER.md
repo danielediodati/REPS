@@ -135,11 +135,12 @@ Week 2 — everything smooth
 Week 7 — 40 minutes instead of 60, and three skipped workouts
   adherence_history(4)                 → always skips the long workouts
   pattern_history(single_leg, 4)       → never actually did the lunges
+  allocate(40, {legs: .6, core: .4})   → minutes per group
   admissible_set(...)
-  simulate_cut(selection, 40)          → does not fit
-  pattern_history(pull, 4)             → here is where I can cut
+  remaining_budget(partial, 40)        → 6 left, not enough for another block
+  pattern_history(pull, 4)             → so this is the one I drop
   emits
-  6 calls, order decided on the spot
+  7 calls, order decided on the spot
 ```
 
 The second trace **was not drawable in advance**. That is what makes the project agentic.
@@ -156,9 +157,10 @@ A **tool library**, called by the agent.
 
 ### Engine — analytic / derived
 
-- **Volume** per pattern and per week, counted **on the pattern performed**, never on the planned one.
-- **Duration**: `Σ [ setup + sets × (work + rest) ]`, with `work ≈ reps × 3s`, rest from the scheme (strength 2.5-3 min, hypertrophy 90-120 s, isolation 60 s), setup from the catalog.
-  If it does not fit, the cut order is: **isolation → secondary patterns → sets on the primaries**. **Never the rest periods**: shortening them does not make the workout shorter, it changes the stimulus, and the engine would keep progressing as if nothing had happened.
+- **Volume** per pattern and per **cycle**, counted **on the pattern performed**, never on the planned one. A cycle is one complete rotation through the workouts being trained, not seven days: a user who trains when they have time completes a rotation in a span no calendar decides, and a weekly figure would move for that reason rather than because the training moved.
+- **Duration**: a plan is a sequence of **blocks**, and a block is one or more exercises performed for a number of rounds with the rest taken after each round. A block costs `setup(every exercise in it, once) + rounds × (Σ work + rest)`, with `work ≈ reps × 3s` or a declared duration for timed work, and setup from the catalog. Straight sets are the one-exercise block, a superset holds two, a circuit as many as it has — see ADR-0002.
+  The three rest bands (strength 2.5-3 min, hypertrophy 90-120 s, isolation 60 s) are a **reference the planner consults**, not a value the engine imposes: rest is prescribed, travels with the plan and is recorded, because a deliberately short rest is a legitimate prescription and progression has to know what it was measured against.
+  **It is not made to fit by cutting.** Time is allocated before the plan is built and `remaining_budget` is asked before an exercise is added; a plan that still does not fit is **rejected**, never silently repaired. Repairing it would hide from the agent that it got the arithmetic wrong, and the old cut order's one real guarantee — that nothing shortens rest behind the planner's back — is kept by there being no automatic cut at all. See ADR-0001.
 - **Progression**: increments according to the scheme chosen for the mesocycle.
 - **Return**, from the date of the last workout: ≤10 days no ramp-in; 11-21 one workout; 22-45 two workouts; >45 full calibration.
 
@@ -166,12 +168,11 @@ A **tool library**, called by the agent.
 
 ```
 admissible_set(exclusions, equipment, budget)
-remaining_budget(partial_selection)
-pattern_history(pattern, weeks)
-adherence_history(weeks)
+remaining_budget(partial_selection, budget)
+pattern_history(pattern, cycles)
+adherence_history(cycles)
 last_performed_load(exercise_id)
 compare_variants(id_a, id_b)          # pattern, loaded joints, stability, setup cost
-simulate_cut(selection, minutes)
 active_conclusions()
 ```
 

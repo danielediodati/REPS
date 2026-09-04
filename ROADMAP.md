@@ -18,7 +18,7 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 |---|---|---|
 | 1 | `0.1.0` | browse 800 exercises filtering by equipment |
 | 2 | `0.2.0` | ask *«what can I do today»* and get the admissible set back |
-| 3 | `0.3.0` | know how long a selection takes and what would get cut |
+| 3 | `0.3.0` | know how long a plan takes — supersets included — and what fits the time you have |
 | 4 | `0.4.0` | **get a real plan** from an agent that cannot break the constraints |
 | 5 | `0.5.0` | report the workout in twenty seconds and watch the state move |
 | 6 | `0.6.0` | start from nothing: ten questions, and a week 1 plan at the end |
@@ -85,15 +85,17 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 
 ## Session 3 — `0.3.0` — Time
 
-**Runs**: give it a selection, it tells you how long it takes and what it would drop to fit into 40 minutes.
+**Runs**: declare a cycle and a time cap, and it tells you what fits — costing whatever structure you prescribe, supersets included.
 
-1. Duration model: `Σ [ setup + sets × (work + rest) ]`, rest from the scheme, setup from the catalog. — **done** `9e21b10`
-2. `remaining_budget` and `simulate_cut`, with the order isolation → secondary patterns → sets on the primaries.
-3. Tests that the cut **never touches the rest periods**, on any branch.
+1. Duration model: a plan is a sequence of **blocks**, rest is **prescribed**, setup from the catalog. First shipped costing a flat list at a fixed rest (`9e21b10`) and reworked to blocks in the same session — see ADR-0002.
+2. `remaining_budget` and `allocate`: the arithmetic of a declared time budget over declared proportions. **No cut** — see ADR-0001.
+3. The training config file: cycle length, duration cap, split, volume denominator. Declared by the user, read by the engine, written by nobody — see ADR-0003.
 4. `pattern_history` and `last_performed_load` against still-empty state — they have to answer «I don't know», not break.
 5. MCP wrapper over the library. Half a day, and from here on you inspect the engine from a generic client while developing.
 
 > MCP is pulled in earlier than TRAINER.md has it, on purpose: it costs little and the return is all in the later sessions, when the agent starts getting things wrong and you want to see what it sees.
+
+> **This session was re-cut mid-flight, after issue 1 had shipped.** The original plan had the engine derive the split, enforce a coverage rule, fix rest at the top of each band, and repair an over-long plan with a fixed cut order — four rules that between them left the agent filling slots in a plan the engine had already decided. ADR-0001 carries the argument and the line that replaced it: the engine costs and constrains, the agent decides how to train. What died with it: `simulate_cut`, the old issue 3 (*tests that the cut never touches the rest periods* — there is no cut), and the idea that rest is a value the engine owns. What arrived: blocks, so a superset can be costed at all, and the config file, so the requirements the user declares stop looking like state the system measured.
 
 ## Session 4 — `0.4.0` — The first plan
 
@@ -199,6 +201,10 @@ Session 11 is the only one that **ships nothing to the end user**, and that shou
 | demonstration videos | absent from «First steps» | a nullable `demo_url` added by session 2's migration, filled by hand from session 4 | in the v1 scope with no slot, and no candidate catalog closes it: free-exercise-db has two static images per exercise and no video, ExerciseDB has video under AGPL with undeclared media terms, and Zenith Fits — the one that had real demonstration videos — is dead. So the field holds a **link**, never hosted media: linking is not distribution. It cannot be model-generated either — asked for a video URL, a model returns a well-formed dead link, which is the *«plausible and wrong»* failure in its most silent form. Curated human work, like the methodology document. The volume is small enough for that to work: one person meets 40-60 distinct exercises in eight weeks, not 800 |
 
 ## Risks
+
+**Extending enrichment to the other categories has no slot, on purpose.** Session 1's issue 5 counted them: 292 rows outside `strength` — stretching (123), plyometrics (61), powerlifting (38), olympic weightlifting (35), strongman (21), cardio (14). Running session 2's existing rules over them decides 55%, but the number hides a split: on powerlifting (92%), olympic (60%) and strongman (38%) the rules are right, because those rows are strength work under another label; on stretching and plyometrics they return values that are **plausible and wrong** — a foam-roll `Adductor` stretch comes back `isolation`, a `Backward Medicine Ball Throw` comes back `horizontal pull` — because the keyword rules were written for loaded work and find the muscle name anyway. Cardio correctly decides almost nothing: a stationary bike has no movement pattern.
+
+So the 94 powerlifting/olympic/strongman rows are cheap and safe, and the rest needs rules of its own. Neither blocks anything: the 584 strength rows already carry everything the planner needs, and this widens the pool rather than unlocking it. It is written here rather than scheduled because the slicing rule caps a session at five issues and no session has a spare one — the day it gets a slot, it is one issue, not two.
 
 **Session 4 is bigger than the others and does not divide well.** The agent without the validator cannot ship. If it overruns, the cut to make is issue 5 (the invariants) into a `0.4.1` of its own — never issue 4.
 
