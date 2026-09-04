@@ -41,7 +41,25 @@ Run through this every time, in order. A ticket is not done because the code wor
    - it is the reasoning behind what you built → the commit message, which is permanent and greppable
 5. **Write the user a report, in Italian** — the one artefact of this project that is not in English, because it is written for the user to read rather than for the repo to keep. In the conversation, never in a file.
 
-   **Open with a headline**, before any section: one line saying what now works that did not before. Not *«ticket chiuso»* — the thing itself.
+   **Open with a header block**, before any section. The report is read in a
+   scrollback full of tool calls and working messages, so it has to be findable
+   by eye: a rule, the ticket and its state, the headline, the metrics on one
+   line, a second rule.
+
+   ```markdown
+   ---
+
+   # ✅ Ticket 02 — chiuso
+   ### Il piano si costruisce contro il budget invece di essere tagliato dopo
+   `00d09c2` · 522 test · mypy pulito · niente rotto
+
+   ---
+   ```
+
+   The H3 is the headline: what now works that did not before — the thing
+   itself, not *«ticket chiuso»*, which the line above it already said. The
+   metrics line is the commit hash, the test count, the type check, and whether
+   anything regressed; four facts, no sentence.
 
    Then these sections, in this order, factual:
 
