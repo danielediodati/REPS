@@ -113,10 +113,10 @@ The biggest session and the least divisible: the agent without the validator is 
 
 **Runs**: do the workout, write *«bench fine, only 3 sets of military because the shoulder was pulling, 4 out of 10»*, and the state moves.
 
-1. `workouts` table; the default is adherence, you only report the deviation.
+1. `workouts` table; the default is adherence, you only report the deviation. Session 3's `state.LOAD_SOURCE` already names the columns `last_performed_load` reads from it — `exercise_id`, `load_kg`, `performed_on` — so this either uses those names or changes that one constant.
 2. Conversational parsing → structured rows, with confirmation when it is ambiguous.
-3. Volume counted **on the pattern performed**, never on the planned one; `pattern_state` updated accordingly.
-4. Real `pattern_history` and `adherence_history`, plus the **volume deficit** as a single quantity.
+3. Volume counted **on the pattern performed**, never on the planned one; `pattern_state` updated accordingly. **And a counterpart table for the muscle axis**: `pattern_state` is keyed by `movement_pattern` and has nowhere to put it, and ADR-0001 counts the deficit on both axes because neither catches the other's degeneration — a leg workout of calf raises shows on the pattern axis, an arm workout of nothing but curls only on the muscle one. Session 3 left the reader ready for it: one more entry in `state._SOURCES`, not a second contract.
+4. Real `pattern_history` and `adherence_history`, plus the **volume deficit** as a single quantity. `pattern_history` and `last_performed_load` already exist with their final signatures and answer a typed *«I don't know»* — this session gives them rows to read, and changes nothing in `state.py` beyond that.
 
 > The case TRAINER.md declares central should be tried immediately: **skipping two weeks**. The engine has to assume adherence and flag the uncertainty, not lock up.
 

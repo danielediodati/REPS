@@ -398,7 +398,7 @@ A single **SQLite** file:
 |---|---|
 | `profile` | primary goal and constraints, history, base equipment, permanent constraints |
 | `mesocycle` | chosen scheme + rationale + start date + split |
-| `pattern_state` | per pattern: weekly volume, load trend, pain |
+| `pattern_state` | per pattern: volume per cycle, load trend, pain |
 | `exclusions` | granularity (pattern or joint), value, re-test date |
 | `workouts` | location, equipment overrides, loads, RPE, pain, deviations, adherence |
 | `exercises` | the 800 enriched |

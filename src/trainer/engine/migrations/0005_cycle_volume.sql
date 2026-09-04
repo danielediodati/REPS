@@ -1,0 +1,15 @@
+-- The denominator is the cycle, not the week.
+--
+-- `pattern_state.weekly_volume` was named when TRAINER.md still counted volume
+-- per week. CONTEXT.md settled it the other way: a user who trains when they
+-- have time completes a rotation in a span no calendar decides, so a weekly
+-- figure would move for that reason rather than because the training moved.
+-- One complete rotation through the workouts being trained is the unit.
+--
+-- Renamed rather than left alone, because the column is about to be read.
+-- `state.pattern_history` answers in volume per cycle, and a function whose
+-- contract says cycle reading a column whose name says week is a discrepancy
+-- that survives exactly until somebody trusts the name instead of the
+-- contract. Nothing has ever written a row here -- session 5's logged workouts
+-- are what will -- so the rename moves no data.
+ALTER TABLE pattern_state RENAME COLUMN weekly_volume TO cycle_volume;

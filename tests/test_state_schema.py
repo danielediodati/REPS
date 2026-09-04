@@ -82,14 +82,30 @@ def test_pattern_state_starts_empty(connection: sqlite3.Connection) -> None:
 
 def test_a_pattern_state_row_can_be_inserted(connection: sqlite3.Connection) -> None:
     connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, weekly_volume, load_trend, pain) "
+        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend, pain) "
         "VALUES ('hip hinge', 12, 'up', 'none')"
     )
 
     row = connection.execute(
         "SELECT * FROM pattern_state WHERE movement_pattern = 'hip hinge'"
     ).fetchone()
-    assert row["weekly_volume"] == 12
+    assert row["cycle_volume"] == 12
+
+
+def test_volume_is_counted_per_cycle_and_the_column_says_so(
+    connection: sqlite3.Connection,
+) -> None:
+    """CONTEXT.md settled the denominator as the cycle, not the week. The
+    column was named before that, and `state.pattern_history` reads it: a
+    contract that says cycle over a column that says week is a discrepancy
+    that lasts until somebody trusts the name."""
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(pattern_state)")
+    }
+
+    assert "cycle_volume" in columns
+    assert "weekly_volume" not in columns
 
 
 # --- exclusions: closed vocabulary, mandatory re-test date --------------
