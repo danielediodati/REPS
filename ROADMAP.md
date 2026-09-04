@@ -105,8 +105,8 @@ The biggest session and the least divisible: the agent without the validator is 
 
 1. The tool surface exposed to the agent — thin wrappers over the same library, zero new logic.
 2. Agent node that loops over the tools, with a **call budget**; when the budget runs out it **emits anyway**.
-3. Structured output: the agent emits `(id, sets, reps)`, never prose. The engine renders the plan.
-4. Deterministic validator on the way out: id outside the set → rejected; the same id twice → rejected, since session 3's `Selection` is one line per exercise and a repeated id has no honest setup cost. Ten lines.
+3. Structured output: the agent emits a **plan** — blocks, each with its exercises, rounds and prescribed rest — never prose. The engine renders it.
+4. Deterministic validator on the way out: id outside the set → rejected; a plan over the declared budget → rejected, never trimmed (ADR-0001). Ten lines.
 5. The six invariants over the six adverse situations from TRAINER.md. **Metric: 100%.** Anything below is a bug, not a tuning knob.
 
 ## Session 5 — `0.5.0` — Logging by deviation

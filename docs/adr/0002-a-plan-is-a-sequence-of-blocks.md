@@ -20,6 +20,32 @@ The block shape is not a special case bolted on for supersets. Straight sets
 are the one-exercise block, so the old model is a strict subset of this one and
 nothing has to know which kind it is holding.
 
+## The rest after the last round is charged on purpose
+
+Every round is charged its rest, the final one included. Between blocks that
+rest is real — nobody goes from their last squat straight into the next
+exercise — so the only interval overcounted is the one after the very last
+round of the very last block, at most three minutes on a whole plan. It stays
+charged because this number decides whether a plan fits a declared budget and
+there is no cut to catch a plan that turns out longer than promised: the one
+direction it must never err in is saying something fits when it does not.
+
+## An exercise appears at most once in a plan
+
+One line per exercise, across the whole plan and not merely within a block.
+Two entries on the same bar leave `setup_cost_min` with no honest answer —
+charged once it undercounts the exercise that genuinely returns later, charged
+twice it overcounts the back-off set that never left — and nothing in a plan
+tells those two apart.
+
+The cost is real and was accepted knowingly: **ramp-up sets on the same lift
+cannot be written as a light block followed by a working block.** Blocks do
+make a third answer possible — charge the setup once per plan, to whichever
+block reaches the bar first — and it was put and declined. The warm-up that
+timed work exists for is a different exercise (external rotations, a light
+walk), so the case this session was built to enable is unaffected; the day
+ramp-up sets have to be expressible, this is the paragraph to reopen.
+
 ## What it deliberately does not cover
 
 Drop sets, rest-pause and EMOM/AMRAP each need a field the block does not have

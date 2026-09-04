@@ -168,7 +168,7 @@ A **tool library**, called by the agent.
 
 ```
 admissible_set(exclusions, equipment, budget)
-remaining_budget(partial_selection, budget)
+remaining_budget(partial_plan, budget)
 pattern_history(pattern, cycles)
 adherence_history(cycles)
 last_performed_load(exercise_id)
@@ -195,9 +195,9 @@ It does not see the catalog: it sees `admissible_set`, already filtered. It can 
 
 The only escape hatch is the output format, and it is closed like this:
 
-> **The agent emits a selection (id + sets + reps), not text. The engine renders the plan.**
+> **The agent emits a plan — a sequence of blocks, each naming its exercises, its rounds and the rest after each round — not text. The engine renders it.**
 
-An id outside the set is rejected by the engine, deterministically. Ten lines, zero cost, 100% recall. **For a decidable constraint, a validator always beats an agent judge** — which would cost money, latency, and would catch 90% of them.
+An id outside the set is rejected by the engine, deterministically, and so is a plan that does not fit the declared budget. Ten lines, zero cost, 100% recall. **For a decidable constraint, a validator always beats an agent judge** — which would cost money, latency, and would catch 90% of them.
 
 The non-determinism lives in the **trajectory**, never in the set of admissible results.
 
