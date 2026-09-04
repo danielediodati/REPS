@@ -42,9 +42,30 @@ issued in advance.
   workout make it meaningless. The engine does the arithmetic over whatever
   proportions it is handed.
 
+## The deficit is measured on two axes, not one
+
+Replacing the coverage rule with a deficit only works if the deficit can see
+the degeneration the rule was aimed at, and one axis cannot. Counted per
+movement pattern, a leg workout made of calf raises is caught — the catalog
+puts quadriceps in `squat` and `single-leg` and hamstrings in `hip hinge`, so
+their absence is visible. An arm workout made entirely of curls is not: biceps,
+triceps and forearms are all `isolation`, and the pattern axis sees one
+undifferentiated bucket of 281 rows.
+
+So volume is counted per movement pattern **and** per muscle, over a cycle.
+The pattern axis answers *am I balanced* — push against pull, squat against
+hinge; the muscle axis answers *am I touching this at all*. Every catalog row
+already carries both labels, so counting both costs nothing when a workout is
+written down.
+
+This is also what keeps the six muscle groups honest. They are the unit a
+workout's **time** is allocated to and nothing else: as an accounting axis
+`arms` would erase exactly the biceps/triceps distinction this paragraph
+exists to preserve. Allocation is coarse on purpose; measurement is not.
+
 ## What is left in the engine
 
 Costing a plan (`plan_duration`), the remaining budget, the admissible set,
-and the volume deficit per movement pattern per cycle. All four are arithmetic
-or set operations over the catalog and the logged state. None of them decides
-how to train.
+and the volume deficit — per pattern and per muscle, per cycle. All four are
+arithmetic or set operations over the catalog and the logged state. None of
+them decides how to train.

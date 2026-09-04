@@ -31,6 +31,9 @@ One of the six units a workout's time is allocated to: **chest**, **back**,
 **shoulders**, **arms**, **legs**, **core**. Each is a curated grouping of the
 catalog's own `primary_muscles` values, decided once and written down —
 `lower back` belongs to core, not to back, because it is trunk musculature.
+Allocating time is **all** it does: volume is never counted on this axis,
+because `arms` erases exactly the biceps/triceps distinction the muscle axis
+exists to keep.
 _Avoid_: body part, muscle — a *muscle* is one of the catalog's seventeen raw
 values, a *muscle group* is one of these six.
 
@@ -79,14 +82,23 @@ _Avoid_: cardio — that is one of the catalog's own `category` values and names
 where a row came from, not how it is prescribed.
 
 **Volume deficit**:
-Unchanged from TRAINER.md, with the denominator settled: the difference
-between planned and performed volume on a movement pattern, measured over a
-**cycle**. It is the signal that a plan is degenerating — an under-served
-pattern shows up here rather than being forbidden in advance.
+Unchanged from TRAINER.md, with the denominator settled and the axes named:
+the difference between planned and performed volume, measured over a **cycle**,
+on two axes — per movement pattern and per muscle. It is the signal that a plan
+is degenerating: an under-served pattern or muscle shows up here rather than
+being forbidden in advance. Two axes because neither catches the other's
+failure — see ADR-0001.
 
 **Movement pattern**:
-Unchanged from TRAINER.md — one of the twelve ways a body can be loaded. It
-remains the axis **volume** is counted on, and the axis a split's coverage is
-stated in. A muscle group answers *what am I training today*; a movement
-pattern answers *what is my body accumulating*. They are different questions
-and an exercise carries both labels already.
+Unchanged from TRAINER.md — one of the twelve ways a body can be loaded. It is
+one of the two axes **volume** is counted on, the other being the muscle. A
+muscle group answers *how is today's time divided*; a movement pattern and a
+muscle each answer *what is my body accumulating*, at different resolutions.
+An exercise carries all three labels already.
+
+**Muscle**:
+One of the catalog's own seventeen `primary_muscles` values — `biceps`,
+`quadriceps`, `lower back`. The finer of the two axes volume is counted on,
+and the only one that can tell an arm workout of curls from a balanced one.
+_Avoid_: muscle group — that is one of the six, and it is for allocating time,
+not for measuring.
