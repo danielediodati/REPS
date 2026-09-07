@@ -604,8 +604,19 @@ def _print_muscle_groups(mapping: muscle_groups.MuscleGroups) -> None:
     multiple=True,
     help="A movement pattern or a loaded joint to keep out -- never an exercise id.",
 )
+@click.option(
+    "--group",
+    "groups",
+    metavar="GROUP",
+    multiple=True,
+    help="A muscle group this workout trains; repeat for more than one. "
+    "Left out, the whole admissible space is answered.",
+)
 def admissible_command(
-    equipment: tuple[str, ...], budget: int, exclude: tuple[str, ...]
+    equipment: tuple[str, ...],
+    budget: int,
+    exclude: tuple[str, ...],
+    groups: tuple[str, ...],
 ) -> None:
     """The exercises today's equipment, the time available and every active
     exclusion leave standing -- the answer to "what can I do today".
@@ -623,7 +634,7 @@ def admissible_command(
         standing = exclusions.active(connection, date.today().isoformat())
         try:
             found = admissible.admissible_set(
-                connection, [*standing, *classified], equipment, budget
+                connection, [*standing, *classified], equipment, budget, groups
             )
         except catalog.UnknownFilterValue as error:
             raise _rejected(error) from error
@@ -667,6 +678,14 @@ def admissible_command(
     help="A movement pattern or a loaded joint to keep out -- never an exercise id.",
 )
 @click.option(
+    "--group",
+    "groups",
+    metavar="GROUP",
+    multiple=True,
+    help="A muscle group this workout trains; repeat for more than one. "
+    "Left out, the whole admissible space is answered.",
+)
+@click.option(
     "--call-budget",
     "call_budget",
     metavar="N",
@@ -689,6 +708,7 @@ def plan_command(
     equipment: tuple[str, ...],
     budget: int,
     exclude: tuple[str, ...],
+    groups: tuple[str, ...],
     call_budget: int,
     record_path: Path | None,
 ) -> None:
@@ -728,6 +748,7 @@ def plan_command(
                 equipment=equipment,
                 budget_min=budget,
                 exclusions=(*standing, *classified),
+                groups=groups,
             )
             try:
                 if parsed is not None:

@@ -513,6 +513,12 @@ def brief(request: plans.Request) -> str:
         f"Equipment available today: {', '.join(request.equipment)}.",
         f"Time available: {request.budget_min} minutes.",
     ]
+    if request.groups:
+        lines.append(
+            f"This workout trains: {', '.join(request.groups)}. Ask "
+            "`admissible_set` for those groups; anything else is not today's "
+            "workout."
+        )
     if request.exclusions:
         lines.append(
             "Excluded, and already filtered out of the admissible set: "

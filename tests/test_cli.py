@@ -1288,7 +1288,7 @@ def write_plan(tmp_path: Path, *blocks: dict[str, object]) -> str:
 
 def squat_block(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
-        "items": [{"exercise_id": "Barbell_Squat", "reps": 8}],
+        "items": [{"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}],
         "rounds": 4,
         "rest": 150,
         "reason": "the heaviest lift while fresh",
@@ -1319,7 +1319,7 @@ def test_plan_rejects_an_exercise_todays_equipment_does_not_reach(
 ) -> None:
     plan_file = write_plan(
         tmp_path,
-        squat_block(items=[{"exercise_id": "Dumbbell_Bicep_Curl", "reps": 12}]),
+        squat_block(items=[{"exercise_id": "Dumbbell_Bicep_Curl", "prescription": {"unit": "reps", "amount": 12}}]),
     )
 
     result = runner.invoke(
@@ -1624,3 +1624,55 @@ def test_plan_refuses_a_record_path_it_cannot_write_before_calling_a_model(
 
     assert result.exit_code != 0
     assert "no directory" in result.output
+
+
+def test_admissible_narrows_to_the_groups_asked_for(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """A leg day has no business seeing the curls."""
+    whole = runner.invoke(main, ["admissible", "--equipment", "dumbbell", "--time", "45"])
+    legs = runner.invoke(
+        main,
+        ["admissible", "--equipment", "dumbbell", "--time", "45", "--group", "legs"],
+    )
+
+    def shown(output: str) -> int:
+        return int(output.rsplit("showing ", 1)[1].split()[0])
+
+    assert legs.exit_code == 0, legs.output
+    assert shown(legs.output) < shown(whole.output)
+    assert "Dumbbell Squat" in legs.output
+    assert "Dumbbell Bicep Curl" not in legs.output
+
+
+def test_admissible_rejects_a_muscle_where_a_group_belongs(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["admissible", "--equipment", "dumbbell", "--time", "45", "--group", "quadriceps"],
+    )
+
+    assert result.exit_code != 0
+    assert "not a muscle group" in result.output
+
+
+def test_plan_checks_a_hand_written_plan_against_what_today_trains(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """A curl on a leg day is refused, and the refusal says which of the two
+    it is rather than calling it a bad choice."""
+    plan_file = write_plan(
+        tmp_path,
+        squat_block(items=[{"exercise_id": "Dumbbell_Bicep_Curl", "prescription": {"unit": "reps", "amount": 12}}]),
+    )
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", plan_file, "--equipment", "dumbbell", "--time", "45",
+         "--group", "legs"],
+    )
+
+    assert result.exit_code != 0
+    assert "biceps" in result.output
+    assert "legs" in result.output

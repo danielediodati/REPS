@@ -38,7 +38,7 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
-uv run trainer plan --equipment dumbbell --time 45   # a model plans it, inside a call budget
+uv run trainer plan --equipment dumbbell --time 45 --group legs --group core
 uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
 uv run trainer config                         # what you declared: cycle, cap, split
@@ -87,11 +87,14 @@ A plan is a **sequence of blocks**: a block is one or more exercises, a number o
 
 ```json
 {"blocks": [
-  {"items": [{"exercise_id": "Dumbbell_Squat", "reps": 8}],
+  {"items": [{"exercise_id": "Dumbbell_Squat",
+              "prescription": {"unit": "reps", "amount": 8}}],
    "rounds": 4, "rest": 150,
    "reason": "the heaviest lift first, while the legs are fresh"}
 ]}
 ```
+
+A prescription is an amount and the unit it counts — reps, or seconds for a carry or a plank. One field and a tag rather than an optional `reps` beside an optional `seconds`, because *exactly one of these two is set* is a rule no schema can state, and whoever writes against the schema is then being asked to guess.
 
 `trainer plan --from FILE` reads one, checks it against the request, and either prints the workout or names the rule that refused it. Three rules, and they **reject** — nothing is trimmed to fit and nothing is asked again (ADR-0001): every exercise is inside `admissible_set` for that request, the plan's duration is inside the declared budget, and no exercise appears twice. A rejection names the id **and** why it is out — the equipment it needs, the exclusion it trips, or the setup cost that does not fit — and a rejected plan is not rendered at all, because half a workout with a refusal under it reads as a workout with a footnote.
 

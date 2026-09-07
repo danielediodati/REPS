@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -51,6 +52,26 @@ class PlanRejected(RuntimeError):
 # -- the shape ----------------------------------------------------------------
 
 
+class Prescription(BaseModel):
+    """How much of an exercise: an amount, and what it counts.
+
+    One field and a unit rather than an optional `reps` beside an optional
+    `seconds`. The engine's `BlockItem` has always refused both-or-neither --
+    *"3 rounds of 10 reps of walking"* means nothing -- but *exactly one of
+    these two is set* is a rule no schema can state, so a model held to that
+    schema is being asked to guess. Written this way the wrong state cannot be
+    expressed, which is worth more than any number of sentences telling a
+    model not to write it. It also survives strict structured output, where
+    every property must be present and *absent* stops being available as a
+    way to say "not this one".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit: Literal["reps", "seconds"]
+    amount: int
+
+
 class PlanItem(BaseModel):
     """One exercise inside a block, and how it is prescribed.
 
@@ -68,20 +89,7 @@ class PlanItem(BaseModel):
             "returned it."
         ),
     )
-    reps: int | None = Field(
-        default=None,
-        description=(
-            "How many repetitions, for work counted in reps. Exactly one of "
-            "reps and seconds carries a value; the other is null."
-        ),
-    )
-    seconds: int | None = Field(
-        default=None,
-        description=(
-            "How long, for work counted in time -- a carry, a plank, a walk. "
-            "Exactly one of reps and seconds carries a value; the other is null."
-        ),
-    )
+    prescription: Prescription
 
 
 class PlanBlock(BaseModel):
@@ -129,6 +137,9 @@ class Request:
     equipment: tuple[str, ...]
     budget_min: int
     exclusions: tuple[Exclusion, ...] = ()
+    groups: tuple[str, ...] = ()
+    """The muscle groups this workout trains. Empty is the whole space, which
+    is what a caller who has not said which workout this is has asked for."""
 
 
 def parse(text: str) -> WorkoutPlan:
@@ -174,8 +185,8 @@ def to_blocks(plan: WorkoutPlan) -> tuple[duration.Block, ...]:
                     items=tuple(
                         duration.BlockItem(
                             exercise_id=item.exercise_id,
-                            reps=item.reps,
-                            seconds=item.seconds,
+                            reps=_amount(item, "reps"),
+                            seconds=_amount(item, "seconds"),
                         )
                         for item in block.items
                     ),
@@ -230,7 +241,11 @@ def _every_id_admissible(
     inside = {
         exercise.id
         for exercise in admissible.admissible_set(
-            connection, request.exclusions, request.equipment, request.budget_min
+            connection,
+            request.exclusions,
+            request.equipment,
+            request.budget_min,
+            request.groups,
         )
     }
     offenders = [
@@ -250,6 +265,7 @@ def _every_id_admissible(
             request.exclusions,
             request.equipment,
             request.budget_min,
+            request.groups,
         )
         lines.append(f"  {exercise_id}: {why or 'not in the admissible set'}")
     raise PlanRejected("\n".join(lines))
@@ -339,4 +355,15 @@ def _name(connection: sqlite3.Connection, exercise_id: str) -> str:
 
 
 def _prescription(item: PlanItem) -> str:
-    return f"{item.reps} reps" if item.reps is not None else f"{item.seconds} seconds"
+    return f"{item.prescription.amount} {item.prescription.unit}"
+
+
+def _amount(item: PlanItem, unit: str) -> int | None:
+    """The count, for the unit it is counted in, and `None` for the other.
+
+    `BlockItem` keeps two fields because costing reads them differently -- reps
+    become seconds at a tempo, seconds are already seconds -- and it is the one
+    definition of what a block holds. This is the only place the two shapes
+    meet.
+    """
+    return item.prescription.amount if item.prescription.unit == unit else None

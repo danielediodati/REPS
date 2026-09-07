@@ -271,3 +271,81 @@ def test_against_the_real_enriched_catalog(database_file: Path) -> None:
         assert found
         assert all(e.equipment == "body only" for e in found)
         assert all(e.category == catalog.STRENGTH_CATEGORY for e in found)
+
+
+# --- the muscle groups today's workout trains --------------------------------
+#
+# The hand-built catalog is one exercise per group: shoulders on a barbell,
+# quadriceps at bodyweight, biceps on a dumbbell. Which makes it exactly the
+# right size for asking what a workout of one group leaves standing.
+
+EVERYTHING = ["barbell", "dumbbell", "body only"]
+
+
+def test_groups_narrow_the_space_to_what_this_workout_needs(
+    connection: sqlite3.Connection,
+) -> None:
+    """The whole admissible space is several times any one workout. Handing it
+    all to a model is handing it the biceps on a leg day."""
+    whole = admissible.admissible_set(connection, [], EVERYTHING, 45)
+    legs = admissible.admissible_set(connection, [], EVERYTHING, 45, ["legs"])
+
+    assert [e.id for e in legs] == ["Bodyweight_Squat"]
+    assert len(whole) == 3
+
+
+def test_two_groups_are_the_union_of_what_each_leaves_standing(
+    connection: sqlite3.Connection,
+) -> None:
+    found = admissible.admissible_set(connection, [], EVERYTHING, 45, ["legs", "arms"])
+
+    assert {e.id for e in found} == {"Bodyweight_Squat", "Dumbbell_Bicep_Curl"}
+
+
+def test_no_group_asked_is_the_whole_space(connection: sqlite3.Connection) -> None:
+    """Empty is *nobody has said which workout this is*, not *nothing is
+    admissible* -- the same distinction `equipment` refuses to blur."""
+    asked = admissible.admissible_set(connection, [], EVERYTHING, 45, [])
+    unasked = admissible.admissible_set(connection, [], EVERYTHING, 45)
+
+    assert {e.id for e in asked} == {e.id for e in unasked}
+    assert len(asked) == 3
+
+
+def test_the_filter_composes_with_the_other_constraints(
+    connection: sqlite3.Connection,
+) -> None:
+    """A leg day with no bodyweight available leaves nothing, and that is an
+    answer rather than a failure."""
+    found = admissible.admissible_set(connection, [], ["barbell", "dumbbell"], 45, ["legs"])
+
+    assert found == ()
+
+
+def test_the_filter_reads_primary_muscles_not_secondary(
+    connection: sqlite3.Connection,
+) -> None:
+    """A lift that happens to load a leg somewhere is not a leg exercise, and
+    a day that admitted every one of them would be the whole catalog again."""
+    legs = admissible.admissible_set(connection, [], EVERYTHING, 45, ["legs"])
+
+    for found in legs:
+        assert set(found.primary_muscles) & set(admissible.muscles_of(["legs"]))
+
+
+def test_a_muscle_is_not_a_muscle_group(connection: sqlite3.Connection) -> None:
+    """`quadriceps` is a muscle the catalog names; the six groups are the
+    project's own vocabulary, and confusing them silently would answer a
+    different question."""
+    with pytest.raises(admissible.AdmissibleError, match="not a muscle group"):
+        admissible.admissible_set(connection, [], ["barbell"], 45, ["quadriceps"])
+
+
+def test_the_six_groups_are_read_from_the_committed_mapping() -> None:
+    """Never a copy: `muscle-groups.md` is the only place the six names and the
+    seventeen assignments live."""
+    from trainer.engine import muscle_groups
+
+    covered = set(admissible.muscles_of(muscle_groups.groups()))
+
+    assert covered == {m for m, g in muscle_groups.committed().by_muscle if g}

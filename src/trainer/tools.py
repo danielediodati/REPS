@@ -204,14 +204,20 @@ def _block(raw: Mapping[str, Any]) -> duration.Block:
 def admissible_set(
     equipment: list[str],
     budget_min: int,
+    muscle_groups: list[str] | None = None,
     exclusions: list[dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
-    """The exercises today's equipment, the time available and the exclusions
-    given leave standing -- the space a plan is chosen inside.
+    """The exercises today's equipment, the time available, the muscle groups
+    being trained and the exclusions given leave standing -- the space a plan
+    is chosen inside.
 
     `equipment` names the catalog's own values (`barbell`, `body only`) and
-    must hold at least one. Each exclusion is `{"granularity": "pattern" |
-    "joint", "value": ...}`; an exclusion never names an exercise id.
+    must hold at least one. `muscle_groups` names the groups this workout
+    trains, from `chest`, `back`, `shoulders`, `arms`, `legs`, `core`: give
+    them, because the whole space is several times larger than any one
+    workout needs and every exercise you are handed you are also paying to
+    re-read on every later turn. Each exclusion is `{"granularity": "pattern"
+    | "joint", "value": ...}`; an exclusion never names an exercise id.
     """
     given = [
         Exclusion(
@@ -221,7 +227,9 @@ def admissible_set(
         for item in exclusions or []
     ]
     with reported(), opened() as connection:
-        found = admissible.admissible_set(connection, given, equipment, budget_min)
+        found = admissible.admissible_set(
+            connection, given, equipment, budget_min, muscle_groups or ()
+        )
     return [_exercise(exercise) for exercise in found]
 
 

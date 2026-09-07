@@ -23,7 +23,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 
-from trainer.engine import catalog
+from trainer.engine import catalog, muscle_groups
 from trainer.engine.catalog import Exercise
 from trainer.engine.exclusions import Exclusion
 
@@ -36,19 +36,58 @@ class AdmissibleError(RuntimeError):
     """A precondition `admissible_set` cannot proceed without."""
 
 
+def muscles_of(groups: Sequence[str]) -> tuple[str, ...]:
+    """The catalog's own muscles that these groups cover.
+
+    Read from the committed mapping rather than from a copy: the six names and
+    the seventeen assignments live in `muscle-groups.md` and nowhere else.
+    """
+    try:
+        mapping = muscle_groups.committed()
+    except muscle_groups.MuscleGroupError as error:
+        raise AdmissibleError(f"the muscle groups cannot be read: {error}") from error
+
+    known = mapping.groups
+    for group in groups:
+        if group not in known:
+            raise AdmissibleError(
+                f"{group!r} is not a muscle group; they are {', '.join(known)}"
+            )
+    wanted = set(groups)
+    return tuple(
+        muscle for muscle, group in mapping.by_muscle if group in wanted
+    )
+
+
 def admissible_set(
     connection: sqlite3.Connection,
     exclusions: Sequence[Exclusion],
     equipment: Sequence[str],
     budget: int,
+    groups: Sequence[str] = (),
 ) -> tuple[Exercise, ...]:
-    """The exercises compatible with every exclusion, today's equipment and
-    the time available.
+    """The exercises compatible with every exclusion, today's equipment, the
+    time available, and the muscle groups today's workout trains.
 
     `equipment` must name at least one value: an empty catalog of "what I
     can use today" is a different question (nothing is ever admissible) from
     one nobody asked, and conflating the two would make a caller's bug look
     like a legitimate, if severe, answer.
+
+    `groups` is different: empty means *the whole space*, because a caller
+    that has not said which workout this is has not narrowed anything. Given,
+    it keeps the exercises whose **primary** muscles fall in those groups.
+    Primary and not secondary, for the reason volume is counted on the
+    primaries and time is allocated to the groups: a curl that happens to load
+    the forearms is not a forearm exercise, and a leg day that admitted every
+    lift with a leg somewhere in it would be the whole catalog again.
+
+    This is a constraint and not a choice of method, which is what keeps it on
+    the right side of ADR-0001: the split is declared by the user in
+    `training.toml`, so *today trains legs and core* is a fact about today in
+    the same way today's equipment is. What the engine still does not decide is
+    which of the admissible exercises to prescribe, in what order, or for how
+    long.
     """
     if not catalog.values(connection, "movement_pattern"):
         raise AdmissibleError(UNENRICHED_MESSAGE)
@@ -86,6 +125,16 @@ def admissible_set(
         )
         parameters.append(joint)
 
+    # The same `json_each` mechanism the joints use, over `primary_muscles`:
+    # keep the row if any of its primaries is a muscle today's groups cover.
+    if groups:
+        wanted = muscles_of(groups)
+        conditions.append(
+            f"EXISTS (SELECT 1 FROM json_each(exercises.primary_muscles) AS muscle "
+            f"WHERE muscle.value IN ({_placeholders(wanted)}))"
+        )
+        parameters.extend(wanted)
+
     rows = connection.execute(
         f"SELECT * FROM exercises WHERE {' AND '.join(conditions)} ORDER BY name, id",
         parameters,
@@ -99,6 +148,7 @@ def rejection(
     exclusions: Sequence[Exclusion],
     equipment: Sequence[str],
     budget: int,
+    groups: Sequence[str] = (),
 ) -> str | None:
     """Why `admissible_set` left this exercise out, or `None` if it did not.
 
@@ -138,6 +188,13 @@ def rejection(
 
     found = catalog.exercise(connection, exercise_id)
     assert found is not None  # `catalog.enrichment` above found the same row
+
+    if groups and not set(found.primary_muscles) & set(muscles_of(groups)):
+        trains = ", ".join(found.primary_muscles) or "nothing recorded"
+        return (
+            f"trains {trains}, and today's workout is {', '.join(groups)}"
+        )
+
     if found.equipment is None:
         return "has no equipment recorded, so it matches nothing available today"
     if found.equipment not in equipment:

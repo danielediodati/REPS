@@ -4,8 +4,10 @@
 nothing here reaches a provider. What is covered is everything that is this
 project's: the tools offered, the call budget, emitting on exhaustion, the way
 out through the validator and the fact that there is no way back in, and the
-run record ticket 05 will measure on. `agent.Claude` is the one class the
-suite never runs -- it is exercised for the first time under `trainer eval`.
+run record ticket 05 will measure on. `agent.Groq` is covered too, against a
+stand-in client that records the request it was handed: the request *shape* is
+where the one bug that would have failed every real run lived, and no socket
+is needed to assert on it.
 """
 
 from __future__ import annotations
@@ -63,7 +65,7 @@ def good_plan(*exercise_ids: str) -> plans.WorkoutPlan:
     return plans.WorkoutPlan(
         blocks=[
             plans.PlanBlock(
-                items=[plans.PlanItem(exercise_id=exercise_id, reps=8)],
+                items=[plans.PlanItem(exercise_id=exercise_id, prescription=plans.Prescription(unit="reps", amount=8))],
                 rounds=3,
                 rest=120,
                 reason="because it is a squat and squats are good",
@@ -330,7 +332,12 @@ def test_a_plan_the_block_vocabulary_cannot_express_is_refused_too(
     emitted = plans.WorkoutPlan(
         blocks=[
             plans.PlanBlock(
-                items=[plans.PlanItem(exercise_id="Barbell_Squat", reps=8, seconds=30)],
+                items=[
+                    plans.PlanItem(
+                        exercise_id="Barbell_Squat",
+                        prescription=plans.Prescription(unit="reps", amount=0),
+                    )
+                ],
                 rounds=3,
                 rest=120,
                 reason="both at once",
@@ -753,7 +760,8 @@ def test_strict_mode_requires_every_property_including_the_optional_pair() -> No
     built = agent.strict_schema(plans.WorkoutPlan)
     item = built["$defs"]["PlanItem"]
 
-    assert set(item["required"]) == {"exercise_id", "reps", "seconds"}
+    assert set(item["required"]) == {"exercise_id", "prescription"}
+    assert set(built["$defs"]["Prescription"]["required"]) == {"unit", "amount"}
     assert item["additionalProperties"] is False
     assert built["required"] == ["blocks"]
 
@@ -765,7 +773,6 @@ def test_the_strict_shape_still_accepts_a_plan_the_project_calls_valid() -> None
     import jsonschema
 
     emitted = json.loads(good_plan("Barbell_Squat").model_dump_json())
-    emitted["blocks"][0]["items"][0]["seconds"] = None
 
     jsonschema.validate(emitted, agent.strict_schema(plans.WorkoutPlan))
 
@@ -849,3 +856,35 @@ def test_a_provider_failure_outside_the_status_hierarchy_is_still_words() -> Non
 
     with pytest.raises(agent.AgentError, match="the provider failed"):
         agent._reported(malformed)
+
+
+def test_the_model_can_ask_for_only_the_groups_today_trains(
+    connection: sqlite3.Connection,
+) -> None:
+    """The whole admissible space is several times any one workout. With
+    dumbbells the catalog leaves 119 exercises standing and a leg day needs
+    14 of them; the other 105 are arms, shoulders, chest and back, re-read on
+    every later turn for nothing."""
+    whole = agent._execute(call("admissible_set", equipment=["barbell"], budget_min=45))
+    narrowed = agent._execute(
+        call(
+            "admissible_set",
+            equipment=["barbell"],
+            budget_min=45,
+            muscle_groups=["shoulders"],
+        )
+    )
+
+    assert narrowed.failed is False
+    assert len(narrowed.content) < len(whole.content)
+
+
+def test_the_brief_names_what_today_trains(connection: sqlite3.Connection) -> None:
+    request = plans.Request(
+        equipment=("dumbbell",), budget_min=45, groups=("legs", "core")
+    )
+
+    written = agent.brief(request)
+
+    assert "legs, core" in written
+    assert "admissible_set" in written

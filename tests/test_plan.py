@@ -73,21 +73,21 @@ BARBELL_45 = plans.Request(equipment=("barbell",), budget_min=45)
 
 def test_a_plan_arrives_whole() -> None:
     parsed = plans.parse(
-        document(block({"exercise_id": "Barbell_Squat", "reps": 8}, reason="heaviest first"))
+        document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}, reason="heaviest first"))
     )
 
     assert len(parsed.blocks) == 1
     assert parsed.blocks[0].items[0].exercise_id == "Barbell_Squat"
-    assert parsed.blocks[0].items[0].reps == 8
+    assert parsed.blocks[0].items[0].prescription.amount == 8
     assert parsed.blocks[0].reason == "heaviest first"
 
 
 def test_timed_work_is_a_prescription_too() -> None:
     """*Three rounds of ten reps of plank* means nothing."""
-    parsed = plans.parse(document(block({"exercise_id": "Plank", "seconds": 45})))
+    parsed = plans.parse(document(block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}})))
 
-    assert parsed.blocks[0].items[0].seconds == 45
-    assert parsed.blocks[0].items[0].reps is None
+    assert parsed.blocks[0].items[0].prescription.unit == "seconds"
+    assert parsed.blocks[0].items[0].prescription.amount == 45
 
 
 def test_a_superset_survives_as_one_block() -> None:
@@ -96,8 +96,8 @@ def test_a_superset_survives_as_one_block() -> None:
     parsed = plans.parse(
         document(
             block(
-                {"exercise_id": "Barbell_Squat", "reps": 8},
-                {"exercise_id": "Standing_Military_Press", "reps": 8},
+                {"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}},
+                {"exercise_id": "Standing_Military_Press", "prescription": {"unit": "reps", "amount": 8}},
             )
         )
     )
@@ -118,7 +118,7 @@ def test_a_missing_field_is_named() -> None:
                 {
                     "blocks": [
                         {
-                            "items": [{"exercise_id": "Barbell_Squat", "reps": 8}],
+                            "items": [{"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}],
                             "rounds": 3,
                             "rest": 90,
                         }
@@ -131,7 +131,7 @@ def test_a_missing_field_is_named() -> None:
 def test_a_block_with_an_empty_reason_is_refused() -> None:
     """The agent gives its reasons, and an empty string is not one."""
     with pytest.raises(plans.PlanError, match="reason"):
-        plans.parse(document(block({"exercise_id": "Barbell_Squat", "reps": 8}, reason="")))
+        plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}, reason="")))
 
 
 def test_an_unrecognised_field_is_refused_rather_than_ignored() -> None:
@@ -148,14 +148,24 @@ def test_a_plan_with_no_blocks_is_refused() -> None:
         plans.parse(json.dumps({"blocks": []}))
 
 
-def test_reps_and_seconds_together_are_refused_by_the_block_itself() -> None:
+def test_reps_and_seconds_together_cannot_be_written_at_all() -> None:
+    """The shape carries an amount and its unit, so *both at once* is not a
+    plan the validator refuses -- it is not a plan that can be written. That is
+    the point: a rule no schema can state is a rule whoever writes against the
+    schema is being asked to guess, and a model asked to guess eventually
+    guesses wrong."""
+    with pytest.raises(plans.PlanError, match="prescription"):
+        plans.parse(document(block({"exercise_id": "Plank", "reps": 8, "seconds": 30})))
+
+
+def test_an_amount_of_zero_is_refused_by_the_block_itself() -> None:
     """`BlockItem.__post_init__` is the one definition of what a block holds,
     and this module restates none of it. The position is added because that
     message is about an item and the author is looking at a file."""
     parsed = plans.parse(
         document(
-            block({"exercise_id": "Plank", "reps": 8}),
-            block({"exercise_id": "Barbell_Squat", "reps": 8, "seconds": 30}),
+            block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}}),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 0}}),
         )
     )
 
@@ -167,7 +177,7 @@ def test_reps_and_seconds_together_are_refused_by_the_block_itself() -> None:
 
 
 def test_a_plan_inside_every_rule_passes(connection: sqlite3.Connection) -> None:
-    parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "reps": 8})))
+    parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
     plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
 
@@ -175,7 +185,7 @@ def test_a_plan_inside_every_rule_passes(connection: sqlite3.Connection) -> None
 def test_an_id_outside_the_set_names_the_equipment(
     connection: sqlite3.Connection,
 ) -> None:
-    parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "reps": 8})))
+    parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanRejected) as rejected:
         plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
@@ -193,7 +203,7 @@ def test_an_id_outside_the_set_names_the_exclusion(
         exclusions=(Exclusion("pattern", "vertical push"),),
     )
     parsed = plans.parse(
-        document(block({"exercise_id": "Standing_Military_Press", "reps": 8}))
+        document(block({"exercise_id": "Standing_Military_Press", "prescription": {"unit": "reps", "amount": 8}}))
     )
 
     with pytest.raises(plans.PlanRejected, match="excluded"):
@@ -204,7 +214,7 @@ def test_an_id_outside_the_set_names_the_setup_cost(
     connection: sqlite3.Connection,
 ) -> None:
     """Two minutes available, a bar that takes three to load."""
-    parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "reps": 8})))
+    parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanRejected, match="set up"):
         plans.validate(
@@ -217,7 +227,7 @@ def test_an_id_outside_the_set_names_the_setup_cost(
 def test_an_id_the_catalog_does_not_have_is_named_as_an_id(
     connection: sqlite3.Connection,
 ) -> None:
-    parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "reps": 8})))
+    parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanRejected, match="Barbell_Sqvat"):
         plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
@@ -228,7 +238,7 @@ def test_a_row_enrichment_does_not_cover_is_rejected_as_that_state(
 ) -> None:
     """A stretching row is out of the set and will never be in it, and saying
     *needs no equipment* about it would send the reader looking for a fix."""
-    parsed = plans.parse(document(block({"exercise_id": "Ankle_Circles", "seconds": 30})))
+    parsed = plans.parse(document(block({"exercise_id": "Ankle_Circles", "prescription": {"unit": "seconds", "amount": 30}})))
 
     with pytest.raises(plans.PlanRejected, match="stretching"):
         plans.validate(
@@ -242,7 +252,7 @@ def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
     connection: sqlite3.Connection,
 ) -> None:
     parsed = plans.parse(
-        document(block({"exercise_id": "Barbell_Squat", "reps": 10}, rounds=20, rest=180))
+        document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 10}}, rounds=20, rest=180))
     )
     blocks = plans.to_blocks(parsed)
 
@@ -257,8 +267,8 @@ def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
 def test_an_exercise_written_twice_is_refused(connection: sqlite3.Connection) -> None:
     parsed = plans.parse(
         document(
-            block({"exercise_id": "Barbell_Squat", "reps": 5}),
-            block({"exercise_id": "Barbell_Squat", "reps": 12}),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}}),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 12}}),
         )
     )
 
@@ -273,7 +283,7 @@ def test_an_unenriched_catalog_is_a_state_not_an_empty_set(database_file: Path) 
         migrations.migrate(opened, migrations.discover())
         catalog.import_exercises(opened, CATALOG)
 
-        parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "reps": 8})))
+        parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
         with pytest.raises(admissible.AdmissibleError, match="trainer enrich derive"):
             plans.validate(opened, plans.to_blocks(parsed), BARBELL_45)
@@ -292,8 +302,13 @@ def test_an_unenriched_catalog_is_a_state_not_an_empty_set(database_file: Path) 
             budget_min=45,
             exclusions=(Exclusion("pattern", "squat"), Exclusion("joint", "shoulder")),
         ),
+        plans.Request(
+            equipment=("barbell", "dumbbell", "body only"),
+            budget_min=45,
+            groups=("legs", "core"),
+        ),
     ],
-    ids=["one equipment", "no time", "two exclusions"],
+    ids=["one equipment", "no time", "two exclusions", "a leg day"],
 )
 def test_a_reason_is_given_for_exactly_the_exercises_the_set_leaves_out(
     connection: sqlite3.Connection, request_: plans.Request
@@ -334,7 +349,7 @@ def test_the_rendering_carries_the_whole_prescription(
         connection,
         document(
             block(
-                {"exercise_id": "Barbell_Squat", "reps": 8},
+                {"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}},
                 rounds=4,
                 rest=150,
                 reason="the heaviest lift while fresh",
@@ -351,7 +366,7 @@ def test_the_rendering_carries_the_whole_prescription(
 
 
 def test_timed_work_is_printed_in_seconds(connection: sqlite3.Connection) -> None:
-    out = rendered(connection, document(block({"exercise_id": "Plank", "seconds": 45})))
+    out = rendered(connection, document(block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}})))
 
     assert "45 seconds" in out
 
@@ -359,7 +374,7 @@ def test_timed_work_is_printed_in_seconds(connection: sqlite3.Connection) -> Non
 def test_the_rendering_is_ascii(connection: sqlite3.Connection) -> None:
     """An em dash reaches the Windows console as a replacement character."""
     out = rendered(
-        connection, document(block({"exercise_id": "Barbell_Squat", "reps": 8}))
+        connection, document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}))
     )
 
     assert out.isascii(), out
@@ -371,8 +386,8 @@ def test_the_block_costs_add_up_to_the_total(connection: sqlite3.Connection) -> 
     out = rendered(
         connection,
         document(
-            block({"exercise_id": "Barbell_Squat", "reps": 8}, rounds=3, rest=120),
-            block({"exercise_id": "Plank", "seconds": 45}, rounds=3, rest=60),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}, rounds=3, rest=120),
+            block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}}, rounds=3, rest=60),
         ),
     )
 
@@ -394,7 +409,7 @@ def test_the_renderer_names_an_unknown_id_rather_than_costing_it(
     """Unreachable through `trainer plan`, which validates first. Called on
     its own, the alternative is a costing failure about a plan whose real
     problem is that it names an exercise nobody has."""
-    parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "reps": 8})))
+    parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanError, match="Barbell_Sqvat"):
         plans.render(connection, parsed, plans.to_blocks(parsed), 45)
@@ -408,10 +423,28 @@ def test_the_renderer_refuses_two_representations_of_different_plans(
     -- a partial workout rendered as a whole one."""
     parsed = plans.parse(
         document(
-            block({"exercise_id": "Barbell_Squat", "reps": 8}),
-            block({"exercise_id": "Plank", "seconds": 45}),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}),
+            block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}}),
         )
     )
 
     with pytest.raises(ValueError):
         plans.render(connection, parsed, plans.to_blocks(parsed)[:1], 45)
+
+
+def test_an_exercise_for_another_day_is_rejected_naming_what_today_trains(
+    connection: sqlite3.Connection,
+) -> None:
+    """A bench press on a leg day is not a bad choice, it is not today's
+    workout, and the rejection has to say which of the two it is."""
+    parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}})))
+
+    with pytest.raises(plans.PlanRejected) as rejected:
+        plans.validate(
+            connection,
+            plans.to_blocks(parsed),
+            plans.Request(equipment=("dumbbell",), budget_min=45, groups=("legs",)),
+        )
+
+    assert "chest" in str(rejected.value)
+    assert "legs" in str(rejected.value)

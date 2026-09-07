@@ -168,7 +168,7 @@ A **tool library**, called by the agent.
 ### The tool surface
 
 ```
-admissible_set(exclusions, equipment, budget)
+admissible_set(exclusions, equipment, budget, groups)
 remaining_budget(partial_plan, budget)
 pattern_history(pattern, cycles)
 adherence_history(cycles)
@@ -176,6 +176,8 @@ last_performed_load(exercise_id)
 compare_variants(id_a, id_b)          # pattern, loaded joints, stability, setup cost
 active_conclusions()
 ```
+
+`groups` names the muscle groups the workout trains, read from the declared split. It is a constraint and not a choice of method: the whole admissible space is several times any one workout — with dumbbells the catalog leaves 119 exercises standing and a leg day needs 14 — and handing an agent the other 105 is handing it the biceps on a leg day, on every turn of the loop.
 
 These are calls into a local Python library: zero network, zero tokens to execute. The cost is the context round-trip, and it is bounded with a **call budget**. When the budget runs out, the agent **emits anyway** a valid plan with what it has.
 
