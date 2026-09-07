@@ -19,7 +19,7 @@ from pathlib import Path
 import click
 from click.core import ParameterSource
 
-from trainer import __version__, plan
+from trainer import __version__, agent, plan
 from trainer.engine import (
     admissible,
     catalog,
@@ -78,6 +78,10 @@ def reported() -> Iterator[None]:
         # would send the author to check their JSON.
         raise click.ClickException(str(error)) from error
     except plan.PlanError as error:
+        raise click.ClickException(str(error)) from error
+    except agent.AgentError as error:
+        # No credentials, or the provider refusing the request. A state the
+        # user can act on, not a failure of the plan they asked for.
         raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
@@ -616,9 +620,8 @@ def admissible_command(
     "--from",
     "source",
     metavar="FILE",
-    required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="A plan, written by hand, as JSON. The agent will emit the same shape.",
+    help="Check a plan written by hand instead of asking a model for one.",
 )
 @click.option(
     "--equipment",
@@ -643,24 +646,58 @@ def admissible_command(
     multiple=True,
     help="A movement pattern or a loaded joint to keep out -- never an exercise id.",
 )
+@click.option(
+    "--call-budget",
+    "call_budget",
+    metavar="N",
+    type=click.IntRange(min=1),
+    default=agent.CALL_BUDGET,
+    show_default=True,
+    help="Tool calls the model may make before it is asked to emit anyway.",
+)
+@click.option(
+    "--record",
+    "record_path",
+    metavar="FILE",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the run record here: the calls, the budget spent, the plan.",
+)
+@click.pass_context
 def plan_command(
-    source: Path, equipment: tuple[str, ...], budget: int, exclude: tuple[str, ...]
+    context: click.Context,
+    source: Path | None,
+    equipment: tuple[str, ...],
+    budget: int,
+    exclude: tuple[str, ...],
+    call_budget: int,
+    record_path: Path | None,
 ) -> None:
-    """Check a hand-written plan against a request, and print it.
+    """Plan a workout, and print it.
 
-    The door session 4's agent comes out through, with the agent left out: the
-    plan is read from a file instead of being emitted by a model, and
-    everything after that -- the three rules, the rejection, the rendering --
-    is what the agent's plan will meet too.
+    A model is asked for the plan, using the same tools `trainer mcp` serves,
+    inside a budget of tool calls; when the budget runs out it is asked to
+    emit with what it has. With `--from FILE` no model is involved at all and
+    a hand-written plan is checked instead -- the same rules, the same
+    rendering, the agent left out.
 
-    A plan that breaks a rule is **rejected**, naming the rule. Nothing is
-    trimmed to fit and nothing is asked again (ADR-0001), and a rejected plan
-    is not printed: half a workout with a refusal under it reads as a workout
-    with a footnote.
+    Either way the plan is **rejected** if it breaks a rule, naming the rule.
+    Nothing is trimmed to fit and nothing is asked again (ADR-0001), and a
+    rejected plan is not printed: half a workout with a refusal under it reads
+    as a workout with a footnote.
     """
-    with reported():
-        parsed = plan.parse(source.read_text(encoding="utf-8"))
-        blocks = plan.to_blocks(parsed)
+    parsed: plan.WorkoutPlan | None = None
+    if source is not None:
+        _only_with_a_model(
+            context, ("--call-budget", "call_budget"), ("--record", "record_path")
+        )
+        with reported():
+            parsed = plan.parse(source.read_text(encoding="utf-8"))
+            plan.to_blocks(parsed)
+    elif record_path is not None:
+        # Checked before the model is called rather than after. `--record` is
+        # the artefact the run exists to produce, and a path that cannot be
+        # written is worth finding out about while the run is still free.
+        _writable(record_path)
 
     with _opened() as connection:
         _require_enrichment(connection)
@@ -673,13 +710,81 @@ def plan_command(
                 exclusions=(*standing, *classified),
             )
             try:
-                plan.validate(connection, blocks, request)
+                if parsed is not None:
+                    lines = _checked(connection, parsed, request, budget)
+                else:
+                    lines = _asked(connection, request, budget, call_budget, record_path)
             except catalog.UnknownFilterValue as error:
                 raise _rejected(error) from error
-            lines = plan.render(connection, parsed, blocks, budget)
 
     for line in lines:
         click.echo(line)
+
+
+def _only_with_a_model(context: click.Context, *options: tuple[str, str]) -> None:
+    """Refuse an option that does nothing on the path being taken.
+
+    `--from` is the no-model path, so a call budget has nothing to bound and
+    there is no run to record. Silently ignored, `trainer plan --from ...
+    --record run.json` exits zero having written no file, which reads exactly
+    like a record that was written.
+
+    The flag and the parameter it lands on are both given: `--record` is
+    `record_path` here, and deriving one from the other would check a name
+    click has never heard of and pass every time.
+    """
+    for option, name in options:
+        if context.get_parameter_source(name) is ParameterSource.COMMANDLINE:
+            raise click.UsageError(
+                f"{option} has no meaning with --from: that path asks no model, "
+                "so there are no tool calls to bound and no run to record"
+            )
+
+
+def _writable(path: Path) -> None:
+    parent = path.parent if str(path.parent) else Path(".")
+    if not parent.is_dir():
+        raise click.ClickException(
+            f"there is no directory {parent} to write {path.name} into"
+        )
+
+
+def _checked(
+    connection: sqlite3.Connection,
+    parsed: plan.WorkoutPlan,
+    request: plan.Request,
+    budget: int,
+) -> list[str]:
+    blocks = plan.to_blocks(parsed)
+    plan.validate(connection, blocks, request)
+    return plan.render(connection, parsed, blocks, budget)
+
+
+def _asked(
+    connection: sqlite3.Connection,
+    request: plan.Request,
+    budget: int,
+    call_budget: int,
+    record_path: Path | None,
+) -> list[str]:
+    """One run, with the record written whichever way it goes.
+
+    Written *before* a refusal is raised, on purpose: the record is what you
+    open to find out why the model emitted what it did, and a refusal is
+    exactly the case you want it for.
+    """
+    record = agent.plan_workout(connection, request, budget=call_budget)
+    if record_path is not None:
+        record_path.write_text(record.model_dump_json(indent=1), encoding="utf-8")
+    if record.refused is not None:
+        raise click.ClickException(record.refused)
+
+    blocks = plan.to_blocks(record.plan)
+    return [
+        *plan.render(connection, record.plan, blocks, request.budget_min),
+        "",
+        *agent.summary(record),
+    ]
 
 
 def _require_enrichment(connection: sqlite3.Connection) -> None:

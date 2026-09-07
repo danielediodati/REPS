@@ -1433,3 +1433,194 @@ def test_plan_needs_a_file_that_exists(
 
     assert result.exit_code != 0
     assert "Traceback" not in result.output
+
+
+# --- plan, with a model ------------------------------------------------------
+#
+# The model is a stand-in: `conftest.py` takes sockets and credentials away
+# from the whole suite, and `trainer eval` is where the real one runs.
+
+
+def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> object:
+    """Put a scripted model where `agent.plan_workout` builds a real one."""
+    from trainer import agent
+
+    from test_agent import Scripted
+
+    model = Scripted(**kwargs)  # type: ignore[arg-type]
+    monkeypatch.setattr(agent, "claude", lambda client=None: model)
+    return model
+
+
+def test_plan_asks_a_model_when_no_file_is_given(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_agent import call, good_plan
+
+    scripted(
+        monkeypatch,
+        turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),), ()],
+        emitted=good_plan("Barbell_Squat"),
+    )
+
+    result = runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45"])
+
+    assert result.exit_code == 0, result.output
+    assert "Barbell Squat" in result.output
+    assert "1 of 12 tool calls" in result.output
+    assert result.output.isascii()
+
+
+def test_plan_reports_a_refused_plan_and_prints_no_workout(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plan the model emitted needs dumbbells nobody has today. It is
+    refused, not trimmed, and not shown."""
+    from test_agent import good_plan
+
+    model = scripted(monkeypatch, emitted=good_plan("Dumbbell_Bicep_Curl"))
+
+    result = runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45"])
+
+    assert result.exit_code != 0
+    assert "Dumbbell_Bicep_Curl" in result.output
+    assert "Barbell Squat" not in result.output
+    assert model.emissions == 1, "the refused plan was handed back to the model"  # type: ignore[attr-defined]
+
+
+def test_plan_writes_the_run_record_when_asked(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_agent import call, good_plan
+
+    scripted(
+        monkeypatch,
+        turns=[(call("allocate", minutes=45, proportions={"legs": 1.0}),), ()],
+        emitted=good_plan("Barbell_Squat"),
+    )
+    record = tmp_path / "run.json"
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45", "--record", str(record)],
+    )
+
+    assert result.exit_code == 0, result.output
+    written = json.loads(record.read_text(encoding="utf-8"))
+    assert written["calls"][0]["name"] == "allocate"
+    assert written["spent"] == 1
+    assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
+
+
+def test_plan_writes_the_record_even_when_the_plan_is_refused(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refusal is exactly the case you open the record for."""
+    from test_agent import good_plan
+
+    scripted(monkeypatch, emitted=good_plan("Dumbbell_Bicep_Curl"))
+    record = tmp_path / "run.json"
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45", "--record", str(record)],
+    )
+
+    assert result.exit_code != 0
+    written = json.loads(record.read_text(encoding="utf-8"))
+    assert written["refused"] is not None
+    assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Dumbbell_Bicep_Curl"
+
+
+def test_plan_says_when_the_budget_ran_out(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_agent import call, good_plan
+
+    scripted(
+        monkeypatch,
+        turns=[(call("pattern_history", pattern="squat", cycles=3),)] * 10,
+        emitted=good_plan("Barbell_Squat"),
+    )
+
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--call-budget", "2"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "budget spent" in result.output
+    assert "Barbell Squat" in result.output, "it did not emit anyway"
+
+
+def test_plan_with_a_file_asks_no_model(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--from` is the no-model path, and it has to stay one: a model built
+    behind it would make the offline door depend on a credential."""
+    from trainer import agent
+
+    def refuse(client: object = None) -> object:
+        raise AssertionError("--from must not reach a model")
+
+    monkeypatch.setattr(agent, "claude", refuse)
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "tool calls" not in result.output
+
+
+def test_plan_refuses_call_budget_with_a_hand_written_plan(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`--from` asks no model, so there are no tool calls to bound. Ignored
+    silently, the option reads as one that took effect."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--call-budget", "3"],
+    )
+
+    assert result.exit_code != 0
+    assert "--call-budget" in result.output
+
+
+def test_plan_refuses_record_with_a_hand_written_plan(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Exiting zero having written no file reads exactly like a record that
+    was written."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--record", str(tmp_path / "run.json")],
+    )
+
+    assert result.exit_code != 0
+    assert "--record" in result.output
+
+
+def test_plan_refuses_a_record_path_it_cannot_write_before_calling_a_model(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record is the artefact the run exists to produce. Finding out the
+    path is unwritable afterwards throws away a run that was paid for."""
+    from trainer import agent
+
+    def refuse(client: object = None) -> object:
+        raise AssertionError("the model was called before the path was checked")
+
+    monkeypatch.setattr(agent, "claude", refuse)
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45",
+         "--record", str(tmp_path / "absent" / "run.json")],
+    )
+
+    assert result.exit_code != 0
+    assert "no directory" in result.output

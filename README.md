@@ -38,7 +38,8 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
-uv run trainer plan --from workout.json --equipment dumbbell --time 45
+uv run trainer plan --equipment dumbbell --time 45   # a model plans it, inside a call budget
+uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
 uv run trainer config                         # what you declared: cycle, cap, split
 uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups
@@ -98,6 +99,22 @@ The reason a block carries is the field that makes this the agent's shape rather
 
 This is the door session 4's agent comes out through, built and testable before there is an agent. Reading the plan from a file instead of a model changes what is upstream of the validator and nothing downstream of it.
 
+## The agent
+
+`trainer plan` asks a model for the workout. It gets the tools `trainer.tools` defines — the same ones `trainer mcp` serves, derived from the same function signatures — calls them until it has what it needs, and emits a plan in the shape above.
+
+**A node that loops, not a graph.** TRAINER.md is explicit that the workout loop *«is a node looping over a tool surface, and a graph adds nothing to a node that loops»*. LangGraph arrives in session 6, for onboarding, where checkpointing and resume are the point.
+
+**A call budget.** Tool calls are local Python — zero network, zero tokens to execute — so what they cost is the context round-trip, and that is bounded. When the budget runs out the loop does not fail: it stops offering tools and asks for the plan with what it has. `--call-budget N` overrides the default of 12.
+
+**No way back in.** A plan the validator refuses is reported as refused, with the rule that refused it. It is not trimmed and it is not handed back to the model to fix: *propose → check → correct* is the loop this project deliberately does not have, because the constraints are applied upstream, in the request. A refusal is a bug to go and read.
+
+**The run record.** `--record FILE` writes what the model called, in what order, with what arguments, how much budget went, whether it emitted on exhaustion, what it cost in tokens, and the plan — written whichever way the run went, because a refusal is exactly the case you open it for. Session 4's evaluation decides its invariants by reading this rather than by asking the model what it did.
+
+Set `ANTHROPIC_API_KEY`, or run `ant auth login` once and the SDK reads the profile it writes. Missing credentials are reported as that state, before any request goes out.
+
+The suite never reaches a provider: `conftest.py` removes sockets and credentials from every test, so the loop is covered against a stand-in model with scripted replies, and the real one runs only under the evaluation command.
+
 ## Inspecting the engine from a generic client
 
 `trainer mcp` serves the engine's tool surface over MCP on stdio — `admissible_set`, `remaining_budget`, `allocate`, `pattern_history`, `last_performed_load` and `compare_variants`. Point the MCP inspector, or any other generic client, at it and you can call the engine exactly as the agent will, without going through the agent.
@@ -134,6 +151,7 @@ src/trainer/
   cli.py      argument parsing and formatting, nothing else
   tools.py    the tool surface: one definition per tool, registered behind every door
   plan.py     the plan's wire shape, the validator and the renderer
+  agent.py    the model: a node looping over the tool surface, inside a call budget
   mcp_server.py  one of those doors; registration and server.run(), beside cli.py and never inside engine/
 docs/
   agents/     configuration the engineering skills read

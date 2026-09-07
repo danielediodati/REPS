@@ -4,7 +4,12 @@ version = "0.3.0"
 description = "Reasoning Engine for Personal Strength"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["click>=8.1", "mcp>=2,<3", "pydantic>=2.9,<3"]
+dependencies = [
+    "anthropic>=1,<2",
+    "click>=8.1",
+    "mcp>=2,<3",
+    "pydantic>=2.9,<3",
+]
 
 [project.scripts]
 trainer = "trainer.cli:main"
