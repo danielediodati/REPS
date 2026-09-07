@@ -1272,3 +1272,164 @@ def test_config_muscle_groups_prints_no_empty_group_line(
     assert result.exit_code == 0, result.output
     assert "(no group)" not in result.output
     assert "shoulders: neck" in result.output
+
+
+# --- plan --------------------------------------------------------------------
+#
+# Against the real catalog, because the ids in a plan file are the real ones
+# and a fixture catalog would let a plan pass here that no user could write.
+
+
+def write_plan(tmp_path: Path, *blocks: dict[str, object]) -> str:
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps({"blocks": list(blocks)}), encoding="utf-8")
+    return str(path)
+
+
+def squat_block(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "items": [{"exercise_id": "Barbell_Squat", "reps": 8}],
+        "rounds": 4,
+        "rest": 150,
+        "reason": "the heaviest lift while fresh",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_plan_renders_a_valid_plan(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Barbell Squat" in result.output
+    assert "4 rounds, 150s rest" in result.output
+    assert "why: the heaviest lift while fresh" in result.output
+    assert "of 45" in result.output
+    assert result.output.isascii()
+
+
+def test_plan_rejects_an_exercise_todays_equipment_does_not_reach(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    plan_file = write_plan(
+        tmp_path,
+        squat_block(items=[{"exercise_id": "Dumbbell_Bicep_Curl", "reps": 12}]),
+    )
+
+    result = runner.invoke(
+        main, ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45"]
+    )
+
+    assert result.exit_code != 0
+    assert "Dumbbell_Bicep_Curl" in result.output
+    assert "dumbbell" in result.output
+
+
+def test_plan_rejects_an_over_budget_plan_and_prints_no_workout(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """A rendered plan under a refusal reads as a workout with a footnote."""
+    plan_file = write_plan(tmp_path, squat_block(rounds=20, rest=180))
+
+    result = runner.invoke(
+        main, ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45"]
+    )
+
+    assert result.exit_code != 0
+    assert "45" in result.output
+    assert "over" in result.output
+    assert "Barbell Squat" not in result.output
+
+
+def test_plan_honours_an_exclusion_given_on_the_command_line(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    plan_file = write_plan(tmp_path, squat_block())
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45",
+         "--exclude", "squat"],
+    )
+
+    assert result.exit_code != 0
+    assert "excluded" in result.output
+
+
+def test_plan_reports_a_file_that_is_not_a_plan_as_a_shape_error(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps({"blocks": [{"rounds": 4, "rest": 150}]}), encoding="utf-8")
+
+    result = runner.invoke(
+        main, ["plan", "--from", str(path), "--equipment", "barbell", "--time", "45"]
+    )
+
+    assert result.exit_code != 0
+    assert "items" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_plan_on_an_unenriched_catalog_names_that_state(
+    runner: CliRunner, stocked: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    assert "trainer enrich derive" in result.output
+
+
+def test_plan_with_an_exclusion_on_an_unenriched_catalog_names_that_state(
+    runner: CliRunner, stocked: Path, tmp_path: Path
+) -> None:
+    """`exclusions.classify` reads its vocabulary from the table, so against
+    an unenriched catalog it rejects `squat` as neither a pattern nor a joint
+    -- a correct value reported as a typo. The state has to be checked before
+    any value is classified against it, not after."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--exclude", "squat"],
+    )
+
+    assert result.exit_code != 0
+    assert "trainer enrich derive" in result.output
+
+
+def test_plan_on_a_database_with_no_catalog_names_that_state(
+    runner: CliRunner, database_file: Path, tmp_path: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    assert "trainer db import" in result.output
+
+
+def test_plan_needs_a_file_that_exists(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", str(tmp_path / "absent.json"),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output

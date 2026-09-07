@@ -14,16 +14,18 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from datetime import date
+from pathlib import Path
 
 import click
 from click.core import ParameterSource
 
-from trainer import __version__
+from trainer import __version__, plan
 from trainer.engine import (
     admissible,
     catalog,
     config,
     database,
+    duration,
     enrichment,
     exclusions,
     graph,
@@ -63,6 +65,19 @@ def reported() -> Iterator[None]:
     except exclusions.ExclusionError as error:
         raise click.ClickException(str(error)) from error
     except admissible.AdmissibleError as error:
+        raise click.ClickException(str(error)) from error
+    except duration.DurationError as error:
+        # `trainer plan` is the first command that costs a plan. `tools.py`
+        # has listed this among the engine's stated failures since the surface
+        # existed; the terminal had no clause for it because nothing here
+        # reached the costing path.
+        raise click.ClickException(str(error)) from error
+    except plan.PlanRejected as error:
+        # Before PlanError, which it does not subclass but reads like: a plan
+        # the rules refuse is not a malformed document, and dressing it as one
+        # would send the author to check their JSON.
+        raise click.ClickException(str(error)) from error
+    except plan.PlanError as error:
         raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
@@ -578,8 +593,7 @@ def admissible_command(
     alongside it.
     """
     with _opened() as connection:
-        if not catalog.values(connection, "movement_pattern"):
-            raise click.ClickException(admissible.UNENRICHED_MESSAGE)
+        _require_enrichment(connection)
 
         classified = [exclusions.classify(connection, value) for value in exclude]
         standing = exclusions.active(connection, date.today().isoformat())
@@ -595,6 +609,91 @@ def admissible_command(
         return
     _print_table(found)
     click.echo(f"showing {len(found)}")
+
+
+@main.command("plan")
+@click.option(
+    "--from",
+    "source",
+    metavar="FILE",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A plan, written by hand, as JSON. The agent will emit the same shape.",
+)
+@click.option(
+    "--equipment",
+    "equipment",
+    metavar="VALUE",
+    multiple=True,
+    required=True,
+    help="Today's equipment; repeat for more than one.",
+)
+@click.option(
+    "--time",
+    "budget",
+    metavar="MINUTES",
+    type=click.IntRange(min=0),
+    required=True,
+    help="Minutes available. The plan is checked against this, never cut to fit.",
+)
+@click.option(
+    "--exclude",
+    "exclude",
+    metavar="VALUE",
+    multiple=True,
+    help="A movement pattern or a loaded joint to keep out -- never an exercise id.",
+)
+def plan_command(
+    source: Path, equipment: tuple[str, ...], budget: int, exclude: tuple[str, ...]
+) -> None:
+    """Check a hand-written plan against a request, and print it.
+
+    The door session 4's agent comes out through, with the agent left out: the
+    plan is read from a file instead of being emitted by a model, and
+    everything after that -- the three rules, the rejection, the rendering --
+    is what the agent's plan will meet too.
+
+    A plan that breaks a rule is **rejected**, naming the rule. Nothing is
+    trimmed to fit and nothing is asked again (ADR-0001), and a rejected plan
+    is not printed: half a workout with a refusal under it reads as a workout
+    with a footnote.
+    """
+    with reported():
+        parsed = plan.parse(source.read_text(encoding="utf-8"))
+        blocks = plan.to_blocks(parsed)
+
+    with _opened() as connection:
+        _require_enrichment(connection)
+        with reported():
+            classified = [exclusions.classify(connection, value) for value in exclude]
+            standing = exclusions.active(connection, date.today().isoformat())
+            request = plan.Request(
+                equipment=equipment,
+                budget_min=budget,
+                exclusions=(*standing, *classified),
+            )
+            try:
+                plan.validate(connection, blocks, request)
+            except catalog.UnknownFilterValue as error:
+                raise _rejected(error) from error
+            lines = plan.render(connection, parsed, blocks, budget)
+
+    for line in lines:
+        click.echo(line)
+
+
+def _require_enrichment(connection: sqlite3.Connection) -> None:
+    """Refuse before any value is classified against an empty vocabulary.
+
+    `exclusions.classify` reads what `movement_pattern` and `loaded_joints`
+    actually hold, so against an unenriched catalog it rejects `squat` as
+    neither -- a correct value reported as a typo, which is the standing rule's
+    own example. Every command that classifies a value calls this first; the
+    check is here rather than in `_opened` because `db status` and `catalog
+    --stats` are legitimate questions to ask of a catalog nobody has enriched.
+    """
+    if not catalog.values(connection, "movement_pattern"):
+        raise click.ClickException(admissible.UNENRICHED_MESSAGE)
 
 
 @contextmanager

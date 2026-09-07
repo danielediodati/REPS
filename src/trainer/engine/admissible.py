@@ -93,6 +93,67 @@ def admissible_set(
     return tuple(catalog.from_row(row) for row in rows)
 
 
+def rejection(
+    connection: sqlite3.Connection,
+    exercise_id: str,
+    exclusions: Sequence[Exclusion],
+    equipment: Sequence[str],
+    budget: int,
+) -> str | None:
+    """Why `admissible_set` left this exercise out, or `None` if it did not.
+
+    The explanation, and only the explanation. `admissible_set` decides, and a
+    caller asking *is this admissible* asks the set: two functions answering
+    one question is one function too many, and the day they disagree a plan is
+    checked against whichever of them is wrong. This is asked afterwards,
+    about an id already known to be out.
+
+    It lives here, beside the query it explains, for exactly that reason: the
+    conditions it walks are the conditions in the `WHERE` above, and a filter
+    added there without a clause here comes back as *not in the admissible
+    set*, the sentence this function exists to replace. The two are the same
+    set of conditions and deliberately not the same order -- reading them off
+    in step is not what keeps them in step, the property test is.
+
+    The user's own constraints come first, an exclusion they set and then the
+    equipment they said they have, and the clock last. Several can be true at
+    once; the first is the one reported, because a rejection is read to decide
+    what to prescribe instead, not to enumerate what is wrong with a choice
+    already discarded.
+    """
+    try:
+        profile = catalog.enrichment(connection, exercise_id)
+    except catalog.CatalogError as error:
+        # Unknown id, a row outside what enrichment covers, a row decided to
+        # have no honest pattern: three states with three different sentences,
+        # and `catalog.enrichment` is where they are worded. Restating them
+        # here would give the same state two phrasings that drift apart.
+        return str(error)
+
+    for exclusion in exclusions:
+        if exclusion.granularity == "pattern" and exclusion.value == profile.movement_pattern:
+            return f"is a {exclusion.value} movement, which is excluded"
+        if exclusion.granularity == "joint" and exclusion.value in profile.loaded_joints:
+            return f"loads the {exclusion.value}, which is excluded"
+
+    found = catalog.exercise(connection, exercise_id)
+    assert found is not None  # `catalog.enrichment` above found the same row
+    if found.equipment is None:
+        return "has no equipment recorded, so it matches nothing available today"
+    if found.equipment not in equipment:
+        return (
+            f"needs {found.equipment}, and today's equipment is "
+            f"{', '.join(equipment)}"
+        )
+
+    if profile.setup_cost_min > budget:
+        return (
+            f"costs {profile.setup_cost_min} min to set up, which is over the "
+            f"{budget} min available"
+        )
+    return None
+
+
 def _placeholders(values: Sequence[str]) -> str:
     return ",".join("?" for _ in values)
 

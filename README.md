@@ -38,6 +38,8 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
+uv run trainer plan --from workout.json --equipment dumbbell --time 45
+
 uv run trainer config                         # what you declared: cycle, cap, split
 uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups
 
@@ -78,6 +80,24 @@ The six muscle groups — `chest`, `back`, `shoulders`, `arms`, `legs`, `core` �
 
 **Allocating time is all a muscle group does.** Volume is counted per movement pattern and per *muscle* — `arms` erases exactly the biceps/triceps distinction that axis exists to keep.
 
+## A plan is a document
+
+A plan is a **sequence of blocks**: a block is one or more exercises, a number of rounds, the rest taken after each round, and the reason it is there. Straight sets are the block holding one exercise, a superset holds two, a circuit as many as it has — one shape and one formula, ADR-0002.
+
+```json
+{"blocks": [
+  {"items": [{"exercise_id": "Dumbbell_Squat", "reps": 8}],
+   "rounds": 4, "rest": 150,
+   "reason": "the heaviest lift first, while the legs are fresh"}
+]}
+```
+
+`trainer plan --from FILE` reads one, checks it against the request, and either prints the workout or names the rule that refused it. Three rules, and they **reject** — nothing is trimmed to fit and nothing is asked again (ADR-0001): every exercise is inside `admissible_set` for that request, the plan's duration is inside the declared budget, and no exercise appears twice. A rejection names the id **and** why it is out — the equipment it needs, the exclusion it trips, or the setup cost that does not fit — and a rejected plan is not rendered at all, because half a workout with a refusal under it reads as a workout with a footnote.
+
+The reason a block carries is the field that makes this the agent's shape rather than the engine's: TRAINER.md has the agent give its reasons, and a plan with nowhere to put them turns those reasons into prose beside the plan — which is what structured output exists to stop.
+
+This is the door session 4's agent comes out through, built and testable before there is an agent. Reading the plan from a file instead of a model changes what is upstream of the validator and nothing downstream of it.
+
 ## Inspecting the engine from a generic client
 
 `trainer mcp` serves the engine's tool surface over MCP on stdio — `admissible_set`, `remaining_budget`, `allocate`, `pattern_history`, `last_performed_load` and `compare_variants`. Point the MCP inspector, or any other generic client, at it and you can call the engine exactly as the agent will, without going through the agent.
@@ -113,6 +133,7 @@ src/trainer/
   data/       what ships with the package: the exercise dataset, the muscle group mapping, the config example
   cli.py      argument parsing and formatting, nothing else
   tools.py    the tool surface: one definition per tool, registered behind every door
+  plan.py     the plan's wire shape, the validator and the renderer
   mcp_server.py  one of those doors; registration and server.run(), beside cli.py and never inside engine/
 docs/
   agents/     configuration the engineering skills read
