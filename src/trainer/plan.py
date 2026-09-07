@@ -64,9 +64,8 @@ class PlanItem(BaseModel):
 
     exercise_id: str = Field(
         description=(
-            "The exercise's id, exactly as `admissible_set` returned it in its "
-            "`id` field -- `Bodyweight_Squat`, not `Bodyweight Squat`. The "
-            "`name` field is for reading; an id is what a plan is written in."
+            "The exercise's id, character for character as `admissible_set` "
+            "returned it."
         ),
     )
     reps: int | None = Field(

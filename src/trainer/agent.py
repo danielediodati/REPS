@@ -407,6 +407,7 @@ NOT_FOR_CONTEXT = (
     "level",
     "category",
     "secondary_muscles",
+    "name",
 )
 """Fields dropped on the way to the model, and only on the way to the model.
 
@@ -423,6 +424,16 @@ appendix judges it insufficient on its own terms and `movement_pattern`
 replaced it. `level` and `category` because the admissible set has already
 filtered on what today allows. `secondary_muscles` because allocation is over
 the six groups a workout trains, and the primaries are what answer that.
+
+`name` goes for a different reason: not because it is large, but because it
+is *the wrong one of two strings*. A plan is written in ids, and a model shown
+both fields copied the readable one into `exercise_id` -- five refused plans
+across the first runs. No rule recovers the id from the name either: `Butt
+Lift (Bridge)` is `Butt_Lift_Bridge`, parentheses dropped rather than
+underscored, in 36 of the 876 rows. Removing the field makes the mistake
+impossible instead of rare, and costs nothing, because the name was never the
+model's to carry: `plan.render` reads it back out of the catalog by id when
+the workout is printed.
 
 `mechanic` stays: compound against isolation is the distinction ticket 05's
 sixth invariant -- *it does not degenerate* -- is about, and a model that
@@ -472,9 +483,9 @@ You plan one strength workout, for one person, today.
 The rules you are working inside, none of which you can talk your way around:
 
 - Every exercise you prescribe must be in what `admissible_set` returns for
-  today's request, named by its `id` field exactly as that came back --
-  `Bodyweight_Squat`, never `Bodyweight Squat`. Anything else is rejected by a
-  deterministic check after you emit, and the workout does not happen.
+  today's request, written as the `id` that came back, character for
+  character. Anything else is rejected by a deterministic check after you
+  emit, and the workout does not happen.
 - The plan must fit the time declared. It is never trimmed to fit: a plan that
   runs over is rejected whole, so ask `remaining_budget` before you commit to
   a block rather than after.

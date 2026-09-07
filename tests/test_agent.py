@@ -535,9 +535,37 @@ def test_an_admissible_set_reaches_the_model_without_its_prose(
     (first, *_) = json.loads(result.content)
 
     assert result.failed is False
-    assert first["id"] and first["equipment"]
-    assert "instructions" not in first
-    assert "images" not in first
+    assert set(first) == {"id", "equipment", "mechanic", "primary_muscles"}
+
+
+def test_the_model_is_not_shown_the_name_it_could_write_by_mistake(
+    connection: sqlite3.Connection,
+) -> None:
+    """A plan is written in ids, and a model shown both fields copied the
+    readable one into `exercise_id`. No rule recovers the id from the name --
+    `Butt Lift (Bridge)` is `Butt_Lift_Bridge` -- so the field is removed
+    rather than explained, which makes the mistake impossible instead of
+    rare."""
+    result = agent._execute(call("admissible_set", equipment=["barbell"], budget_min=45))
+
+    assert "name" not in json.loads(result.content)[0]
+    assert "Barbell Squat" not in result.content
+    assert "Barbell_Squat" in result.content
+
+
+def test_the_name_comes_back_when_the_workout_is_printed(
+    connection: sqlite3.Connection,
+) -> None:
+    """Removing it costs nothing: the name was never the model's to carry, and
+    the renderer reads it out of the catalog by id."""
+    record = agent.plan_workout(
+        connection, BARBELL_45, model=Scripted(emitted=good_plan("Barbell_Squat"))
+    )
+    printed = "\n".join(
+        plans.render(connection, record.plan, plans.to_blocks(record.plan), 45)
+    )
+
+    assert "Barbell Squat" in printed
 
 
 def test_the_shared_surface_still_answers_whole(
@@ -799,11 +827,11 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     """`compare_variants` already answers `{"a": {...}, "b": {...}}`. A tool
     that nests a list of exercises brings back the payload this exists to
     bound, with nothing failing to say so."""
-    answer = {"variants": [{"id": "X", "name": "X", "instructions": ["long"], "level": "expert"}]}
+    answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
 
     trimmed = agent._trimmed(answer)
 
-    assert trimmed == {"variants": [{"id": "X", "name": "X"}]}
+    assert trimmed == {"variants": [{"id": "X"}]}
 
 
 def test_a_provider_failure_outside_the_status_hierarchy_is_still_words() -> None:
