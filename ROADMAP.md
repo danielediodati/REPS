@@ -103,11 +103,19 @@ An honest note on what *«testable by the end user»* means: until session 4 the
 
 The biggest session and the least divisible: the agent without the validator is not shippable, so they stay together.
 
-1. The tool surface exposed to the agent — thin wrappers over the same library, zero new logic.
-2. Agent node that loops over the tools, with a **call budget**; when the budget runs out it **emits anyway**.
-3. Structured output: the agent emits a **plan** — blocks, each with its exercises, rounds and prescribed rest — never prose. The engine renders it.
-4. Deterministic validator on the way out: id outside the set → rejected; a plan over the declared budget → rejected, never trimmed (ADR-0001). Ten lines.
+1. One tool surface, two doors: the tool definitions — preconditions, error translation, shaping — leave `mcp_server.py` for a module both the MCP server and the agent register over, and `compare_variants` joins them. Zero new logic, one definition per tool.
+2. The plan is a document: the structured shape the agent emits — blocks, each with its exercises, rounds, prescribed rest and the reason it is there, never prose — the deterministic validator on the way out (id outside the set → rejected; over the declared budget → rejected, never trimmed, ADR-0001) and the ASCII renderer. **No model**: `trainer plan --from FILE` pushes a hand-written plan through the same door the agent will use.
+3. Agent node that loops over the tools, with a **call budget**; when the budget runs out it **emits anyway**. Out through issue 2's validator, and no way back in — *propose → check → correct* is the loop TRAINER.md does not have.
+4. The request the agent is actually asked: which workout of the split, the allocation over its groups, the exclusions, the equipment, the preferences as data — and the refusal, *«I don't feel like it»* → it proposes again, without pushing and without giving up.
 5. The six invariants over the six adverse situations from TRAINER.md. **Metric: 100%.** Anything below is a bug, not a tuning knob.
+
+> **The order is not TRAINER.md's, on purpose.** Structured output and validator come *before* the agent, as one issue, so that the day the first model emits something there is already a door that rejects it and a renderer that shows it — the same argument that pulled MCP into session 3. And the tool surface is a **prefactor**: `mcp_server.py` already holds the precondition, error and shaping layer the agent needs, and a second copy of it diverges at the first tool that is added to one door and not the other.
+
+> **No LangGraph in this session.** TRAINER.md is explicit that the workout loop *«is a node looping over a tool surface, and a graph adds nothing to a node that loops»*. What arrives here is the provider SDK and a structured output shape; LangGraph arrives in session 6, where checkpointing and resume are the point.
+
+> **`pytest` stays offline.** `conftest.py` removes sockets and credentials from every test on purpose, and that guarantee is worth more than the convenience of one runner: issues 3 and 4 are covered against a stand-in model, and the real one runs only in issue 5, under `trainer eval`.
+
+> **`--workout N` is a flag, not something derived.** Nothing tracks the rotation's position until `workouts` arrives in session 5. Naming it here is what stops session 5 from inventing it.
 
 ## Session 5 — `0.5.0` — Logging by deviation
 
@@ -206,7 +214,7 @@ Session 11 is the only one that **ships nothing to the end user**, and that shou
 
 So the 94 powerlifting/olympic/strongman rows are cheap and safe, and the rest needs rules of its own. Neither blocks anything: the 584 strength rows already carry everything the planner needs, and this widens the pool rather than unlocking it. It is written here rather than scheduled because the slicing rule caps a session at five issues and no session has a spare one — the day it gets a slot, it is one issue, not two.
 
-**Session 4 is bigger than the others and does not divide well.** The agent without the validator cannot ship. If it overruns, the cut to make is issue 5 (the invariants) into a `0.4.1` of its own — never issue 4.
+**Session 4 is bigger than the others and does not divide well.** The agent without the validator cannot ship. If it overruns, the cut to make is issue 5 (the invariants) into a `0.4.1` of its own — never issue 2, which is the validator and the only thing standing between the agent and a plan nobody checked.
 
 **Session 2 is five issues carrying two jobs**, the catalog and the admissible set, and it is the widest session before 4. If it overruns, the cut is issue 4's `variant_of` / `regression_of` graph, which slides into session 4 where substitution first needs it — never the reference set in issue 3, which is the only measurement in the session.
 
