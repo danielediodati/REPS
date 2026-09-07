@@ -62,9 +62,27 @@ class PlanItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    exercise_id: str
-    reps: int | None = None
-    seconds: int | None = None
+    exercise_id: str = Field(
+        description=(
+            "The exercise's id, exactly as `admissible_set` returned it in its "
+            "`id` field -- `Bodyweight_Squat`, not `Bodyweight Squat`. The "
+            "`name` field is for reading; an id is what a plan is written in."
+        ),
+    )
+    reps: int | None = Field(
+        default=None,
+        description=(
+            "How many repetitions, for work counted in reps. Exactly one of "
+            "reps and seconds carries a value; the other is null."
+        ),
+    )
+    seconds: int | None = Field(
+        default=None,
+        description=(
+            "How long, for work counted in time -- a carry, a plank, a walk. "
+            "Exactly one of reps and seconds carries a value; the other is null."
+        ),
+    )
 
 
 class PlanBlock(BaseModel):

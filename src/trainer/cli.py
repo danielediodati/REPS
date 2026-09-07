@@ -102,6 +102,26 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"a file could not be used: {error}") from error
 
 
+def run() -> None:
+    """The installed `trainer` command.
+
+    `.env` is read here and nowhere else, which is deliberate. `main` is what
+    the suite invokes, and a group that loaded credentials on the way in would
+    put back the ones `conftest.py` takes away -- quietly turning the
+    no-credentials guarantee into a guarantee about the machine.
+    """
+    from dotenv import find_dotenv, load_dotenv
+
+    # `usecwd`, because the default walks up from *this file*. Under the
+    # editable install that is the repo and it finds the right `.env` by
+    # accident; installed as a tool, `cli.py` lives in site-packages and the
+    # walk never reaches the user at all -- they follow `.env.example`, put
+    # the file beside their database, and get told there are no credentials
+    # with the file sitting right there.
+    load_dotenv(find_dotenv(usecwd=True))
+    main()
+
+
 @click.group()
 @click.version_option(__version__, "-V", "--version", prog_name="trainer")
 def main() -> None:

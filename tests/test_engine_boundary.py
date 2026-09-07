@@ -36,7 +36,10 @@ FORBIDDEN_PREFIXES = (
     "requests",
     "httpx",
     "aiohttp",
-    # models
+    # models -- every provider SDK this project has used or might reach for.
+    # `groq` is the one in use; `anthropic` stays because the guard is about
+    # what `engine/` may never import, not about what is installed today.
+    "groq",
     "openai",
     "anthropic",
     "langchain",
@@ -119,6 +122,8 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
         "from trainer.agent import plan_workout",
         "from trainer.mcp_server import server",
         "from anthropic import Anthropic",
+        "import groq",
+        "from groq import Groq",
         "from langgraph.graph import StateGraph",
     ],
 )

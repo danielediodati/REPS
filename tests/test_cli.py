@@ -1448,7 +1448,7 @@ def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> object:
     from test_agent import Scripted
 
     model = Scripted(**kwargs)  # type: ignore[arg-type]
-    monkeypatch.setattr(agent, "claude", lambda client=None: model)
+    monkeypatch.setattr(agent, "groq", lambda client=None: model)
     return model
 
 
@@ -1562,7 +1562,7 @@ def test_plan_with_a_file_asks_no_model(
     def refuse(client: object = None) -> object:
         raise AssertionError("--from must not reach a model")
 
-    monkeypatch.setattr(agent, "claude", refuse)
+    monkeypatch.setattr(agent, "groq", refuse)
 
     result = runner.invoke(
         main,
@@ -1614,7 +1614,7 @@ def test_plan_refuses_a_record_path_it_cannot_write_before_calling_a_model(
     def refuse(client: object = None) -> object:
         raise AssertionError("the model was called before the path was checked")
 
-    monkeypatch.setattr(agent, "claude", refuse)
+    monkeypatch.setattr(agent, "groq", refuse)
 
     result = runner.invoke(
         main,

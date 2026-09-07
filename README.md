@@ -111,7 +111,9 @@ This is the door session 4's agent comes out through, built and testable before 
 
 **The run record.** `--record FILE` writes what the model called, in what order, with what arguments, how much budget went, whether it emitted on exhaustion, what it cost in tokens, and the plan — written whichever way the run went, because a refusal is exactly the case you open it for. Session 4's evaluation decides its invariants by reading this rather than by asking the model what it did.
 
-Set `ANTHROPIC_API_KEY`, or run `ant auth login` once and the SDK reads the profile it writes. Missing credentials are reported as that state, before any request goes out.
+**The provider is Groq**, and the model defaults to `qwen/qwen3.8-27b` — the Qwen whose structured output runs in *strict* mode, where constrained decoding makes the emitted plan conform to the schema by construction rather than by luck. That matters because a malformed plan is a whole run thrown away: the loop has no way to ask again. Groq also refuses structured output and tool use in the same request, which is why the emission is a call of its own.
+
+Copy `.env.example` to `.env` and set `GROQ_API_KEY`; `GROQ_MODEL` overrides the model and `LLM_BACKEND` names the provider (only `groq` is built — `ollama` is refused by name rather than quietly falling through). `.env` is read by the `trainer` command and by nothing else: the suite never loads it, because `conftest.py` takes credentials away from every test and a file that put them back would turn that guarantee into a guarantee about one machine. Missing credentials are reported as that state, before any request goes out.
 
 The suite never reaches a provider: `conftest.py` removes sockets and credentials from every test, so the loop is covered against a stand-in model with scripted replies, and the real one runs only under the evaluation command.
 

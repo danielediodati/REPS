@@ -1,4 +1,4 @@
-"""The first model in the project: a node that loops over the tool surface.
+"""The model: a node that loops over the tool surface, inside a call budget.
 
 `trainer plan` without `--from` asks a model for a workout. It gets the tools
 `trainer.tools` defines -- the same ones `trainer mcp` serves -- calls them
@@ -24,27 +24,29 @@ deliberately does not have, because the constraints are applied upstream, in
 the request. A refusal here is a bug to go and read, and ticket 05 counts
 them.
 
-**Two phases, one emission.** The model is asked for the plan in a final call
-of its own, with no tools offered and the structured shape required. Running
-out of budget and finishing early therefore take the *same* path out, which is
-what makes "it emits anyway" a property of the loop rather than a branch in
-it.
+**Two phases, and on Groq that is not a choice.** The plan is asked for in a
+final call of its own, with the tools off the table and the structured shape
+required. Groq does not allow structured outputs and tool use in the same
+request at all, so the separation the loop was built with is the only shape
+that works -- and it has the property that mattered anyway: running out of
+budget and finishing early leave by the *same* door, which is what makes "it
+emits anyway" a property of the loop rather than a branch inside it.
 
-**The seam.** Everything above talks to a `Model`, two methods wide. `Claude`
-implements it against the SDK; the suite implements it with scripted replies.
-`conftest.py` takes sockets and credentials away from every test on purpose,
-and that guarantee is worth more than the convenience of one runner -- so the
-loop is exercised offline here, and the real model runs only under ticket 05's
-`trainer eval`.
+**The seam.** Everything above talks to a `Model`, two methods wide, over a
+conversation described in this project's own terms -- a brief, and the
+exchanges that followed. No provider's message shape reaches the loop: that
+lives in the adapter, which is the whole reason swapping providers touched
+one class and not the loop.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter
@@ -52,24 +54,83 @@ from pydantic import BaseModel, TypeAdapter
 from trainer import plan as plans
 from trainer import tools
 
-MODEL = "claude-opus-5"
-"""The model, named once. A second spelling at a call site is a run that is
-measured on one model and shipped on another."""
+BACKEND_ENV = "LLM_BACKEND"
+MODEL_ENV = "GROQ_MODEL"
+API_KEY_ENV = "GROQ_API_KEY"
+
+GROQ = "groq"
+BACKENDS = (GROQ,)
+"""What `LLM_BACKEND` may name today.
+
+`ollama` is the value this will grow next -- the local backend, free and
+offline. It is read and refused by name rather than ignored, so a `.env` that
+asks for it gets told it is not built yet instead of quietly getting Groq.
+"""
+
+DEFAULT_MODEL = "qwen/qwen3.8-27b"
+"""The model, when `GROQ_MODEL` does not name one.
+
+Qwen 3.8 27B rather than 3.6: both are preview models on Groq, and this is the
+one whose structured output runs in **strict** mode, where constrained
+decoding makes the emitted plan conform to the schema by construction rather
+than by luck. A plan that comes back as malformed JSON is a whole run thrown
+away, and the loop has no way to ask again.
+"""
+
+STRICT_OUTPUT = "structured outputs in strict mode"
+
+MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
 
 CALL_BUDGET = 12
 """Tool calls one run may make before the loop stops offering tools.
 
 A starting value, not a measurement: ticket 05 is what says whether a workout
 needs more or fewer, and until it has run this is the number that keeps a
-runaway loop from costing a fortune. `--call-budget` overrides it."""
+runaway loop from spending an afternoon. `--call-budget` overrides it."""
 
-MAX_TOKENS = 16000
+DEFAULT_MAX_TOKENS = 1000
+"""How much the model may write in one turn, by default.
 
-API_KEY_ENV = "ANTHROPIC_API_KEY"
+One thousand because that is Groq's free-tier ceiling on output tokens per
+minute, and a request whose declared `max_tokens` exceeds it is refused before
+any of it runs -- a 429 about a limit nobody has reached yet.
+
+**It is shared with reasoning.** The default model reasons before it answers
+and `max_tokens` caps the completion, thinking included, so the plan is
+written out of whatever is left. An observed run emitted a six-block plan in
+676 tokens all in, so this fits -- but not by much, and a run that reasons
+harder loses the plan to truncation rather than to a rule. That is why the
+truncation state names `GROQ_MAX_TOKENS`: on a paid tier it is the number to
+raise first.
+"""
+
+
+def max_tokens() -> int:
+    """How much the model may write, from the environment or the default.
+
+    Checked rather than trusted, because this value is interpolated into the
+    rate-limit and truncation messages: `GROQ_MAX_TOKENS=2k` would raise a
+    `ValueError` *while handling* the 429 it was meant to explain, and the
+    user would get a traceback about a codec-shaped mistake instead of the
+    state with its way out.
+    """
+    declared = os.environ.get(MAX_TOKENS_ENV)
+    if not declared:
+        return DEFAULT_MAX_TOKENS
+    try:
+        asked = int(declared)
+    except ValueError:
+        raise AgentError(
+            f"{MAX_TOKENS_ENV} is {declared!r}; it is a whole number of tokens"
+        ) from None
+    if asked < 1:
+        raise AgentError(f"{MAX_TOKENS_ENV} is {asked}; it is at least one token")
+    return asked
+
 
 NO_CREDENTIALS = (
-    f"no Anthropic credentials: set {API_KEY_ENV}, or run `ant auth login` "
-    "once and the SDK reads the profile it writes"
+    f"no Groq credentials: set {API_KEY_ENV} in .env (copy .env.example) or in "
+    "the environment"
 )
 """A state with the way out, checked before any request goes out.
 
@@ -80,10 +141,32 @@ thing that is actually missing.
 
 
 class AgentError(RuntimeError):
-    """The run could not be made: no credentials, or the provider refused."""
+    """The run could not be made: no credentials, a backend that is not built,
+    or the provider refusing."""
 
 
-# -- what the loop talks to ---------------------------------------------------
+def backend() -> str:
+    """Which provider this run talks to, and a state for one nobody built."""
+    named = os.environ.get(BACKEND_ENV) or GROQ
+    if named not in BACKENDS:
+        raise AgentError(
+            f"{BACKEND_ENV} names {named!r}, and the backends built are "
+            f"{', '.join(BACKENDS)}"
+        )
+    return named
+
+
+def model_name() -> str:
+    return os.environ.get(MODEL_ENV) or DEFAULT_MODEL
+
+
+# -- the conversation, in this project's own terms ----------------------------
+#
+# Not the provider's. Groq wants an assistant message carrying `tool_calls` and
+# one `{"role": "tool"}` message per result; Anthropic wanted content blocks in
+# a user turn. The loop below describes what happened -- the model replied, the
+# tools answered -- and the adapter renders that into whichever shape its
+# provider reads. Swapping providers cost one class, and this is why.
 
 
 @dataclass(frozen=True)
@@ -96,18 +179,36 @@ class Call:
 
 
 @dataclass(frozen=True)
+class Result:
+    """What one tool answered, on its way back to the model."""
+
+    call_id: str
+    name: str
+    content: str
+    failed: bool = False
+
+
+@dataclass(frozen=True)
 class Reply:
     """One turn from the model.
 
-    `content` is opaque and handed straight back on the next turn -- the
-    provider's own blocks, which the loop has no business reading. `calls` is
-    the part the loop acts on, pulled out by whoever implements `Model`.
+    `content` is opaque and belongs to the adapter that produced it: the
+    provider's own assistant message, handed straight back when the next
+    request is built. The loop reads `calls` and nothing else.
     """
 
     content: Any
     calls: tuple[Call, ...] = ()
     input_tokens: int = 0
     output_tokens: int = 0
+
+
+@dataclass(frozen=True)
+class Exchange:
+    """One round: what the model said, and what the tools answered."""
+
+    reply: Reply
+    results: tuple[Result, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -120,18 +221,35 @@ class Emission:
 
 
 class Model(Protocol):
-    """Two methods, because the loop has two phases.
+    """Two methods and a name, because the loop has two phases and a record.
 
     Narrow on purpose. A stand-in that satisfies this exercises the whole loop
     -- the calls, the budget, the emission, the way out through the validator
     -- without a socket, which is the only way the suite can cover any of it.
     """
 
-    def respond(self, messages: list[Any], offered: list[dict[str, Any]] | None) -> Reply:
+    @property
+    def name(self) -> str:
+        """What ran, for the record.
+
+        Asked of the model rather than read back out of the environment.
+        Ticket 05 compares invariants across models by constructing one per
+        run, and a record that re-read `GROQ_MODEL` afterwards would stamp
+        every one of them with whatever the environment happened to say --
+        unattributable, and passing every test that compares the two.
+        """
+        ...
+
+    def respond(
+        self,
+        brief: str,
+        exchanges: Sequence[Exchange],
+        offered: Sequence[dict[str, Any]] | None,
+    ) -> Reply:
         """One turn, with `offered` tools or with none at all."""
         ...
 
-    def emit(self, messages: list[Any]) -> Emission:
+    def emit(self, brief: str, exchanges: Sequence[Exchange]) -> Emission:
         """The plan, structured, with no tools on the table."""
         ...
 
@@ -181,8 +299,8 @@ def schema(tool: Callable[..., Any]) -> dict[str, Any]:
     would be the second definition ticket 01 exists to prevent -- and the one
     that drifts, because nothing would fail when it did.
 
-    The docstring is the description, which is what the model reads to decide
-    whether a tool answers its question.
+    Provider-neutral: name, description, parameters. The envelope a given API
+    wants around that is the adapter's business.
     """
     hints = get_type_hints(tool)
     properties: dict[str, Any] = {}
@@ -191,7 +309,7 @@ def schema(tool: Callable[..., Any]) -> dict[str, Any]:
     for name, parameter in inspect.signature(tool).parameters.items():
         built = TypeAdapter(hints[name]).json_schema()
         # A `$ref` resolves from the root of the schema document, and the root
-        # here is `input_schema`. Left where pydantic puts them -- inside the
+        # here is `parameters`. Left where pydantic puts them -- inside the
         # property -- the definitions an enum or a model-typed parameter needs
         # sit one level too deep and every reference to them dangles. No
         # parameter is typed that way today; the day one is, the provider
@@ -201,17 +319,17 @@ def schema(tool: Callable[..., Any]) -> dict[str, Any]:
         if parameter.default is inspect.Parameter.empty:
             required.append(name)
 
-    input_schema: dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": properties,
         "required": required,
     }
     if definitions:
-        input_schema["$defs"] = definitions
+        parameters["$defs"] = definitions
     return {
         "name": tool.__name__,
         "description": inspect.getdoc(tool) or "",
-        "input_schema": input_schema,
+        "parameters": parameters,
     }
 
 
@@ -220,8 +338,8 @@ def surface() -> list[dict[str, Any]]:
     return [schema(tool) for tool in tools.TOOLS]
 
 
-def _execute(call: Call) -> tuple[str, bool]:
-    """Run one call. The sentence to hand back, and whether it failed.
+def _execute(call: Call) -> Result:
+    """Run one call, and say what goes back to the model.
 
     Everything the *model* can get wrong -- a tool that does not exist,
     arguments that do not fit the schema, a question the engine states it
@@ -232,29 +350,32 @@ def _execute(call: Call) -> tuple[str, bool]:
     """
     import pydantic
 
+    def failed(sentence: str) -> Result:
+        return Result(call_id=call.id, name=call.name, content=sentence, failed=True)
+
     found = next((tool for tool in tools.TOOLS if tool.__name__ == call.name), None)
     if found is None:
         # The model asked for a tool nobody offered. Its mistake, not ours, so
         # it goes back as a result it can recover from.
         offered = ", ".join(tool.__name__ for tool in tools.TOOLS)
-        return f"there is no tool called {call.name!r}; the tools are {offered}", True
+        return failed(f"there is no tool called {call.name!r}; the tools are {offered}")
 
     try:
         arguments = _fitted(found, call.arguments)
     except pydantic.ValidationError as error:
-        return f"{call.name} was given arguments that do not fit: {error}", True
+        return failed(f"{call.name} was given arguments that do not fit: {error}")
     except KeyError as error:
-        return f"{call.name} takes no argument called {error}", True
+        return failed(f"{call.name} takes no argument called {error}")
 
     try:
         answer = found(**arguments)
     except tools.ToolFailure as error:
-        return str(error), True
+        return failed(str(error))
     except TypeError as error:
         # An argument left out, or given twice. The shapes are checked above,
         # so what is left is the call itself not fitting the signature.
-        return f"{call.name} cannot be called that way: {error}", True
-    return _serialised(answer), False
+        return failed(f"{call.name} cannot be called that way: {error}")
+    return Result(call_id=call.id, name=call.name, content=_serialised(answer))
 
 
 def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str, Any]:
@@ -279,17 +400,37 @@ def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str,
     return fitted
 
 
-NOT_FOR_CONTEXT = ("instructions", "images")
+NOT_FOR_CONTEXT = (
+    "instructions",
+    "images",
+    "force",
+    "level",
+    "category",
+    "secondary_muscles",
+)
 """Fields dropped on the way to the model, and only on the way to the model.
 
-An admissible set of 75 exercises carries some 18,000 tokens of instruction
-prose and image paths, and the loop re-sends it on every later turn. The call
+The admissible set is the largest thing the loop ever carries, and it carries
+it again on every later turn: 119 dumbbell exercises came to 31,000 characters
+whole, against a free-tier ceiling of 7,000 input tokens a minute. The call
 budget rests on a round-trip whose cost is bounded (TRAINER.md § The tool
-surface), and it is not bounded while one answer can be larger than the whole
-output budget. The inspector behind the MCP door pays none of that and keeps
-the record whole; nothing in planning reads either field, and `catalog.py`
-already says they are fetched by id when something needs to *show* an
-exercise rather than choose one.
+surface), and it was not bounded.
+
+What is dropped is what nothing in planning reads. `instructions` and `images`
+because `catalog.py` already says they are fetched by id when something needs
+to *show* an exercise rather than choose one. `force` because TRAINER.md's own
+appendix judges it insufficient on its own terms and `movement_pattern`
+replaced it. `level` and `category` because the admissible set has already
+filtered on what today allows. `secondary_muscles` because allocation is over
+the six groups a workout trains, and the primaries are what answer that.
+
+`mechanic` stays: compound against isolation is the distinction ticket 05's
+sixth invariant -- *it does not degenerate* -- is about, and a model that
+cannot see it cannot be asked to respect it.
+
+The MCP door pays none of this and keeps the record whole. That is the
+difference between an inspector and a context window, not two definitions of
+what an exercise is.
 """
 
 
@@ -305,10 +446,20 @@ def _serialised(answer: Any) -> str:
 
 
 def _trimmed(answer: Any) -> Any:
+    """All the way down, not just the top level.
+
+    `compare_variants` already answers `{"a": {...}, "b": {...}}`, and the day
+    a tool nests a list of exercises under a key the payload this function
+    exists to bound comes back whole, with nothing failing to say so.
+    """
     if isinstance(answer, list):
         return [_trimmed(item) for item in answer]
     if isinstance(answer, dict):
-        return {key: value for key, value in answer.items() if key not in NOT_FOR_CONTEXT}
+        return {
+            key: _trimmed(value)
+            for key, value in answer.items()
+            if key not in NOT_FOR_CONTEXT
+        }
     return answer
 
 
@@ -321,13 +472,18 @@ You plan one strength workout, for one person, today.
 The rules you are working inside, none of which you can talk your way around:
 
 - Every exercise you prescribe must be in what `admissible_set` returns for
-  today's request. Anything else is rejected by a deterministic check after
-  you emit, and the workout does not happen.
+  today's request, named by its `id` field exactly as that came back --
+  `Bodyweight_Squat`, never `Bodyweight Squat`. Anything else is rejected by a
+  deterministic check after you emit, and the workout does not happen.
 - The plan must fit the time declared. It is never trimmed to fit: a plan that
   runs over is rejected whole, so ask `remaining_budget` before you commit to
   a block rather than after.
 - An exercise appears at most once in the whole plan. One line per exercise,
   with the rounds and reps it needs.
+- Each exercise is prescribed in **either** reps **or** seconds, never both
+  and never neither. Both fields are always present in the shape you emit, so
+  put a value in one and null in the other. A plank is seconds; a push-up is
+  reps. Filling both is rejected.
 - Rest is yours to prescribe and travels with the block. There are reference
   bands -- around 3 min for heavy low-rep work, 90-120 s for hypertrophy, 60 s
   for isolation -- and they are a reference, not a rule.
@@ -379,47 +535,38 @@ def plan_workout(
     if budget < 1:
         raise AgentError(f"a call budget is at least one call, got {budget}")
     if model is None:
-        model = claude()
+        model = groq()
 
-    messages: list[Any] = [{"role": "user", "content": brief(request)}]
+    written = brief(request)
     offered = surface()
+    exchanges: list[Exchange] = []
     recorded: list[RecordedCall] = []
     spent = 0
     input_tokens = 0
     output_tokens = 0
 
     while spent < budget:
-        reply = model.respond(messages, offered)
+        reply = model.respond(written, exchanges, offered)
         input_tokens += reply.input_tokens
         output_tokens += reply.output_tokens
-        messages.append({"role": "assistant", "content": reply.content})
         if not reply.calls:
+            exchanges.append(Exchange(reply=reply))
             break
 
-        # Every result from one turn goes back in one message. Split across
-        # several, the provider reads it as the calls having been made one at
-        # a time, and the model stops asking for them in parallel.
         results = []
         for call in reply.calls:
-            answer, failed = _execute(call)
+            result = _execute(call)
             recorded.append(
                 RecordedCall(
                     name=call.name,
                     arguments=call.arguments,
-                    failed=failed,
-                    detail=answer if failed else None,
+                    failed=result.failed,
+                    detail=result.content if result.failed else None,
                 )
             )
             spent += 1
-            results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": call.id,
-                    "content": answer,
-                    "is_error": failed,
-                }
-            )
-        messages.append({"role": "user", "content": results})
+            results.append(result)
+        exchanges.append(Exchange(reply=reply, results=tuple(results)))
 
     # A turn's calls are executed together, so the last one may carry the
     # count past the budget rather than land on it. The record says what was
@@ -427,13 +574,12 @@ def plan_workout(
     # offered, not a number the loop pretends to hit exactly.
     exhausted = spent >= budget
 
-    messages.append({"role": "user", "content": EMIT})
-    emission = model.emit(messages)
+    emission = model.emit(written, exchanges)
     input_tokens += emission.input_tokens
     output_tokens += emission.output_tokens
 
     return RunRecord(
-        model=MODEL,
+        model=model.name,
         budget=budget,
         spent=spent,
         emitted_on_exhaustion=exhausted,
@@ -465,137 +611,221 @@ def _refusal(
 # -- the provider -------------------------------------------------------------
 
 
-class Claude:
-    """`Model`, against the Anthropic SDK.
+def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """A pydantic model's schema, in the shape strict mode will accept.
 
-    The only part of this file that knows what a provider looks like. It is
-    also the only part the suite never runs: `conftest.py` removes sockets and
-    credentials, so everything above is covered against a stand-in and this
-    class is exercised for the first time under ticket 05's `trainer eval`.
+    Strict mode is constrained decoding: it makes the emitted JSON conform by
+    construction rather than by luck, which is what a loop with no way to ask
+    again needs. It also demands that **every** property be listed in
+    `required`, and pydantic leaves out the ones with defaults -- `reps` and
+    `seconds`, which are exactly the pair that carries *either reps or
+    seconds*. Their optionality survives as the null in their type; what
+    changes here is only that the model must decide about them rather than
+    leave them out.
+
+    `additionalProperties: false` is already there, from the wire shape's own
+    `extra="forbid"`. Strict mode wants it for its reasons and the plan format
+    wants it for the ticket-02 reason -- a misspelled field quietly ignored is
+    a prescription the author believes they wrote -- and they agree.
+    """
+    built = model.model_json_schema()
+
+    def require_everything(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object" and "properties" in node:
+                node["required"] = list(node["properties"])
+                node.setdefault("additionalProperties", False)
+            for value in node.values():
+                require_everything(value)
+        elif isinstance(node, list):
+            for item in node:
+                require_everything(item)
+
+    require_everything(built)
+    return built
+
+
+class Groq:
+    """`Model`, against the Groq API.
+
+    The only part of this file that knows what a provider looks like: the
+    message shapes, the tool envelope, the two request forms. Everything above
+    talks in exchanges.
     """
 
-    def __init__(self, client: Any | None = None, model: str = MODEL) -> None:
-        self._model = model
+    def __init__(self, client: Any | None = None, model: str | None = None) -> None:
+        self._model = model or model_name()
         self._client = client if client is not None else _client()
 
-    def respond(self, messages: list[Any], offered: list[dict[str, Any]] | None) -> Reply:
+    @property
+    def name(self) -> str:
+        return self._model
+
+    def _messages(self, written: str, exchanges: Sequence[Exchange]) -> list[Any]:
+        """The conversation, in the shape Groq reads.
+
+        An assistant message carrying `tool_calls`, then one `tool` message per
+        result, keyed by the id the call came with. The assistant message goes
+        back exactly as it arrived: it is the provider's own object, and
+        rebuilding it from parts is how a loop starts disagreeing with the
+        history it is sending.
+        """
+        messages: list[Any] = [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": written},
+        ]
+        for exchange in exchanges:
+            messages.append(exchange.reply.content)
+            for result in exchange.results:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": result.call_id,
+                        "name": result.name,
+                        "content": result.content,
+                    }
+                )
+        return messages
+
+    def respond(
+        self,
+        brief: str,
+        exchanges: Sequence[Exchange],
+        offered: Sequence[dict[str, Any]] | None,
+    ) -> Reply:
         request: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": MAX_TOKENS,
-            "system": SYSTEM,
-            "messages": messages,
+            "max_tokens": max_tokens(),
+            "messages": self._messages(brief, exchanges),
         }
         if offered:
-            request["tools"] = offered
-        response = _reported(lambda: self._client.messages.create(**request))
-        calls = tuple(
-            Call(id=block.id, name=block.name, arguments=dict(block.input))
-            for block in response.content
-            if block.type == "tool_use"
-        )
+            request["tools"] = [
+                {"type": "function", "function": definition} for definition in offered
+            ]
+        completion = _reported(lambda: self._client.chat.completions.create(**request))
+        message = completion.choices[0].message
         return Reply(
-            content=response.content,
-            calls=calls,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+            content=message.model_dump(exclude_none=True),
+            calls=tuple(_call(raw) for raw in message.tool_calls or ()),
+            input_tokens=completion.usage.prompt_tokens,
+            output_tokens=completion.usage.completion_tokens,
         )
 
-    def emit(self, messages: list[Any]) -> Emission:
+    def emit(self, brief: str, exchanges: Sequence[Exchange]) -> Emission:
         """The plan, in `trainer.plan`'s own shape.
 
-        `WorkoutPlan` is handed to the provider as the required output format
-        rather than described in the prompt: the shape the file format uses,
-        the shape the validator reads and the shape the model is held to are
-        then one declaration, and a field added to it reaches all three.
-
-        **The tools are still declared, and refused by `tool_choice`.** The
-        history at this point holds the `tool_use` and `tool_result` blocks the
-        loop appended, and the API rejects a request that carries those while
-        defining no tools. Leaving `tools` out is not how you take them off the
-        table -- it is how you make every run that used one fail at the last
-        step, which is the one step the suite cannot cover.
+        No tools on this request, and not as a nicety: Groq does not allow
+        structured outputs and tool use in the same call at all. The shape the
+        file format uses, the shape the validator reads and the shape the model
+        is held to are one declaration, so a field added to `WorkoutPlan`
+        reaches all three.
         """
         import pydantic
 
-        response = _reported(
-            lambda: self._client.messages.parse(
+        messages = self._messages(brief, exchanges)
+        messages.append({"role": "user", "content": EMIT})
+        completion = _reported(
+            lambda: self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=MAX_TOKENS,
-                system=SYSTEM,
+                max_tokens=max_tokens(),
                 messages=messages,
-                tools=surface(),
-                tool_choice={"type": "none"},
-                output_format=plans.WorkoutPlan,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "workout_plan",
+                        "strict": True,
+                        "schema": strict_schema(plans.WorkoutPlan),
+                    },
+                },
             )
         )
-        try:
-            parsed = response.parsed_output
-        except pydantic.ValidationError as error:
-            # Truncated JSON, most likely: a long plan against `max_tokens`.
-            raise AgentError(
-                "the model's plan did not parse, which usually means it was "
-                f"cut off at {MAX_TOKENS} tokens: {error}"
-            ) from error
-        if parsed is None:
-            # No text block carried a parsed output: the model answered with
-            # something that is not a plan at all.
+        body = completion.choices[0].message.content
+        if not body:
             raise AgentError("the model returned no plan")
+        try:
+            emitted = plans.WorkoutPlan.model_validate_json(body)
+        except pydantic.ValidationError as error:
+            raise AgentError(
+                "the model's plan did not parse, which usually means it was cut "
+                f"off at {max_tokens()} tokens ({MAX_TOKENS_ENV} raises that): "
+                f"{error}"
+            ) from error
         return Emission(
-            plan=parsed,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
+            plan=emitted,
+            input_tokens=completion.usage.prompt_tokens,
+            output_tokens=completion.usage.completion_tokens,
         )
 
 
-def claude(client: Any | None = None) -> Claude:
+def _call(raw: Any) -> Call:
+    """One tool call, out of Groq's envelope.
+
+    `function.arguments` arrives as a **JSON string**, not an object. Read as
+    one it would reach the tools as a `str`, and every call would come back
+    refused for arguments that do not fit -- a whole run spent on a mistake
+    nobody made.
+    """
+    try:
+        arguments = json.loads(raw.function.arguments or "{}")
+    except json.JSONDecodeError:
+        arguments = {}
+    return Call(id=raw.id, name=raw.function.name, arguments=arguments)
+
+
+def groq(client: Any | None = None) -> Groq:
     """The provider-backed model, built lazily.
 
     A function rather than a constructor call at import: nothing in the suite
     may build a client, and a module that made one on import would break the
     no-credentials guarantee for every test that happens to import it.
     """
-    return Claude(client)
+    backend()
+    return Groq(client)
 
 
 def _client() -> Any:
-    import anthropic
+    import groq as sdk
 
-    return authenticated(anthropic.Anthropic())
-
-
-def authenticated(built: Any) -> Any:
-    """The credential check, kept apart from building the client.
-
-    The SDK resolves a key, a token, or an `ant auth login` profile, in that
-    order, and comes back with empty auth headers when it finds none of them.
-    Checked here rather than left to the request: unauthenticated, the call
-    comes back a 401 from the network, and on a machine with no network it
-    comes back a connection error -- neither of which names what is missing.
-
-    Its own function so the suite can exercise it. Reaching it through
-    `_client` would mean constructing a real SDK client, and what that
-    resolves depends on the machine the tests are running on -- which is the
-    state under test, not a way to reach it.
-    """
-    if not built.auth_headers:
+    key = os.environ.get(API_KEY_ENV)
+    if not key:
         raise AgentError(NO_CREDENTIALS)
-    return built
+    return sdk.Groq(api_key=key)
 
 
 def _reported(call: Callable[[], Any]) -> Any:
     """The provider's failures, in words, with the ones worth acting on apart."""
-    import anthropic
+    import groq as sdk
 
     try:
         return call()
-    except anthropic.AuthenticationError as error:
+    except sdk.AuthenticationError as error:
         raise AgentError(f"{NO_CREDENTIALS} (the provider said: {error})") from error
-    except anthropic.RateLimitError as error:
-        raise AgentError(f"the provider is rate limiting this key: {error}") from error
-    except anthropic.APIConnectionError as error:
+    except sdk.RateLimitError as error:
+        raise AgentError(
+            f"the provider is rate limiting this key: {error}\n"
+            f"If it is refusing the declared output size rather than actual "
+            f"traffic, lower {MAX_TOKENS_ENV} (currently {max_tokens()})."
+        ) from error
+    except sdk.BadRequestError as error:
+        # Where a model that cannot do strict structured output lands: the
+        # emission is the only request that asks for it, and the refusal
+        # arrives naming the parameter rather than the way out.
+        raise AgentError(
+            f"the provider refused the request: {error}\n"
+            f"If it names response_format, this model does not support "
+            f"{STRICT_OUTPUT}; qwen/qwen3.8-27b and the gpt-oss models do, and "
+            f"{MODEL_ENV} chooses."
+        ) from error
+    except sdk.APIConnectionError as error:
         raise AgentError(f"the provider could not be reached: {error}") from error
-    except anthropic.APIStatusError as error:
+    except sdk.APIStatusError as error:
         raise AgentError(f"the provider refused the request: {error}") from error
+    except sdk.APIError as error:
+        # `APIResponseValidationError` and anything else the SDK raises that is
+        # not a status error. Last, and deliberately broad: this function's
+        # whole job is that no provider failure reaches the terminal as a
+        # traceback, and a chain that ends at `APIStatusError` leaves a door.
+        raise AgentError(f"the provider failed: {error}") from error
 
 
 def summary(record: RunRecord) -> list[str]:
@@ -607,12 +837,5 @@ def summary(record: RunRecord) -> list[str]:
     lines = [f"{record.model} -- {used}"]
     if failed:
         lines.append(f"  {failed} of those calls came back an error")
-    lines.append(
-        f"  {record.input_tokens} tokens in, {record.output_tokens} out"
-    )
+    lines.append(f"  {record.input_tokens} tokens in, {record.output_tokens} out")
     return lines
-
-
-def called(record: RunRecord) -> Sequence[Mapping[str, Any]]:
-    """The calls, in order, as plain data -- what ticket 05 reads."""
-    return [call.model_dump() for call in record.calls]

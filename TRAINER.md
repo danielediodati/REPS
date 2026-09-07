@@ -457,12 +457,45 @@ The engine has to **work with missing data**: you will skip weeks, and the syste
 | engine | **pure Python library, zero LLM inside, exposed as a tool surface** |
 | agent framework | **LangGraph** |
 | agent output | structured (Pydantic), never prose for the plan |
-| deliberative agent | the best model available |
+| provider | **Groq** — see below |
+| deliberative agent | `qwen/qwen3.8-27b` by default, overridable |
 | supervisor | a **different** model from the agent's |
 | tracing | LangSmith (or OTel) — the trace is an artifact, not a log |
 | methodology | a curated document, no vector DB |
 | MCP | thin wrapper over the tool library |
 | enrichment | batch job, see appendix |
+
+### The provider is Groq, and that costs something
+
+This said *«the best model available»* until session 4, and it now says Groq.
+The reason is cost and reach: the free tier makes a project that runs many
+evaluation passes affordable, and nothing about the architecture depends on
+which model sits in the node.
+
+**What it costs is measured, not argued.** The engine still guarantees that no
+plan outside the admissible set and no plan over the budget can ship — that is
+a deterministic check, not a property of the model. What a weaker model costs
+is *refusals* and *worse plans*, and both are exactly what Level 1's six
+invariants count. If the 100% bar cannot be reached, that is a finding about
+this choice and it belongs in the open, not a reason to lower the bar.
+
+**Two constraints Groq puts on the shape of the loop**, neither of which is a
+preference:
+
+- **Structured output and tool use cannot be in the same request.** The
+  workout loop is therefore two phases — tools until the model stops asking or
+  the call budget runs out, then one final call with the tools off the table
+  and the plan's schema required. That is the shape the loop wanted anyway,
+  because it makes *emits anyway* one door rather than a branch.
+- **Guaranteed schema conformance is model-specific.** In *strict* mode
+  constrained decoding makes the emitted plan conform by construction; it is
+  available on some models and not others. On the rest it is best-effort, and
+  a plan that comes back malformed is a whole run lost, because the loop has
+  no way to ask again.
+
+The provider lives behind one class. The loop talks about a brief and the
+exchanges that followed, in this project's own terms, so the day this table
+says something else again it is that class that changes.
 
 ### The engine is a library, not a service
 
