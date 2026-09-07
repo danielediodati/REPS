@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import enrich
 from trainer.engine import catalog, database, graph, migrations
 from trainer.engine.catalog import Exercise
 
@@ -297,3 +298,76 @@ def test_the_committed_file_resolves_trainers_running_example(
     assert rows["Arnold_Dumbbell_Press"] == "Standing_Military_Press"
     assert rows["Kettlebell_Arnold_Press"] == "Standing_Military_Press"
     assert rows["Standing_Military_Press"] is None
+
+
+# --- reading the graph back -----------------------------------------------
+
+
+@pytest.fixture()
+def applied(connection: sqlite3.Connection) -> sqlite3.Connection:
+    """The throwaway graph above, written onto the five rows, and enriched.
+
+    `compare` reads both halves -- the four fields TRAINER.md names come from
+    `enrich derive`, the relation from the curated file -- so a fixture that
+    applied only one of them would leave every case failing on the other.
+    """
+    enrich(
+        connection,
+        {
+            "Standing_Military_Press": ("vertical push", "shoulder, elbow", "yes", "medium", 3),
+            "Arnold_Dumbbell_Press": ("vertical push", "shoulder, elbow", "yes", "medium", 1),
+            "Kettlebell_Arnold_Press": ("vertical push", "shoulder, elbow", "yes", "high", 1),
+            "Band_Assisted_Pull-Up": ("vertical pull", "shoulder, elbow", "no", "medium", 2),
+            "Pullups": ("vertical pull", "shoulder, elbow", "no", "high", 1),
+        },
+    )
+    graph.apply(connection, *graph.parse(TEXT))
+    return connection
+
+
+def test_a_member_and_its_representative_are_the_same_movement(
+    applied: sqlite3.Connection,
+) -> None:
+    found = graph.compare(applied, "Arnold_Dumbbell_Press", "Standing_Military_Press")
+
+    assert found.same_movement is True
+    assert found.easier is None
+    assert found.a.movement_pattern == "vertical push"
+    assert found.b.setup_cost_min == 3
+
+
+def test_two_members_of_one_group_are_the_same_movement(
+    applied: sqlite3.Connection,
+) -> None:
+    """TRAINER.md's running example, neither side of which is the
+    representative -- the case a naive `a.variant_of == b.id` misses."""
+    found = graph.compare(applied, "Arnold_Dumbbell_Press", "Kettlebell_Arnold_Press")
+
+    assert found.same_movement is True
+
+
+def test_the_easier_side_is_named_by_id_whichever_way_round_it_is_asked(
+    applied: sqlite3.Connection,
+) -> None:
+    forwards = graph.compare(applied, "Band_Assisted_Pull-Up", "Pullups")
+    backwards = graph.compare(applied, "Pullups", "Band_Assisted_Pull-Up")
+
+    assert forwards.easier == backwards.easier == "Band_Assisted_Pull-Up"
+    assert forwards.same_movement is False
+    assert "regression" in forwards.summary
+
+
+def test_an_unrelated_pair_says_so_rather_than_saying_nothing(
+    applied: sqlite3.Connection,
+) -> None:
+    found = graph.compare(applied, "Standing_Military_Press", "Pullups")
+
+    assert found.same_movement is False
+    assert found.easier is None
+    assert found.summary == "neither the same movement nor a regression of one another"
+    assert found.a.movement_pattern != found.b.movement_pattern
+
+
+def test_an_id_the_catalog_does_not_have_is_named(applied: sqlite3.Connection) -> None:
+    with pytest.raises(catalog.CatalogError, match="Pullupz"):
+        graph.compare(applied, "Pullups", "Pullupz")

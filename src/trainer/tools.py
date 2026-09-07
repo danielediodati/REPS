@@ -1,0 +1,312 @@
+"""The tool surface: one set of definitions, registered behind two doors.
+
+TRAINER.md's `admissible_set`, `remaining_budget`, `allocate`,
+`pattern_history`, `last_performed_load` and `compare_variants`, each of which
+unpacks its arguments, opens the connection, calls the library function and
+shapes the result for a caller that speaks JSON. No validation of its own, no
+decision, no new logic: `tests/test_engine_boundary.py` exists precisely so
+that the CLI, this surface and a direct call stay doors onto the same code
+rather than copies of it.
+
+**One definition, two registrations.** `trainer mcp` serves these to a generic
+client and session 4's agent loops over the same objects. The alternative --
+a set of MCP tools and a set of agent tools that happen to wrap the same
+library -- diverges at the first tool added to one door and not the other, and
+the divergence is invisible until the agent asks for something the inspector
+cannot show. `TOOLS` is the single enumeration; a door registers what is in it
+and nothing else.
+
+**What each door still owns.** Its transport, and its own error type. This
+module states a failure as a `ToolFailure` in the words the caller should
+read; `mcp_server` turns that into the SDK's `ToolError`, and the agent will
+turn it into a tool result the model can act on. What neither door owns is
+*which* failures exist or how they are worded.
+
+**Beside `trainer.cli`, never inside `engine/`.** The engine is the pure
+library the boundary test keeps free of any knowledge of a client, and `mcp`
+is in its forbidden list next to `click` for the same reason: a convention
+that is not enforced is a convention forgotten in a month.
+
+**What is not here.** `adherence_history` and `active_conclusions` are in
+TRAINER.md's tool surface and have nothing to wrap yet -- they need `workouts`
+(session 5) and `conclusions` (session 8). Wrapping a function that does not
+exist is not this module's job.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import closing, contextmanager
+from dataclasses import asdict, is_dataclass
+from typing import Any
+
+from trainer.engine import (
+    admissible,
+    budget,
+    catalog,
+    database,
+    duration,
+    graph,
+    migrations,
+    muscle_groups,
+    state,
+)
+from trainer.engine.exclusions import Exclusion, ExclusionError
+
+INSTRUCTIONS = """\
+The REPS engine: a deterministic library over an exercise catalog and the
+training state. It answers questions and never decides how to train.
+
+`admissible_set` is the space -- an exercise outside what it returns cannot be
+prescribed. `remaining_budget` and `allocate` are arithmetic over the time
+available; neither cuts a plan that does not fit. `compare_variants` says what
+two exercises are like and whether the curated graph calls them the same
+movement, or one of them easier. `pattern_history` and `last_performed_load`
+read state that no workout has been logged into yet, so today they answer that
+they do not know, which is an answer and not a failure.
+"""
+
+
+class ToolFailure(RuntimeError):
+    """A tool call that cannot be answered, stated in words for the caller.
+
+    One exception type for the whole surface, so a door translates once
+    instead of enumerating the engine's error classes a second time.
+    """
+
+
+_ENGINE_ERRORS = (
+    admissible.AdmissibleError,
+    budget.BudgetError,
+    catalog.CatalogError,
+    duration.DurationError,
+    ExclusionError,
+    graph.GraphError,
+    migrations.MigrationError,
+    muscle_groups.MuscleGroupError,
+    state.StateError,
+)
+"""Every failure the library states in words. Each is re-raised as a
+`ToolFailure` so it reaches the caller as a result marked failed, rather than
+as a traceback that takes the door down with it -- the same job
+`cli.reported()` does for the terminal."""
+
+
+@contextmanager
+def opened() -> Iterator[sqlite3.Connection]:
+    """The connection every tool reads through, with its preconditions named.
+
+    A missing database, a database behind this checkout's migrations and an
+    empty catalog are states rather than caller errors, and each has a command
+    that fixes it. Left to fail on their own the first two arrive as `no such
+    table: exercises` and the third as an answer -- an empty admissible set, or
+    an id the catalog does not have -- which names neither the state nor the
+    way out of it.
+    """
+    path = database.database_path()
+    if not path.exists():
+        raise ToolFailure(
+            f"there is no database at {path}; run `trainer db init` and "
+            "`trainer db import` first"
+        )
+    with closing(database.connect(path)) as connection:
+        current = migrations.applied_version(connection)
+        latest = migrations.latest_version(migrations.discover())
+        if current < latest:
+            raise ToolFailure(
+                f"the database is at schema version {current} and this "
+                f"checkout is at {latest}; run `trainer db init`"
+            )
+        if catalog.count(connection) == 0:
+            raise ToolFailure("the catalog is empty; run `trainer db import` first")
+        yield connection
+
+
+@contextmanager
+def reported() -> Iterator[None]:
+    """Turn a stated library failure into a tool failure.
+
+    The catalog being unenriched arrives through here rather than from
+    `opened()`: it is the engine that decides which fields a given call reads,
+    and a precondition checked by whoever opens the connection would refuse
+    `pattern_history`, which reads no enrichment at all.
+    """
+    try:
+        yield
+    except _ENGINE_ERRORS as error:
+        raise ToolFailure(str(error)) from error
+    except sqlite3.Error as error:
+        raise ToolFailure(f"the database could not be used: {error}") from error
+
+
+# -- shaping for the wire -----------------------------------------------------
+#
+# Dataclasses out, dicts in. The engine's types are frozen dataclasses holding
+# tuples, which JSON has no word for, so each is turned into the plainest thing
+# that carries the same fields. Nothing is computed, renamed or dropped on the
+# way through: a client reading this is reading the engine's own answer.
+
+
+def _exercise(found: catalog.Exercise) -> dict[str, Any]:
+    return asdict(found) | {
+        "primary_muscles": list(found.primary_muscles),
+        "secondary_muscles": list(found.secondary_muscles),
+        "instructions": list(found.instructions),
+        "images": list(found.images),
+    }
+
+
+def _enrichment(found: catalog.Enrichment) -> dict[str, Any]:
+    return asdict(found) | {"loaded_joints": list(found.loaded_joints)}
+
+
+def _answer(answer: state.Answer[Any]) -> dict[str, Any]:
+    """An `Answer`, with its "I don't know" kept legible.
+
+    `known` travels as its own field rather than being left implicit in a null
+    value: an agent reading this mid-loop has to be able to tell *nobody has
+    trained this yet* from a field that happens to be empty, and that
+    distinction is the whole reason these two functions exist this early.
+    """
+    value = answer.value
+    return {
+        "about": answer.about,
+        "known": answer.known,
+        "value": asdict(value) if is_dataclass(value) and not isinstance(value, type) else value,
+    }
+
+
+def _block(raw: Mapping[str, Any]) -> duration.Block:
+    """One block, out of what a JSON client can express.
+
+    Every error here is the dataclass's own -- `Block` and `BlockItem` validate
+    themselves in `__post_init__`, and re-checking their fields on the way in
+    would be this module growing the logic it exists not to have.
+    """
+    try:
+        items = tuple(
+            duration.BlockItem(
+                exercise_id=str(item["exercise_id"]),
+                reps=item.get("reps"),
+                seconds=item.get("seconds"),
+            )
+            for item in raw["items"]
+        )
+        return duration.Block(items=items, rounds=raw["rounds"], rest=raw["rest"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ToolFailure(f"that is not a block: {error}") from error
+
+
+# -- the tools ----------------------------------------------------------------
+
+
+def admissible_set(
+    equipment: list[str],
+    budget_min: int,
+    exclusions: list[dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """The exercises today's equipment, the time available and the exclusions
+    given leave standing -- the space a plan is chosen inside.
+
+    `equipment` names the catalog's own values (`barbell`, `body only`) and
+    must hold at least one. Each exclusion is `{"granularity": "pattern" |
+    "joint", "value": ...}`; an exclusion never names an exercise id.
+    """
+    given = [
+        Exclusion(
+            granularity=str(item.get("granularity", "")),
+            value=str(item.get("value", "")),
+        )
+        for item in exclusions or []
+    ]
+    with reported(), opened() as connection:
+        found = admissible.admissible_set(connection, given, equipment, budget_min)
+    return [_exercise(exercise) for exercise in found]
+
+
+def remaining_budget(partial_plan: list[dict[str, Any]], budget_min: int) -> int:
+    """How many minutes are left once `partial_plan` is committed.
+
+    A plan is a list of blocks, each `{"items": [{"exercise_id": ..., "reps":
+    ...} | {"exercise_id": ..., "seconds": ...}], "rounds": N, "rest": SECONDS}`.
+    Negative when the plan is already over, on purpose: how far over is what
+    the caller has to act on, and this engine never trims a plan to fit.
+    """
+    plan = [_block(raw) for raw in partial_plan]
+    with reported(), opened() as connection:
+        return budget.remaining_budget(connection, plan, budget_min)
+
+
+def allocate(minutes: int, proportions: dict[str, float]) -> dict[str, int]:
+    """Divide a workout's minutes among the muscle groups it trains.
+
+    `proportions` maps a muscle group to its share and has to sum to 1: they
+    are refused rather than normalised, because scaling a typo produces a
+    different plan that runs the full time and trains something else. The
+    group names are the six in the committed mapping.
+    """
+    with reported():
+        return budget.allocate(minutes, proportions)
+
+
+def pattern_history(pattern: str, cycles: int) -> dict[str, Any]:
+    """What the state has recorded for one movement pattern, over `cycles`.
+
+    The window is a **cycle** -- one complete rotation through the workouts
+    being trained -- never a week. Nothing writes this state until workouts are
+    logged, so today the answer comes back with `known: false`, which is an
+    answer: nobody has trained this pattern yet.
+    """
+    with reported(), opened() as connection:
+        return _answer(state.pattern_history(connection, pattern, cycles))
+
+
+def last_performed_load(exercise_id: str) -> dict[str, Any]:
+    """The load this exercise was last performed with, if it ever was.
+
+    `known: false` means no load has been recorded for a valid exercise. An id
+    the catalog does not have is a tool failure instead, so a typo never reads
+    as *"you have never done this"*.
+    """
+    with reported(), opened() as connection:
+        return _answer(state.last_performed_load(connection, exercise_id))
+
+
+def compare_variants(id_a: str, id_b: str) -> dict[str, Any]:
+    """Two exercises side by side, and what the curated graph says about them.
+
+    Each side carries its movement pattern, the joints it loads, the stability
+    it demands and what it costs to set up. `same_movement` is true when both
+    belong to one variant group -- *the Arnold and the military press are the
+    same pattern, to the engine they are interchangeable*. `easier` names the
+    id that is a regression of the other, or is null when neither is.
+
+    An id the catalog does not have is a failure naming that id, never a
+    comparison of two blanks that reads as *these two have nothing in common*.
+    """
+    with reported(), opened() as connection:
+        found = graph.compare(connection, id_a, id_b)
+    return {
+        "a": _enrichment(found.a),
+        "b": _enrichment(found.b),
+        "same_movement": found.same_movement,
+        "easier": found.easier,
+        "summary": found.summary,
+    }
+
+
+TOOLS: tuple[Callable[..., Any], ...] = (
+    admissible_set,
+    remaining_budget,
+    allocate,
+    pattern_history,
+    last_performed_load,
+    compare_variants,
+)
+"""The surface, enumerated once.
+
+Every door registers exactly this. A test asserting the same six names a
+second time would be a second place to forget them, so what the doors are
+checked against is this tuple rather than a copy of it.
+"""

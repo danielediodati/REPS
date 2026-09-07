@@ -9,6 +9,12 @@ refuses the two shapes that would make the graph unusable before anything
 touches the database -- a chain where `variant_of` should be a group of one
 representative and its members, and a cycle where `regression_of` should be a
 strict "easier points at harder".
+
+It also reads the graph back: `compare()` answers, for one pair of ids, what
+each row carries and whether the two are the same movement or one a regression
+of the other. That read lives here rather than beside the catalog because the
+answer is about the edges this module wrote, and a query that outlived its
+writer's rules would be the first thing to disagree with them.
 """
 
 from __future__ import annotations
@@ -19,7 +25,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from trainer.engine.catalog import known_ids
+from trainer.engine import catalog
+from trainer.engine.catalog import Enrichment, known_ids
 
 GRAPH_ENV_VAR = "TRAINER_GRAPH"
 """Environment variable that overrides the graph file location, the same way
@@ -214,3 +221,115 @@ def apply(
         variant_rows=tuple(variant_rows),
         regression_rows=tuple(regression_rows),
     )
+
+
+# --- reading the graph back ----------------------------------------------
+#
+# Everything above writes the curated file into the table. What follows reads
+# the two columns back out for one pair of ids -- the question TRAINER.md's
+# `compare_variants` asks, and the reason the tool had nothing to wrap until
+# this module existed.
+
+
+@dataclass(frozen=True)
+class Comparison:
+    """Two exercises side by side, and what the graph says about the pair.
+
+    The two relations are separate fields rather than one verdict, because
+    they are independent facts and a single string would have to rank them:
+    a regression is *also* a same-movement pair whenever the curated file says
+    both, and a caller looking for a substitution wants to know each.
+
+    `easier` names an id rather than a side, so that reading the answer does
+    not depend on remembering which argument was `a`.
+    """
+
+    a: Enrichment
+    b: Enrichment
+    same_movement: bool
+    easier: str | None
+
+    @property
+    def summary(self) -> str:
+        """The pair in one sentence, for whoever is not going to read fields."""
+        harder = (
+            self.b.exercise_id
+            if self.easier == self.a.exercise_id
+            else self.a.exercise_id
+        )
+        if self.a.exercise_id == self.b.exercise_id:
+            return "the same exercise"
+        if self.same_movement and self.easier:
+            return f"the same movement; {self.easier} is the easier of the two"
+        if self.same_movement:
+            return "the same movement, interchangeable"
+        if self.easier:
+            return f"{self.easier} is a regression of {harder}"
+        return "neither the same movement nor a regression of one another"
+
+
+def applied_to(connection: sqlite3.Connection) -> bool:
+    """Has this graph ever been written into the catalog?
+
+    `trainer enrich curated` is a command of its own, separate from `db
+    import` and `enrich derive`, and a database that has had the other two run
+    on it looks completely enriched while holding no edges at all. Read from
+    the provenance columns rather than the value columns: an exercise in no
+    variant group legitimately has `variant_of` null, so the values cannot
+    tell *nobody decided* from *decided to be nothing*.
+    """
+    row = connection.execute(
+        "SELECT COUNT(*) AS total FROM exercises WHERE variant_of_source IS NOT NULL "
+        "OR regression_of_source IS NOT NULL"
+    ).fetchone()
+    return int(row["total"]) > 0
+
+
+def compare(connection: sqlite3.Connection, id_a: str, id_b: str) -> Comparison:
+    """What the two rows carry, and the relation the graph holds between them.
+
+    Only the direct edge. `variant_of` is a star by construction, so same-group
+    membership is always one hop; `regression_of` may chain, and a chain is
+    deliberately not followed -- *A is easier than B, which is easier than C*
+    does not make A a usable stand-in for C, and answering as though it did
+    would put a substitution in the agent's hands that nobody decided.
+
+    A catalog the graph was never applied to is refused before anything is
+    read. Answered on the edges alone it comes back as *neither the same
+    movement nor a regression of one another* for TRAINER.md's own running
+    example -- a decided **no**, indistinguishable from a real one, off which
+    an agent would refuse a legitimate substitution with nothing in the
+    output to say why. CLAUDE.md's standing rule, in the case it was written
+    for: check the state first and name it.
+    """
+    if not applied_to(connection):
+        raise GraphError(
+            "no variant or regression edge has been written into this "
+            "catalog, so nothing can be said about how two exercises relate; "
+            "run `trainer enrich curated` first"
+        )
+
+    a = catalog.enrichment(connection, id_a)
+    b = catalog.enrichment(connection, id_b)
+
+    if id_a == id_b:
+        # One exercise against itself. Left to the edges it answers *the same
+        # movement* for a group member -- both sides carry the same
+        # `variant_of` -- and *neither* for a representative or an exercise in
+        # no group, which is the same question getting two answers depending
+        # on where in the graph the id happens to sit.
+        return Comparison(a=a, b=b, same_movement=True, easier=None)
+
+    same_movement = (
+        a.variant_of == b.exercise_id
+        or b.variant_of == a.exercise_id
+        or (a.variant_of is not None and a.variant_of == b.variant_of)
+    )
+    if a.regression_of == b.exercise_id:
+        easier: str | None = a.exercise_id
+    elif b.regression_of == a.exercise_id:
+        easier = b.exercise_id
+    else:
+        easier = None
+
+    return Comparison(a=a, b=b, same_movement=same_movement, easier=easier)

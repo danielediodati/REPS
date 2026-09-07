@@ -1,9 +1,12 @@
-"""The MCP wrapper: the same answers the library gives, through the other door.
+"""The MCP door: the shared surface, registered, and nothing added.
 
-Two things are checked here and nothing else. That a generic client sees five
-tools with usable schemas, and that each one returns what the equivalent direct
-library call returns -- because the moment the two disagree, the wrapper has
-grown logic, which is the one thing this module is not allowed to have.
+Three things are checked here and nothing else. That a generic client sees
+exactly the tools `trainer.tools` defines -- read from `tools.TOOLS`, never
+from a second list of names, so a tool that reaches one door and not the other
+fails here. That every one of them arrives with a usable schema and a
+description, which survive the wrapper that translates the failure type. And
+that each returns what the equivalent direct library call returns, because the
+moment the two disagree the door has grown logic of its own.
 
 `server.call_tool` is what an MCP client's request lands on after the transport
 has decoded it, so calling it directly exercises the wrapper without a socket:
@@ -26,7 +29,7 @@ import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
 from conftest import enrich, make_exercise
-from trainer import mcp_server
+from trainer import mcp_server, tools
 from trainer.engine import admissible, budget, catalog, database, migrations, state
 from trainer.engine.duration import Block, BlockItem
 from trainer.engine.exclusions import Exclusion
@@ -50,13 +53,10 @@ _PATTERNS = {
     "Bodyweight_Squat": ("squat", "hip, knee, ankle", "no", "medium", 0),
 }
 
-TOOLS = (
-    "admissible_set",
-    "remaining_budget",
-    "allocate",
-    "pattern_history",
-    "last_performed_load",
-)
+TOOLS = {tool.__name__ for tool in tools.TOOLS}
+"""Read from the shared surface, not restated. Restated, this file would
+assert the six names a second time, and the day a seventh is registered on one
+door only, both places would agree with each other and with nothing else."""
 
 
 @pytest.fixture()
@@ -106,10 +106,14 @@ def call(name: str, **arguments: Any) -> Any:
 # -- what a generic client sees -----------------------------------------------
 
 
-def test_all_five_tools_are_listed() -> None:
+def test_this_door_serves_exactly_the_shared_surface() -> None:
+    """The check ticket 01 exists for: a tool behind one door and not the
+    other fails the build rather than being noticed by whoever happens to open
+    the inspector."""
     listed = _LOOP.run_until_complete(mcp_server.server.list_tools())
 
-    assert {tool.name for tool in listed} == set(TOOLS)
+    assert {tool.name for tool in listed} == TOOLS
+    assert len(TOOLS) == len(tools.TOOLS), "two tools registered under one name"
 
 
 def test_every_tool_has_a_usable_schema_and_a_description() -> None:
@@ -123,15 +127,32 @@ def test_every_tool_has_a_usable_schema_and_a_description() -> None:
         assert tool.description, f"{tool.name} has no description"
 
 
-def test_the_tools_are_exactly_this_session_s_surface() -> None:
-    """`adherence_history`, `compare_variants` and `active_conclusions` are in
-    TRAINER.md's tool surface and have nothing to wrap yet. A tool that exists
-    and cannot work is worse than one that does not exist."""
+def test_the_tools_with_nothing_to_wrap_are_still_absent() -> None:
+    """`adherence_history` and `active_conclusions` are in TRAINER.md's tool
+    surface and need `workouts` and `conclusions`, neither of which exists. A
+    tool that exists and cannot work is worse than one that does not exist."""
     listed = {tool.name for tool in _LOOP.run_until_complete(mcp_server.server.list_tools())}
 
     assert "adherence_history" not in listed
-    assert "compare_variants" not in listed
     assert "active_conclusions" not in listed
+
+
+def test_the_description_a_model_reads_survives_the_wrapper() -> None:
+    """The docstring is the tool's description, and it is written once, in
+    `trainer.tools`. Registration goes through a wrapper that translates the
+    failure type, and a wrapper that dropped the docstring would leave every
+    tool on this door described by nothing."""
+    listed = {
+        tool.name: tool for tool in _LOOP.run_until_complete(mcp_server.server.list_tools())
+    }
+
+    for defined in tools.TOOLS:
+        served = listed[defined.__name__]
+        assert defined.__doc__ is not None
+        assert served.description == defined.__doc__
+        assert set(served.input_schema["properties"]) == {
+            name for name in defined.__annotations__ if name != "return"
+        }
 
 
 # -- the same answers as a direct call ----------------------------------------

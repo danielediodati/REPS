@@ -322,6 +322,133 @@ filters are built on, so it is the one wired up now; a later ticket adds
 another the day something actually reads it."""
 
 
+@dataclass(frozen=True)
+class Enrichment:
+    """What session 2 wrote onto one catalog row, read back whole.
+
+    Kept apart from `Exercise` on purpose. That dataclass is the source
+    record, with the source's own field names preserved; these are this
+    project's reading of it, derived by a rule or decided by hand. Merged into
+    one type there would be no way to tell, holding a value, whether the
+    dataset said it or we did.
+
+    Read by id rather than filtered on, which is why it is not in `FILTERABLE`:
+    the question it answers is *what is this exercise like* -- what
+    `compare_variants` asks of two ids, and what a rejected plan needs in
+    order to say why an exercise was not admissible.
+    """
+
+    exercise_id: str
+    name: str
+    movement_pattern: str
+    loaded_joints: tuple[str, ...]
+    spinal_axial_load: str
+    required_stability: str
+    setup_cost_min: int
+    variant_of: str | None
+    regression_of: str | None
+
+
+CURATED = "curated"
+"""The provenance a hand-read decision carries, as the schema spells it. The
+other value is `rule`; a check in `0003_enrichment.sql` allows no third."""
+
+
+_DERIVED = (
+    "movement_pattern",
+    "loaded_joints",
+    "spinal_axial_load",
+    "required_stability",
+    "setup_cost_min",
+)
+"""The five `enrich derive` writes in one pass. `variant_of` and
+`regression_of` are not among them -- they come from the curated graph, and a
+row with neither is an ordinary row rather than an unenriched one."""
+
+
+def enrichment(connection: sqlite3.Connection, exercise_id: str) -> Enrichment:
+    """One row's enrichment, or the state that explains why there is none.
+
+    Four answers, not two, because *this row has no pattern* has three
+    different causes and only one of them has a command that fixes it:
+
+    - the id is not in the catalog -- named as an id;
+    - the row is outside what enrichment covers. `enrich derive` reads the
+      strength catalog, so a stretching or cardio row has no pattern, no
+      joints and no setup cost, and running anything changes that;
+    - the row is a strength row nobody has derived yet -- the one case with a
+      remedy, and the only one that says `trainer enrich derive`;
+    - the row was read by hand and **decided** to have no honest value
+      (`docs/enrichment/residue.md`, rule B6). `enrich derive` skips it
+      forever by design, so naming that command would send the reader to run
+      something that does nothing.
+
+    Presence is read from the `_source` columns, never from the values: two of
+    the five are legitimately null once decided, and `loaded_joints` is `NOT
+    NULL DEFAULT '[]'`, so a value-based check would call an unenriched row
+    enriched and hand back an exercise that loads no joints.
+    """
+    row = connection.execute(
+        "SELECT id, name, category, movement_pattern, movement_pattern_source, "
+        "loaded_joints, loaded_joints_source, spinal_axial_load, "
+        "spinal_axial_load_source, required_stability, required_stability_source, "
+        "setup_cost_min, setup_cost_min_source, variant_of, regression_of "
+        "FROM exercises WHERE id = ?",
+        (exercise_id,),
+    ).fetchone()
+    if row is None:
+        raise CatalogError(f"no such exercise: {exercise_id!r}")
+
+    # The decided case first, and read off `movement_pattern` alone. A rule-B6
+    # row keeps `curated` provenance on the pattern and nothing on the other
+    # four -- `residue.apply` takes the null branch and never calls `write` --
+    # so a row that is genuinely settled looks unwritten on four fields, and
+    # the check below would send the reader to a command that skips it.
+    if row["movement_pattern_source"] == CURATED and row["movement_pattern"] is None:
+        raise CatalogError(
+            f"{exercise_id!r} has no movement pattern on purpose: "
+            "docs/enrichment/residue.md records that no honest value exists "
+            "for it (rule B6), so it cannot be compared or costed. There is "
+            "nothing to run"
+        )
+
+    unwritten = [field for field in _DERIVED if row[f"{field}_source"] is None]
+    if unwritten:
+        if row["category"] != STRENGTH_CATEGORY:
+            raise CatalogError(
+                f"{exercise_id!r} is a {row['category']} row, and enrichment "
+                "covers the strength catalog only -- it has no movement "
+                "pattern and no setup cost, and there is no command that "
+                "would give it one"
+            )
+        raise CatalogError(
+            f"{exercise_id!r} has no {', '.join(unwritten)}, so it cannot be "
+            "compared or costed; run `trainer enrich derive` first"
+        )
+
+    # Nothing writes a curated null anywhere but the pattern today. The guard
+    # stays because the alternative is `int(None)` a few lines down, which is
+    # a traceback rather than a sentence.
+    decided_absent = [field for field in _DERIVED if row[field] is None]
+    if decided_absent:
+        raise CatalogError(
+            f"{exercise_id!r} has no {', '.join(decided_absent)}, decided "
+            "rather than derived, so it cannot be compared or costed"
+        )
+
+    return Enrichment(
+        exercise_id=str(row["id"]),
+        name=str(row["name"]),
+        movement_pattern=str(row["movement_pattern"]),
+        loaded_joints=tuple(json.loads(row["loaded_joints"])),
+        spinal_axial_load=str(row["spinal_axial_load"]),
+        required_stability=str(row["required_stability"]),
+        setup_cost_min=int(row["setup_cost_min"]),
+        variant_of=None if row["variant_of"] is None else str(row["variant_of"]),
+        regression_of=None if row["regression_of"] is None else str(row["regression_of"]),
+    )
+
+
 def exercises_with_joint(connection: sqlite3.Connection, joint: str) -> tuple[str, ...]:
     """Ids of the exercises whose `loaded_joints` set contains this joint.
 

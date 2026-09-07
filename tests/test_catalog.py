@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from trainer.engine import catalog, database, enrichment, migrations
+from conftest import enrich, make_exercise
+from trainer.engine import catalog, database, enrichment, migrations, residue
 
 
 @pytest.fixture()
@@ -545,3 +546,109 @@ def test_two_exercises_sharing_a_name_are_ordered_by_id(migrated: Path) -> None:
 
     assert [found.id for found in first.exercises] == ["Aaa_Curl"]
     assert first.total == 2
+
+
+# --- enrichment, read back by id -----------------------------------------
+
+
+@pytest.fixture()
+def one_row(migrated: Path) -> Path:
+    with closing(database.connect(migrated)) as connection:
+        catalog.import_exercises(connection, (make_exercise(id="Barbell_Squat"),))
+    return migrated
+
+
+def test_enrichment_reads_a_row_back_whole(one_row: Path) -> None:
+    with closing(database.connect(one_row)) as connection:
+        enrich(
+            connection,
+            {"Barbell_Squat": ("squat", "hip, knee, ankle", "yes", "high", 3)},
+        )
+
+        found = catalog.enrichment(connection, "Barbell_Squat")
+
+    assert found.movement_pattern == "squat"
+    assert found.loaded_joints == ("hip", "knee", "ankle")
+    assert found.required_stability == "high"
+    assert found.setup_cost_min == 3
+    assert found.variant_of is None
+    assert found.regression_of is None
+
+
+def test_enrichment_names_an_id_the_catalog_does_not_have(one_row: Path) -> None:
+    with closing(database.connect(one_row)) as connection:
+        with pytest.raises(catalog.CatalogError, match="no such exercise: 'Barbell_Sqvat'"):
+            catalog.enrichment(connection, "Barbell_Sqvat")
+
+
+def test_a_strength_row_nobody_derived_names_the_command_that_fixes_it(
+    one_row: Path,
+) -> None:
+    """Not a record full of nulls, which reads as *loads no joints and costs
+    nothing to set up* -- a sentence about the exercise rather than about the
+    catalog."""
+    with closing(database.connect(one_row)) as connection:
+        with pytest.raises(catalog.CatalogError, match="trainer enrich derive"):
+            catalog.enrichment(connection, "Barbell_Squat")
+
+
+def test_a_row_enrichment_does_not_cover_names_no_command(migrated: Path) -> None:
+    """`enrich derive` reads the strength catalog. A stretching row will never
+    have a pattern, and telling the reader to run something that skips it is
+    worse than saying nothing."""
+    with closing(database.connect(migrated)) as connection:
+        catalog.import_exercises(
+            connection,
+            (make_exercise(id="Ankle_Circles", category="stretching"),),
+        )
+
+        with pytest.raises(catalog.CatalogError) as raised:
+            catalog.enrichment(connection, "Ankle_Circles")
+
+    assert "stretching" in str(raised.value)
+    assert "enrich derive" not in str(raised.value)
+
+
+def test_a_row_decided_to_have_no_pattern_says_so_rather_than_naming_a_command(
+    one_row: Path,
+) -> None:
+    """`docs/enrichment/residue.md` rule B6: two rows are read by hand and
+    decided to have no honest pattern, written as a null with `curated`
+    provenance. `enrich derive`'s `only_if_not_curated` guard skips them
+    forever, so the command it would otherwise name changes nothing."""
+    with closing(database.connect(one_row)) as connection:
+        connection.execute(
+            "UPDATE exercises SET movement_pattern = NULL, "
+            "movement_pattern_source = 'curated', loaded_joints_source = 'curated', "
+            "spinal_axial_load_source = 'curated', required_stability_source = 'curated', "
+            "setup_cost_min = 2, setup_cost_min_source = 'curated', "
+            "spinal_axial_load = 'no', required_stability = 'low' WHERE id = 'Barbell_Squat'"
+        )
+
+        with pytest.raises(catalog.CatalogError) as raised:
+            catalog.enrichment(connection, "Barbell_Squat")
+
+    assert "on purpose" in str(raised.value)
+    assert "enrich derive" not in str(raised.value)
+
+
+def test_the_committed_residue_rows_are_the_case_this_is_written_for(
+    enriched: Path,
+) -> None:
+    """Against the real catalog, both halves of `enrich curated` applied: the
+    two rule-B6 rows are the ones the sentence above has to be right about."""
+    with closing(database.connect(enriched)) as connection:
+        residue.apply(connection, residue.load())
+        decided = [
+            str(row["id"])
+            for row in connection.execute(
+                "SELECT id FROM exercises WHERE movement_pattern IS NULL "
+                "AND movement_pattern_source = 'curated'"
+            )
+        ]
+        assert decided, "the residue file names no rule-B6 row any more"
+
+        for exercise_id in decided:
+            with pytest.raises(catalog.CatalogError) as raised:
+                catalog.enrichment(connection, exercise_id)
+            assert "enrich derive" not in str(raised.value)

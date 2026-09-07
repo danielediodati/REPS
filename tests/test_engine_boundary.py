@@ -20,6 +20,7 @@ FORBIDDEN_PREFIXES = (
     # the client layer: the engine must not know it exists
     "trainer.cli",
     "click",
+    "trainer.tools",
     "trainer.mcp_server",
     "mcp",
     # the network, in every form it usually arrives in
@@ -105,6 +106,8 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
         "import trainer.cli",
         "import mcp",
         "from mcp.server import MCPServer",
+        "from trainer import tools",
+        "from trainer.tools import TOOLS",
         "from trainer.mcp_server import server",
         "from anthropic import Anthropic",
         "from langgraph.graph import StateGraph",

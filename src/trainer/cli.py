@@ -479,9 +479,9 @@ def catalog_command(
 def mcp_command() -> None:
     """Serve the engine's tool surface over MCP, on stdio.
 
-    Point a generic MCP client at `trainer mcp` and it lists the five tools
-    and calls them against this database. That is the whole reason MCP is in
-    the project this early: from session 4 on, the engine can be watched
+    Point a generic MCP client at `trainer mcp` and it lists the tools
+    `trainer.tools` defines, and calls them against this database. That is the
+    whole reason MCP is in the project this early: from session 4 on, the engine can be watched
     answering the same calls the agent is making, from an inspector rather
     than through the agent's own account of what happened.
     """
