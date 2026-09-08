@@ -49,7 +49,7 @@ Run through this every time, in order. A ticket is not done because the code wor
    ```markdown
    ---
 
-   # ✅ Ticket 02 — chiuso
+   # ✅ Ticket 3.2 — chiuso
    ### Il piano si costruisce contro il budget invece di essere tagliato dopo
    `00d09c2` · 522 test · mypy pulito · niente rotto
 
@@ -83,7 +83,9 @@ Run through this every time, in order. A ticket is not done because the code wor
    That is where finished work stays visible. The roadmap already lists every session's issues in order, so someone opening the repo sees what is built and what is not without reading git history, and the hash puts the full record one `git show` away.
 
 7. **Delete the ticket file.** A finished ticket is a work item, not an archive: the roadmap carries the status, the commit carries the record, and git still has the file. Delete the feature directory too when its last ticket goes.
-8. **Commit.**
+8. **Commit**, with the subject `Close ticket S.N` — **the session first, then the ticket within it**: the fifth ticket of session 4 is `Close ticket 4.5`, not `Close ticket 05`.
+
+   Ticket numbers restart at 1 every session, so the number alone names four different pieces of work by the time the project has run four sessions. `git log --oneline | grep 'Close ticket'` is the fastest way to read what a session actually shipped, and it is worth nothing while half the subjects are ambiguous. The same `S.N` is what the closing report's header block uses, because it is the same ticket.
 
 Step 4 is the one that costs you if you skip it. Steps 1-3 fail loudly; a decision buried in a deleted file fails silently, weeks later, when someone rebuilds the reasoning from scratch.
 
