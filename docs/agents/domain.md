@@ -46,7 +46,7 @@ When your output names a domain concept (in an issue title, a refactor proposal,
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-Until `CONTEXT.md` exists, [TRAINER.md](../../TRAINER.md) § Glossary is the authority on domain vocabulary — *movement pattern*, *admissible set*, *exclusion*, *hypothesis*, *trial*, *conclusion*, *observation*, *mesocycle*, *volume deficit*, *ramp-in*. Note the distinctions it draws deliberately: a *workout* is a training session, a *session* in ROADMAP.md is a unit of development work, and a *plan* is what the agent emits for one workout.
+`CONTEXT.md` is the **only** glossary: [TRAINER.md](../../TRAINER.md) § Glossary points at it and defines nothing, so a term read in one and a term read in the other can no longer drift apart. Note the distinctions it draws deliberately: a *workout* is a training session, a *session* in ROADMAP.md is a unit of development work, and a *plan* is what the agent emits for one workout.
 
 ## Flag ADR conflicts
 

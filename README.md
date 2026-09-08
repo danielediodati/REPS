@@ -2,7 +2,7 @@
 
 > *Reasoning Engine for Personal Strength.*
 
-Not a workout plan generator. **A loop.** A plan is a prompt: equipment + time + limitations → a table. The value is not in generating it, it is in adapting it over time — at week 3 the lunges at the end of the session have cost three missed workouts, and the system changes.
+Not a workout plan generator. **A loop.** A plan is a prompt: equipment + time + limitations → a table. The value is not in generating it, it is in adapting it over time — at week 3 the lunges at the end of the workout have cost three missed workouts, and the system changes.
 
 - **[TRAINER.md](TRAINER.md)** — what gets built, and why.
 - **[ROADMAP.md](ROADMAP.md)** — in what order, and where the cuts fall.

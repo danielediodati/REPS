@@ -1,10 +1,12 @@
 # REPS
 
-The language this project reasons in. TRAINER.md § Glossary is the source for
-the terms that were settled before this file existed — *movement pattern*,
-*admissible set*, *exclusion*, *hypothesis*, *trial*, *conclusion*,
-*observation*, *mesocycle*, *volume deficit*, *ramp-in*. What follows is the
-vocabulary of time and structure, settled after it.
+The language this project reasons in — **the** glossary, and the only one.
+Every term the project uses in a load-bearing sense is defined here once;
+TRAINER.md and ROADMAP.md use these words and never redefine them. Where a term
+carries an argument longer than its definition, the definition stays here and
+the argument stays where it is made: the twelve movement patterns are
+enumerated here and argued in TRAINER.md § Appendix, the two axes volume is
+counted on in ADR-0001.
 
 ## Language
 
@@ -21,8 +23,16 @@ declares how many workouts a rotation holds; it advances when a workout is
 performed, never when a date passes.
 _Avoid_: week — a week counts days, and a user who trains when they have time
 completes a rotation in a span no calendar decides. Also avoid confusing it
-with **mesocycle**, which is 4-6 weeks holding a fixed progression scheme and
-spans many cycles.
+with **mesocycle**, below, which spans many cycles.
+
+**Mesocycle**:
+4-6 weeks with a fixed progression scheme and a fixed goal. It is the boundary
+at which the agent re-evaluates its policies, and the unit a **split** holds
+for.
+
+**Ramp-in**:
+A workout on the normal scheme with reduced volume and loads guided by feel,
+used on returning from a break to realign the loads without estimating them.
 
 ### The structure of a workout
 
@@ -85,18 +95,26 @@ block like any other; only its work term differs.
 _Avoid_: cardio — that is one of the catalog's own `category` values and names
 where a row came from, not how it is prescribed.
 
-**Volume deficit**:
-Unchanged from TRAINER.md, with the denominator settled and the axes named:
-the difference between planned and performed volume, measured over a **cycle**,
-on two axes — per movement pattern and per muscle. It is the signal that a plan
-is degenerating: an under-served pattern or muscle shows up here rather than
-being forbidden in advance. Two axes because neither catches the other's
-failure — see ADR-0001.
+### What volume is counted on
 
 **Movement pattern**:
-Unchanged from TRAINER.md — one of the twelve ways a body can be loaded. It is
-one of the two axes **volume** is counted on, the other being the muscle. A
-muscle group answers *how is today's time divided*; a movement pattern and a
+The class of movement, not the exercise. Twelve values: horizontal push,
+vertical push, horizontal pull, vertical pull, squat, hip hinge, single-leg,
+core anti-extension, core rotation, core lateral flexion, carry, isolation. It
+is the level at which you program, exclude and count, and the coarser of the
+two axes volume is counted on.
+
+- `core anti-extension` — the trunk holds a fixed position while resisting
+  lumbar extension: a plank, an ab-wheel rollout.
+- `core rotation` — the trunk produces or resists rotation in the transverse
+  plane: a cable chop, a Pallof press, a landmine 180.
+- `core lateral flexion` — the trunk produces or resists a lean in the frontal
+  plane: a kettlebell windmill, a side plank, a suitcase carry held on one
+  side.
+
+Why those three are three and not two is TRAINER.md § Appendix.
+
+A muscle group answers *how is today's time divided*; a movement pattern and a
 muscle each answer *what is my body accumulating*, at different resolutions.
 An exercise carries all three labels already.
 
@@ -106,3 +124,55 @@ One of the catalog's own seventeen `primary_muscles` values — `biceps`,
 and the only one that can tell an arm workout of curls from a balanced one.
 _Avoid_: muscle group — that is one of the six, and it is for allocating time,
 not for measuring.
+
+**Volume deficit**:
+The difference between planned and performed volume, measured over a **cycle**,
+on two axes — per movement pattern and per muscle. It absorbs four different
+mechanisms — substitution, a cut for time, a shortened workout, a skipped
+workout — into a single quantity, and it is the signal that a plan is
+degenerating: an under-served pattern or muscle shows up here rather than being
+forbidden in advance. Two axes because neither catches the other's failure —
+see ADR-0001.
+
+### What limits a plan
+
+**Constraint**:
+Anything that limits the plan: preference, time, equipment, boredom, a niggle.
+Most of it is not medical.
+
+**Exclusion**:
+A **hard** engine boundary, reserved for safety: a movement pattern, or
+everything loading a named joint, that cannot be prescribed, with a re-test
+date. Those are the two granularities a person can actually report at. A
+preference never becomes an exclusion — otherwise you wall off a pattern
+forever and nobody will be able to reopen it.
+_Avoid_: an exclusion on an exercise id — there is no third granularity.
+
+**Admissible set**:
+The answer to a question the agent chose to ask the engine: the exercises
+compatible with the exclusions, today's equipment and the time available. The
+agent chooses inside it; it never widens it.
+
+**Triage**:
+The interview about *movements*, never about clinical symptoms: *does it hurt
+when you press overhead? at what range? under load or unloaded too?* It
+produces exclusions, not diagnoses. It is one of the inputs, not the main one.
+
+### What the system learns
+
+**Hypothesis**:
+A falsifiable statement about this user, formulated by the agent. Admissible
+only if a trial exists that discriminates it.
+
+**Trial**:
+A modification to the plan designed to knock down a hypothesis: it holds every
+variable fixed but one, it has a duration, and it has an outcome that comes
+back in.
+
+**Conclusion**:
+A fact **about this person**, with a source — something they said, or the
+outcome of a trial. It has a state, and it can be retired.
+
+**Observation**:
+A fact **about the agent**, written by the supervisor looking at the
+trajectory.

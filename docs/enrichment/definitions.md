@@ -10,7 +10,7 @@ hand decision that disagrees with this document is wrong, not the document.
 ## Movement pattern
 
 Twelve values. The level at which the engine programs, excludes and counts
-— TRAINER.md § Glossary — so a boundary drawn wrong here is wrong for every
+— CONTEXT.md — so a boundary drawn wrong here is wrong for every
 row that falls on the wrong side of it, silently.
 
 **`horizontal push`** — the load moves away from the torso on a path roughly
@@ -82,7 +82,7 @@ forced by the catalog, not chosen for elegance: `Spell Caster` and
 `Side Bridge` visibly do not — nothing rotates, the body bends sideways. A
 name that has to cover both fails half its members, and `movement_pattern`
 is prompt surface for the agent from session 4 on, so the difference has to
-be visible in the name. TRAINER.md § Glossary carries the same argument.
+be visible in the name. TRAINER.md § Appendix carries the same argument.
 
 `B2` also settled a real disagreement with the source data:
 `Advanced Kettlebell Windmill` is `mechanic: isolation`, and it is not —

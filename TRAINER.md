@@ -51,7 +51,7 @@ The test to apply to every piece you design:
 
 Not a plan generator. **A loop.**
 
-A plan is a prompt: equipment + time + limitations → table. The value is not in the generation, it is in the adaptation over time: at week 3 the lunges at the end of the workout have cost three missed sessions, and the system **changes**.
+A plan is a prompt: equipment + time + limitations → table. The value is not in the generation, it is in the adaptation over time: at week 3 the lunges at the end of the workout have cost three missed workouts, and the system **changes**.
 
 Persistent state, feedback after every workout, progression, deload, substitution.
 
@@ -95,23 +95,9 @@ Criterion 1 is the product criterion and takes two months. It is not the proof t
 
 ## Glossary
 
-- **movement pattern** — the class of movement, not the exercise. Twelve values: horizontal/vertical push, horizontal/vertical pull, squat, hip hinge, single-leg, core anti-extension, core rotation, core lateral flexion, carry, isolation. It is the level at which you program, exclude and count.
-  - `core anti-extension` — the trunk holds a fixed position while resisting lumbar extension: a plank, an ab-wheel rollout.
-  - `core rotation` — the trunk produces or resists rotation in the transverse plane: a cable chop, a Pallof press, a landmine 180.
-  - `core lateral flexion` — the trunk produces or resists a lean in the frontal plane: a kettlebell windmill, a side plank, a suitcase carry held on one side.
+The vocabulary lives in [CONTEXT.md](CONTEXT.md), which is the only glossary this project has. Every term used here in a load-bearing sense — *movement pattern*, *admissible set*, *exclusion*, *hypothesis*, *trial*, *conclusion*, *observation*, *triage*, *mesocycle*, *volume deficit*, *ramp-in*, and the *workout* / *session* distinction — is defined there, once.
 
-  These were one merged slot for a day, under the name `core rotation`, covering both qualities. The merge did not survive contact with the catalog: a cable chop is not lateral flexion and a windmill is not rotation, so the single name was accurate for half its members and not the other half. `movement_pattern` is prompt surface for the agent from session 4 on — the difference has to be visible in the name, not buried in a paragraph nobody reads before writing a prompt. Twelve patterns, not eleven.
-- **constraint** — anything that limits the plan: preference, time, equipment, boredom, a niggle. Most of it is not medical.
-- **admissible set** — the answer to a question the agent chose to ask the engine: the exercises compatible with the exclusions, today's equipment and the time available. The agent chooses inside it; it never widens it.
-- **exclusion** — a **hard** engine boundary, reserved for safety: a movement pattern, or everything loading a named joint, that cannot be prescribed, with a re-test date. Those are the two granularities a person can actually report at. A preference never becomes an exclusion — otherwise you wall off a pattern forever and nobody will be able to reopen it.
-- **hypothesis** — a falsifiable statement about this user, formulated by the agent. Admissible only if a trial exists that discriminates it.
-- **trial** — a modification to the plan designed to knock down a hypothesis: it holds every variable fixed but one, it has a duration, and it has an outcome that comes back in.
-- **conclusion** — a fact **about this person**, with a source (something they said, or the outcome of a trial). It has a state, and it can be retired.
-- **observation** — a fact **about the agent**, written by the supervisor looking at the trajectory.
-- **triage** — the interview about *movements*, never about clinical symptoms: *does it hurt when you press overhead? at what range? under load or unloaded too?* It produces exclusions, not diagnoses. It is one of the inputs, not the main one.
-- **mesocycle** — 4-6 weeks with a fixed progression scheme and a fixed goal. It is the boundary at which the agent re-evaluates its policies.
-- **volume deficit** — the difference between planned volume and performed volume on a pattern. It absorbs four different mechanisms (substitution, cut for time, shortened workout, skipped workout) into a single quantity.
-- **ramp-in** — a workout on the normal scheme with reduced volume and loads guided by feel, used on returning from a break to realign the loads without estimating them.
+This document argues; it does not define. Where an argument is longer than the definition it stands behind, it stays here and CONTEXT.md points at it.
 
 ---
 
@@ -543,7 +529,7 @@ Two axes, with an obvious human label in most cases.
 | *«this user responds well to high volume»* (inferred) | **no** | no source |
 | *«this suits me well»*, after 6 weeks of falling volume | **suspect** | drift certifying itself |
 
-**Axis B — is it dangerous across sessions?**
+**Axis B — is it dangerous across workouts?**
 
 | situation | flag |
 |---|---|
@@ -643,12 +629,14 @@ No public catalog has the necessary fields. `force: "push"` does not distinguish
 
 | field | values |
 |---|---|
-| `movement_pattern` | the 12 from the glossary |
+| `movement_pattern` | the twelve in CONTEXT.md |
 | `loaded_joints` | shoulder, elbow, wrist, lumbar spine, hip, knee, ankle |
 | `spinal_axial_load` | yes / no |
 | `required_stability` | high / medium / low |
 | `setup_cost_min` | minutes |
 | `regression_of` / `variant_of` | id |
+
+The twelve were eleven for a day: `core rotation` and `core lateral flexion` were one merged slot, under the first of those two names, covering both qualities. The merge did not survive contact with the catalog — a cable chop is not lateral flexion and a windmill is not rotation, so the single name was accurate for half its members and not for the other half. `movement_pattern` is prompt surface for the agent from session 4 on, and a difference that matters there has to be visible in the name rather than buried in a paragraph nobody reads before writing a prompt. Twelve patterns, not eleven.
 
 **A seventh field was specified here and has been removed from v1**: `required_rom`, the triple `(joint, movement, degrees)` — military press `(shoulder, flexion, 180)`, flat bench `(shoulder, flexion, 90)` — filtered by `NOT (joint='shoulder' AND movement='flexion' AND degrees > 120)`.
 
