@@ -179,7 +179,7 @@ def test_an_amount_of_zero_is_refused_by_the_block_itself() -> None:
 def test_a_plan_inside_every_rule_passes(connection: sqlite3.Connection) -> None:
     parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
-    plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
+    plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
 
 
 def test_an_id_outside_the_set_names_the_equipment(
@@ -188,7 +188,7 @@ def test_an_id_outside_the_set_names_the_equipment(
     parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
+        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
 
     assert "Dumbbell_Bench_Press" in str(rejected.value)
     assert "dumbbell" in str(rejected.value)
@@ -207,7 +207,7 @@ def test_an_id_outside_the_set_names_the_exclusion(
     )
 
     with pytest.raises(plans.PlanRejected, match="excluded"):
-        plans.validate(connection, plans.to_blocks(parsed), request)
+        plans.validate(connection, plans.to_blocks(parsed), request, parsed)
 
 
 def test_an_id_outside_the_set_names_the_setup_cost(
@@ -221,6 +221,7 @@ def test_an_id_outside_the_set_names_the_setup_cost(
             connection,
             plans.to_blocks(parsed),
             plans.Request(equipment=("barbell",), budget_min=2),
+            parsed,
         )
 
 
@@ -230,7 +231,7 @@ def test_an_id_the_catalog_does_not_have_is_named_as_an_id(
     parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "prescription": {"unit": "reps", "amount": 8}})))
 
     with pytest.raises(plans.PlanRejected, match="Barbell_Sqvat"):
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
+        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
 
 
 def test_a_row_enrichment_does_not_cover_is_rejected_as_that_state(
@@ -245,6 +246,7 @@ def test_a_row_enrichment_does_not_cover_is_rejected_as_that_state(
             connection,
             plans.to_blocks(parsed),
             plans.Request(equipment=("barbell", "body only"), budget_min=45),
+            parsed,
         )
 
 
@@ -257,7 +259,7 @@ def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
     blocks = plans.to_blocks(parsed)
 
     with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(connection, blocks, BARBELL_45)
+        plans.validate(connection, blocks, BARBELL_45, parsed)
 
     assert "45" in str(rejected.value)
     assert "over" in str(rejected.value)
@@ -273,7 +275,7 @@ def test_an_exercise_written_twice_is_refused(connection: sqlite3.Connection) ->
     )
 
     with pytest.raises(plans.PlanRejected, match="more than once"):
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45)
+        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
 
 
 def test_an_unenriched_catalog_is_a_state_not_an_empty_set(database_file: Path) -> None:
@@ -286,7 +288,7 @@ def test_an_unenriched_catalog_is_a_state_not_an_empty_set(database_file: Path) 
         parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
         with pytest.raises(admissible.AdmissibleError, match="trainer enrich derive"):
-            plans.validate(opened, plans.to_blocks(parsed), BARBELL_45)
+            plans.validate(opened, plans.to_blocks(parsed), BARBELL_45, parsed)
 
 
 # -- the reason agrees with the set -------------------------------------------
@@ -444,7 +446,148 @@ def test_an_exercise_for_another_day_is_rejected_naming_what_today_trains(
             connection,
             plans.to_blocks(parsed),
             plans.Request(equipment=("dumbbell",), budget_min=45, groups=("legs",)),
+            parsed,
         )
 
     assert "chest" in str(rejected.value)
     assert "legs" in str(rejected.value)
+
+
+# -- the preferences, and the plan you turned down ----------------------------
+
+
+LEG_DAY = plans.Request(
+    equipment=("barbell",), budget_min=45, preferences=("Barbell_Squat",)
+)
+
+
+def prefers_not(text: str) -> plans.WorkoutPlan:
+    return plans.parse(text)
+
+
+def test_a_preference_prescribed_silently_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """TRAINER.md's fourth invariant is *nothing the user has refused; and if
+    it proposes it again, it says so and asks*. Silence is the failure."""
+    parsed = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8}}))
+    )
+
+    with pytest.raises(plans.PlanRejected) as rejected:
+        plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+
+    assert "Barbell_Squat" in str(rejected.value)
+    assert "rather not" in str(rejected.value)
+
+
+def test_a_preference_prescribed_with_a_reason_is_allowed(
+    connection: sqlite3.Connection,
+) -> None:
+    """An agent that has read the history and thinks the user should revisit
+    something is doing its job. One that slips it in is not."""
+    parsed = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8},
+                        "despite": "nothing else your equipment reaches loads the knee"}))
+    )
+
+    plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+
+
+def test_an_empty_acknowledgement_does_not_count(
+    connection: sqlite3.Connection,
+) -> None:
+    """Whitespace is not saying so."""
+    parsed = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8},
+                        "despite": "   "}))
+    )
+
+    with pytest.raises(plans.PlanRejected):
+        plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+
+
+def test_a_preference_is_not_an_exclusion_and_stays_admissible(
+    connection: sqlite3.Connection,
+) -> None:
+    """An exclusion is safety and the engine takes it out of the space. A
+    preference is knowledge of the person, and the agent may still reach for
+    it -- which is only possible if it is still there to reach for."""
+    inside = {
+        exercise.id
+        for exercise in admissible.admissible_set(
+            connection, LEG_DAY.exclusions, LEG_DAY.equipment, LEG_DAY.budget_min
+        )
+    }
+
+    assert "Barbell_Squat" in inside
+
+
+def test_the_acknowledgement_is_printed_where_it_will_be_read(
+    connection: sqlite3.Connection,
+) -> None:
+    """On its own line and marked. Folded into the block's reason it becomes
+    one clause among several, and the thing the user has to notice is the
+    thing they were asked about."""
+    out = rendered(
+        connection,
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8},
+                        "despite": "nothing else loads the knee today"})),
+    )
+
+    assert "! you said no to this: nothing else loads the knee today" in out
+    assert out.isascii()
+
+
+def test_the_plan_that_was_refused_is_not_an_answer(
+    connection: sqlite3.Connection,
+) -> None:
+    """Asked again, it has to answer differently. Handing back the same
+    document is the one response that is certainly not a second proposal."""
+    text = document(block({"exercise_id": "Barbell_Squat",
+                           "prescription": {"unit": "reps", "amount": 8}}))
+    again = plans.parse(text)
+    request = plans.Request(
+        equipment=("barbell",), budget_min=45, refused=plans.parse(text)
+    )
+
+    with pytest.raises(plans.PlanRejected, match="just refused"):
+        plans.validate(connection, plans.to_blocks(again), request, again)
+
+
+def test_a_different_plan_after_a_refusal_passes(
+    connection: sqlite3.Connection,
+) -> None:
+    """What makes the second one better is the agent's business; a rule about
+    *how* different it must be would be this module deciding method."""
+    refused = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8}}))
+    )
+    offered = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 5}}, rounds=5))
+    )
+    request = plans.Request(equipment=("barbell",), budget_min=45, refused=refused)
+
+    plans.validate(connection, plans.to_blocks(offered), request, offered)
+
+
+def test_an_acknowledgement_of_something_nobody_refused_is_rejected(
+    connection: sqlite3.Connection,
+) -> None:
+    """Strict structured output puts `despite` on every item, so a model that
+    writes a sentence where `null` belongs invents a refusal the user never
+    made -- and the renderer prints it back to them as their own words."""
+    parsed = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8},
+                        "despite": "you hate these but it is all that is left"}))
+    )
+
+    with pytest.raises(plans.PlanRejected, match="did not"):
+        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)

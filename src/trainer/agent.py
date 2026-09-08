@@ -519,11 +519,41 @@ def brief(request: plans.Request) -> str:
             "`admissible_set` for those groups; anything else is not today's "
             "workout."
         )
+    if request.allocation:
+        divided = ", ".join(
+            f"{group} {minutes} min" for group, minutes in request.allocation
+        )
+        lines.append(
+            f"The time divides over them as {divided}. That is a starting "
+            "point and not an instruction: `allocate` will divide it on any "
+            "proportions you think are better."
+        )
     if request.exclusions:
         lines.append(
             "Excluded, and already filtered out of the admissible set: "
             + ", ".join(f"{e.granularity} {e.value}" for e in request.exclusions)
             + "."
+        )
+    if request.preferences:
+        lines.append(
+            "The user has said they would rather not do: "
+            + ", ".join(request.preferences)
+            + ". These are preferences, not exclusions, so they are still in "
+            "the admissible set. Leave them out, or propose one and put the "
+            "reason in that item's `despite` -- proposing one silently is "
+            "rejected."
+        )
+    if request.refused is not None:
+        lines.append(
+            "You proposed this workout and the user turned it down:\n"
+            + request.refused.model_dump_json(indent=1)
+        )
+        if request.because:
+            lines.append(f"They said: {request.because}")
+        lines.append(
+            "Propose a different one. Do not argue it, do not hand back the "
+            "same plan, and do not give up and offer something token: they "
+            "still want to train today."
         )
     lines.append("Plan the workout.")
     return "\n".join(lines)
@@ -619,7 +649,7 @@ def _refusal(
     names a rule.
     """
     try:
-        plans.validate(connection, plans.to_blocks(emitted), request)
+        plans.validate(connection, plans.to_blocks(emitted), request, emitted)
     except (plans.PlanError, plans.PlanRejected) as error:
         return str(error)
     return None

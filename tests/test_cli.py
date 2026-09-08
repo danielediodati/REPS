@@ -1676,3 +1676,280 @@ def test_plan_checks_a_hand_written_plan_against_what_today_trains(
     assert result.exit_code != 0
     assert "biceps" in result.output
     assert "legs" in result.output
+
+
+# --- the request the agent is actually asked ---------------------------------
+
+SPLIT = """\
+cycle_length = 4
+duration_cap_min = 60
+volume_denominator = "cycle"
+split = [
+    ["chest", "shoulders", "arms"],
+    ["back", "arms"],
+    ["legs", "core"],
+    ["chest", "back", "shoulders"],
+]
+"""
+
+
+@pytest.fixture()
+def declared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    written = tmp_path / "training.toml"
+    written.write_text(SPLIT, encoding="utf-8")
+    monkeypatch.setenv("TRAINER_CONFIG", str(written))
+    return written
+
+
+def test_plan_takes_its_groups_from_the_workout_of_the_split(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    """Workout 3 of that cycle is legs and core, so a curl is not today."""
+    plan_file = write_plan(
+        tmp_path,
+        squat_block(items=[{"exercise_id": "Dumbbell_Bicep_Curl",
+                            "prescription": {"unit": "reps", "amount": 12}}]),
+    )
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", plan_file, "--equipment", "dumbbell", "--workout", "3"],
+    )
+
+    assert result.exit_code != 0
+    assert "biceps" in result.output
+    assert "legs" in result.output
+
+
+def test_plan_defaults_the_time_to_the_declared_cap(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "3"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "of 60" in result.output
+
+
+def test_plan_refuses_a_time_over_the_declared_cap(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    """Refused and not clamped: quietly planning 60 minutes for someone who
+    asked for 90 is the engine deciding how long to train."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "3", "--time", "90"],
+    )
+
+    assert result.exit_code != 0
+    assert "over the 60" in result.output
+
+
+def test_plan_reports_a_workout_outside_the_cycle_as_a_state(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "9"],
+    )
+
+    assert result.exit_code != 0
+    assert "outside a cycle of 4" in result.output
+    assert "1 to 4" in result.output
+
+
+def test_plan_with_no_training_config_names_that_state(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Never a complaint about a missing field: nobody has declared anything
+    yet, and the way out is copying the example."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "2"],
+    )
+
+    assert result.exit_code != 0
+    assert "no training configuration yet" in result.output
+    assert "training.example.toml" in result.output
+
+
+def test_plan_refuses_a_workout_and_a_group_together(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "3", "--group", "arms"],
+    )
+
+    assert result.exit_code != 0
+    assert "one or the other" in result.output
+
+
+def test_plan_refuses_a_reason_with_nothing_it_is_about(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45",
+         "--because", "I do not feel like it"],
+    )
+
+    assert result.exit_code != 0
+    assert "--refused" in result.output
+
+
+# --- the plan you turned down ------------------------------------------------
+
+
+def test_plan_proposes_again_when_one_is_refused(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two turns, not a conversation: the refused plan and the reason are
+    inputs to a fresh run."""
+    from test_agent import good_plan
+
+    refused = tmp_path / "refused.json"
+    refused.write_text(good_plan("Barbell_Squat").model_dump_json(), encoding="utf-8")
+    scripted(monkeypatch, emitted=good_plan("Standing_Military_Press"))
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45",
+         "--refused", str(refused), "--because", "I do not feel like squatting"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Standing Military Press" in result.output
+    assert "Barbell Squat" not in result.output
+
+
+def test_plan_refuses_to_hand_back_the_plan_that_was_refused(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_agent import good_plan
+
+    same = good_plan("Barbell_Squat")
+    refused = tmp_path / "refused.json"
+    refused.write_text(same.model_dump_json(), encoding="utf-8")
+    scripted(monkeypatch, emitted=same)
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45",
+         "--refused", str(refused), "--because", "no"],
+    )
+
+    assert result.exit_code != 0
+    assert "just refused" in result.output
+
+
+def test_the_refusal_writes_nothing_to_the_database(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TRAINER.md's non-negotiable constraint: SQLite never persists a
+    conversation fact. The refused plan and what the user said about it are
+    the most conversational things this project handles."""
+    from test_agent import good_plan
+
+    refused = tmp_path / "refused.json"
+    refused.write_text(good_plan("Barbell_Squat").model_dump_json(), encoding="utf-8")
+    scripted(monkeypatch, emitted=good_plan("Standing_Military_Press"))
+    before = enriched.read_bytes()
+
+    result = runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45",
+         "--refused", str(refused), "--because", "the squat rack was taken"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert enriched.read_bytes() == before
+
+
+def test_plan_refuses_a_time_over_the_cap_without_a_workout_too(
+    runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
+) -> None:
+    """The cap is a ceiling on any workout, not one that only applies when the
+    rotation is named. Loading the configuration only when `--workout` was
+    given let `--time 500` straight through."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "500"],
+    )
+
+    assert result.exit_code != 0
+    assert "over the 60" in result.output
+
+
+def test_plan_works_with_no_training_config_when_time_is_given(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No declared rotation is a state, not a failure: `--time` and `--group`
+    name everything a plan needs, so somebody who has not written the file yet
+    can still ask for a workout."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "of 45" in result.output
+
+
+def test_plan_reports_a_mistyped_group_in_words(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`trainer admissible` answers the same typo cleanly, so a traceback here
+    would be the two commands disagreeing about one mistake."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--group", "chets"],
+    )
+
+    assert result.exit_code != 0
+    assert "not a muscle group" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_plan_survives_the_same_group_named_twice(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Left in, the even division sums to half a workout -- arithmetic nobody
+    wrote, blamed on the person who typed the flag twice."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--group", "legs", "--group", "legs"],
+    )
+
+    assert result.exit_code == 0, result.output
+
+
+def test_plan_refuses_a_preference_that_names_no_exercise(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """A mistyped id is the worst outcome available: the preference is
+    silently unenforced, and the typo travels to the model as something it
+    must not prescribe."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45", "--avoid", "Barbel_Squat"],
+    )
+
+    assert result.exit_code != 0
+    assert "no such exercise: 'Barbel_Squat'" in result.output

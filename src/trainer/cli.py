@@ -22,6 +22,7 @@ from click.core import ParameterSource
 from trainer import __version__, agent, plan
 from trainer.engine import (
     admissible,
+    budget,
     catalog,
     config,
     database,
@@ -65,6 +66,13 @@ def reported() -> Iterator[None]:
     except exclusions.ExclusionError as error:
         raise click.ClickException(str(error)) from error
     except admissible.AdmissibleError as error:
+        raise click.ClickException(str(error)) from error
+    except budget.BudgetError as error:
+        # `trainer plan` is the first command that divides the time. A
+        # mistyped `--group` reaches `allocate`, which states the failure in
+        # words, and without this clause those words arrive as a traceback --
+        # while `trainer admissible` answers the same typo cleanly, so the two
+        # commands disagree about the same mistake.
         raise click.ClickException(str(error)) from error
     except duration.DurationError as error:
         # `trainer plan` is the first command that costs a plan. `tools.py`
@@ -667,8 +675,16 @@ def admissible_command(
     "budget",
     metavar="MINUTES",
     type=click.IntRange(min=0),
-    required=True,
-    help="Minutes available. The plan is checked against this, never cut to fit.",
+    help="Minutes available. Defaults to the duration cap you declared, and is "
+    "refused above it. The plan is checked against this, never cut to fit.",
+)
+@click.option(
+    "--workout",
+    "workout",
+    metavar="N",
+    type=click.IntRange(min=1),
+    help="Which workout of the declared rotation this is. Its muscle groups "
+    "come from the split in training.toml, and the time divides over them.",
 )
 @click.option(
     "--exclude",
@@ -682,8 +698,30 @@ def admissible_command(
     "groups",
     metavar="GROUP",
     multiple=True,
-    help="A muscle group this workout trains; repeat for more than one. "
-    "Left out, the whole admissible space is answered.",
+    help="A muscle group this workout trains; repeat for more than one. Use "
+    "--workout to take them from the split instead.",
+)
+@click.option(
+    "--avoid",
+    "avoid",
+    metavar="EXERCISE_ID",
+    multiple=True,
+    help="An exercise you would rather not do. A preference, not a safety "
+    "exclusion: it stays admissible, and the agent may propose it if it says why.",
+)
+@click.option(
+    "--refused",
+    "refused_path",
+    metavar="FILE",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A plan you have just turned down. Asks for a different one.",
+)
+@click.option(
+    "--because",
+    "because",
+    metavar="TEXT",
+    default="",
+    help="Why you turned it down. Reaches the model; nothing is written down.",
 )
 @click.option(
     "--call-budget",
@@ -706,9 +744,13 @@ def plan_command(
     context: click.Context,
     source: Path | None,
     equipment: tuple[str, ...],
-    budget: int,
+    budget: int | None,
+    workout: int | None,
     exclude: tuple[str, ...],
     groups: tuple[str, ...],
+    avoid: tuple[str, ...],
+    refused_path: Path | None,
+    because: str,
     call_budget: int,
     record_path: Path | None,
 ) -> None:
@@ -725,19 +767,42 @@ def plan_command(
     rejected plan is not printed: half a workout with a refusal under it reads
     as a workout with a footnote.
     """
-    parsed: plan.WorkoutPlan | None = None
     if source is not None:
         _only_with_a_model(
-            context, ("--call-budget", "call_budget"), ("--record", "record_path")
+            context,
+            ("--call-budget", "call_budget"),
+            ("--record", "record_path"),
+            ("--refused", "refused_path"),
+            ("--because", "because"),
         )
-        with reported():
-            parsed = plan.parse(source.read_text(encoding="utf-8"))
-            plan.to_blocks(parsed)
     elif record_path is not None:
         # Checked before the model is called rather than after. `--record` is
         # the artefact the run exists to produce, and a path that cannot be
         # written is worth finding out about while the run is still free.
         _writable(record_path)
+
+    if because and refused_path is None:
+        raise click.UsageError("--because says why you refused a plan; --refused says which")
+
+    # The request first, and the plan after it. The plan is checked *against*
+    # the request, so a workout outside the cycle or a time over the cap is
+    # the more basic thing to be told about -- reported the other way round,
+    # a mistyped file hides a mistyped rotation.
+    with reported():
+        declared = _declared()
+        budget = _minutes(budget, declared)
+        groups = _groups(workout, declared, groups)
+        refused = (
+            plan.parse(refused_path.read_text(encoding="utf-8"))
+            if refused_path is not None
+            else None
+        )
+
+    parsed: plan.WorkoutPlan | None = None
+    if source is not None:
+        with reported():
+            parsed = plan.parse(source.read_text(encoding="utf-8"))
+            plan.to_blocks(parsed)
 
     with _opened() as connection:
         _require_enrichment(connection)
@@ -749,6 +814,10 @@ def plan_command(
                 budget_min=budget,
                 exclusions=(*standing, *classified),
                 groups=groups,
+                allocation=_divided(budget, groups),
+                preferences=_preferred(connection, avoid),
+                refused=refused,
+                because=because,
             )
             try:
                 if parsed is not None:
@@ -760,6 +829,113 @@ def plan_command(
 
     for line in lines:
         click.echo(line)
+
+
+def _declared() -> config.TrainingConfig | None:
+    """The training configuration, or `None` when there is not one yet.
+
+    Absent is a state rather than a failure *here*: `--time` and `--group`
+    name everything a plan needs, so somebody who has not declared a rotation
+    can still ask for a workout. It becomes a failure the moment something is
+    asked for that only the file can answer, and then it is reported with the
+    file's own wording rather than a second phrasing of it.
+
+    Only `NoTrainingConfig` is caught. A file that exists and is wrong is a
+    different thing entirely and must not be read as one that is not there.
+    """
+    try:
+        return config.load()
+    except config.NoTrainingConfig:
+        return None
+
+
+def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
+    """Today's budget: what was asked for, or the cap that was declared.
+
+    The cap is a ceiling and not a suggestion -- it is the one number in
+    `training.toml` that says *a workout never runs longer than this* -- so a
+    larger `--time` is refused rather than honoured, **whether or not
+    `--workout` was given**. Refused and not clamped: quietly planning 60
+    minutes for somebody who asked for 90 is the engine deciding how long they
+    train.
+    """
+    if declared is None:
+        if asked is None:
+            raise config.NoTrainingConfig(config.config_path())
+        return asked
+    if asked is None:
+        return declared.duration_cap_min
+    if asked > declared.duration_cap_min:
+        raise click.ClickException(
+            f"{asked} minutes is over the {declared.duration_cap_min} you "
+            f"declared as the cap in {config.config_path().name}. Raise the "
+            "cap there if a longer workout is what you meant"
+        )
+    return asked
+
+
+def _groups(
+    workout: int | None,
+    declared: config.TrainingConfig | None,
+    given: tuple[str, ...],
+) -> tuple[str, ...]:
+    """The groups this workout trains: off the declared split, or named by hand.
+
+    `--workout` is a flag rather than something derived because nothing tracks
+    where in the rotation you are: `workouts` is session 5. Naming it here is
+    what stops that session from inventing it.
+
+    Repeats are dropped rather than refused. `--group legs --group legs` is a
+    slip with one obvious reading, and left in it makes the even division sum
+    to half a workout -- arithmetic nobody wrote, blamed on the person who
+    typed the flag twice.
+    """
+    if workout is None:
+        return tuple(dict.fromkeys(given))
+    if given:
+        raise click.UsageError(
+            "--workout takes its groups from the split; --group names them by "
+            "hand. Use one or the other"
+        )
+    if declared is None:
+        raise config.NoTrainingConfig(config.config_path())
+    try:
+        return declared.groups_for(workout)
+    except IndexError as error:
+        raise click.ClickException(str(error)) from error
+
+
+def _divided(minutes: int, groups: tuple[str, ...]) -> tuple[tuple[str, int], ...]:
+    """The minutes over the groups, evenly.
+
+    Offered rather than imposed, the way the rest bands are (ADR-0001): the
+    agent has `allocate` and may divide the time on any proportions it can
+    argue for. Even shares because this layer has no grounds for any other
+    split -- *60-40 on two groups* is what one workout might look like, not a
+    law, and it means nothing the moment a workout trains three.
+    """
+    if not groups:
+        return ()
+    share = 1 / len(groups)
+    allocated = budget.allocate(minutes, {group: share for group in groups})
+    return tuple((group, allocated[group]) for group in groups)
+
+
+def _preferred(connection: sqlite3.Connection, avoid: tuple[str, ...]) -> tuple[str, ...]:
+    """The exercises the user would rather not do, checked against the catalog.
+
+    A mistyped id is the worst possible outcome here: the preference is
+    silently unenforced, the plan comes back with the thing in it, and the
+    typo also travels to the model as something it must not prescribe. Read
+    from the data, the way every other vocabulary in this project is.
+    """
+    for exercise_id in avoid:
+        if catalog.exercise(connection, exercise_id) is None:
+            raise click.ClickException(
+                f"no such exercise: {exercise_id!r}. A preference names an "
+                "exercise by id, the way a plan does"
+            )
+    return tuple(dict.fromkeys(avoid))
 
 
 def _only_with_a_model(context: click.Context, *options: tuple[str, str]) -> None:
@@ -797,7 +973,7 @@ def _checked(
     budget: int,
 ) -> list[str]:
     blocks = plan.to_blocks(parsed)
-    plan.validate(connection, blocks, request)
+    plan.validate(connection, blocks, request, parsed)
     return plan.render(connection, parsed, blocks, budget)
 
 

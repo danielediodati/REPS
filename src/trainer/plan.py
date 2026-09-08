@@ -90,6 +90,23 @@ class PlanItem(BaseModel):
         ),
     )
     prescription: Prescription
+    despite: str | None = Field(
+        default=None,
+        description=(
+            "Null, except when this exercise is one the user said they would "
+            "rather not do. Then it says why you are proposing it anyway, in "
+            "one sentence, so they can say no again."
+        ),
+    )
+    """A preference is not an exclusion.
+
+    An exclusion is safety and the engine removes it from the space; a
+    preference is knowledge of the person, and TRAINER.md's fourth invariant
+    is *nothing the user has refused -- and if it proposes it again, it says
+    so and asks*. A field is what makes *says so* checkable: proposing one
+    silently is refused, proposing it with a reason is a question the user can
+    answer by refusing the plan.
+    """
 
 
 class PlanBlock(BaseModel):
@@ -127,11 +144,16 @@ class WorkoutPlan(BaseModel):
 class Request:
     """What the plan was asked for, and what it is checked against.
 
-    Three fields today, all of them things `trainer admissible` already takes.
-    Ticket 04 fills in the rest -- which workout of the split, the allocation
-    over its groups, the preferences -- and this is the object it grows, so
-    that the validator keeps checking against the request that was made rather
-    than against arguments a caller assembled at the call site.
+    One object, assembled before the model is called, out of what the project
+    already knows: which workout of the declared rotation this is, the groups
+    it trains and how its minutes divide over them, today's equipment, the
+    exclusions in force, what the user said they would rather not do, and --
+    on a second pass -- the plan they just turned down.
+
+    It is one object rather than a handful of arguments so that the validator
+    checks against *the request that was made*. Assembled at each call site,
+    the two would drift, and a plan would be checked against a request nobody
+    asked for.
     """
 
     equipment: tuple[str, ...]
@@ -140,6 +162,30 @@ class Request:
     groups: tuple[str, ...] = ()
     """The muscle groups this workout trains. Empty is the whole space, which
     is what a caller who has not said which workout this is has asked for."""
+
+    allocation: tuple[tuple[str, int], ...] = ()
+    """Minutes per group, divided **before** the plan is built rather than cut
+    after it (ADR-0001). Offered rather than imposed, the way the rest bands
+    are: the agent has `allocate` and may divide the time differently, and
+    nothing here checks that it did not."""
+
+    preferences: tuple[str, ...] = ()
+    """Exercise ids the user said they would rather not do.
+
+    Not exclusions. An exclusion is safety and the engine removes it from the
+    admissible space; a preference is knowledge of the person, and the agent
+    may still propose one -- as long as it says so, in the item's `despite`.
+    Stated per run, because `conclusions` is session 8 and there is nowhere to
+    keep them yet."""
+
+    refused: WorkoutPlan | None = None
+    """A plan the user just turned down, on a second pass. The new one has to
+    differ from it; how is the agent's business."""
+
+    because: str = ""
+    """What the user said when they turned it down. Reaches the model, is
+    checked by nothing, and is persisted nowhere: SQLite never keeps a
+    conversation fact."""
 
 
 def parse(text: str) -> WorkoutPlan:
@@ -203,7 +249,10 @@ def to_blocks(plan: WorkoutPlan) -> tuple[duration.Block, ...]:
 
 
 def validate(
-    connection: sqlite3.Connection, blocks: duration.Plan, request: Request
+    connection: sqlite3.Connection,
+    blocks: duration.Plan,
+    request: Request,
+    plan: WorkoutPlan,
 ) -> None:
     """The three rules, in the order that makes the message useful.
 
@@ -214,11 +263,18 @@ def validate(
     than as an exercise that could not be costed. The clock last, because it
     is the only one of the three that is about the plan as a whole.
 
+    The last two are about the request rather than the catalog, and they come
+    after it for that reason: an id nobody has is not a preference violation,
+    it is a typo, and saying so in the wrong order sends the reader looking in
+    the wrong place.
+
     Nothing is trimmed and nothing is re-asked. ADR-0001.
     """
     _no_exercise_twice(blocks)
     _every_id_admissible(connection, blocks, request)
     _inside_the_budget(connection, blocks, request)
+    _preferences_acknowledged(plan, request)
+    _not_the_plan_that_was_refused(plan, request)
 
 
 def _no_exercise_twice(blocks: duration.Plan) -> None:
@@ -269,6 +325,74 @@ def _every_id_admissible(
         )
         lines.append(f"  {exercise_id}: {why or 'not in the admissible set'}")
     raise PlanRejected("\n".join(lines))
+
+
+def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> None:
+    """Nothing the user refused -- unless the agent says why.
+
+    TRAINER.md's fourth invariant is *nothing the user has refused; and if it
+    proposes it again, it says so and asks*. Both halves are here: proposing
+    one silently is refused, and proposing one with a sentence attached is
+    allowed, printed prominently, and left for the user to turn down.
+
+    Silence is the failure, not the choice. An agent that has read the history
+    and thinks the user should revisit something is doing its job; one that
+    slips it in among five other blocks is not.
+    """
+    invented = [
+        item.exercise_id
+        for block in plan.blocks
+        for item in block.items
+        if (item.despite or "").strip() and item.exercise_id not in request.preferences
+    ]
+    if invented:
+        # Strict structured output puts `despite` on every item, so a model
+        # that writes a sentence where `null` belongs is inventing a refusal
+        # the user never made -- and the renderer would print it back to them
+        # as their own words.
+        raise PlanRejected(
+            "the plan says the user refused exercises they did not:\n"
+            + "\n".join(f"  {exercise_id}" for exercise_id in invented)
+            + "\n`despite` is for an exercise they actually said no to; it is "
+            "null everywhere else."
+        )
+
+    if not request.preferences:
+        return
+
+    unspoken = [
+        item.exercise_id
+        for block in plan.blocks
+        for item in block.items
+        if item.exercise_id in request.preferences and not (item.despite or "").strip()
+    ]
+    if unspoken:
+        raise PlanRejected(
+            "the plan prescribes exercises the user said they would rather not "
+            "do, without saying why:\n"
+            + "\n".join(f"  {exercise_id}" for exercise_id in unspoken)
+            + "\nA preference is not an exclusion -- propose it again if there "
+            "is a reason, and put the reason in the item's `despite`."
+        )
+
+
+def _not_the_plan_that_was_refused(plan: WorkoutPlan, request: Request) -> None:
+    """Asked again, it has to answer differently.
+
+    The weakest possible reading of *proposes again* -- not the same document
+    -- and deliberately so: what makes the second plan better is the agent's
+    business, and a rule about *how* different it must be would be this file
+    deciding method. What it refuses is the one answer that is certainly not a
+    second proposal.
+    """
+    if request.refused is None:
+        return
+    if plan == request.refused:
+        raise PlanRejected(
+            "this is the plan that was just refused, unchanged. Propose a "
+            "different one: the user said no, and saying it again is not an "
+            "answer"
+        )
 
 
 def _inside_the_budget(
@@ -331,6 +455,11 @@ def render(
         )
         for item in shape.items:
             lines.append(f"  {names[item.exercise_id]:<{column}}{_prescription(item)}")
+            if item.despite:
+                # On its own line and marked, not folded into the block's
+                # reason: this is the agent proposing something the user said
+                # no to, and it has to be the thing they notice.
+                lines.append(f"    ! you said no to this: {item.despite}")
         lines.append(f"  why: {shape.reason}")
         lines.append("")
 

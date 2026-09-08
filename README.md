@@ -38,7 +38,9 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
-uv run trainer plan --equipment dumbbell --time 45 --group legs --group core
+uv run trainer plan --equipment dumbbell --workout 3          # groups and time from your split
+uv run trainer plan --equipment dumbbell --workout 3 --avoid Dumbbell_Lunges
+uv run trainer plan --equipment dumbbell --workout 3 --refused plan.json --because "not today"
 uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
 uv run trainer config                         # what you declared: cycle, cap, split
@@ -111,6 +113,12 @@ This is the door session 4's agent comes out through, built and testable before 
 **A call budget.** Tool calls are local Python — zero network, zero tokens to execute — so what they cost is the context round-trip, and that is bounded. When the budget runs out the loop does not fail: it stops offering tools and asks for the plan with what it has. `--call-budget N` overrides the default of 12.
 
 **No way back in.** A plan the validator refuses is reported as refused, with the rule that refused it. It is not trimmed and it is not handed back to the model to fix: *propose → check → correct* is the loop this project deliberately does not have, because the constraints are applied upstream, in the request. A refusal is a bug to go and read.
+
+**What it is asked.** `--workout N` says which workout of the rotation this is; its muscle groups come from the `split` you declared, and the time divides evenly over them — offered as a starting point, not imposed, because the agent has `allocate` and ADR-0001 leaves the proportions to it. The time defaults to your declared `duration_cap_min` and is **refused** above it rather than clamped: quietly planning 60 minutes for someone who asked for 90 is the engine deciding how long you train. Persisted exclusions still inside their re-test date apply without being asked for; `--exclude` adds more for one run and writes nothing down.
+
+**Preferences are not exclusions.** `--avoid EXERCISE_ID` says what you would rather not do. An exclusion is safety and the engine removes it from the space; a preference is knowledge of you, so it stays admissible and the agent may still reach for it — as long as it says why, in that item's `despite`, which the renderer prints on its own line. Proposing one silently is rejected. That is both halves of *«nothing the user has refused; and if it proposes it again, it says so and asks»*.
+
+**The plan you don't want.** `--refused FILE --because "..."` hands back a plan you turned down and asks for another one. Two turns, not a conversation: the refused plan and what you said are inputs to a fresh run, and the only rule is that the new plan is not the old one — what makes it better is the agent's business. Nothing about the exchange is written down; SQLite never persists a conversation fact.
 
 **The run record.** `--record FILE` writes what the model called, in what order, with what arguments, how much budget went, whether it emitted on exhaustion, what it cost in tokens, and the plan — written whichever way the run went, because a refusal is exactly the case you open it for. Session 4's evaluation decides its invariants by reading this rather than by asking the model what it did.
 

@@ -752,15 +752,17 @@ def test_a_provider_that_cannot_be_reached_is_reported_in_words() -> None:
 # -- the shape the model is held to -------------------------------------------
 
 
-def test_strict_mode_requires_every_property_including_the_optional_pair() -> None:
+def test_strict_mode_requires_every_property_including_the_nullable_ones() -> None:
     """Strict mode is constrained decoding, and it demands every property be
-    listed in `required`. Pydantic leaves out the ones with defaults, which is
-    exactly `reps` and `seconds` -- the pair that carries *either reps or
-    seconds*. Their optionality survives as the null in their type."""
+    listed in `required`. Pydantic leaves out the ones carrying a default,
+    which is `despite` -- the field an agent uses to say it is proposing
+    something the user refused. Its optionality survives as the null in its
+    type; what changes is that the model must decide about it rather than
+    leave it out."""
     built = agent.strict_schema(plans.WorkoutPlan)
     item = built["$defs"]["PlanItem"]
 
-    assert set(item["required"]) == {"exercise_id", "prescription"}
+    assert set(item["required"]) == {"exercise_id", "prescription", "despite"}
     assert set(built["$defs"]["Prescription"]["required"]) == {"unit", "amount"}
     assert item["additionalProperties"] is False
     assert built["required"] == ["blocks"]
@@ -888,3 +890,59 @@ def test_the_brief_names_what_today_trains(connection: sqlite3.Connection) -> No
 
     assert "legs, core" in written
     assert "admissible_set" in written
+
+
+# -- the request the model is actually given ----------------------------------
+
+
+def test_the_brief_offers_the_allocation_rather_than_imposing_it() -> None:
+    """Minutes divided before the plan is built rather than cut after it
+    (ADR-0001), and offered the way the rest bands are: the agent has
+    `allocate` and may divide the time differently."""
+    request = plans.Request(
+        equipment=("dumbbell",),
+        budget_min=40,
+        groups=("legs", "core"),
+        allocation=(("legs", 20), ("core", 20)),
+    )
+
+    written = agent.brief(request)
+
+    assert "legs 20 min, core 20 min" in written
+    assert "not an instruction" in written
+
+
+def test_a_preference_reaches_the_model_as_data(connection: sqlite3.Connection) -> None:
+    """Invariant 4 is measured by code against the request, so a preference
+    has to be a field on it and not a sentence somebody typed into a prompt."""
+    request = plans.Request(
+        equipment=("barbell",), budget_min=45, preferences=("Barbell_Squat",)
+    )
+
+    assert request.preferences == ("Barbell_Squat",)
+    assert "Barbell_Squat" in agent.brief(request)
+    assert "despite" in agent.brief(request)
+
+
+def test_the_refused_plan_and_the_reason_reach_the_model() -> None:
+    """Two turns, not a conversation: both are inputs to a fresh run."""
+    request = plans.Request(
+        equipment=("barbell",),
+        budget_min=45,
+        refused=good_plan("Barbell_Squat"),
+        because="I do not feel like squatting",
+    )
+
+    written = agent.brief(request)
+
+    assert "turned it down" in written
+    assert "Barbell_Squat" in written
+    assert "I do not feel like squatting" in written
+    assert "do not give up" in written
+
+
+def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
+    written = agent.brief(plans.Request(equipment=("barbell",), budget_min=45))
+
+    assert "turned it down" not in written
+    assert "rather not" not in written
