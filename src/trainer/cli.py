@@ -19,7 +19,7 @@ from pathlib import Path
 import click
 from click.core import ParameterSource
 
-from trainer import __version__, agent, plan
+from trainer import __version__, agent, evaluation, plan
 from trainer.engine import (
     admissible,
     budget,
@@ -520,6 +520,95 @@ def catalog_command(
             click.echo(f"showing {shown} of {found.total} (--limit 0 for all)")
         else:
             click.echo(f"showing {shown}")
+
+
+@main.command("eval")
+@click.option(
+    "--repetitions",
+    "repetitions",
+    metavar="N",
+    type=click.IntRange(min=1),
+    default=evaluation.REPETITIONS,
+    show_default=True,
+    help="How many times each situation runs. A model is a distribution, so "
+    "one run measures nothing.",
+)
+@click.option(
+    "--only",
+    "only",
+    metavar="NAME",
+    multiple=True,
+    help="Run just these situations, by name. Every run still counts, so a "
+    "partial pass is a partial answer.",
+)
+@click.option(
+    "--records",
+    "records",
+    metavar="DIR",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=evaluation.RECORDS,
+    show_default=True,
+    help="Where each run's record is written. A failure names the file.",
+)
+@click.option(
+    "--call-budget",
+    "call_budget",
+    metavar="N",
+    type=click.IntRange(min=1),
+    default=agent.CALL_BUDGET,
+    show_default=True,
+    help="Tool calls each run may make before it is asked to emit anyway.",
+)
+def eval_command(
+    repetitions: int, only: tuple[str, ...], records: Path, call_budget: int
+) -> None:
+    """Run the six adverse situations against the real agent, and check the
+    six invariants over every run.
+
+    Not *good plan / bad plan*: properties that must hold always, decided by
+    code reading the run record. No model judges another model's output.
+
+    **This is the one command in the project that reaches a provider**, and
+    the only one that spends money. `pytest` never runs it: the suite has no
+    sockets and no credentials, and the checks are covered there against
+    recorded runs instead.
+
+    The bar is 100%, and the command exits non-zero below it.
+    """
+    with _opened() as connection:
+        _require_enrichment(connection)
+        with reported():
+            available = evaluation.situations(connection)
+            chosen = _chosen(available, only)
+            report = evaluation.run(
+                connection,
+                chosen,
+                build=agent.groq,
+                repetitions=repetitions,
+                records=records,
+                budget=call_budget,
+            )
+
+    for line in evaluation.render(report, chosen):
+        click.echo(line)
+    if not report.passed:
+        raise SystemExit(1)
+
+
+def _chosen(
+    available: tuple[evaluation.Situation, ...], only: tuple[str, ...]
+) -> tuple[evaluation.Situation, ...]:
+    if not only:
+        return available
+    known = {situation.name: situation for situation in available}
+    for name in only:
+        if name not in known:
+            raise click.ClickException(
+                f"no situation called {name!r}; they are {', '.join(known)}"
+            )
+    # Named twice is named once. Left in, the situation runs twice the
+    # repetitions against a paid provider and prints two identical rows.
+    return tuple(known[name] for name in dict.fromkeys(only))
 
 
 @main.command("mcp")

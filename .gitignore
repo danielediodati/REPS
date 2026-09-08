@@ -7,3 +7,4 @@ venv/
 *.sqlite
 *.sqlite-journal
 .DS_Store
+eval-runs/

@@ -539,8 +539,8 @@ def brief(request: plans.Request) -> str:
             "The user has said they would rather not do: "
             + ", ".join(request.preferences)
             + ". These are preferences, not exclusions, so they are still in "
-            "the admissible set. Leave them out, or propose one and put the "
-            "reason in that item's `despite` -- proposing one silently is "
+            "the admissible set. Leave them out, or propose one and add a row "
+            "to the plan's `despite` saying why -- proposing one silently is "
             "rejected."
         )
     if request.refused is not None:

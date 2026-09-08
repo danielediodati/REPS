@@ -128,6 +128,28 @@ Copy `.env.example` to `.env` and set `GROQ_API_KEY`; `GROQ_MODEL` overrides the
 
 The suite never reaches a provider: `conftest.py` removes sockets and credentials from every test, so the loop is covered against a stand-in model with scripted replies, and the real one runs only under the evaluation command.
 
+## The measurement
+
+`trainer eval` runs six hand-written, deliberately nasty situations against the real agent and checks six properties over every run — **decided by code**, never by a second model judging the first. For a decidable constraint a validator costs nothing, is not persuadable, and catches all of them rather than most.
+
+The six situations are data: a seventh is a row. Each runs a declared number of times, because a model is a distribution and one green run is not a measurement, and **every run counts** — a run that could not be made counts against the metric too, since a measurement that quietly skipped what it could not do would report on the easy ones. The output is the situation-by-invariant matrix, the single percentage, and what the pass cost in tool calls and tokens. The bar is 100% and the command exits non-zero below it.
+
+```
+                 terminates      time      constraints   preferences   equipment   not degenerate
+no-equipment         ok           ok            ok            ok           ok            ok
+no-history           ok           ok            ok            ok           ok            ok
+contradictory        ok           ok            ok            ok           ok            ok
+
+3 of 3 runs held every invariant -- 100%
+cost: 10 tool calls, 65854 tokens in, 3726 out
+```
+
+Every run's record is written to `eval-runs/`, and a failure names the situation, the invariant and the file — *invariant 3 failed* is a fact, and the record is the only thing that says why.
+
+**It is the one command that reaches a provider**, and the only one that spends money. `pytest` never runs it: the suite has no sockets and no credentials, and the checks are pure functions over a record, so all of them are covered there instead.
+
+**A full pass does not fit Groq's free tier in one day.** The daily ceiling is 200,000 tokens and a pass at three repetitions is roughly twice that. `--only NAME` and `--repetitions N` cut it down; a paid tier runs it whole.
+
 ## Inspecting the engine from a generic client
 
 `trainer mcp` serves the engine's tool surface over MCP on stdio — `admissible_set`, `remaining_budget`, `allocate`, `pattern_history`, `last_performed_load` and `compare_variants`. Point the MCP inspector, or any other generic client, at it and you can call the engine exactly as the agent will, without going through the agent.

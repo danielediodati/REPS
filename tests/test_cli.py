@@ -1953,3 +1953,64 @@ def test_plan_refuses_a_preference_that_names_no_exercise(
 
     assert result.exit_code != 0
     assert "no such exercise: 'Barbel_Squat'" in result.output
+
+
+# --- eval --------------------------------------------------------------------
+#
+# The command itself, not a pass of it: the suite has no sockets and no
+# credentials, so what is checked here is that it stops at that state rather
+# than reaching for a provider, and that its arguments behave.
+
+
+def test_eval_stops_at_the_credentials_state_rather_than_a_socket(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """`conftest.py` takes both away from every test. If this ever reached the
+    network the no-network fixture would fail the run instead -- which is the
+    point: a suite that could quietly start spending money is not a suite."""
+    result = runner.invoke(main, ["eval", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "no Groq credentials" in result.output
+
+
+def test_eval_names_the_situations_when_one_is_mistyped(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(main, ["eval", "--only", "no-equipmnet"])
+
+    assert result.exit_code != 0
+    assert "no situation called" in result.output
+    assert "no-equipment" in result.output
+
+
+def test_eval_leaves_no_records_directory_behind_when_it_never_runs(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """The suite invokes this command to check it stops at the credentials
+    state. A directory made before the first request is litter in whatever
+    working directory pytest happened to start in."""
+    records = tmp_path / "eval-runs"
+
+    runner.invoke(main, ["eval", "--repetitions", "1", "--records", str(records)])
+
+    assert not records.exists()
+
+
+def test_eval_runs_a_situation_named_twice_only_once(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """Left in, it runs twice the repetitions against a paid provider and
+    prints two identical rows."""
+    result = runner.invoke(
+        main,
+        ["eval", "--repetitions", "1", "--only", "no-equipment", "--only", "no-equipment"],
+    )
+
+    rows = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith("no-equipment") and "#" not in line
+    ]
+    assert len(rows) == 1, result.output
+    assert "of 1 runs" in result.output, "it ran the situation more than once"

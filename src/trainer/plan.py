@@ -90,23 +90,6 @@ class PlanItem(BaseModel):
         ),
     )
     prescription: Prescription
-    despite: str | None = Field(
-        default=None,
-        description=(
-            "Null, except when this exercise is one the user said they would "
-            "rather not do. Then it says why you are proposing it anyway, in "
-            "one sentence, so they can say no again."
-        ),
-    )
-    """A preference is not an exclusion.
-
-    An exclusion is safety and the engine removes it from the space; a
-    preference is knowledge of the person, and TRAINER.md's fourth invariant
-    is *nothing the user has refused -- and if it proposes it again, it says
-    so and asks*. A field is what makes *says so* checkable: proposing one
-    silently is refused, proposing it with a reason is a question the user can
-    answer by refusing the plan.
-    """
 
 
 class PlanBlock(BaseModel):
@@ -122,22 +105,76 @@ class PlanBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[PlanItem] = Field(min_length=1)
-    rounds: int
-    rest: int
+    rounds: int = Field(
+        description=(
+            "How many times the block is performed from the top. One exercise "
+            "is straight sets, two is a superset, more is a circuit."
+        ),
+    )
+    rest: int = Field(
+        description=(
+            "Seconds rested after each round -- 90 means a minute and a half. "
+            "Seconds, never milliseconds and never minutes."
+        ),
+    )
     reason: str = Field(min_length=1)
+    """`rounds` and `rest` carry their units in the schema because a bare
+    integer does not.
+
+    An observed run wrote `rest: 60000` -- a minute, in milliseconds -- which
+    costed out at 3,007 minutes against a fifteen-minute budget. The plan was
+    correctly refused and the run was lost, over a unit nobody had told the
+    model. The engine's `Block` has said *seconds after each round* since it
+    was written; what it had never done is say it anywhere the model reads.
+    """
+
+
+class Acknowledgement(BaseModel):
+    """One exercise the user said no to, and why it is in the workout anyway."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    exercise_id: str
+    why: str = Field(min_length=1)
 
 
 class WorkoutPlan(BaseModel):
-    """The whole plan: blocks, in the order they are performed.
+    """The whole plan: blocks in the order they are performed, and whatever in
+    them the user had already said no to.
 
-    Nothing else. What the plan was made *against* -- the equipment, the time,
-    the exclusions -- is the request, and it is deliberately not carried here:
-    a plan that declared its own budget could declare one it fits.
+    What the plan was made *against* -- the equipment, the time, the
+    exclusions -- is the request, and it is deliberately not carried here: a
+    plan that declared its own budget could declare one it fits.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     blocks: list[PlanBlock] = Field(min_length=1)
+    despite: list[Acknowledgement] = Field(
+        default_factory=list,
+        description=(
+            "Empty, unless the workout includes something the user said they "
+            "would rather not do. One entry for each of those, saying why it "
+            "is there anyway, so they can say no again."
+        ),
+    )
+    """A preference is not an exclusion.
+
+    An exclusion is safety and the engine removes it from the space; a
+    preference is knowledge of the person, and TRAINER.md's fourth invariant
+    is *nothing the user has refused -- and if it proposes it again, it says
+    so and asks*. This list is what makes *says so* checkable: prescribing one
+    without a row here is refused, and a row is a question the user answers by
+    refusing the plan.
+
+    **A list on the plan, not a field on every item**, which is where it
+    started. Strict structured output puts every property on every object, so
+    a per-item `despite` asked the model to decide *null, or a sentence* on
+    every exercise in the workout -- and an observed run filled all eight of
+    them, inventing refusals the user had never made. Asked once, about the
+    plan, the empty answer is an empty list, which is a thing a model writes
+    without being talked into it.
+    """
 
 
 @dataclass(frozen=True)
@@ -174,7 +211,7 @@ class Request:
 
     Not exclusions. An exclusion is safety and the engine removes it from the
     admissible space; a preference is knowledge of the person, and the agent
-    may still propose one -- as long as it says so, in the item's `despite`.
+    may still propose one -- as long as the plan says so, in its `despite`.
     Stated per run, because `conclusions` is session 8 and there is nowhere to
     keep them yet."""
 
@@ -340,31 +377,29 @@ def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> None:
     slips it in among five other blocks is not.
     """
     invented = [
-        item.exercise_id
-        for block in plan.blocks
-        for item in block.items
-        if (item.despite or "").strip() and item.exercise_id not in request.preferences
+        said.exercise_id
+        for said in plan.despite
+        if said.exercise_id not in request.preferences
     ]
     if invented:
-        # Strict structured output puts `despite` on every item, so a model
-        # that writes a sentence where `null` belongs is inventing a refusal
-        # the user never made -- and the renderer would print it back to them
-        # as their own words.
+        # A refusal the user never made, which the renderer would otherwise
+        # print back to them as their own words.
         raise PlanRejected(
             "the plan says the user refused exercises they did not:\n"
             + "\n".join(f"  {exercise_id}" for exercise_id in invented)
-            + "\n`despite` is for an exercise they actually said no to; it is "
-            "null everywhere else."
+            + "\n`despite` names exercises they actually said no to, and is "
+            "empty otherwise."
         )
 
     if not request.preferences:
         return
 
+    spoken = {said.exercise_id for said in plan.despite}
     unspoken = [
         item.exercise_id
         for block in plan.blocks
         for item in block.items
-        if item.exercise_id in request.preferences and not (item.despite or "").strip()
+        if item.exercise_id in request.preferences and item.exercise_id not in spoken
     ]
     if unspoken:
         raise PlanRejected(
@@ -437,6 +472,7 @@ def render(
     # or pushes every prescription to the right of a page of blanks. The
     # catalog listing aligns its own columns the same way.
     column = max(len(name) for name in names.values()) + 2
+    acknowledged = {said.exercise_id: said.why for said in plan.despite}
 
     lines: list[str] = []
     for position, (shape, costed) in enumerate(
@@ -455,11 +491,12 @@ def render(
         )
         for item in shape.items:
             lines.append(f"  {names[item.exercise_id]:<{column}}{_prescription(item)}")
-            if item.despite:
+            said = acknowledged.get(item.exercise_id)
+            if said is not None:
                 # On its own line and marked, not folded into the block's
                 # reason: this is the agent proposing something the user said
                 # no to, and it has to be the thing they notice.
-                lines.append(f"    ! you said no to this: {item.despite}")
+                lines.append(f"    ! you said no to this: {said}")
         lines.append(f"  why: {shape.reason}")
         lines.append("")
 

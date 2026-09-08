@@ -65,6 +65,10 @@ def block(
     return {"items": list(items), "rounds": rounds, "rest": rest, "reason": reason}
 
 
+def acknowledging(despite: list[dict[str, Any]], *blocks: dict[str, Any]) -> str:
+    return json.dumps({"blocks": list(blocks), "despite": despite})
+
+
 BARBELL_45 = plans.Request(equipment=("barbell",), budget_min=45)
 
 
@@ -488,26 +492,28 @@ def test_a_preference_prescribed_with_a_reason_is_allowed(
     """An agent that has read the history and thinks the user should revisit
     something is doing its job. One that slips it in is not."""
     parsed = plans.parse(
-        document(block({"exercise_id": "Barbell_Squat",
-                        "prescription": {"unit": "reps", "amount": 8},
-                        "despite": "nothing else your equipment reaches loads the knee"}))
+        acknowledging(
+            [{"exercise_id": "Barbell_Squat",
+              "why": "nothing else your equipment reaches loads the knee"}],
+            block({"exercise_id": "Barbell_Squat",
+                   "prescription": {"unit": "reps", "amount": 8}}),
+        )
     )
 
     plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
 
 
-def test_an_empty_acknowledgement_does_not_count(
-    connection: sqlite3.Connection,
-) -> None:
-    """Whitespace is not saying so."""
-    parsed = plans.parse(
-        document(block({"exercise_id": "Barbell_Squat",
-                        "prescription": {"unit": "reps", "amount": 8},
-                        "despite": "   "}))
-    )
-
-    with pytest.raises(plans.PlanRejected):
-        plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+def test_an_empty_acknowledgement_does_not_count() -> None:
+    """Whitespace is not saying so, and the shape refuses it before any rule
+    has to."""
+    with pytest.raises(plans.PlanError, match="why"):
+        plans.parse(
+            acknowledging(
+                [{"exercise_id": "Barbell_Squat", "why": ""}],
+                block({"exercise_id": "Barbell_Squat",
+                       "prescription": {"unit": "reps", "amount": 8}}),
+            )
+        )
 
 
 def test_a_preference_is_not_an_exclusion_and_stays_admissible(
@@ -534,9 +540,11 @@ def test_the_acknowledgement_is_printed_where_it_will_be_read(
     thing they were asked about."""
     out = rendered(
         connection,
-        document(block({"exercise_id": "Barbell_Squat",
-                        "prescription": {"unit": "reps", "amount": 8},
-                        "despite": "nothing else loads the knee today"})),
+        acknowledging(
+            [{"exercise_id": "Barbell_Squat", "why": "nothing else loads the knee today"}],
+            block({"exercise_id": "Barbell_Squat",
+                   "prescription": {"unit": "reps", "amount": 8}}),
+        ),
     )
 
     assert "! you said no to this: nothing else loads the knee today" in out
@@ -584,9 +592,12 @@ def test_an_acknowledgement_of_something_nobody_refused_is_rejected(
     writes a sentence where `null` belongs invents a refusal the user never
     made -- and the renderer prints it back to them as their own words."""
     parsed = plans.parse(
-        document(block({"exercise_id": "Barbell_Squat",
-                        "prescription": {"unit": "reps", "amount": 8},
-                        "despite": "you hate these but it is all that is left"}))
+        acknowledging(
+            [{"exercise_id": "Barbell_Squat",
+              "why": "you hate these but it is all that is left"}],
+            block({"exercise_id": "Barbell_Squat",
+                   "prescription": {"unit": "reps", "amount": 8}}),
+        )
     )
 
     with pytest.raises(plans.PlanRejected, match="did not"):

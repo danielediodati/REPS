@@ -752,20 +752,19 @@ def test_a_provider_that_cannot_be_reached_is_reported_in_words() -> None:
 # -- the shape the model is held to -------------------------------------------
 
 
-def test_strict_mode_requires_every_property_including_the_nullable_ones() -> None:
+def test_strict_mode_requires_every_property_including_the_defaulted_ones() -> None:
     """Strict mode is constrained decoding, and it demands every property be
     listed in `required`. Pydantic leaves out the ones carrying a default,
-    which is `despite` -- the field an agent uses to say it is proposing
-    something the user refused. Its optionality survives as the null in its
-    type; what changes is that the model must decide about it rather than
-    leave it out."""
+    which is the plan's `despite`. That it must be present is exactly why it
+    is a list and not a field on every item: the empty answer is `[]`, which a
+    model writes without being talked into it."""
     built = agent.strict_schema(plans.WorkoutPlan)
     item = built["$defs"]["PlanItem"]
 
-    assert set(item["required"]) == {"exercise_id", "prescription", "despite"}
+    assert set(item["required"]) == {"exercise_id", "prescription"}
     assert set(built["$defs"]["Prescription"]["required"]) == {"unit", "amount"}
     assert item["additionalProperties"] is False
-    assert built["required"] == ["blocks"]
+    assert set(built["required"]) == {"blocks", "despite"}
 
 
 def test_the_strict_shape_still_accepts_a_plan_the_project_calls_valid() -> None:

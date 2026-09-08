@@ -567,7 +567,9 @@ You do not label «good plan / bad plan». You verify properties that must hold 
 3. **it respects the constraints** — nothing outside the admissible set.
 4. **it respects the preferences** — nothing the user has refused; and if it proposes it again, it says so and asks.
 5. **it uses only today's equipment**.
-6. **it does not degenerate** — it covers the patterns the split calls for, it does not fill the workout with isolation work because that was the short path.
+6. **it does not degenerate** — it uses the space it was given. Two axes, the same two the volume deficit is measured on (ADR-0001): on the **muscle** axis every group the workout was asked to train is trained by at least one block — *am I touching this at all*; on the **pattern** axis the plan uses more than one movement pattern — *am I balanced*, which is what catches an arm workout made entirely of curls, invisible on the muscle axis because biceps, triceps and forearms are one bucket there.
+
+   Both halves are checked **against what was available**, never against an absolute: if the admissible set offers nothing for a group, or holds one movement pattern, a plan that reflects that is the only honest answer and failing it would measure the catalog rather than the agent. What is deliberately not here is a ratio of compound to isolation work — the arms group is 70 isolation exercises to 12 compound, so any majority-compound rule fails a correct arm day, and in a measurement whose bar is 100% an invariant that can be wrong is worse than one that is weak.
 
 Situations to run them against, written by hand and deliberately nasty:
 
