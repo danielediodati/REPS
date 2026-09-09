@@ -82,8 +82,8 @@ def test_pattern_state_starts_empty(connection: sqlite3.Connection) -> None:
 
 def test_a_pattern_state_row_can_be_inserted(connection: sqlite3.Connection) -> None:
     connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend, pain) "
-        "VALUES ('hip hinge', 12, 'up', 'none')"
+        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend) "
+        "VALUES ('hip hinge', 12, 'up')"
     )
 
     row = connection.execute(

@@ -12,6 +12,7 @@ is needed to assert on it.
 
 from __future__ import annotations
 
+import ast
 import enum
 import json
 import sqlite3
@@ -945,3 +946,126 @@ def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
 
     assert "turned it down" not in written
     assert "rather not" not in written
+
+
+# -- the agent never writes ---------------------------------------------------
+#
+# ROADMAP.md § Session 5: writes are never tools. If the model can call the
+# write, the model decides when the database changes -- the single door
+# disappears, the validator becomes optional, and an interrupted run leaves
+# half a workout behind. The agent emits; the engine writes, from the CLI.
+
+
+def workout_count(connection: sqlite3.Connection) -> int:
+    return int(
+        connection.execute("SELECT COUNT(*) AS total FROM workouts").fetchone()["total"]
+    )
+
+
+def test_the_loop_leaves_the_workout_count_unchanged(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),)],
+        emitted=good_plan("Barbell_Squat"),
+    )
+
+    record = agent.plan_workout(connection, BARBELL_45, model=model, budget=4)
+
+    assert record.refused is None
+    assert workout_count(connection) == 0
+
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "trainer"
+PACKAGE_NAME = "trainer"
+
+
+def _importers_of(
+    name: str, root: Path = PACKAGE_ROOT, package: str = PACKAGE_NAME
+) -> set[str]:
+    """Every module under `root` whose source imports `name`.
+
+    Every form the import can take, absolute and relative, because a guard
+    that catches four of five is a guard that tells you the writer is
+    unreachable while somebody is calling it -- and the one it misses is the
+    one a future module inside the package is most likely to be written with.
+    """
+    found: set[str] = set()
+    for module in sorted(root.rglob("*.py")):
+        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        here = _module_name(module, root, package)
+        for node in ast.walk(tree):
+            imported: set[str] = set()
+            if isinstance(node, ast.Import):
+                imported = {alias.name for alias in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                base = _resolved(node, here)
+                if base is not None:
+                    imported = {base} | {
+                        f"{base}.{alias.name}" for alias in node.names
+                    }
+            if name in imported:
+                found.add(str(module.relative_to(root)).replace("\\", "/"))
+    return found
+
+
+def _module_name(module: Path, root: Path, package: str) -> str:
+    """The dotted name of a file, as Python would import it."""
+    parts = module.relative_to(root).with_suffix("").parts
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join((package, *parts))
+
+
+def _resolved(node: ast.ImportFrom, here: str) -> str | None:
+    """What `from ... import` names, absolute or relative to `here`.
+
+    `node.level` is the number of leading dots: zero is absolute, one means
+    the importing module's own package, and each further dot climbs one more.
+    """
+    if node.level == 0:
+        return node.module
+    ancestors = here.split(".")[: -node.level]
+    if not ancestors:
+        return None
+    return ".".join((*ancestors, node.module)) if node.module else ".".join(ancestors)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import trainer.engine.workouts",
+        "from trainer.engine import workouts",
+        "from trainer.engine.workouts import record_prescribed",
+        "from .engine import workouts",
+        "from .engine.workouts import record_prescribed",
+    ],
+)
+def test_the_writer_guard_catches_every_form_of_the_import(
+    source: str, tmp_path: Path
+) -> None:
+    """The guard is only worth having if it fails on the code it forbids --
+    `test_engine_boundary.py` makes the same point about its own. The two
+    relative forms are here because the guard once missed both, and a module
+    added inside the package is exactly where they would be written."""
+    (tmp_path / "offender.py").write_text(source, encoding="utf-8")
+
+    assert _importers_of("trainer.engine.workouts", tmp_path) == {"offender.py"}
+
+
+def test_the_writer_guard_does_not_fire_on_something_else(tmp_path: Path) -> None:
+    """A guard that matched everything would pass this suite while saying
+    nothing at all."""
+    (tmp_path / "innocent.py").write_text(
+        "from trainer.engine import duration\nfrom .engine import catalog\n",
+        encoding="utf-8",
+    )
+
+    assert _importers_of("trainer.engine.workouts", tmp_path) == set()
+
+
+def test_only_the_cli_reaches_the_writer() -> None:
+    """The runtime assertions above say the writer was not called on these
+    paths. This says it cannot be, from anywhere but the command -- which is
+    the claim that has to survive somebody adding a tool next session."""
+    assert _importers_of("trainer.engine.workouts") == {"cli.py"}

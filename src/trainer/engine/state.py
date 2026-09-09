@@ -3,7 +3,8 @@
 `pattern_history` and `last_performed_load` are the two calls in TRAINER.md's
 tool surface that read what the user has actually done. Today both answer
 *«I don't know»*, because nothing writes what they read: `pattern_state` exists
-and is empty, and there is no `workouts` table at all until session 5.
+and is empty, and migration 0006's `workouts` holds prescribed rows only --
+nothing has been performed, and a load is something a report carries.
 
 **Building them now, against nothing, is the point.** Session 4's agent calls
 these mid-loop, inside its call budget, and session 5 is when real rows arrive.
@@ -89,9 +90,15 @@ class VolumeHistory:
     question about a movement pattern and a question about a muscle, and an
     answer that does not say which it is can be filed under the wrong one.
 
-    The three payload fields are each nullable on their own: a row can exist
-    because pain was recorded against a pattern before any volume was counted
-    for it. `Answer.known` is about whether the state has this key at all.
+    Both payload fields are nullable on their own: a pattern can have volume
+    counted against it before enough of it exists for a trend to mean
+    anything. `Answer.known` is about whether the state has this key at all.
+
+    There is no `pain` field, and migration 0006 dropped the column it read.
+    ROADMAP.md § Declared deviations carries the reversal: a 0-10 scale is the
+    `required_rom` failure applied to the most delicate thing the system
+    touches, and pain's only structured outcome is an exclusion the user
+    confirms -- which `exclusions` already holds.
     """
 
     axis: str
@@ -102,7 +109,6 @@ class VolumeHistory:
     trained, never a week. CONTEXT.md settled the denominator; migration 0005
     renamed the column so it says the same thing."""
     load_trend: str | None
-    pain: str | None
 
 
 @dataclass(frozen=True)
@@ -205,8 +211,7 @@ def volume_history(
     # `recorded` says which, without anyone testing a result set for emptiness.
     row = connection.execute(
         f"SELECT recorded.{source.key_column} IS NOT NULL AS recorded, "  # from _SOURCES
-        f"recorded.cycle_volume AS volume, recorded.load_trend AS load_trend, "
-        f"recorded.pain AS pain "
+        f"recorded.cycle_volume AS volume, recorded.load_trend AS load_trend "
         f"FROM (SELECT 1) AS asked "
         f"LEFT JOIN {source.table} AS recorded "  # from _SOURCES
         f"ON recorded.{source.key_column} = ?",  # from _SOURCES
@@ -223,7 +228,6 @@ def volume_history(
             cycles=cycles,
             volume=row["volume"],
             load_trend=row["load_trend"],
-            pain=row["pain"],
         ),
     )
 
@@ -242,12 +246,21 @@ def pattern_history(
 
 @dataclass(frozen=True)
 class _LoadSource:
-    """Where a performed load will be read from, once session 5 writes it.
+    """Where a performed load will be read from, once a report writes one.
 
     Named here rather than left implicit in a query, because the columns are a
-    contract with a table that does not exist yet: session 5 either uses these
-    names or changes this one constant, and either way the expectation is
-    written down instead of being discovered when the query fails.
+    contract with a table that did not exist when this was written: session 5
+    either uses these names or changes this one constant, and either way the
+    expectation is written down instead of being discovered when the query
+    fails.
+
+    **It is about to change, and this is where.** Migration 0006 built
+    `workouts` around the two states, and a load belongs to one exercise of
+    one block -- so `load_kg` sits on `workout_exercises` and `performed_on`
+    on `workouts`, which is two tables and not the one this shape assumes.
+    Session 5's issue 03 is what rewrites it, against rows a report has
+    actually produced; until then `_has_source` finds the columns missing and
+    the answer stays the honest *«I don't know»* it has always been.
     """
 
     table: str = "workouts"
@@ -262,10 +275,12 @@ LOAD_SOURCE = _LoadSource()
 def _has_source(connection: sqlite3.Connection, source: _LoadSource) -> bool:
     """Whether the table exists and carries the columns this reads.
 
-    Not a special case of emptiness: a table that has not been created is a
+    Not a special case of emptiness: a table whose columns are not there is a
     different fact from a table with no matching row, and both are honestly
-    *«I don't know»* to the caller. Once session 5 creates it, this stops being
-    the branch taken and nothing else here changes.
+    *«I don't know»* to the caller. `workouts` exists as of migration 0006 and
+    this still answers False, because the load moved to a child table -- see
+    `_LoadSource`. Once issue 03 points the constant at the right columns, this
+    stops being the branch taken and nothing else here changes.
     """
     present = {
         str(row["name"]) for row in connection.execute(f"PRAGMA table_info({source.table})")

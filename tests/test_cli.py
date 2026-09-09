@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,16 @@ from click.testing import CliRunner
 
 from trainer import __version__
 from trainer.cli import main
-from trainer.engine import catalog, database, graph, migrations, reference_set, residue, snapshot
+from trainer.engine import (
+    catalog,
+    database,
+    graph,
+    migrations,
+    reference_set,
+    residue,
+    snapshot,
+    workouts,
+)
 
 
 BLANK = "\n\n"
@@ -1435,6 +1446,130 @@ def test_plan_needs_a_file_that_exists(
     assert "Traceback" not in result.output
 
 
+# --- plan, persisted ---------------------------------------------------------
+#
+# `trainer plan` writes the workout it prescribes, in the command and nowhere
+# else. What is asserted here is the row; that the agent cannot reach the
+# writer is `test_agent.py`'s.
+
+
+def workout_rows(path: Path) -> list[sqlite3.Row]:
+    with closing(database.connect(path)) as connection:
+        return connection.execute("SELECT * FROM workouts ORDER BY id").fetchall()
+
+
+def test_plan_leaves_the_workout_it_prescribed(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    (row,) = workout_rows(enriched)
+    assert row["state"] == "prescribed"
+    assert row["prescribed_on"] == date.today().isoformat()
+    assert row["performed_on"] is None
+
+    with closing(database.connect(enriched)) as connection:
+        prescribed = workouts.prescribed(connection, int(row["id"]))
+    (block,) = prescribed
+    assert block.reason == "the heaviest lift while fresh"
+    assert block.block.rounds == 4
+    assert block.block.rest == 150
+    assert [item.exercise_id for item in block.block.items] == ["Barbell_Squat"]
+
+
+def test_plan_still_renders_exactly_as_before(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Persisting is a side effect, not a change to the command's output."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Barbell Squat" in result.output
+    assert "4 rounds, 150s rest" in result.output
+    assert "why: the heaviest lift while fresh" in result.output
+    assert "of 45" in result.output
+    assert result.output.isascii()
+
+
+def test_planning_twice_leaves_two_workouts(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Two prescriptions, not one overwritten: the second is not a correction
+    of the first, and an upsert would lose a deviation nobody could account
+    for afterwards."""
+    arguments = ["plan", "--from", write_plan(tmp_path, squat_block()),
+                 "--equipment", "barbell", "--time", "45"]
+
+    assert runner.invoke(main, arguments).exit_code == 0
+    assert runner.invoke(main, arguments).exit_code == 0
+
+    assert len(workout_rows(enriched)) == 2
+
+
+def test_a_rejected_plan_writes_nothing_at_all(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """No workout row, and no orphaned blocks under one."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block(rounds=20, rest=180)),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    with closing(database.connect(enriched)) as connection:
+        for table in ("workouts", "workout_blocks", "workout_exercises"):
+            total = connection.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
+            assert total["n"] == 0, table
+
+
+def test_a_plan_that_cannot_be_recorded_is_still_printed(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A database that cannot be written to is worth an error; it is not worth
+    throwing the workout away to report one. On the model path that plan cost
+    a real run, and before persistence existed any plan that validated was
+    printed."""
+
+    def refuse(*args: object, **kwargs: object) -> int:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(workouts, "record_prescribed", refuse)
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    assert "Barbell Squat" in result.output
+    assert "disk I/O error" in result.output
+
+
+def test_a_plan_the_shape_check_refuses_writes_nothing(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    path = tmp_path / "plan.json"
+    path.write_text('{"blocks": [{"rounds": 3}]}', encoding="utf-8")
+
+    result = runner.invoke(
+        main, ["plan", "--from", str(path), "--equipment", "barbell", "--time", "45"]
+    )
+
+    assert result.exit_code != 0
+    assert workout_rows(enriched) == []
+
+
 # --- plan, with a model ------------------------------------------------------
 #
 # The model is a stand-in: `conftest.py` takes sockets and credentials away
@@ -1857,13 +1992,17 @@ def test_the_refusal_writes_nothing_to_the_database(
 ) -> None:
     """TRAINER.md's non-negotiable constraint: SQLite never persists a
     conversation fact. The refused plan and what the user said about it are
-    the most conversational things this project handles."""
+    the most conversational things this project handles.
+
+    The workout that *was* prescribed is written, and that is a domain fact.
+    What must not survive is the sentence: the assertion is over every text
+    value in every table, so a column added later that happened to keep it
+    would fail this rather than slip past a check on one table."""
     from test_agent import good_plan
 
     refused = tmp_path / "refused.json"
     refused.write_text(good_plan("Barbell_Squat").model_dump_json(), encoding="utf-8")
     scripted(monkeypatch, emitted=good_plan("Standing_Military_Press"))
-    before = enriched.read_bytes()
 
     result = runner.invoke(
         main,
@@ -1872,7 +2011,33 @@ def test_the_refusal_writes_nothing_to_the_database(
     )
 
     assert result.exit_code == 0, result.output
-    assert enriched.read_bytes() == before
+    with closing(database.connect(enriched)) as connection:
+        assert "the squat rack was taken" not in every_stored_value(connection)
+        prescribed = connection.execute(
+            "SELECT exercise_id FROM workout_exercises"
+        ).fetchall()
+    assert [row["exercise_id"] for row in prescribed] == ["Standing_Military_Press"]
+
+
+def every_stored_value(connection: sqlite3.Connection) -> str:
+    """Every value in every table of the database, as one blob of text.
+
+    Deliberately blunt. A test that only looked where the sentence would go
+    today would keep passing the moment somebody adds the column it actually
+    ends up in.
+    """
+    tables = [
+        row["name"]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    ]
+    return "\n".join(
+        str(value)
+        for table in tables
+        for row in connection.execute(f"SELECT * FROM {table}")  # names from sqlite_master
+        for value in tuple(row)
+    )
 
 
 def test_plan_refuses_a_time_over_the_cap_without_a_workout_too(

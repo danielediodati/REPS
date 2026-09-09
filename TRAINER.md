@@ -139,7 +139,9 @@ A **tool library**, called by the agent.
 
 - **Admissibility filter**: given the state, today's equipment and the time, it returns the prescribable exercises. The agent cannot prescribe outside it.
 - **Never a max-effort test.** Under no circumstances, in v1.
-- **Medical trigger**: a declared pathology → recommend a doctor. The agent asks about health status **at every workout**; the escalation, though, reads the *state table*, not today's answer — otherwise six weeks of *«it pulls a bit»* are never seen. A second, stronger trigger comes from the loop: *I removed range of motion, volume and load, and the niggle stayed. It is not a variable I control.*
+- **Medical trigger**: a declared pathology → recommend a doctor. The agent asks about health status **at every workout**; the escalation, though, reads what has accumulated rather than today's answer — otherwise six weeks of *«it pulls a bit»* are never seen. A second, stronger trigger comes from the loop: *I removed range of motion, volume and load, and the niggle stayed. It is not a variable I control.*
+
+  **It does not read a state table, because there is no pain column to read.** Session 5's migration 0006 dropped it: a 0-10 pain scale is `required_rom` a third time — a number nobody can supply honestly, your 4 is not mine and not your own 4 next month, used as a safety threshold. Pain is prose the agent reads, and its only structured outcome is an **exclusion** the user confirms, at whichever of the two granularities fits. What accumulates instead is `conclusions` (session 8) and the hypothesis/trial loop (9), where the evidence is something the user actually said or a trial that actually ran. ROADMAP.md § Declared deviations carries the reversal.
 
 ### Engine — analytic / derived
 
@@ -386,9 +388,9 @@ A single **SQLite** file:
 |---|---|
 | `profile` | primary goal and constraints, history, base equipment, permanent constraints |
 | `mesocycle` | chosen scheme + rationale + start date + split |
-| `pattern_state` | per pattern: volume per cycle, load trend, pain |
+| `pattern_state` | per pattern: volume per cycle, load trend. A **view** over the performed workouts from session 5, not a stored aggregate |
 | `exclusions` | granularity (pattern or joint), value, re-test date |
-| `workouts` | location, equipment overrides, loads, RPE, pain, deviations, adherence |
+| `workouts` | one row per workout, `prescribed` or `performed`; its blocks and exercises carry both phases side by side, because the deviation is the difference between them. Loads, RPE, and a provenance per field. **No pain**: see the medical trigger above |
 | `exercises` | the 800 enriched |
 | `hypotheses` | text, date, state |
 | `trials` | hypothesis, variable varied, variables held fixed, duration, outcome |

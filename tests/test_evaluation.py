@@ -520,3 +520,31 @@ def test_overshooting_the_budget_on_the_turn_that_crossed_it_is_not_a_fault(
     )
 
     assert "terminates" not in failing(connection, LEGS_AND_CORE, record)
+
+
+# --- the measurement never writes --------------------------------------------
+
+
+def test_the_measurement_leaves_the_workout_count_unchanged(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """`trainer eval` runs eighteen loops against the project database. A plan
+    that persisted from inside the agent would write eighteen phantom
+    prescribed workouts into the very state the measurement is taken from,
+    where the unreported-workout tool would read them as a skipped rotation.
+    ROADMAP.md § Session 5: writes are never tools."""
+    from test_agent import Scripted, good_plan
+
+    chosen = evaluation.situations(connection)[:2]
+    report = evaluation.run(
+        connection,
+        chosen,
+        build=lambda: Scripted(emitted=good_plan("Bodyweight_Squat")),
+        repetitions=1,
+        records=tmp_path / "records",
+    )
+
+    assert report.total == len(chosen)
+    assert connection.execute(
+        "SELECT COUNT(*) AS total FROM workouts"
+    ).fetchone()["total"] == 0

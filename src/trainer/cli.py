@@ -35,6 +35,7 @@ from trainer.engine import (
     reference_set,
     residue,
     snapshot,
+    workouts,
 )
 
 
@@ -79,6 +80,11 @@ def reported() -> Iterator[None]:
         # has listed this among the engine's stated failures since the surface
         # existed; the terminal had no clause for it because nothing here
         # reached the costing path.
+        raise click.ClickException(str(error)) from error
+    except workouts.WorkoutError as error:
+        # Unreachable through a plan that passed the validator -- `WorkoutPlan`
+        # already requires a block. Here so that the writer's own refusals
+        # arrive as sentences if a later command reaches it another way.
         raise click.ClickException(str(error)) from error
     except plan.PlanRejected as error:
         # Before PlanError, which it does not subclass but reads like: a plan
@@ -893,11 +899,12 @@ def plan_command(
             parsed = plan.parse(source.read_text(encoding="utf-8"))
             plan.to_blocks(parsed)
 
+    today = date.today().isoformat()
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
             classified = [exclusions.classify(connection, value) for value in exclude]
-            standing = exclusions.active(connection, date.today().isoformat())
+            standing = exclusions.active(connection, today)
             request = plan.Request(
                 equipment=equipment,
                 budget_min=budget,
@@ -910,14 +917,30 @@ def plan_command(
             )
             try:
                 if parsed is not None:
-                    lines = _checked(connection, parsed, request, budget)
+                    accepted, lines = _checked(connection, parsed, request, budget)
                 else:
-                    lines = _asked(connection, request, budget, call_budget, record_path)
+                    accepted, lines = _asked(
+                        connection, request, budget, call_budget, record_path
+                    )
             except catalog.UnknownFilterValue as error:
                 raise _rejected(error) from error
 
-    for line in lines:
-        click.echo(line)
+            # Printed before it is written, and that order is the point. A
+            # rejected plan is not printed at all -- the refusal above has
+            # already raised -- but a plan that passed every rule is the
+            # user's workout, and on the model path it cost a real run. A
+            # database that cannot be written to is worth an error; it is not
+            # worth throwing the workout away to report one.
+            for line in lines:
+                click.echo(line)
+
+            # The workout is written **here**, in the command, and nowhere
+            # else. Not in `plan.py` and not in `agent.py`: `trainer eval`
+            # runs eighteen agent loops against the project database, and a
+            # plan that persisted from inside the agent would leave eighteen
+            # phantom prescribed workouts in the very state the measurement is
+            # taken from. ROADMAP.md § Session 5.
+            _recorded(connection, accepted, today)
 
 
 def _declared() -> config.TrainingConfig | None:
@@ -1060,10 +1083,17 @@ def _checked(
     parsed: plan.WorkoutPlan,
     request: plan.Request,
     budget: int,
-) -> list[str]:
+) -> tuple[plan.WorkoutPlan, list[str]]:
+    """The plan that survived the rules, and how it reads.
+
+    Both, because the caller has to write down the same plan it printed. A
+    helper that returned only the lines would leave `plan_command` re-deciding
+    which of the two paths produced the plan it is persisting, and the two
+    answers would eventually differ.
+    """
     blocks = plan.to_blocks(parsed)
     plan.validate(connection, blocks, request, parsed)
-    return plan.render(connection, parsed, blocks, budget)
+    return parsed, plan.render(connection, parsed, blocks, budget)
 
 
 def _asked(
@@ -1072,7 +1102,7 @@ def _asked(
     budget: int,
     call_budget: int,
     record_path: Path | None,
-) -> list[str]:
+) -> tuple[plan.WorkoutPlan, list[str]]:
     """One run, with the record written whichever way it goes.
 
     Written *before* a refusal is raised, on purpose: the record is what you
@@ -1086,11 +1116,33 @@ def _asked(
         raise click.ClickException(record.refused)
 
     blocks = plan.to_blocks(record.plan)
-    return [
+    return record.plan, [
         *plan.render(connection, record.plan, blocks, request.budget_min),
         "",
         *agent.summary(record),
     ]
+
+
+def _recorded(
+    connection: sqlite3.Connection, accepted: plan.WorkoutPlan, on: str
+) -> int:
+    """Write the workout that was just prescribed, and return its id.
+
+    The one place the wire shape is paired with the costed one for the writer:
+    `reason` lives on the document and the rest of the block lives on
+    `duration.Block`, and `strict` is what stops a mismatched pair from
+    persisting a workout whose reasons belong to different blocks.
+    """
+    return workouts.record_prescribed(
+        connection,
+        tuple(
+            workouts.PrescribedBlock(block=costed, reason=shape.reason)
+            for shape, costed in zip(
+                accepted.blocks, plan.to_blocks(accepted), strict=True
+            )
+        ),
+        on=on,
+    )
 
 
 def _require_enrichment(connection: sqlite3.Connection) -> None:

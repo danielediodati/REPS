@@ -92,8 +92,8 @@ def test_real_history_comes_back_through_the_same_query(
     """What session 5 will write, written by hand. Nothing in this module
     changes when it starts arriving for real."""
     connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend, pain) "
-        "VALUES ('squat', 42, 'up', 'none')"
+        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend) "
+        "VALUES ('squat', 42, 'up')"
     )
 
     answer = state.pattern_history(connection, "squat", 3)
@@ -102,7 +102,6 @@ def test_real_history_comes_back_through_the_same_query(
     assert answer.value is not None
     assert answer.value.volume == 42
     assert answer.value.load_trend == "up"
-    assert answer.value.pain == "none"
     assert answer.value.axis == "pattern"
     assert answer.value.key == "squat"
     assert answer.value.cycles == 3
@@ -111,11 +110,11 @@ def test_real_history_comes_back_through_the_same_query(
 def test_a_row_with_no_volume_yet_is_known_but_carries_nothing(
     connection: sqlite3.Connection,
 ) -> None:
-    """Pain can be recorded against a pattern before any volume is counted for
-    it. The row existing is what `known` is about; the fields are separately
-    nullable."""
+    """A trend can be recorded against a pattern before any volume is counted
+    for it. The row existing is what `known` is about; the fields are
+    separately nullable."""
     connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, pain) VALUES ('squat', 'left knee')"
+        "INSERT INTO pattern_state (movement_pattern, load_trend) VALUES ('squat', 'flat')"
     )
 
     answer = state.pattern_history(connection, "squat", 1)
@@ -123,7 +122,7 @@ def test_a_row_with_no_volume_yet_is_known_but_carries_nothing(
     assert answer.known is True
     assert answer.value is not None
     assert answer.value.volume is None
-    assert answer.value.pain == "left knee"
+    assert answer.value.load_trend == "flat"
 
 
 def test_the_denominator_is_the_cycle(connection: sqlite3.Connection) -> None:
@@ -255,27 +254,53 @@ def test_an_empty_catalog_is_a_state_for_loads_too(empty: sqlite3.Connection) ->
         state.last_performed_load(empty, "Barbell_Squat")
 
 
-def create_workouts(connection: sqlite3.Connection) -> None:
-    """Session 5's table, in the minimal shape `LOAD_SOURCE` names.
+def create_load_source(
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A table in the minimal shape `LOAD_SOURCE` names, and the constant
+    pointed at it.
 
-    Written here so the query is exercised rather than dead: this is the
-    contract session 5 either meets or changes in one place.
+    Written here so the query is exercised rather than dead. It is pointed at
+    a table of its own rather than at `workouts`, which migration 0006 built
+    around the two states: a load belongs to one exercise of one block, so it
+    lives on `workout_exercises` while the date lives on `workouts`, and this
+    query reads one table. Issue 03 is what re-points the constant at real
+    rows; until then what is under test is that the query answers correctly
+    against whatever `_LoadSource` names, which is the part that has to
+    survive the move.
     """
+    source = state._LoadSource(table="performed_loads")
+    monkeypatch.setattr(state, "LOAD_SOURCE", source)
     connection.execute(
-        f"CREATE TABLE {state.LOAD_SOURCE.table} ("
+        f"CREATE TABLE {source.table} ("
         f"  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        f"  {state.LOAD_SOURCE.key_column} TEXT NOT NULL,"
-        f"  {state.LOAD_SOURCE.load_column} REAL,"
-        f"  {state.LOAD_SOURCE.order_column} TEXT NOT NULL)"
+        f"  {source.key_column} TEXT NOT NULL,"
+        f"  {source.load_column} REAL,"
+        f"  {source.order_column} TEXT NOT NULL)"
     )
 
 
-def test_a_logged_load_comes_back_through_the_same_call(
+def test_the_real_workouts_table_does_not_yet_carry_a_load(
     connection: sqlite3.Connection,
 ) -> None:
-    create_workouts(connection)
+    """Migration 0006 created `workouts`, and the answer is still «I don't
+    know» -- the columns this reads are not on it. Named rather than left to
+    be discovered: the branch taken here is what tells issue 03 the constant
+    has to move, and a table appearing without the answer changing is exactly
+    the state to be explicit about."""
     connection.execute(
-        "INSERT INTO workouts (exercise_id, load_kg, performed_on) "
+        "INSERT INTO workouts (state, prescribed_on) VALUES ('prescribed', '2026-09-01')"
+    )
+
+    assert state.last_performed_load(connection, "Barbell_Squat").known is False
+
+
+def test_a_logged_load_comes_back_through_the_same_call(
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    create_load_source(connection, monkeypatch)
+    connection.execute(
+        "INSERT INTO performed_loads (exercise_id, load_kg, performed_on) "
         "VALUES ('Barbell_Squat', 80.0, '2026-08-01'), "
         "('Barbell_Squat', 92.5, '2026-08-20')"
     )
@@ -287,13 +312,13 @@ def test_a_logged_load_comes_back_through_the_same_call(
 
 
 def test_a_table_that_exists_but_holds_nothing_for_this_exercise_is_unknown(
-    connection: sqlite3.Connection,
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The same answer as no table at all -- which is what makes session 5's
     arrival a change of data and not of contract."""
-    create_workouts(connection)
+    create_load_source(connection, monkeypatch)
     connection.execute(
-        "INSERT INTO workouts (exercise_id, load_kg, performed_on) "
+        "INSERT INTO performed_loads (exercise_id, load_kg, performed_on) "
         "VALUES ('Barbell_Deadlift', 100.0, '2026-08-01')"
     )
 
@@ -303,13 +328,13 @@ def test_a_table_that_exists_but_holds_nothing_for_this_exercise_is_unknown(
 
 
 def test_a_bodyweight_row_with_no_load_does_not_count_as_a_load(
-    connection: sqlite3.Connection,
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A performed workout that recorded no load is not a load of zero, and
     the most recent row having none must not hide the last one that did."""
-    create_workouts(connection)
+    create_load_source(connection, monkeypatch)
     connection.execute(
-        "INSERT INTO workouts (exercise_id, load_kg, performed_on) "
+        "INSERT INTO performed_loads (exercise_id, load_kg, performed_on) "
         "VALUES ('Barbell_Squat', 60.0, '2026-08-01'), "
         "('Barbell_Squat', NULL, '2026-08-20')"
     )

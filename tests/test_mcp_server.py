@@ -297,8 +297,8 @@ def test_pattern_history_carries_real_history_when_there_is_some(
     connection: sqlite3.Connection,
 ) -> None:
     connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend, pain) "
-        "VALUES ('squat', 42, 'up', 'none')"
+        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend) "
+        "VALUES ('squat', 42, 'up')"
     )
 
     through_mcp = call("pattern_history", pattern="squat", cycles=3)

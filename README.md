@@ -164,6 +164,8 @@ The tools are defined once, in `tools.py`, and `mcp_server.py` is the registrati
 
 A single SQLite file, `trainer.sqlite` in the working directory. Override it with the `TRAINER_DB` environment variable — that is what the test suite does, so tests never touch a real one.
 
+**SQLite 3.35 or newer** (March 2021). Migration 0006 drops a column, and `ALTER TABLE ... DROP COLUMN` arrived in that release; the migration set is applied as a whole, so an older library fails `trainer db init` with a syntax error rather than half-migrating. `uv` provisions the interpreter and the library comes with it, so this only matters if you run the package under an interpreter you brought yourself: `python -c "import sqlite3; print(sqlite3.sqlite_version)"` is the check.
+
 The file is never committed: `git` diffs of a binary blob are useless. The readable history is `snapshots/catalog.md`, regenerated beside it by `trainer db snapshot` and committed. **The DB is the truth, the snapshot is the readable history.**
 
 That snapshot is never hand-edited and never read back by the engine — it exists to be diffed. Regenerating against an unchanged database produces a byte-identical file, so `git diff` stays empty and a diff that does appear means the catalog moved. One exercise is one line and its text depends on nothing but that exercise, so a rename changes one line rather than reflowing the table around it. Instructions and images are counts, not text: the file is for reading, not a second copy of the database. `TRAINER_SNAPSHOT` overrides where it goes.
