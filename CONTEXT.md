@@ -13,9 +13,21 @@ counted on in ADR-0001.
 ### The unit of training
 
 **Workout**:
-One training session performed by the user.
+One training session, in one of two states. It is **prescribed** when a plan is
+emitted for it, and **performed** once it has been reported. A performed
+workout need not have been prescribed — training nobody planned is still
+training, and it is recorded like any other.
 _Avoid_: session — in ROADMAP.md that word means a unit of development work,
 and the two appear in the same sentence too often to share a name.
+
+**Unreported**:
+What a prescribed workout is called once a later one has been performed and it
+still has no report. Nothing closes it automatically and nothing assumes it
+happened: it contributes no volume, the engine states the fact, and whether to
+ask about it is the agent's call.
+_Avoid_: treating it as adherence — assuming a silent workout was performed
+inflates the volume at exactly the moment training stopped, which is the one
+direction the error must never run.
 
 **Cycle**:
 One complete rotation through the workouts the user trains on. The user
@@ -95,6 +107,32 @@ block like any other; only its work term differs.
 _Avoid_: cardio — that is one of the catalog's own `category` values and names
 where a row came from, not how it is prescribed.
 
+### What a report says
+
+**Report**:
+What the user says about a workout they performed. It is prose, in whatever
+words they used, and it is the only thing the system asks of them after
+training.
+
+**Adherence**:
+The assumption that whatever a report does not mention was performed as
+prescribed. It holds **inside one report** and nowhere else.
+_Avoid_: stretching it across workouts — a prescribed workout with no report
+is unreported, never adherent.
+
+**Deviation**:
+The difference between what was prescribed and what was done, which is all a
+report actually has to carry. Logging is by deviation: adherence is the
+default and only the difference is said.
+
+**Provenance**:
+Which of three ways a value in a performed workout got there — *reported* (the
+user said it), *assumed* (the adherence default), or *asked* (confirmed in a
+clarifying turn). It is carried per field, which is what makes *«assume
+adherence and flag the uncertainty»* a column rather than a slogan. The same
+discipline the enrichment fields already use, where a value a rule derived and
+a value a person decided are not worth the same.
+
 ### What volume is counted on
 
 **Movement pattern**:
@@ -124,6 +162,16 @@ One of the catalog's own seventeen `primary_muscles` values — `biceps`,
 and the only one that can tell an arm workout of curls from a balanced one.
 _Avoid_: muscle group — that is one of the six, and it is for allocating time,
 not for measuring.
+
+**Volume**:
+What a body has accumulated, counted in **rounds performed** — the unit the
+word already means in strength programming. Not reps, not rounds times reps,
+not tonnage: a round needs no load, so bodyweight work counts like everything
+else, and timed work needs no special case. A block of two exercises for four
+rounds is four rounds of *each*, not two. Every round counts whole to the
+exercise's movement pattern and whole to each of its primary muscles; nothing
+is divided, because the question is what is accumulating and not how the
+effort splits.
 
 **Volume deficit**:
 The difference between planned and performed volume, measured over a **cycle**,
