@@ -30,7 +30,15 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from conftest import enrich, make_exercise
 from trainer import mcp_server, tools
-from trainer.engine import admissible, budget, catalog, database, migrations, state
+from trainer.engine import (
+    admissible,
+    budget,
+    catalog,
+    database,
+    migrations,
+    state,
+    workouts,
+)
 from trainer.engine.duration import Block, BlockItem
 from trainer.engine.exclusions import Exclusion
 
@@ -123,18 +131,24 @@ def test_every_tool_has_a_usable_schema_and_a_description() -> None:
         schema = tool.input_schema
 
         assert schema["type"] == "object"
-        assert schema.get("properties"), f"{tool.name} declares no arguments"
         assert tool.description, f"{tool.name} has no description"
+        if tool.name == "unreported_workouts":
+            # The one question with nothing to ask about. It takes no
+            # arguments -- *today* is the door's to supply, not the model's,
+            # for the reason nothing in `engine/` reads the clock.
+            assert schema.get("properties") == {}
+            continue
+        assert schema.get("properties"), f"{tool.name} declares no arguments"
 
 
-def test_the_tools_with_nothing_to_wrap_are_still_absent() -> None:
-    """`adherence_history` and `active_conclusions` are in TRAINER.md's tool
-    surface and need `workouts` and `conclusions`, neither of which exists. A
-    tool that exists and cannot work is worse than one that does not exist."""
+def test_the_tool_with_nothing_to_wrap_is_still_absent() -> None:
+    """`active_conclusions` is in TRAINER.md's tool surface and needs
+    `conclusions`, which is session 8. A tool that exists and cannot work is
+    worse than one that does not exist."""
     listed = {tool.name for tool in _LOOP.run_until_complete(mcp_server.server.list_tools())}
 
-    assert "adherence_history" not in listed
     assert "active_conclusions" not in listed
+    assert "adherence_history" in listed
 
 
 def test_the_description_a_model_reads_survives_the_wrapper() -> None:
@@ -296,9 +310,29 @@ def test_pattern_history_answers_that_it_does_not_know(
 def test_pattern_history_carries_real_history_when_there_is_some(
     connection: sqlite3.Connection,
 ) -> None:
-    connection.execute(
-        "INSERT INTO pattern_state (movement_pattern, cycle_volume, load_trend) "
-        "VALUES ('squat', 42, 'up')"
+    """The rows are written the way any performed workout is -- through the
+    engine's own writer, so what the door reports is what a report would have
+    put there."""
+    workouts.record_performed(
+        connection,
+        [
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id="Barbell_Squat",
+                        unit="reps",
+                        amount=10,
+                        amount_source="reported",
+                    ),
+                ),
+                rounds=42,
+                rounds_source="reported",
+                rest=90,
+                rest_source="reported",
+            )
+        ],
+        on="2026-09-01",
+        report="squats",
     )
 
     through_mcp = call("pattern_history", pattern="squat", cycles=3)

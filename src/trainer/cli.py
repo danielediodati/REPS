@@ -35,6 +35,7 @@ from trainer.engine import (
     reference_set,
     residue,
     snapshot,
+    state,
     workouts,
 )
 
@@ -67,6 +68,13 @@ def reported() -> Iterator[None]:
     except exclusions.ExclusionError as error:
         raise click.ClickException(str(error)) from error
     except admissible.AdmissibleError as error:
+        raise click.ClickException(str(error)) from error
+    except state.StateError as error:
+        # `trainer state` is the first command to ask the state module
+        # anything. Every sibling module's stated failure is translated here
+        # and this one was not, which would have made it the only one to reach
+        # the terminal as a traceback -- the reachable paths are all guarded
+        # upstream today, and that is exactly how a gap like this survives.
         raise click.ClickException(str(error)) from error
     except budget.BudgetError as error:
         # `trainer plan` is the first command that divides the time. A
@@ -911,6 +919,7 @@ def plan_command(
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
+            groups = _rotated(connection, declared, groups)
             classified = [exclusions.classify(connection, value) for value in exclude]
             standing = exclusions.active(connection, today)
             request = plan.Request(
@@ -1001,9 +1010,10 @@ def _groups(
 ) -> tuple[str, ...]:
     """The groups this workout trains: off the declared split, or named by hand.
 
-    `--workout` is a flag rather than something derived because nothing tracks
-    where in the rotation you are: `workouts` is session 5. Naming it here is
-    what stops that session from inventing it.
+    `--workout` is the override. Where in the rotation you are is derived from
+    the performed workouts as of session 5 -- `_rotated` below -- so the flag
+    is for saying *no, plan the leg day again*, not for telling the engine
+    something it can count.
 
     Repeats are dropped rather than refused. `--group legs --group legs` is a
     slip with one obvious reading, and left in it makes the even division sum
@@ -1023,6 +1033,36 @@ def _groups(
         return declared.groups_for(workout)
     except IndexError as error:
         raise click.ClickException(str(error)) from error
+
+
+def _rotated(
+    connection: sqlite3.Connection,
+    declared: config.TrainingConfig | None,
+    groups: tuple[str, ...],
+) -> tuple[str, ...]:
+    """The groups nobody named, taken from where the rotation actually is.
+
+    `--workout N` was a flag nobody computed because nothing tracked the
+    position: a cycle advances when a workout is **performed**, and until
+    session 5 nothing recorded that one had been. It is counted now, so asking
+    for a plan with neither `--workout` nor `--group` plans the next workout of
+    the declared split rather than the whole admissible space.
+
+    Nothing is derived without a declared split -- somebody planning with
+    `--time` alone and no `training.toml` gets what they always got. And
+    nothing is derived over a flag: both `--workout` and `--group` have already
+    filled `groups` by the time this runs.
+    """
+    if groups or declared is None:
+        return groups
+    where = state.rotation(connection)
+    chosen = declared.groups_for(where.position)
+    click.echo(
+        f"rotation: workout {where.position} of {where.cycle_length}, "
+        f"cycle {where.cycle} ({where.performed} performed) -- "
+        f"{', '.join(chosen)}"
+    )
+    return chosen
 
 
 def _divided(minutes: int, groups: tuple[str, ...]) -> tuple[tuple[str, int], ...]:
@@ -1208,6 +1248,134 @@ def log_command(source: Path) -> None:
                 exclusion=exclusion,
                 retest_date=retest_date,
             )
+
+
+@main.command("state")
+@click.option(
+    "--cycles",
+    "cycles",
+    metavar="N",
+    type=click.IntRange(min=1),
+    default=1,
+    show_default=True,
+    help="How many cycles back to count. A cycle is one rotation through the "
+    "workouts you declared -- never a week.",
+)
+def state_command(cycles: int) -> None:
+    """What has been trained, and what has not.
+
+    Where the rotation is, what became of the workouts in the window, the
+    volume accumulated on both axes, and the difference between what was
+    planned and what was done. Read-only: nothing here closes an unreported
+    workout or writes a number down.
+
+    Every figure is recomputed from the performed workouts on each run. Change
+    `cycle_length` in `training.toml` and the windows move on the next
+    invocation -- there is no stored aggregate that could disagree with the
+    file.
+    """
+    today = date.today().isoformat()
+    with _opened() as connection:
+        # Half the answer is the pattern axis, and an unenriched catalog
+        # carries no patterns at all -- so the table would print as *nothing
+        # performed* for a body that had trained. A state, named, with the
+        # command that fixes it.
+        _require_enrichment(connection)
+        with reported():
+            where = state.rotation(connection)
+            covered = state.window(connection, cycles)
+            adherence = state.adherence_history(connection, cycles)
+            shortfalls = state.volume_deficit(connection, cycles)
+            waiting = state.unreported(connection, today)
+            trends = _trends(connection, shortfalls, cycles)
+
+    click.echo(
+        f"rotation: workout {where.position} of {where.cycle_length}, "
+        f"cycle {where.cycle} -- {where.performed} workout(s) performed"
+    )
+    reach = f"from {covered.start}" if covered.start else "all of it"
+    click.echo(f"window: {cycles} cycle(s), {covered.workouts} workouts, {reach}")
+
+    click.echo("")
+    if adherence.value is None:
+        click.echo("adherence: nothing performed and nothing waiting in this window")
+    else:
+        click.echo(
+            f"adherence: {adherence.value.performed} performed, "
+            f"{adherence.value.unreported} unreported, "
+            f"{adherence.value.unplanned} nobody planned"
+        )
+
+    for axis in state.AXES:
+        _print_axis(axis, shortfalls, trends)
+
+    # Not narrowed to the window, and the heading says so. The count in the
+    # adherence line above is windowed -- it is about the workouts of those
+    # cycles -- while a prescription nobody ever reported is worth naming
+    # however long ago it was written, and the two numbers printed under one
+    # word would otherwise contradict each other on the same screen.
+    click.echo("")
+    if not waiting:
+        click.echo("unreported, whenever prescribed: none")
+        return
+    click.echo("unreported, whenever prescribed:")
+    for found in waiting:
+        click.echo(
+            f"  workout {found.workout_id}, prescribed "
+            f"{found.prescribed_on} ({found.days_ago} days ago)"
+        )
+
+
+def _trends(
+    connection: sqlite3.Connection, shortfalls: tuple[state.Deficit, ...], cycles: int
+) -> dict[tuple[str, str], str | None]:
+    """The load trend for each key something was actually performed on.
+
+    Not asked for the rest: a key with nothing performed has no loads to have
+    a direction, and the question would come back unknown for a reason that is
+    already visible in the row beside it.
+    """
+    return {
+        (short.axis, short.key): _trend_of(connection, short, cycles)
+        for short in shortfalls
+        if short.performed > 0
+    }
+
+
+def _trend_of(
+    connection: sqlite3.Connection, short: state.Deficit, cycles: int
+) -> str | None:
+    answer = state.volume_history(connection, short.axis, short.key, cycles)
+    return None if answer.value is None else answer.value.load_trend
+
+
+def _print_axis(
+    axis: str,
+    shortfalls: tuple[state.Deficit, ...],
+    trends: dict[tuple[str, str], str | None],
+) -> None:
+    """One axis's table, largest deficit first.
+
+    Both axes are printed even when one of them says nothing, because an axis
+    that disappeared when it was empty would read as an axis nobody counts --
+    and the whole argument for having two is that neither catches the other's
+    failure (ADR-0001).
+    """
+    rows = [short for short in shortfalls if short.axis == axis]
+    click.echo("")
+    click.echo(f"volume per {axis}, in rounds performed:")
+    if not rows:
+        click.echo("  nothing planned and nothing performed in this window")
+        return
+
+    width = max(len(short.key) for short in rows)
+    click.echo(f"  {'':{width}}  done  planned  deficit  loads")
+    for short in rows:
+        trend = trends.get((axis, short.key)) or "-"
+        click.echo(
+            f"  {short.key:{width}}  {short.performed:>4}  {short.planned:>7}  "
+            f"{short.deficit:>7}  {trend}"
+        )
 
 
 def _require_enrichment(connection: sqlite3.Connection) -> None:

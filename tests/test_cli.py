@@ -7,11 +7,13 @@ import sqlite3
 from contextlib import closing
 from datetime import date
 from pathlib import Path
+from typing import Any
 
+import click
 import pytest
 from click.testing import CliRunner
 
-from trainer import __version__
+from trainer import __version__, cli
 from trainer.cli import main
 from trainer.engine import (
     catalog,
@@ -22,6 +24,7 @@ from trainer.engine import (
     reference_set,
     residue,
     snapshot,
+    state,
     workouts,
 )
 
@@ -1315,7 +1318,7 @@ def test_plan_renders_a_valid_plan(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code == 0, result.output
@@ -1335,7 +1338,9 @@ def test_plan_rejects_an_exercise_todays_equipment_does_not_reach(
     )
 
     result = runner.invoke(
-        main, ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45"]
+        main,
+        ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45",
+         "--group", "arms"],
     )
 
     assert result.exit_code != 0
@@ -1350,7 +1355,9 @@ def test_plan_rejects_an_over_budget_plan_and_prints_no_workout(
     plan_file = write_plan(tmp_path, squat_block(rounds=20, rest=180))
 
     result = runner.invoke(
-        main, ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45"]
+        main,
+        ["plan", "--from", plan_file, "--equipment", "barbell", "--time", "45",
+         "--group", "legs"],
     )
 
     assert result.exit_code != 0
@@ -1395,7 +1402,7 @@ def test_plan_on_an_unenriched_catalog_names_that_state(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code != 0
@@ -1427,7 +1434,7 @@ def test_plan_on_a_database_with_no_catalog_names_that_state(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code != 0
@@ -1465,7 +1472,7 @@ def test_plan_leaves_the_workout_it_prescribed(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code == 0, result.output
@@ -1490,7 +1497,7 @@ def test_plan_still_renders_exactly_as_before(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code == 0, result.output
@@ -1508,7 +1515,7 @@ def test_planning_twice_leaves_two_workouts(
     of the first, and an upsert would lose a deviation nobody could account
     for afterwards."""
     arguments = ["plan", "--from", write_plan(tmp_path, squat_block()),
-                 "--equipment", "barbell", "--time", "45"]
+                 "--equipment", "barbell", "--time", "45", "--group", "legs"]
 
     assert runner.invoke(main, arguments).exit_code == 0
     assert runner.invoke(main, arguments).exit_code == 0
@@ -1549,7 +1556,7 @@ def test_a_plan_that_cannot_be_recorded_is_still_printed(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code != 0
@@ -1599,7 +1606,9 @@ def test_plan_asks_a_model_when_no_file_is_given(
         emitted=good_plan("Barbell_Squat"),
     )
 
-    result = runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45"])
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
+    )
 
     assert result.exit_code == 0, result.output
     assert "Barbell Squat" in result.output
@@ -1616,7 +1625,9 @@ def test_plan_reports_a_refused_plan_and_prints_no_workout(
 
     model = scripted(monkeypatch, emitted=good_plan("Dumbbell_Bicep_Curl"))
 
-    result = runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45"])
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
+    )
 
     assert result.exit_code != 0
     assert "Dumbbell_Bicep_Curl" in result.output
@@ -1638,7 +1649,8 @@ def test_plan_writes_the_run_record_when_asked(
 
     result = runner.invoke(
         main,
-        ["plan", "--equipment", "barbell", "--time", "45", "--record", str(record)],
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
+         "--record", str(record)],
     )
 
     assert result.exit_code == 0, result.output
@@ -1659,7 +1671,8 @@ def test_plan_writes_the_record_even_when_the_plan_is_refused(
 
     result = runner.invoke(
         main,
-        ["plan", "--equipment", "barbell", "--time", "45", "--record", str(record)],
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
+         "--record", str(record)],
     )
 
     assert result.exit_code != 0
@@ -1680,7 +1693,9 @@ def test_plan_says_when_the_budget_ran_out(
     )
 
     result = runner.invoke(
-        main, ["plan", "--equipment", "barbell", "--time", "45", "--call-budget", "2"]
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
+         "--call-budget", "2"],
     )
 
     assert result.exit_code == 0, result.output
@@ -1703,7 +1718,7 @@ def test_plan_with_a_file_asks_no_model(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code == 0, result.output
@@ -1959,7 +1974,7 @@ def test_plan_proposes_again_when_one_is_refused(
 
     result = runner.invoke(
         main,
-        ["plan", "--equipment", "barbell", "--time", "45",
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "shoulders",
          "--refused", str(refused), "--because", "I do not feel like squatting"],
     )
 
@@ -1980,7 +1995,7 @@ def test_plan_refuses_to_hand_back_the_plan_that_was_refused(
 
     result = runner.invoke(
         main,
-        ["plan", "--equipment", "barbell", "--time", "45",
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
          "--refused", str(refused), "--because", "no"],
     )
 
@@ -2007,7 +2022,7 @@ def test_the_refusal_writes_nothing_to_the_database(
 
     result = runner.invoke(
         main,
-        ["plan", "--equipment", "barbell", "--time", "45",
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "shoulders",
          "--refused", str(refused), "--because", "the squat rack was taken"],
     )
 
@@ -2068,7 +2083,7 @@ def test_plan_works_with_no_training_config_when_time_is_given(
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
 
     assert result.exit_code == 0, result.output
@@ -2226,7 +2241,7 @@ def prescribed_workout(runner: CliRunner, tmp_path: Path) -> int:
     result = runner.invoke(
         main,
         ["plan", "--from", write_plan(tmp_path, squat_block()),
-         "--equipment", "barbell", "--time", "45"],
+         "--equipment", "barbell", "--time", "45", "--group", "legs"],
     )
     assert result.exit_code == 0, result.output
     return int(workout_rows(database.database_path())[-1]["id"])
@@ -2510,3 +2525,238 @@ def test_log_needs_a_file_at_all(runner: CliRunner, enriched: Path) -> None:
 
     assert result.exit_code != 0
     assert "--from" in result.output
+
+
+# --- `trainer state`: what has been trained, and what has not ----------------
+
+
+def performed_workout(
+    runner: CliRunner, tmp_path: Path, **report: Any
+) -> None:
+    """Prescribe a squat workout and report it, both through the commands."""
+    identifier = prescribed_workout(runner, tmp_path)
+    report.setdefault("blocks", [performed_block(performed_item("Barbell_Squat"))])
+    report.setdefault("report", "done")
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(tmp_path, workout_id=identifier, **report)],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_state_on_a_database_nobody_has_trained_against(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """Every figure is a state and none of them is an error: nobody having
+    trained yet is the first thing this command ever prints."""
+    result = runner.invoke(main, ["state"])
+
+    assert result.exit_code == 0, result.output
+    assert "rotation: workout 1 of 4, cycle 1 -- 0 workout(s) performed" in result.output
+    assert "nothing performed and nothing waiting" in result.output
+    assert "unreported, whenever prescribed: none" in result.output
+    assert result.output.isascii()
+
+
+def test_state_counts_the_rounds_that_were_performed(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    performed_workout(runner, tmp_path)
+
+    result = runner.invoke(main, ["state"])
+
+    assert result.exit_code == 0, result.output
+    assert "rotation: workout 2 of 4, cycle 1 -- 1 workout(s) performed" in result.output
+    assert "adherence: 1 performed, 0 unreported, 0 nobody planned" in result.output
+
+
+def test_state_reports_both_axes(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Neither catches the other's degeneration, so an answer giving one of
+    them would be read as the whole picture (ADR-0001)."""
+    performed_workout(runner, tmp_path)
+
+    result = runner.invoke(main, ["state"])
+
+    assert "volume per pattern, in rounds performed:" in result.output
+    assert "volume per muscle, in rounds performed:" in result.output
+    assert "squat" in result.output
+    assert "quadriceps" in result.output
+
+
+def test_state_shows_the_rounds_a_shortened_workout_did_not_do(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Four rounds prescribed, two performed: the deficit is the two nobody
+    did, and it is the same number a substitution or a skipped workout would
+    have produced."""
+    performed_workout(
+        runner,
+        tmp_path,
+        blocks=[performed_block(performed_item("Barbell_Squat"), rounds=2)],
+    )
+
+    result = runner.invoke(main, ["state"])
+
+    squat = next(line for line in result.output.splitlines() if "  squat" in line)
+    assert squat.split() == ["squat", "2", "4", "2", "-"]
+
+
+def test_state_says_that_the_unreported_list_is_not_windowed(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """The adherence line counts the unreported workouts *of the window*; the
+    list names every one there is. Printed under one word, the two numbers
+    would contradict each other on the same screen."""
+    old = prescribed_workout(runner, tmp_path)
+    with closing(database.connect(database.database_path())) as connection:
+        connection.execute(
+            "UPDATE workouts SET prescribed_on = '2020-01-01' WHERE id = ?", (old,)
+        )
+        connection.commit()
+    # A full cycle of workouts since, all today, so the window starts today
+    # and the 2020 prescription is outside it.
+    for _ in range(4):
+        performed_workout(runner, tmp_path)
+
+    result = runner.invoke(main, ["state"])
+
+    assert "adherence: 4 performed, 0 unreported, 0 nobody planned" in result.output
+    assert "unreported, whenever prescribed:" in result.output
+    assert f"workout {old}, prescribed 2020-01-01" in result.output
+
+
+def test_state_leaves_out_the_workout_you_have_not_done_yet(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`trainer plan` writes a prescribed row every time it runs, and nobody
+    has failed to do a workout they are about to do."""
+    prescribed_workout(runner, tmp_path)
+
+    result = runner.invoke(main, ["state"])
+
+    assert "nothing planned and nothing performed in this window" in result.output
+    assert "unreported, whenever prescribed: none" in result.output
+
+
+def test_state_takes_a_window_of_cycles(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(main, ["state", "--cycles", "3"])
+
+    assert result.exit_code == 0, result.output
+    assert "window: 3 cycle(s), 12 workouts" in result.output
+
+
+def test_state_on_an_unenriched_catalog_names_that_state(
+    runner: CliRunner, stocked: Path
+) -> None:
+    """Half the answer is the pattern axis, and an unenriched catalog carries
+    no patterns -- so the table would print as *nothing performed* for a body
+    that had trained."""
+    result = runner.invoke(main, ["state"])
+
+    assert result.exit_code != 0
+    assert "trainer enrich derive" in result.output
+
+
+def test_state_needs_the_declared_rotation(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cycle is as long as the user said it is, and nothing else knows."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = runner.invoke(main, ["state"])
+
+    assert result.exit_code != 0
+    assert "no training configuration yet" in result.output
+
+
+def test_state_writes_nothing(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Read-only, including the unreported workouts it lists: nothing closes
+    one automatically and nothing assumes it happened."""
+    performed_workout(runner, tmp_path)
+    before = workout_rows(database.database_path())
+
+    runner.invoke(main, ["state"])
+
+    assert workout_rows(database.database_path()) == before
+
+
+def test_a_stated_state_failure_reaches_the_terminal_as_a_sentence() -> None:
+    """Every module that states a failure in words has a clause in
+    `reported()`, and the state module was the last one without: `trainer
+    state` is the first command to ask it anything, and its reachable failures
+    are all guarded upstream -- which is exactly how a missing clause survives
+    until the day something new can reach it."""
+    with pytest.raises(click.ClickException, match="a window of 0 cycles"):
+        with cli.reported():
+            raise state.StateError("a window of 0 cycles asks about nothing")
+
+
+# --- the rotation, derived ---------------------------------------------------
+
+
+def test_plan_takes_its_groups_from_where_the_rotation_is(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`--workout N` was a flag nobody computed. The position is the count of
+    performed workouts against the declared cycle length, and workout 1 of the
+    declared split is chest and arms."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code != 0
+    assert "rotation: workout 1 of 4, cycle 1 (0 performed) -- chest, arms" in result.output
+    assert "today's workout is chest, arms" in result.output
+
+
+def test_a_performed_workout_moves_the_plan_on_to_the_next_split(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    performed_workout(runner, tmp_path)
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert "rotation: workout 2 of 4, cycle 1 (1 performed) -- back, core" in result.output
+
+
+def test_the_workout_flag_still_overrides_the_rotation(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Planning the leg day again is a legitimate thing to want."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--workout", "3"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "rotation:" not in result.output
+
+
+def test_nothing_is_derived_without_a_declared_split(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Somebody planning with `--time` alone and no `training.toml` gets what
+    they always got: the whole admissible space."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "rotation:" not in result.output

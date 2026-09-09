@@ -28,6 +28,22 @@ and an interrupted run leaves half a workout behind. The agent emits and the
 engine writes — the same symmetry as session 4, where the agent does not call
 `render` either.
 
+**What issue 03 built, by the names it built them under.** `tools.TOOLS` now
+holds ten: `search_exercises` is the catalog search, `unreported_workouts` is
+the prescribed workouts with no report, and `adherence_history` and
+`volume_deficit` are there too — read tools the *planner* wants and the logger
+does not. Of this ticket's six, five exist; the sixth, the prescribed workout
+being reported against, is this ticket's to wrap around
+`workouts.prescribed`. So the logger's set is `search_exercises`,
+`unreported_workouts`, `last_performed_load`, `pattern_history`,
+`compare_variants` and that one.
+
+**Every windowed read needs `training.toml`.** `pattern_history` counts in
+cycles and only the declared file says how long one is, so on a machine with no
+configuration it comes back as a **failed tool result** naming the file to copy
+— not a crash, and not an empty history. The loop has to be able to carry on
+without it, the way it carries on past any other stated failure.
+
 `surface()` becomes parameterised by which agent is asking. One definition per
 tool and never a second copy: a copy diverges at the first tool added to one
 door and not the other. That is session 4's ticket 01 argument, unchanged.

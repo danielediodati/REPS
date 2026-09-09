@@ -450,6 +450,87 @@ def test_a_name_filter_does_not_treat_its_argument_as_a_pattern(
         assert catalog.search(connection, name="%").total == 0
 
 
+# --- searching by phrase -----------------------------------------------------
+
+
+def found_by(path: Path, text: str, limit: int | None = None) -> catalog.SearchResult:
+    with closing(database.connect(path)) as connection:
+        return catalog.candidates(connection, text, limit=limit)
+
+
+def test_a_phrase_finds_the_exercises_it_names(stocked: Path) -> None:
+    found = found_by(stocked, "military press")
+
+    assert "Standing_Military_Press" in {exercise.id for exercise in found.exercises}
+
+
+def test_every_word_has_to_land_somewhere(stocked: Path) -> None:
+    """*«dumbbell bench»* is dumbbells **and** benching, not either. Matched as
+    an OR it would answer with every barbell bench press in the catalog."""
+    found = found_by(stocked, "dumbbell bench")
+
+    assert found.total > 0
+    for exercise in found.exercises:
+        assert exercise.equipment == "dumbbell"
+
+
+def test_the_words_may_land_in_different_fields(stocked: Path) -> None:
+    """Which is what lets somebody describe an exercise by its equipment and
+    the muscle it trains without knowing what the catalog calls it."""
+    found = found_by(stocked, "cable chest")
+
+    assert found.total > 0
+    for exercise in found.exercises:
+        assert exercise.equipment == "cable"
+        assert "chest" in exercise.primary_muscles
+
+
+def test_a_phrase_matching_nothing_returns_nothing_rather_than_a_guess(
+    stocked: Path,
+) -> None:
+    """No nearest match, no dropped word, no fuzzy fallback: a caller handed an
+    exercise it did not ask for cannot tell that from the one it did, and it is
+    the id that gets prescribed."""
+    found = found_by(stocked, "quidditch broomstick")
+
+    assert found.exercises == ()
+    assert found.total == 0
+
+
+def test_a_search_with_no_words_in_it_is_a_caller_error(stocked: Path) -> None:
+    """Every row matches no words at all, and answering the whole catalog to a
+    question nobody asked is the shape of an accident."""
+    with pytest.raises(catalog.CatalogError, match="something to search for"):
+        found_by(stocked, "   ")
+
+
+def test_a_limited_search_still_says_how_many_there_were(stocked: Path) -> None:
+    limited = found_by(stocked, "press", limit=3)
+    whole = found_by(stocked, "press")
+
+    assert len(limited.exercises) == 3
+    assert limited.total == whole.total > 3
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_a_limit_of_less_than_one_is_refused(stocked: Path, limit: int) -> None:
+    """This is the one search a **model** picks the limit for. Zero would
+    answer *six matches* and show none of them, which reads exactly like no
+    matches at all; -1 is SQLite's *no limit*, which puts several hundred rows
+    into the context of an agent that asked for a shortlist."""
+    with pytest.raises(catalog.CatalogError, match="at least 1"):
+        found_by(stocked, "press", limit=limit)
+
+
+def test_the_phrase_is_not_treated_as_a_pattern(stocked: Path) -> None:
+    """`%` is a wildcard to LIKE and nothing to a person typing it."""
+    assert found_by(stocked, "%").total == 0
+
+
+def test_a_phrase_search_is_case_insensitive(stocked: Path) -> None:
+    assert found_by(stocked, "ARNOLD").total == found_by(stocked, "arnold").total > 0
+
+
 def test_results_are_ordered_by_name(stocked: Path) -> None:
     with closing(database.connect(stocked)) as connection:
         found = catalog.search(connection, filters={"category": "cardio"})

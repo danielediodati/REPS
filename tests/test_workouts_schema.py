@@ -401,11 +401,15 @@ def test_pattern_state_no_longer_has_a_pain_column(
     connection: sqlite3.Connection,
 ) -> None:
     """Nothing will ever write it: pain is prose the agent reads, and its only
-    structured outcome is an exclusion the user confirms."""
+    structured outcome is an exclusion the user confirms.
+
+    Migration 0007 has since replaced the table with a view, and the column is
+    still not there -- which is the stronger version of the same statement: no
+    view could compute it, so nothing could have brought it back."""
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(pattern_state)")}
 
     assert "pain" not in columns
-    assert {"movement_pattern", "cycle_volume", "load_trend"} <= columns
+    assert {"movement_pattern", "rounds"} <= columns
 
 
 def test_a_prescribed_block_must_say_why_it_is_there(

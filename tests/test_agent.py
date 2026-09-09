@@ -141,6 +141,12 @@ def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None
     for offered in agent.surface():
         assert offered["description"], f"{offered['name']} has no description"
         assert offered["parameters"]["type"] == "object"
+        if offered["name"] == "unreported_workouts":
+            # The one question with nothing to ask about: *today* is the
+            # door's to supply, never the model's, because nothing in
+            # `engine/` reads the clock.
+            assert offered["parameters"]["properties"] == {}
+            continue
         assert offered["parameters"]["properties"], f"{offered['name']} takes nothing"
 
 
@@ -264,7 +270,7 @@ def test_a_tool_the_surface_does_not_have_is_a_result_not_a_crash(
 ) -> None:
     """The model's mistake, not this project's, so it comes back as something
     it can recover from -- with the real names in it."""
-    model = Scripted(turns=[(call("adherence_history", cycles=3),), ()])
+    model = Scripted(turns=[(call("active_conclusions",),), ()])
 
     record = agent.plan_workout(connection, BARBELL_45, model=model)
 

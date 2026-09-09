@@ -17,7 +17,7 @@ import pytest
 
 from conftest import enrich, make_exercise
 from trainer import tools
-from trainer.engine import catalog, database, graph, migrations
+from trainer.engine import catalog, database, duration, graph, migrations, workouts
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
@@ -159,6 +159,144 @@ def test_compare_variants_refuses_a_catalog_the_graph_was_never_applied_to(
         tools.compare_variants("Barbell_Squat", "Dumbbell_Squat")
 
 
+# -- the read tools this ticket adds ------------------------------------------
+
+
+def performed(connection: sqlite3.Connection, on: str, exercise_id: str, rounds: int) -> None:
+    """One performed workout, straight sets, written the way a report writes
+    it. `tools` reopens the database on its own, so this commits."""
+    workouts.record_performed(
+        connection,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id=exercise_id,
+                        unit="reps",
+                        amount=8,
+                        amount_source="reported",
+                    ),
+                ),
+                rounds=rounds,
+                rounds_source="reported",
+                rest=90,
+                rest_source="reported",
+            ),
+        ),
+        on=on,
+        report="done",
+    )
+
+
+def test_search_exercises_finds_what_a_phrase_names(
+    stocked: sqlite3.Connection,
+) -> None:
+    found = tools.search_exercises("dumbbell squat")
+
+    assert found["total"] == 1
+    assert found["exercises"][0]["id"] == "Dumbbell_Squat"
+
+
+def test_search_exercises_answers_nothing_rather_than_a_guess(
+    stocked: sqlite3.Connection,
+) -> None:
+    """An id you did not ask for reads exactly like the one you did, and it is
+    the id that gets prescribed."""
+    found = tools.search_exercises("quidditch broomstick")
+
+    assert found == {"total": 0, "exercises": []}
+
+
+def test_search_exercises_says_how_many_there_were_before_the_limit(
+    stocked: sqlite3.Connection,
+) -> None:
+    found = tools.search_exercises("squat", limit=1)
+
+    assert len(found["exercises"]) == 1
+    assert found["total"] == 3
+
+
+def test_adherence_history_counts_what_became_of_the_workouts(
+    stocked: sqlite3.Connection,
+) -> None:
+    performed(stocked, "2026-09-01", "Barbell_Squat", 3)
+
+    answer = tools.adherence_history(cycles=1)
+
+    assert answer["known"] is True
+    assert answer["value"]["performed"] == 1
+    assert answer["value"]["unplanned"] == 1
+
+
+def test_adherence_history_against_nothing_is_an_answer_and_not_a_failure(
+    stocked: sqlite3.Connection,
+) -> None:
+    answer = tools.adherence_history(cycles=1)
+
+    assert answer["known"] is False
+    assert answer["value"] is None
+
+
+def test_volume_deficit_carries_both_axes_and_the_number_itself(
+    stocked: sqlite3.Connection,
+) -> None:
+    performed(stocked, "2026-09-01", "Barbell_Squat", 4)
+
+    found = tools.volume_deficit(cycles=1)
+
+    by_axis = {(short["axis"], short["key"]): short for short in found}
+    assert by_axis[("pattern", "squat")]["performed"] == 4
+    assert by_axis[("pattern", "squat")]["deficit"] == -4
+    assert by_axis[("muscle", "quadriceps")]["performed"] == 4
+
+
+def test_unreported_workouts_states_the_fact_and_changes_nothing(
+    stocked: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_prescribed(
+        stocked,
+        (
+            workouts.PrescribedBlock(
+                block=duration.Block(
+                    items=(duration.BlockItem(exercise_id="Barbell_Squat", reps=8),),
+                    rounds=4,
+                    rest=120,
+                ),
+                reason="because",
+            ),
+        ),
+        on="2020-01-01",
+    )
+    performed(stocked, "2020-02-01", "Standing_Military_Press", 3)
+
+    (waiting,) = tools.unreported_workouts()
+
+    assert waiting["workout_id"] == identifier
+    assert waiting["prescribed_on"] == "2020-01-01"
+    assert waiting["days_ago"] > 0
+    assert stocked.execute(
+        "SELECT state FROM workouts WHERE id = ?", (identifier,)
+    ).fetchone()["state"] == "prescribed"
+
+
+def test_unreported_workouts_is_empty_when_nothing_is_waiting(
+    stocked: sqlite3.Connection,
+) -> None:
+    assert tools.unreported_workouts() == []
+
+
+def test_a_window_with_no_declared_rotation_is_the_configuration_s_own_state(
+    stocked: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A question about cycles cannot be answered without knowing how long one
+    is, and the answer names the file to copy rather than a state the engine
+    invented."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    with pytest.raises(tools.ToolFailure, match="training.example.toml"):
+        tools.pattern_history(pattern="squat", cycles=1)
+
+
 # -- the preconditions, stated once and with the way out ----------------------
 
 
@@ -222,10 +360,13 @@ def test_every_tool_is_documented_and_annotated() -> None:
         assert "return" in tool.__annotations__, f"{tool.__name__} has no return type"
 
 
-def test_the_tools_with_nothing_to_wrap_are_not_here() -> None:
-    """`adherence_history` needs `workouts` and `active_conclusions` needs
-    `conclusions`; neither table exists."""
+def test_the_tool_with_nothing_to_wrap_is_not_here() -> None:
+    """`active_conclusions` needs `conclusions`, which is session 8. A tool
+    that exists and cannot work is worse than one that does not exist.
+
+    `adherence_history` was named here too until session 5 gave it the rows it
+    reads, and it is registered now."""
     named = {tool.__name__ for tool in tools.TOOLS}
 
-    assert "adherence_history" not in named
     assert "active_conclusions" not in named
+    assert "adherence_history" in named

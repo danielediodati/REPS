@@ -1,7 +1,9 @@
 """The tool surface: one set of definitions, registered behind two doors.
 
 TRAINER.md's `admissible_set`, `remaining_budget`, `allocate`,
-`pattern_history`, `last_performed_load` and `compare_variants`, each of which
+`pattern_history`, `adherence_history`, `last_performed_load` and
+`compare_variants`, plus the three this project found it needed --
+`search_exercises`, `volume_deficit`, `unreported_workouts` -- each of which
 unpacks its arguments, opens the connection, calls the library function and
 shapes the result for a caller that speaks JSON. No validation of its own, no
 decision, no new logic: `tests/test_engine_boundary.py` exists precisely so
@@ -27,10 +29,16 @@ library the boundary test keeps free of any knowledge of a client, and `mcp`
 is in its forbidden list next to `click` for the same reason: a convention
 that is not enforced is a convention forgotten in a month.
 
-**What is not here.** `adherence_history` and `active_conclusions` are in
-TRAINER.md's tool surface and have nothing to wrap yet -- they need `workouts`
-(session 5) and `conclusions` (session 8). Wrapping a function that does not
-exist is not this module's job.
+**What is not here.** `active_conclusions` is in TRAINER.md's tool surface and
+has nothing to wrap yet -- it needs `conclusions`, in session 8. Wrapping a
+function that does not exist is not this module's job. `adherence_history` was
+here in that sentence too until session 5 gave it rows to read.
+
+**Nothing here writes.** Every tool on this surface is a question, and that is
+a rule and not an observation: if the model can call the write, the model
+decides when the database changes -- the single door disappears, the validator
+becomes optional, and an interrupted run leaves half a workout behind. The
+agent emits and the engine writes (ROADMAP.md § Session 5).
 """
 
 from __future__ import annotations
@@ -39,12 +47,14 @@ import sqlite3
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import asdict, is_dataclass
+from datetime import date
 from typing import Any
 
 from trainer.engine import (
     admissible,
     budget,
     catalog,
+    config,
     database,
     duration,
     graph,
@@ -62,9 +72,15 @@ training state. It answers questions and never decides how to train.
 prescribed. `remaining_budget` and `allocate` are arithmetic over the time
 available; neither cuts a plan that does not fit. `compare_variants` says what
 two exercises are like and whether the curated graph calls them the same
-movement, or one of them easier. `pattern_history` and `last_performed_load`
-read state that no workout has been logged into yet, so today they answer that
-they do not know, which is an answer and not a failure.
+movement, or one of them easier. `search_exercises` goes from a phrase to the
+exercises that could be it, and answers nothing rather than guessing.
+
+`pattern_history`, `last_performed_load`, `adherence_history`, `volume_deficit`
+and `unreported_workouts` read what has actually been trained. They answer
+*"I don't know"* where nothing has been recorded, which is an answer and not a
+failure: a movement nobody has trained is a fact to plan around.
+
+None of these writes anything. The engine records a workout; a tool never does.
 """
 
 
@@ -80,6 +96,7 @@ _ENGINE_ERRORS = (
     admissible.AdmissibleError,
     budget.BudgetError,
     catalog.CatalogError,
+    config.ConfigError,
     duration.DurationError,
     ExclusionError,
     graph.GraphError,
@@ -90,7 +107,12 @@ _ENGINE_ERRORS = (
 """Every failure the library states in words. Each is re-raised as a
 `ToolFailure` so it reaches the caller as a result marked failed, rather than
 as a traceback that takes the door down with it -- the same job
-`cli.reported()` does for the terminal."""
+`cli.reported()` does for the terminal.
+
+`ConfigError` is among them because a window is counted in cycles and only
+`training.toml` says how long one is. Its own wording is kept -- it names the
+file and the example to copy -- rather than being restated as a state the
+engine invented."""
 
 
 @contextmanager
@@ -281,6 +303,105 @@ def last_performed_load(exercise_id: str) -> dict[str, Any]:
         return _answer(state.last_performed_load(connection, exercise_id))
 
 
+def search_exercises(text: str, limit: int = 20) -> dict[str, Any]:
+    """The exercises a plain-language phrase could be naming.
+
+    Every word has to appear somewhere in the row, and the words may land in
+    different fields: `"dumbbell bench"` is dumbbells **and** benching,
+    `"cable chest"` is the cable exercises that train the chest. The fields
+    searched are the catalog's own -- name, equipment, category, primary
+    muscles, movement pattern.
+
+    A phrase that matches nothing comes back with `total: 0` and no exercises.
+    There is no nearest match and no dropped word: an id you did not ask for
+    reads exactly like the one you did, and it is the id that gets prescribed.
+
+    `total` is how many there were before `limit`, so a listing that stops
+    short still says how much it stopped short of.
+    """
+    with reported(), opened() as connection:
+        found = catalog.candidates(connection, text, limit=limit)
+    return {
+        "total": found.total,
+        "exercises": [_exercise(exercise) for exercise in found.exercises],
+    }
+
+
+def adherence_history(cycles: int) -> dict[str, Any]:
+    """What became of the workouts of the last `cycles` cycles.
+
+    Three counts and no percentage: `performed` is what was done, `unreported`
+    is prescribed workouts a later one overtook with no report ever filed, and
+    `unplanned` is training nobody prescribed -- which is training all the
+    same. An unreported workout is **never** counted as adherence: assuming a
+    silent workout happened inflates the record at exactly the moment training
+    stopped.
+
+    `known: false` means the window holds nothing at all, which is *"nobody has
+    trained yet"* and not zero-percent adherence.
+    """
+    with reported(), opened() as connection:
+        return _answer(state.adherence_history(connection, cycles))
+
+
+def volume_deficit(cycles: int) -> list[dict[str, Any]]:
+    """Planned against performed volume, on both axes.
+
+    Largest deficit first **within each axis**, pattern rows and then muscle
+    rows: a round counts once per pattern and once per primary muscle, so the
+    two are not on one scale and ranking them against each other would be
+    arithmetic on different units. Read the list to the end -- the largest
+    muscle-axis deficit is below every pattern row, however small.
+
+    Volume is **rounds performed**. Every round counts whole to the exercise's
+    movement pattern and whole to each of its primary muscles; nothing is
+    divided, and a block of two exercises for four rounds is four rounds of
+    each.
+
+    Both axes in one answer, because neither catches the other's failure: a leg
+    day of calf raises shows up per pattern, an arm day of nothing but curls
+    only per muscle, since biceps, triceps and forearms are all `isolation`.
+
+    A negative deficit is training nobody planned. The number absorbs four
+    different mechanisms -- a substitution, a cut for time, a workout stopped
+    early, a workout skipped -- and does not claim to know which it was.
+
+    A workout still to do is **not** in here. A prescription that has been
+    neither performed nor overtaken by a later workout has not been missed, and
+    counting it would have you making up volume that is already scheduled.
+    """
+    with reported(), opened() as connection:
+        found = state.volume_deficit(connection, cycles)
+    return [
+        {
+            "axis": short.axis,
+            "key": short.key,
+            "cycles": short.cycles,
+            "planned": short.planned,
+            "performed": short.performed,
+            "deficit": short.deficit,
+        }
+        for short in found
+    ]
+
+
+def unreported_workouts() -> list[dict[str, Any]]:
+    """The prescribed workouts a later one has overtaken with no report.
+
+    A statement of fact, oldest first: *"there is a prescribed workout from
+    twelve days ago with no report"*. It decides nothing -- whether to ask the
+    user about it is yours to judge, and reading this closes nothing and
+    assumes nothing happened.
+
+    Empty is the normal state. A plan emitted this morning is not in here; it
+    is a workout still to do.
+    """
+    today = date.today().isoformat()
+    with reported(), opened() as connection:
+        found = state.unreported(connection, today)
+    return [asdict(waiting) for waiting in found]
+
+
 def compare_variants(id_a: str, id_b: str) -> dict[str, Any]:
     """Two exercises side by side, and what the curated graph says about them.
 
@@ -310,11 +431,20 @@ TOOLS: tuple[Callable[..., Any], ...] = (
     allocate,
     pattern_history,
     last_performed_load,
+    search_exercises,
+    adherence_history,
+    volume_deficit,
+    unreported_workouts,
     compare_variants,
 )
 """The surface, enumerated once.
 
-Every door registers exactly this. A test asserting the same six names a
-second time would be a second place to forget them, so what the doors are
-checked against is this tuple rather than a copy of it.
+Every door registers exactly this. A test asserting the same names a second
+time would be a second place to forget them, so what the doors are checked
+against is this tuple rather than a copy of it.
+
+Not every agent is offered all of them -- session 5's logging agent reads what
+was trained and never plans, so it has no use for `allocate`. Which subset a
+given agent sees is `agent.surface()`'s to decide; what may exist at all is
+decided here.
 """

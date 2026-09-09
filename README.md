@@ -38,12 +38,16 @@ uv run trainer enrich check                   # score both against the hand-buil
 
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 
-uv run trainer plan --equipment dumbbell --workout 3          # groups and time from your split
+uv run trainer plan --equipment dumbbell                      # the next workout of your split
+uv run trainer plan --equipment dumbbell --workout 3          # or name which one of it
 uv run trainer plan --equipment dumbbell --workout 3 --avoid Dumbbell_Lunges
 uv run trainer plan --equipment dumbbell --workout 3 --refused plan.json --because "not today"
 uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
 uv run trainer log --from report.json                          # no model: report a workout you did
+
+uv run trainer state                          # where the rotation is, and what it has accumulated
+uv run trainer state --cycles 3               # over a wider window
 
 uv run trainer config                         # what you declared: cycle, cap, split
 uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups

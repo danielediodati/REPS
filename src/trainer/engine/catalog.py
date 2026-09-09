@@ -677,6 +677,88 @@ def search(
     return SearchResult(tuple(from_row(row) for row in rows), total)
 
 
+SEARCHABLE = (
+    "name",
+    "equipment",
+    "category",
+    "primary_muscles",
+    "movement_pattern",
+)
+"""The fields a phrase is matched against, and they are the catalog's own.
+
+Not a synonym table and not a curated index: *«dumbbell chest»* finds what it
+finds because the rows say `dumbbell` and `chest`, and the day the dataset is
+re-vendored the vocabulary moves with it. `primary_muscles` is matched as the
+JSON text it is stored as, which is enough for a substring and needs no
+explosion -- `["chest"]` contains `chest`.
+"""
+
+
+def candidates(
+    connection: sqlite3.Connection, text: str, limit: int | None = None
+) -> SearchResult:
+    """The exercises a plain-language phrase could be naming.
+
+    Every word has to appear somewhere in the row -- *«dumbbell bench»* is
+    dumbbells **and** benching, not either -- and the words may land in
+    different fields, which is what lets somebody describe an exercise by its
+    equipment and the muscle it trains without knowing what the catalog calls
+    it.
+
+    **No guess.** A phrase that matches nothing comes back empty, with a total
+    of zero. There is no nearest-match, no dropped word and no fuzzy fallback:
+    a caller handed an exercise it did not ask for cannot tell that from the
+    one it did, and it is the id that gets prescribed.
+
+    An empty phrase is a caller error rather than the whole catalog: every row
+    matches no words at all, and answering 876 rows to a question nobody asked
+    is the shape of an accident.
+    """
+    words = text.split()
+    if not words:
+        raise CatalogError(
+            "a search needs something to search for; give a word or two from "
+            "the exercise, its equipment or the muscle it trains"
+        )
+    if limit is not None and limit < 1:
+        # The one search a **model** picks the limit for, so the limit is
+        # checked here rather than by whoever calls it -- `search` is only
+        # reached through `click.IntRange`. Zero would answer *six matches*
+        # and show none of them, which reads exactly like no matches; and -1
+        # is SQLite's *no limit at all*, which puts several hundred rows into
+        # the context of an agent that asked for a shortlist.
+        raise CatalogError(
+            f"a search for at most {limit} exercises asks for nothing; the "
+            "limit is how many to show, and it is at least 1"
+        )
+
+    # One blob per row, built from the fields above. `instr` rather than LIKE,
+    # for `search`'s reason: no % or _ to escape, so a phrase cannot turn into
+    # a pattern by accident.
+    blob = " || ' ' || ".join(
+        f"COALESCE(lower({field}), '')" for field in SEARCHABLE  # from SEARCHABLE
+    )
+    conditions = " AND ".join(f"instr({blob}, lower(?)) > 0" for _ in words)
+
+    clause = ""
+    parameters: list[object] = list(words)
+    if limit is not None:
+        clause = "LIMIT ?"
+        parameters = [*words, limit]
+
+    with _one_snapshot(connection):
+        total = int(
+            connection.execute(
+                f"SELECT COUNT(*) AS total FROM exercises WHERE {conditions}", words
+            ).fetchone()["total"]
+        )
+        rows = connection.execute(
+            f"SELECT * FROM exercises WHERE {conditions} ORDER BY name, id {clause}",
+            parameters,
+        ).fetchall()
+    return SearchResult(tuple(from_row(row) for row in rows), total)
+
+
 STRENGTH_CATEGORY = "strength"
 """The one category value the rest of the project is about.
 

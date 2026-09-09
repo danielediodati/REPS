@@ -106,3 +106,43 @@ def enrich(
                 exercise_id,
             ),
         )
+
+
+DECLARED_CONFIG = """\
+cycle_length = 4
+duration_cap_min = 60
+volume_denominator = "cycle"
+split = [["chest", "arms"], ["back", "core"], ["legs"], ["shoulders", "arms"]]
+"""
+"""What a test reads when it asks what the user declared.
+
+A four-workout rotation, because `state.window` multiplies the cycle length by
+the cycles asked for and a length of 1 would make every window test pass for
+the wrong reason.
+"""
+
+
+@pytest.fixture(autouse=True)
+def declared_training(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A training configuration, for every test that does not bring its own.
+
+    Autouse for the reason `no_network` is: `config.config_path()` falls back
+    to `Path.cwd() / "training.toml"`, so a developer who has declared their
+    own rotation in the checkout would have the suite read it -- and every
+    window, split and cycle assertion would be about their file rather than
+    about the code. Pointed somewhere disposable, the suite says the same thing
+    on every machine.
+
+    Overridden by any test that sets `TRAINER_CONFIG` itself, which is how the
+    absent-configuration and broken-configuration states are still exercised.
+    It is written to a directory of its own rather than to `tmp_path`, because
+    those tests point at `tmp_path / "training.toml"` to mean *there is no such
+    file* -- and a fixture that had already written one there would answer them
+    with a configuration.
+    """
+    directory = tmp_path / "declared"
+    directory.mkdir(exist_ok=True)
+    path = directory / "training.toml"
+    path.write_text(DECLARED_CONFIG, encoding="utf-8")
+    monkeypatch.setenv("TRAINER_CONFIG", str(path))
+    return path

@@ -158,12 +158,24 @@ A **tool library**, called by the agent.
 ```
 admissible_set(exclusions, equipment, budget, groups)
 remaining_budget(partial_plan, budget)
+allocate(minutes, proportions)
+search_exercises(text, limit)         # a phrase to candidate ids, or nothing
 pattern_history(pattern, cycles)
-adherence_history(cycles)
+adherence_history(cycles)             # performed, unreported, nobody planned
+volume_deficit(cycles)                # planned against performed, on both axes
+unreported_workouts()                 # a fact, and no decision about it
 last_performed_load(exercise_id)
 compare_variants(id_a, id_b)          # pattern, loaded joints, stability, setup cost
 active_conclusions()
 ```
+
+The three unlisted for a long time — `search_exercises`, `volume_deficit` and
+`unreported_workouts` — arrived with session 5, which is when there was
+anything to read. The logging agent goes from *«ho fatto le alzate laterali»*
+to an id it can record, and it needs to be told that a workout from twelve days
+ago was never reported so that it can decide whether to ask. Every one of them
+is a **read**: writes are never tools, because a model that can call the write
+decides when the database changes.
 
 `groups` names the muscle groups the workout trains, read from the declared split. It is a constraint and not a choice of method: the whole admissible space is several times any one workout — with dumbbells the catalog leaves 119 exercises standing and a leg day needs 14 — and handing an agent the other 105 is handing it the biceps on a leg day, on every turn of the loop.
 
@@ -388,7 +400,8 @@ A single **SQLite** file:
 |---|---|
 | `profile` | primary goal and constraints, history, base equipment, permanent constraints |
 | `mesocycle` | chosen scheme + rationale + start date + split |
-| `pattern_state` | per pattern: volume per cycle, load trend. A **view** over the performed workouts from session 5, not a stored aggregate |
+| `pattern_state` | per pattern: rounds performed, and the load trend by a written rule. A **view**, not a stored aggregate — it carries both phases, because the volume deficit is the difference between them |
+| `muscle_state` | the same, per muscle: the finer of the two axes ADR-0001 counts on, and the only one that tells an arm day of curls from a balanced one |
 | `exclusions` | granularity (pattern or joint), value, re-test date |
 | `workouts` | one row per workout, `prescribed` or `performed`; its blocks and exercises carry both phases side by side, because the deviation is the difference between them. Loads, RPE, and a provenance per field. **No pain**: see the medical trigger above |
 | `exercises` | the 800 enriched |

@@ -95,6 +95,39 @@ def prescribe(connection: sqlite3.Connection) -> int:
     )
 
 
+def lifted(connection: sqlite3.Connection, exercise_id: str, load_kg: float) -> int:
+    """One workout, already performed, with a load on the bar.
+
+    Written through the engine's own writer rather than in SQL: what
+    `last_performed_load` reads back has to be what a report actually puts
+    there, and a fixture that inserted its own rows could agree with a view
+    that no report ever fills.
+    """
+    return workouts.record_performed(
+        connection,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id=exercise_id,
+                        unit="reps",
+                        amount=5,
+                        amount_source="reported",
+                        load_kg=load_kg,
+                        load_kg_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on="2026-09-01",
+        report="lifted it",
+    )
+
+
 def document(*blocks: dict[str, Any], **fields: Any) -> str:
     base: dict[str, Any] = {"blocks": list(blocks), "report": "went fine"}
     base.update(fields)
@@ -487,13 +520,48 @@ def test_a_load_inside_the_rule_is_not_flagged(
 def test_a_load_with_no_history_behind_it_is_not_flagged(
     connection: sqlite3.Connection,
 ) -> None:
-    """`state.last_performed_load` answers *"I don't know"* until session 5's
-    issue 03 repoints `LOAD_SOURCE` at the columns migration 0006 moved the
-    load onto. An unknown history flags nothing: the first time a load is
-    recorded there is nothing for it to have jumped from, and inventing a
-    baseline would make every first entry suspicious."""
+    """An unknown history flags nothing: the first time a load is recorded
+    there is nothing for it to have jumped from, and inventing a baseline would
+    make every first entry suspicious.
+
+    This asserted the same thing when `state.last_performed_load` could not
+    answer at all, and it asserts it now against a database where the answer is
+    real and this exercise simply has no load in it -- which is what the
+    original was standing in for.
+    """
+    lifted(connection, "Standing_Military_Press", 40.0)
     parsed = log.parse(
         document(block(item("Barbell_Squat", load_kg=400, load_kg_source="reported")))
+    )
+
+    assert says(flags_for(connection, parsed), "Barbell_Squat") == []
+
+
+def test_a_load_is_flagged_against_a_load_that_was_really_recorded(
+    connection: sqlite3.Connection,
+) -> None:
+    """No `monkeypatch`. The flag was dormant for two sessions because
+    `last_performed_load` had nowhere to read from; migration 0007 gave it one,
+    and this is the whole path -- a workout performed at 100 kg, and the next
+    report saying 140."""
+    lifted(connection, "Barbell_Squat", 100.0)
+    parsed = log.parse(
+        document(block(item("Barbell_Squat", load_kg=140, load_kg_source="reported")))
+    )
+
+    assert says(flags_for(connection, parsed), "Barbell_Squat") == [
+        "moved from 100 kg to 140 kg, further than the recorded history explains"
+    ]
+
+
+def test_progression_against_a_real_recorded_load_is_not_flagged(
+    connection: sqlite3.Connection,
+) -> None:
+    """The other half of the same path: a flag that fired on every good workout
+    would be a flag nobody reads."""
+    lifted(connection, "Barbell_Squat", 100.0)
+    parsed = log.parse(
+        document(block(item("Barbell_Squat", load_kg=102.5, load_kg_source="reported")))
     )
 
     assert says(flags_for(connection, parsed), "Barbell_Squat") == []
