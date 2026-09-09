@@ -1064,8 +1064,101 @@ def test_the_writer_guard_does_not_fire_on_something_else(tmp_path: Path) -> Non
     assert _importers_of("trainer.engine.workouts", tmp_path) == set()
 
 
-def test_only_the_cli_reaches_the_writer() -> None:
+def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
+    """A short, explicit list of who may even see the module.
+
+    `log.py` joined it in session 5 and does not write: it reads the
+    prescribed phase back, because adherence has to know what was prescribed
+    in order to fill in what a report left out, and it names the two performed
+    dataclasses because those are what a complete block is. The claim that the
+    writer itself is out of reach is the next test, and it is the one that
+    matters.
+    """
+    assert _importers_of("trainer.engine.workouts") == {"cli.py", "log.py"}
+
+
+WRITERS = ("record_prescribed", "record_performed")
+"""The two functions that change what the database says happened. The guard
+below is about these names, not about the module that holds them."""
+
+
+def _callers_of(
+    writers: tuple[str, ...] = WRITERS, root: Path = PACKAGE_ROOT
+) -> set[str]:
+    """Every module under `root` outside the engine that names one of the
+    writers -- called as `workouts.record_performed(...)` or imported bare and
+    called by name.
+
+    A call rather than an import, because `log.py` legitimately needs the
+    module: it reads the prescribed phase back in order to fill in what a
+    report did not mention, and it names the two performed dataclasses because
+    those are what a complete block is. Reading is not writing. What must stay
+    impossible is the *call*, from anywhere but the command.
+    """
+    found: set[str] = set()
+    for module in sorted(root.rglob("*.py")):
+        if module.is_relative_to(root / "engine"):
+            # The engine defines them and may call its own; the claim is about
+            # everything above it.
+            continue
+        tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        for node in ast.walk(tree):
+            named = (
+                node.attr
+                if isinstance(node, ast.Attribute)
+                else node.id
+                if isinstance(node, ast.Name)
+                else None
+            )
+            if named in writers:
+                found.add(str(module.relative_to(root)).replace("\\", "/"))
+    return found
+
+
+def test_only_the_cli_calls_a_writer() -> None:
     """The runtime assertions above say the writer was not called on these
     paths. This says it cannot be, from anywhere but the command -- which is
-    the claim that has to survive somebody adding a tool next session."""
-    assert _importers_of("trainer.engine.workouts") == {"cli.py"}
+    the claim that has to survive somebody adding a tool next session.
+
+    It is about the two writer names rather than about the module because
+    session 5 gave that module readers as well: `log.py` reads the prescribed
+    phase to fill in what a report left out. Written as *nobody but the CLI
+    may import `workouts`*, this test would have had to be relaxed to let a
+    reader through, and relaxing it is what loses the claim. Written about the
+    writers, it says exactly what ROADMAP.md says -- the agent emits, the
+    engine writes -- and it stays sharp.
+    """
+    assert _callers_of() == {"cli.py"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "workouts.record_prescribed(connection, blocks, on='2026-09-09')",
+        "workouts.record_performed(connection, blocks, on='2026-09-09', report='')",
+        "record_performed(connection, blocks, on='2026-09-09', report='')",
+        "engine.workouts.record_prescribed(connection, blocks, on='2026-09-09')",
+    ],
+)
+def test_the_writer_guard_catches_every_form_of_the_call(
+    source: str, tmp_path: Path
+) -> None:
+    """The guard is only worth having if it fails on the code it forbids --
+    `test_engine_boundary.py` makes the same point about its own."""
+    (tmp_path / "offender.py").write_text(source, encoding="utf-8")
+
+    assert _callers_of(root=tmp_path) == {"offender.py"}
+
+
+def test_the_writer_call_guard_does_not_fire_on_a_reader(tmp_path: Path) -> None:
+    """Reading the prescribed phase and naming the performed dataclasses is
+    what `log.py` does, and it must not read as a write."""
+    (tmp_path / "innocent.py").write_text(
+        "from trainer.engine import workouts\n"
+        "blocks = workouts.prescribed(connection, 1)\n"
+        "item = workouts.PerformedItem(exercise_id='x', unit='reps', amount=8,\n"
+        "                              amount_source='reported')\n",
+        encoding="utf-8",
+    )
+
+    assert _callers_of(root=tmp_path) == set()

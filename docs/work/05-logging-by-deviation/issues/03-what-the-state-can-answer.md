@@ -74,3 +74,4 @@ had to stop being a table. TRAINER.md § The tool surface.
 - [ ] Catalog search returns candidates for a plain-language phrase and returns nothing rather than a guess when there is no match.
 - [ ] The unreported-workouts tool states the fact and takes no action.
 - [ ] `last_performed_load` reads the columns `state.LOAD_SOURCE` already names, or that constant changes and says why.
+- [ ] Repointing `LOAD_SOURCE` turns on the load flag issue 02 left dormant: `log._loads_that_jumped` asks `last_performed_load` and flags a move of more than `log.LOAD_JUMP` from it, and today that flag never fires because the answer is always unknown. `test_log.py::test_a_load_with_no_history_behind_it_is_not_flagged` is the test written against the silence — it has to be rewritten, not deleted, and there has to be a test with a real recorded load behind it.

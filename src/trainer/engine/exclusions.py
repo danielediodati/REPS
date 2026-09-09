@@ -17,6 +17,7 @@ outlive the command that made it.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from trainer.engine import catalog
@@ -85,3 +86,38 @@ def active(connection: sqlite3.Connection, today: str) -> tuple[Exclusion, ...]:
         (today,),
     )
     return tuple(Exclusion(row["granularity"], row["value"]) for row in rows)
+
+
+def covering(
+    connection: sqlite3.Connection,
+    exclusions: Sequence[Exclusion],
+    exercise_id: str,
+) -> tuple[Exclusion, ...]:
+    """Which of these exclusions reach this exercise, in the order given.
+
+    The one definition of *an exclusion covers an exercise*, and there are two
+    readers of it that ask for opposite reasons. `admissible.rejection`
+    explains why a plan may not name it; session 5's report says it was
+    performed anyway. Written twice, the day the two disagree is the day the
+    engine forbids something on the way in that it does not flag on the way
+    out -- and the flag is the row TRAINER.md's whole learning loop is built
+    on.
+
+    An exercise enrichment does not cover -- a stretch, a cardio row, a row
+    read by hand and decided to have no honest pattern -- is covered by
+    nothing. It has no pattern to match and no joints to load, which is a
+    fact about the row rather than a failure to answer, so the empty tuple is
+    the truthful answer and `catalog.enrichment`'s four states stay where
+    they are worded.
+    """
+    try:
+        profile = catalog.enrichment(connection, exercise_id)
+    except catalog.CatalogError:
+        return ()
+
+    return tuple(
+        exclusion
+        for exclusion in exclusions
+        if (exclusion.granularity == "pattern" and exclusion.value == profile.movement_pattern)
+        or (exclusion.granularity == "joint" and exclusion.value in profile.loaded_joints)
+    )

@@ -24,6 +24,7 @@ FORBIDDEN_PREFIXES = (
     "trainer.mcp_server",
     "mcp",
     "trainer.plan",
+    "trainer.log",
     "trainer.agent",
     # The wire shape's own library. A plan reaches the engine as
     # `duration.Block`, and the day `engine/` imports pydantic it has started
@@ -119,6 +120,7 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
         "from trainer.tools import TOOLS",
         "from pydantic import BaseModel",
         "from trainer.plan import WorkoutPlan",
+        "from trainer.log import PerformedWorkout",
         "from trainer.agent import plan_workout",
         "from trainer.mcp_server import server",
         "from anthropic import Anthropic",

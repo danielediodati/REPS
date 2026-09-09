@@ -133,6 +133,20 @@ adherence and flag the uncertainty»* a column rather than a slogan. The same
 discipline the enrichment fields already use, where a value a rule derived and
 a value a person decided are not worth the same.
 
+**Flag**:
+Something the engine noticed about a performed workout and **recorded
+anyway**: an exercise nobody prescribed, an exercise under an active
+exclusion, a workout with no prescribed counterpart, a load that moved further
+than the recorded history explains. It is the whole of what a report can be
+told about what the user *did*, because a report is a fact and a fact is never
+refused — what a report is refused for is only ever a statement about the
+document, like an exercise id the catalog does not have.
+It is computed when the report is read and printed beside the row it is about;
+it is not a column. Nothing stored can go stale, and a flag recomputed
+tomorrow against tomorrow's exclusions is the truthful one.
+_Avoid_: warning, error — neither is a thing that gets written to the
+database, and both read as something the user should have done differently.
+
 ### What volume is counted on
 
 **Movement pattern**:

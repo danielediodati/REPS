@@ -62,6 +62,32 @@ the admissible set across six patterns, `vertical push` takes 50. Creating one
 silently from a passing remark would cost the user a third of the catalog with
 nobody telling them.
 
+**What issue 02 already decided, so this ticket does not decide it again.**
+The document the agent emits is `log.PerformedWorkout`, and four things about
+it are settled:
+
+- **The proposed exclusion carries a value, a re-test date and a `why` — no
+  granularity.** `exclusions.classify` resolves the value against the
+  catalog's own vocabulary, and a granularity on the wire would be a second
+  answer to a question the engine already answers. The model names the thing;
+  it does not label it.
+- **Adherence is applied by `log.to_performed`, not by the model.** The agent
+  may emit only what deviated: a prescribed exercise the document never names
+  comes through with the prescription's numbers and a provenance of `assumed`.
+  Emitting the whole workout with every value marked is also correct and
+  changes nothing downstream — which of the two the prompt asks for is this
+  ticket's call, and the eval in issue 05 is what decides it.
+- **The write is `workouts.record_performed`, called from the CLI command.**
+  It takes the workout, its blocks, the user's verbatim words and the
+  exclusion, in one transaction, and it refuses a workout that was already
+  reported. `test_agent.py::test_only_the_cli_calls_a_writer` is the guard
+  that fails if this ticket puts it anywhere else.
+- **`log.validate` raises, `log.flags` returns, and nothing in this ticket
+  may turn a flag into a refusal** — a report is a fact. `flags` is read
+  off the blocks `to_performed` resolved, never off the document: an
+  exercise adherence filled in is as much a performed exercise as one the
+  user named, and it is checked against the exclusions like any other.
+
 **Read first:** `agent.py` in full — the loop, the call budget, the strict
 structured output, the run record. ROADMAP.md § Session 5, the notes on the
 agent, on writes never being tools, and on nothing persisting between turns.

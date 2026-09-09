@@ -16,6 +16,7 @@ from trainer.cli import main
 from trainer.engine import (
     catalog,
     database,
+    exclusions,
     graph,
     migrations,
     reference_set,
@@ -2179,3 +2180,333 @@ def test_eval_runs_a_situation_named_twice_only_once(
     ]
     assert len(rows) == 1, result.output
     assert "of 1 runs" in result.output, "it ran the situation more than once"
+
+
+# --- log ---------------------------------------------------------------------
+#
+# Against the real catalog, for the reason the plan tests are: the ids in a
+# report are the real ones, and a fixture catalog would let a document pass
+# here that no user could write.
+
+
+def write_report(tmp_path: Path, **fields: object) -> str:
+    base: dict[str, object] = {"blocks": [], "report": "went fine"}
+    base.update(fields)
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(base), encoding="utf-8")
+    return str(path)
+
+
+def performed_block(*items: dict[str, object], **fields: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "items": list(items),
+        "rounds": 3,
+        "rounds_source": "reported",
+        "rest": 90,
+        "rest_source": "reported",
+    }
+    base.update(fields)
+    return base
+
+
+def performed_item(exercise_id: str, **fields: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "exercise_id": exercise_id,
+        "unit": "reps",
+        "amount": 8,
+        "amount_source": "reported",
+    }
+    base.update(fields)
+    return base
+
+
+def prescribed_workout(runner: CliRunner, tmp_path: Path) -> int:
+    """One squat block on the real catalog, prescribed through the command
+    that prescribes it. Its id, which a report names."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "barbell", "--time", "45"],
+    )
+    assert result.exit_code == 0, result.output
+    return int(workout_rows(database.database_path())[-1]["id"])
+
+
+def test_log_sets_prescribed_against_performed(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    identifier = prescribed_workout(runner, tmp_path)
+
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            workout_id=identifier,
+            blocks=[performed_block(performed_item("Barbell_Squat", amount=5))],
+            report="only three sets, the knee was noisy",
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert f"prescribed (workout {identifier}):" in result.output
+    assert "block 1 -- 4 rounds, 150s rest" in result.output
+    assert "performed:" in result.output
+    assert "Barbell Squat" in result.output
+    assert "said: only three sets, the knee was noisy" in result.output
+    assert result.output.isascii()
+
+
+def test_log_writes_the_workout_it_understood(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    identifier = prescribed_workout(runner, tmp_path)
+
+    runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            workout_id=identifier,
+            blocks=[performed_block(
+                performed_item("Barbell_Squat", amount=5, load_kg=100, load_kg_source="reported")
+            )],
+            report="heavy",
+        )],
+    )
+
+    with closing(database.connect(enriched)) as connection:
+        written = workouts.workout(connection, identifier)
+        assert written is not None
+        assert written.state == "performed"
+        assert written.report == "heavy"
+        # Both phases, side by side. Deviation is the difference between them.
+        assert len(workouts.prescribed(connection, identifier)) == 1
+        performed = workouts.performed(connection, identifier)
+        assert performed[0].items[0].load_kg == 100.0
+
+
+def test_log_fills_in_what_the_report_did_not_mention(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Adherence: what a report does not mention was done as prescribed, and
+    every number it filled in is printed marked."""
+    identifier = prescribed_workout(runner, tmp_path)
+
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path, workout_id=identifier, report="tutto come previsto"
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "8 reps (assumed)" in result.output
+    assert "4 rounds (assumed)" in result.output
+    with closing(database.connect(enriched)) as connection:
+        performed = workouts.performed(connection, identifier)
+    assert performed[0].items[0].amount_source == "assumed"
+
+
+def test_log_refuses_an_exercise_the_catalog_does_not_have(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path, blocks=[performed_block(performed_item("Barbel_Squat"))]
+        )],
+    )
+
+    assert result.exit_code != 0
+    assert "Barbel_Squat" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_log_writes_an_exercise_performed_under_an_exclusion(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """The row this ticket exists to protect. Recorded and flagged, never
+    refused: an exclusion the user trained straight through is what session 9
+    forms a hypothesis about."""
+    with closing(database.connect(enriched)) as connection:
+        exclusions.add(
+            connection, exclusions.Exclusion("pattern", "vertical push"), "2099-01-01"
+        )
+        connection.commit()
+
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            blocks=[performed_block(performed_item("Standing_Military_Press", amount=10))],
+            report="ho spinto lo stesso",
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "! is under an exclusion on pattern 'vertical push'" in result.output
+    with closing(database.connect(enriched)) as connection:
+        written = connection.execute(
+            "SELECT COUNT(*) AS total FROM workout_exercises "
+            "WHERE exercise_id = 'Standing_Military_Press' AND phase = 'performed'"
+        ).fetchone()
+    assert written["total"] == 1
+
+
+def test_log_records_a_workout_nobody_planned(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """Training nobody planned is still training. Every value in it is the
+    user's, because there was nothing to assume against."""
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            blocks=[performed_block(performed_item("Barbell_Squat", amount_source="asked"))],
+            report="palestra di un amico",
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "prescribed: nothing -- this workout was not planned" in result.output
+    assert "! this reports no prescribed workout" in result.output
+    with closing(database.connect(enriched)) as connection:
+        row = connection.execute("SELECT * FROM workouts").fetchone()
+        sources = {
+            found["amount_source"]
+            for found in connection.execute(
+                "SELECT amount_source FROM workout_exercises WHERE phase = 'performed'"
+            )
+        }
+    assert row["prescribed_on"] is None and row["state"] == "performed"
+    assert sources == {"asked"}
+
+
+def test_log_writes_the_exclusion_the_report_proposes(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            blocks=[performed_block(performed_item("Barbell_Squat"))],
+            proposed_exclusion={
+                "value": "shoulder",
+                "retest_date": "2099-01-01",
+                "why": "tirava sotto il bilanciere",
+            },
+            report="la spalla tirava",
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "proposes excluding joint 'shoulder' until 2099-01-01" in result.output
+    with closing(database.connect(enriched)) as connection:
+        assert exclusions.active(connection, "2026-09-09") == (
+            exclusions.Exclusion("joint", "shoulder"),
+        )
+
+
+def test_log_refuses_a_proposed_exclusion_that_is_neither_granularity(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            blocks=[performed_block(performed_item("Barbell_Squat"))],
+            proposed_exclusion={
+                "value": "Barbell_Squat",
+                "retest_date": "2099-01-01",
+                "why": "non mi piace",
+            },
+        )],
+    )
+
+    assert result.exit_code != 0
+    assert "movement pattern" in result.output and "joint" in result.output
+    assert "never an exercise id" in result.output
+
+
+def test_log_reports_a_file_that_is_not_a_performed_workout_as_a_shape_error(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    path = tmp_path / "report.json"
+    path.write_text(
+        json.dumps({"blocks": [{"items": [], "rounds": 3}], "report": "x"}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["log", "--from", str(path)])
+
+    assert result.exit_code != 0
+    assert "that is not a performed workout" in result.output
+    assert "rest_source" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_log_reports_a_refused_workout_and_writes_nothing(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            workout_id=404,
+            blocks=[performed_block(performed_item("Barbell_Squat"))],
+        )],
+    )
+
+    assert result.exit_code != 0
+    assert "no workout 404" in result.output
+    assert workout_rows(enriched) == []
+
+
+def test_log_on_an_unenriched_catalog_names_that_state(
+    runner: CliRunner, stocked: Path, tmp_path: Path
+) -> None:
+    """`exclusions.classify` reads its vocabulary from the table, so against
+    an unenriched catalog it would reject `vertical push` as neither. The
+    state is checked before any value is classified against it."""
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path, blocks=[performed_block(performed_item("Barbell_Squat"))]
+        )],
+    )
+
+    assert result.exit_code != 0
+    assert "trainer enrich derive" in result.output
+
+
+def test_log_on_a_database_with_no_catalog_names_that_state(
+    runner: CliRunner, database_file: Path, tmp_path: Path
+) -> None:
+    runner.invoke(main, ["db", "init"])
+
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path, blocks=[performed_block(performed_item("Barbell_Squat"))]
+        )],
+    )
+
+    assert result.exit_code != 0
+    assert "trainer db import" in result.output
+
+
+def test_log_needs_a_file_that_exists(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(main, ["log", "--from", str(tmp_path / "absent.json")])
+
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+
+
+def test_log_needs_a_file_at_all(runner: CliRunner, enriched: Path) -> None:
+    """There is no interactive path yet -- that is issue 04 -- so a bare
+    `trainer log` has nothing to read."""
+    result = runner.invoke(main, ["log"])
+
+    assert result.exit_code != 0
+    assert "--from" in result.output

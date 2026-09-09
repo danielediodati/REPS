@@ -1,22 +1,28 @@
-"""The write path for a prescribed workout, and reading one back.
+"""The write path for a workout in either of its two states, and reading one
+back.
 
-A plan that is only rendered is a plan nobody can deviate from. This is where
-one becomes a row -- `prescribed`, with its blocks and its exercises -- so that
-session 5's report has something to be a difference *against*.
+A plan that is only rendered is a plan nobody can deviate from, and a report
+that is only read is a workout that never happened. This is where both become
+rows -- the same workout, `prescribed` and then `performed`, with its blocks
+and its exercises side by side under it, because deviation is the difference
+between the two phases and nothing that overwrites one of them can still
+compute it.
 
-**Only `trainer plan` calls this, and it calls it from the CLI command.** Not
-from `plan.py`, not from `agent.py`: `trainer eval` runs eighteen agent loops
-against the project database, and a plan that persisted from inside the agent
-would write eighteen phantom prescribed workouts into the very state the
-measurement is taken from -- where the unreported-workout tool would then read
-them as a rotation the user skipped. ROADMAP.md § Session 5: writes are never
-tools. The agent emits; the engine writes.
+**Only the CLI commands call these writers, and they call them from the
+command.** Not from `plan.py`, not from `log.py`, not from `agent.py`:
+`trainer eval` runs eighteen agent loops against the project database, and a
+plan that persisted from inside the agent would write eighteen phantom
+prescribed workouts into the very state the measurement is taken from -- where
+the unreported-workout tool would then read them as a rotation the user
+skipped. ROADMAP.md § Session 5: writes are never tools. The agent emits; the
+engine writes.
 
 **The wire shape stops at the door.** What arrives here is `duration.Block`,
 the vocabulary the engine already costs plans in, plus the one field a block
-carries that costing has no use for: the reason it was prescribed. Nothing in
-this module knows what JSON is, and `test_engine_boundary.py` is what keeps it
-that way.
+carries that costing has no use for: the reason it was prescribed. The
+performed phase has its own two dataclasses, for the reasons written above
+them. Nothing in this module knows what JSON is, and `test_engine_boundary.py`
+is what keeps it that way.
 
 **One transaction or nothing.** A workout row with no blocks under it is not a
 smaller workout, it is a lie about what was prescribed, and the deviation
@@ -29,15 +35,18 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from trainer.engine import duration
+from trainer.engine import duration, exclusions
+from trainer.engine.exclusions import Exclusion
 
 # The phases (`prescribed`, `performed`) and the provenances (`reported`,
 # `assumed`, `asked`) live in migration 0006's CHECK constraints, which is
-# what enforces them, and nowhere else. They are deliberately not restated
-# here as constants: this module writes one phase and no provenance at all, so
-# a tuple naming the rest would have no reader to keep it honest and would
-# drift from the schema the first time either vocabulary moved. Whatever fills
-# a provenance -- session 5's issue 02 -- is where it earns a name in Python.
+# what enforces them, and nowhere else. They are still not restated here as
+# constants. This module writes whatever provenance it is handed and checks
+# none of them: the vocabulary is decided where a value acquires a provenance,
+# which is `log.Provenance` on the wire, and a second copy here would be a
+# list with no reader to keep it honest -- it would drift from the schema the
+# first time either vocabulary moved, and the CHECK would go on being the
+# thing that actually refused the bad value.
 
 
 class WorkoutError(RuntimeError):
@@ -264,4 +273,284 @@ def _assembled(row: sqlite3.Row, items: Sequence[duration.BlockItem]) -> Prescri
     return PrescribedBlock(
         block=duration.Block(items=tuple(items), rounds=row["rounds"], rest=row["rest"]),
         reason=row["reason"],
+    )
+
+
+# -- the performed phase ------------------------------------------------------
+#
+# Its own dataclasses rather than `duration.Block` with sources bolted on, and
+# for two reasons that both come back to what a performed row *is*.
+#
+# `duration.Block` is the vocabulary the engine **costs** plans in, and a
+# provenance is not something the costing formula reads -- the same argument
+# `PrescribedBlock` makes for keeping `reason` beside a block rather than in
+# it. Bolted on, it would arrive as a tuple of sources parallel to `items`,
+# and a pair of sequences that have to stay aligned is the mismatch
+# `plan.render`'s `strict=True` exists to catch, moved somewhere nothing
+# checks it.
+#
+# And `check_plan`'s invariant -- an exercise appears at most once -- is a rule
+# about a *plan*. A workout in which the bar was picked up twice is a fact, and
+# this session's whole position is that a fact is recorded and flagged, never
+# refused. Routing performed rows through the plan vocabulary would apply a
+# rule about what may be prescribed to something that has already happened.
+
+
+@dataclass(frozen=True)
+class PerformedItem:
+    """One exercise as it was performed: how much, how that is known, and
+    under what load.
+
+    `amount_source` is required and `load_kg_source` is tied to the load
+    rather than to the phase, which is migration 0006's own rule: a provenance
+    describing nothing is not a provenance. A pull-up has no load and so says
+    nothing about where a load came from.
+    """
+
+    exercise_id: str
+    unit: str
+    amount: int
+    amount_source: str
+    load_kg: float | None = None
+    load_kg_source: str | None = None
+
+
+@dataclass(frozen=True)
+class PerformedBlock:
+    """One block as it was performed, with a provenance on each of its numbers
+    and whatever the user volunteered about how hard it was.
+
+    No `reason`: nobody justifies what has already happened, and migration
+    0006's CHECK says so.
+    """
+
+    items: tuple[PerformedItem, ...]
+    rounds: int
+    rounds_source: str
+    rest: int
+    rest_source: str
+    rpe: float | None = None
+
+
+def reportable(connection: sqlite3.Connection, workout_id: int) -> Workout:
+    """The workout a report may be filed against, or why it may not be.
+
+    Two refusals and one wording, because both callers -- the validator on the
+    way in and `record_performed` on the way down -- have to name them the
+    same way. A workout nobody has is a typo in the document; a workout
+    already reported is one training session recorded twice, which would
+    double its volume in every cycle that counts it.
+
+    A raise rather than `workout`'s `None`: that function answers *is this
+    there*, and this one answers *may I write here*, where every answer but
+    yes is a refusal.
+    """
+    found = workout(connection, workout_id)
+    if found is None:
+        raise WorkoutError(
+            f"there is no workout {workout_id} to report against. A report "
+            "either names a workout that was prescribed or names none at all"
+        )
+    if found.state == "performed":
+        raise WorkoutError(
+            f"workout {workout_id} was already reported, on {found.performed_on}. "
+            "One training session is one workout: report the one you did today"
+        )
+    return found
+
+
+def record_performed(
+    connection: sqlite3.Connection,
+    blocks: Sequence[PerformedBlock],
+    on: str,
+    report: str,
+    workout_id: int | None = None,
+    exclusion: Exclusion | None = None,
+    retest_date: str | None = None,
+) -> int:
+    """Write one performed workout -- and the exclusion it proposed, if it
+    proposed one -- and return the workout's id.
+
+    `workout_id` names the prescribed workout this reports against, and that
+    workout transitions in place: its prescribed children stay exactly where
+    they are, because deviation is the difference between the two phases and
+    overwriting one of them destroys it. `None` is training nobody planned,
+    which arrives as a new row with no `prescribed_on`.
+
+    **The exclusion is written in the same transaction, or not at all.** It is
+    the one thing in a report that changes what may be prescribed tomorrow, so
+    a workout recorded without it would go on offering the movement that
+    caused it -- while an exclusion written without its workout is a safety
+    boundary with no recorded reason for existing.
+    """
+    if not blocks:
+        raise WorkoutError("a workout is at least one block")
+    if (exclusion is None) != (retest_date is None):
+        raise WorkoutError(
+            "a proposed exclusion is a value and a re-test date, never one of "
+            "the two: an exclusion with no way back is the one failure "
+            "TRAINER.md says this state cannot afford"
+        )
+    if workout_id is not None:
+        # Read before the transaction so the two refusals arrive as
+        # themselves, with dates and ids in them. It is **not** what makes
+        # them hold: two runs reporting the same workout would both read
+        # `prescribed` here and only then serialise on the write. The UPDATE
+        # below carries the condition again, inside the transaction, and that
+        # is the one that decides.
+        reportable(connection, workout_id)
+
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        identifier = _transitioned(connection, workout_id, on, report)
+        for position, block in enumerate(blocks, start=1):
+            _write_performed_block(connection, identifier, position, block)
+        if exclusion is not None:
+            assert retest_date is not None  # the pair is checked above
+            exclusions.add(connection, exclusion, retest_date)
+        # Inside the try, for the reason `record_prescribed` gives: a COMMIT
+        # that failed outside it would escape with the transaction still open.
+        connection.execute("COMMIT")
+    except Exception:
+        try:
+            connection.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
+    return identifier
+
+
+def _transitioned(
+    connection: sqlite3.Connection, workout_id: int | None, on: str, report: str
+) -> int:
+    """The row the performed children hang under: the prescribed workout moved
+    into its second state, or a new one for training nobody planned.
+
+    **`AND state = 'prescribed'` is the guard, not `reportable`.** That check
+    runs before the transaction opens, so two runs reporting the same workout
+    both pass it and only then serialise on the write -- and the loser's
+    UPDATE would quietly match nothing while its blocks landed as a *second*
+    set of performed children under the same workout. Every cycle that counts
+    volume would then count that session twice. Written as a condition on the
+    UPDATE, the row is re-read under the write lock and the loser is refused.
+    """
+    if workout_id is None:
+        cursor = connection.execute(
+            "INSERT INTO workouts (state, performed_on, report) "
+            "VALUES ('performed', ?, ?)",
+            (on, report),
+        )
+        return _inserted(cursor)
+
+    cursor = connection.execute(
+        "UPDATE workouts SET state = 'performed', performed_on = ?, report = ? "
+        "WHERE id = ? AND state = 'prescribed'",
+        (on, report, workout_id),
+    )
+    if cursor.rowcount != 1:
+        # `reportable` states the two ways this happens, and it is asked again
+        # rather than guessed at: by now the row may have been reported by
+        # somebody else, and its message says when.
+        reportable(connection, workout_id)
+        raise WorkoutError(f"workout {workout_id} could not be moved to performed")
+    return workout_id
+
+
+def _write_performed_block(
+    connection: sqlite3.Connection,
+    workout_id: int,
+    position: int,
+    block: PerformedBlock,
+) -> None:
+    cursor = connection.execute(
+        "INSERT INTO workout_blocks "
+        "(workout_id, phase, position, rounds, rounds_source, rest, rest_source, rpe) "
+        "VALUES (?, 'performed', ?, ?, ?, ?, ?, ?)",
+        (
+            workout_id,
+            position,
+            block.rounds,
+            block.rounds_source,
+            block.rest,
+            block.rest_source,
+            block.rpe,
+        ),
+    )
+    block_id = _inserted(cursor)
+    for item_position, item in enumerate(block.items, start=1):
+        connection.execute(
+            "INSERT INTO workout_exercises "
+            "(block_id, phase, position, exercise_id, unit, amount, amount_source, "
+            "load_kg, load_kg_source) "
+            "VALUES (?, 'performed', ?, ?, ?, ?, ?, ?, ?)",
+            (
+                block_id,
+                item_position,
+                item.exercise_id,
+                item.unit,
+                item.amount,
+                item.amount_source,
+                item.load_kg,
+                item.load_kg_source,
+            ),
+        )
+
+
+def performed(
+    connection: sqlite3.Connection, workout_id: int
+) -> tuple[PerformedBlock, ...]:
+    """What was actually done in this workout, in the order it was reported.
+
+    Empty for a workout nobody has reported yet -- the mirror of `prescribed`,
+    and it refuses a childless block for the same reason: read with an inner
+    join that block would simply not come back, and the workout read out would
+    be shorter than the workout stored.
+    """
+    rows = connection.execute(
+        "SELECT b.id AS block_id, b.position AS block_position, "
+        "b.rounds, b.rounds_source, b.rest, b.rest_source, b.rpe, "
+        "e.exercise_id, e.unit, e.amount, e.amount_source, e.load_kg, e.load_kg_source "
+        "FROM workout_blocks AS b "
+        "LEFT JOIN workout_exercises AS e ON e.block_id = b.id "
+        "WHERE b.workout_id = ? AND b.phase = 'performed' "
+        "ORDER BY b.position, e.position",
+        (workout_id,),
+    ).fetchall()
+
+    blocks: list[PerformedBlock] = []
+    items: list[PerformedItem] = []
+    current: sqlite3.Row | None = None
+    for row in rows:
+        if row["exercise_id"] is None:
+            raise WorkoutError(
+                f"workout {workout_id} has a performed block at position "
+                f"{row['block_position']} with no exercises in it"
+            )
+        if current is not None and row["block_id"] != current["block_id"]:
+            blocks.append(_performed(current, items))
+            items = []
+        current = row
+        items.append(
+            PerformedItem(
+                exercise_id=row["exercise_id"],
+                unit=row["unit"],
+                amount=row["amount"],
+                amount_source=row["amount_source"],
+                load_kg=None if row["load_kg"] is None else float(row["load_kg"]),
+                load_kg_source=row["load_kg_source"],
+            )
+        )
+    if current is not None:
+        blocks.append(_performed(current, items))
+    return tuple(blocks)
+
+
+def _performed(row: sqlite3.Row, items: Sequence[PerformedItem]) -> PerformedBlock:
+    return PerformedBlock(
+        items=tuple(items),
+        rounds=row["rounds"],
+        rounds_source=row["rounds_source"],
+        rest=row["rest"],
+        rest_source=row["rest_source"],
+        rpe=None if row["rpe"] is None else float(row["rpe"]),
     )

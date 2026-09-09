@@ -1,4 +1,4 @@
-"""The write path for a prescribed workout, and reading it back.
+"""The write path for a workout in either of its states, and reading it back.
 
 The database's own refusals are `test_workouts_schema.py`; what is here is the
 module's contract -- one workout per call, whole or not at all, and a plan that
@@ -15,7 +15,15 @@ from pathlib import Path
 import pytest
 
 from conftest import make_exercise
-from trainer.engine import catalog, database, duration, migrations, workouts
+from trainer.engine import (
+    catalog,
+    database,
+    duration,
+    exclusions,
+    migrations,
+    workouts,
+)
+from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat"),
@@ -232,3 +240,336 @@ def test_the_connection_survives_a_write_that_failed_partway(
     )
     assert counted(connection, "workouts") == 1
     assert len(workouts.prescribed(connection, identifier)) == 1
+
+
+# -- the performed phase ------------------------------------------------------
+
+
+def squat_performed(**overrides: object) -> workouts.PerformedBlock:
+    fields: dict[str, object] = {
+        "items": (
+            workouts.PerformedItem(
+                exercise_id="Barbell_Squat",
+                unit="reps",
+                amount=5,
+                amount_source="reported",
+                load_kg=100.0,
+                load_kg_source="reported",
+            ),
+        ),
+        "rounds": 3,
+        "rounds_source": "reported",
+        "rest": 150,
+        "rest_source": "assumed",
+    }
+    fields.update(overrides)
+    return workouts.PerformedBlock(**fields)  # type: ignore[arg-type]
+
+
+def test_a_performed_workout_is_written_with_its_children(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_performed(
+        connection,
+        (squat_performed(),),
+        on="2026-09-09",
+        report="squats felt heavy",
+    )
+
+    written = workouts.workout(connection, identifier)
+    assert written is not None
+    assert written.state == "performed"
+    assert written.performed_on == "2026-09-09"
+    assert written.prescribed_on is None
+    assert written.report == "squats felt heavy"
+    assert counted(connection, "workout_blocks") == 1
+    assert counted(connection, "workout_exercises") == 1
+
+
+def test_the_workout_reads_back_the_shape_it_went_in_as(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_performed(
+        connection, (squat_performed(),), on="2026-09-09", report="ok"
+    )
+
+    assert workouts.performed(connection, identifier) == (squat_performed(),)
+
+
+def test_a_prescribed_workout_transitions_in_place(
+    connection: sqlite3.Connection,
+) -> None:
+    """Deviation is the difference between the two phases, so both stay. The
+    prescribed rows are not overwritten and no second workout appears."""
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+
+    reported = workouts.record_performed(
+        connection,
+        (squat_performed(),),
+        on="2026-09-09",
+        report="three sets, not four",
+        workout_id=identifier,
+    )
+
+    assert reported == identifier
+    assert counted(connection, "workouts") == 1
+    written = workouts.workout(connection, identifier)
+    assert written is not None
+    assert written.state == "performed"
+    assert written.prescribed_on == "2026-09-08"
+    assert written.performed_on == "2026-09-09"
+    assert workouts.prescribed(connection, identifier) == (squat_block(),)
+    assert workouts.performed(connection, identifier) == (squat_performed(),)
+
+
+def test_a_workout_nobody_reported_has_no_performed_phase(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+
+    assert workouts.performed(connection, identifier) == ()
+
+
+def test_a_report_against_a_workout_nobody_has_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    with pytest.raises(workouts.WorkoutError, match="no workout 404"):
+        workouts.record_performed(
+            connection, (squat_performed(),), on="2026-09-09", report="ok", workout_id=404
+        )
+
+    assert counted(connection, "workouts") == 0
+
+
+def test_a_workout_cannot_be_reported_twice(connection: sqlite3.Connection) -> None:
+    """One training session is one workout. A second report would leave two
+    sets of performed children under it and count the same rounds twice."""
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+    workouts.record_performed(
+        connection, (squat_performed(),), on="2026-09-09", report="ok", workout_id=identifier
+    )
+
+    with pytest.raises(workouts.WorkoutError, match="already reported"):
+        workouts.record_performed(
+            connection,
+            (squat_performed(),),
+            on="2026-09-10",
+            report="again",
+            workout_id=identifier,
+        )
+
+    assert len(workouts.performed(connection, identifier)) == 1
+
+
+def test_a_performed_workout_is_at_least_one_block(
+    connection: sqlite3.Connection,
+) -> None:
+    with pytest.raises(workouts.WorkoutError, match="at least one block"):
+        workouts.record_performed(connection, (), on="2026-09-09", report="nothing")
+
+    assert counted(connection, "workouts") == 0
+
+
+def test_the_proposed_exclusion_is_written_with_the_workout(
+    connection: sqlite3.Connection,
+) -> None:
+    """It is the one thing in a report that changes what may be prescribed
+    tomorrow."""
+    workouts.record_performed(
+        connection,
+        (squat_performed(),),
+        on="2026-09-09",
+        report="the shoulder was pulling",
+        exclusion=Exclusion("pattern", "vertical push"),
+        retest_date="2026-10-01",
+    )
+
+    assert exclusions.active(connection, "2026-09-09") == (
+        Exclusion("pattern", "vertical push"),
+    )
+
+
+def test_an_exclusion_with_no_way_back_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """A re-test date is not optional: a wall with no way back is the one
+    failure TRAINER.md says this state cannot afford."""
+    with pytest.raises(workouts.WorkoutError, match="re-test date"):
+        workouts.record_performed(
+            connection,
+            (squat_performed(),),
+            on="2026-09-09",
+            report="ok",
+            exclusion=Exclusion("pattern", "vertical push"),
+        )
+
+    assert counted(connection, "workouts") == 0
+
+
+def test_an_exclusion_that_cannot_be_written_takes_the_workout_with_it(
+    connection: sqlite3.Connection,
+) -> None:
+    """One transaction. A workout recorded without the exclusion it proposed
+    would go on offering the movement that caused it."""
+    with pytest.raises(exclusions.ExclusionError):
+        workouts.record_performed(
+            connection,
+            (squat_performed(),),
+            on="2026-09-09",
+            report="ok",
+            exclusion=Exclusion("exercise", "Barbell_Squat"),
+            retest_date="2026-10-01",
+        )
+
+    assert counted(connection, "workouts") == 0
+    assert counted(connection, "workout_blocks") == 0
+
+
+def test_a_report_that_fails_partway_leaves_the_database_as_it_was(
+    connection: sqlite3.Connection,
+) -> None:
+    """The workout row is written before its children, so a failure between
+    the two is exactly the case a transaction exists for. Injected here as an
+    exercise nobody has, which the foreign key refuses."""
+    orphan = squat_performed(
+        items=(
+            workouts.PerformedItem(
+                exercise_id="Not_An_Exercise",
+                unit="reps",
+                amount=5,
+                amount_source="reported",
+            ),
+        )
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        workouts.record_performed(
+            connection, (squat_performed(), orphan), on="2026-09-09", report="ok"
+        )
+
+    assert counted(connection, "workouts") == 0
+    assert counted(connection, "workout_blocks") == 0
+    assert counted(connection, "workout_exercises") == 0
+
+
+def test_a_failed_report_leaves_a_prescribed_workout_prescribed(
+    connection: sqlite3.Connection,
+) -> None:
+    """The transition is an UPDATE, so a failure after it would leave a
+    workout marked performed with nothing under it -- a workout that happened
+    and in which nothing was done."""
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+    orphan = squat_performed(
+        items=(
+            workouts.PerformedItem(
+                exercise_id="Not_An_Exercise",
+                unit="reps",
+                amount=5,
+                amount_source="reported",
+            ),
+        )
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        workouts.record_performed(
+            connection, (orphan,), on="2026-09-09", report="ok", workout_id=identifier
+        )
+
+    written = workouts.workout(connection, identifier)
+    assert written is not None
+    assert written.state == "prescribed"
+    assert written.performed_on is None
+    assert written.report is None
+    assert workouts.performed(connection, identifier) == ()
+
+
+def test_the_connection_survives_a_report_that_failed_partway(
+    connection: sqlite3.Connection,
+) -> None:
+    orphan = squat_performed(
+        items=(
+            workouts.PerformedItem(
+                exercise_id="Not_An_Exercise",
+                unit="reps",
+                amount=5,
+                amount_source="reported",
+            ),
+        )
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        workouts.record_performed(connection, (orphan,), on="2026-09-09", report="ok")
+
+    workouts.record_performed(connection, (squat_performed(),), on="2026-09-09", report="ok")
+    assert counted(connection, "workouts") == 1
+
+
+def test_a_stored_performed_block_with_no_exercises_is_refused_not_skipped(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_performed(
+        connection, (squat_performed(),), on="2026-09-09", report="ok"
+    )
+    connection.execute(
+        "INSERT INTO workout_blocks "
+        "(workout_id, phase, position, rounds, rounds_source, rest, rest_source) "
+        "VALUES (?, 'performed', 2, 3, 'reported', 60, 'reported')",
+        (identifier,),
+    )
+
+    with pytest.raises(workouts.WorkoutError, match="position 2"):
+        workouts.performed(connection, identifier)
+
+
+def test_reportable_answers_for_a_workout_that_can_take_one(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+
+    assert workouts.reportable(connection, identifier).state == "prescribed"
+
+
+def test_the_transition_refuses_a_workout_that_moved_under_it(
+    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`reportable` runs before the transaction opens, so two runs reporting
+    the same workout both pass it and only then serialise on the write. The
+    condition on the UPDATE is what actually decides -- and without it the
+    loser's UPDATE would match nothing while its blocks landed as a second set
+    of performed children, doubling that session in every cycle that counts
+    volume.
+
+    The race is staged by taking the pre-check away, which is exactly what it
+    is worth in a race: nothing.
+    """
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-08"
+    )
+    workouts.record_performed(
+        connection, (squat_performed(),), on="2026-09-09", report="first", workout_id=identifier
+    )
+    monkeypatch.setattr(workouts, "reportable", lambda connection, workout_id: None)
+
+    with pytest.raises(workouts.WorkoutError):
+        workouts.record_performed(
+            connection,
+            (squat_performed(),),
+            on="2026-09-10",
+            report="second",
+            workout_id=identifier,
+        )
+
+    assert len(workouts.performed(connection, identifier)) == 1
+    assert counted(connection, "workout_blocks") == 2  # one prescribed, one performed
+    written = workouts.workout(connection, identifier)
+    assert written is not None
+    assert written.report == "first"

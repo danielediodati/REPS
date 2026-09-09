@@ -19,7 +19,7 @@ from pathlib import Path
 import click
 from click.core import ParameterSource
 
-from trainer import __version__, agent, evaluation, plan
+from trainer import __version__, agent, evaluation, log, plan
 from trainer.engine import (
     admissible,
     budget,
@@ -85,6 +85,14 @@ def reported() -> Iterator[None]:
         # Unreachable through a plan that passed the validator -- `WorkoutPlan`
         # already requires a block. Here so that the writer's own refusals
         # arrive as sentences if a later command reaches it another way.
+        raise click.ClickException(str(error)) from error
+    except log.LogRejected as error:
+        # Before LogError, for the reason PlanRejected comes before PlanError:
+        # a document the engine cannot resolve -- an id nobody has, an
+        # exclusion naming neither granularity -- is not malformed JSON, and
+        # dressing it as one sends the author to check their brackets.
+        raise click.ClickException(str(error)) from error
+    except log.LogError as error:
         raise click.ClickException(str(error)) from error
     except plan.PlanRejected as error:
         # Before PlanError, which it does not subclass but reads like: a plan
@@ -1143,6 +1151,63 @@ def _recorded(
         ),
         on=on,
     )
+
+
+
+@main.command("log")
+@click.option(
+    "--from",
+    "source",
+    metavar="FILE",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A performed workout written by hand, in the shape the agent will emit.",
+)
+def log_command(source: Path) -> None:
+    """Report a workout you performed, and print what was understood.
+
+    `--from FILE` is the whole of this command for now: a document somebody
+    wrote by hand goes through the same validator, the same writer and the
+    same renderer the logging agent will use. The interactive `trainer log`,
+    where a model reads what you actually said, is session 5's issue 04.
+
+    What you do not mention was done as prescribed -- that is adherence, and
+    every value it fills in is printed marked `(assumed)`. Nothing here is
+    refused for being a bad workout: a report is a **fact**, and an exercise
+    you were told not to do is written, flagged, and kept.
+    """
+    with reported():
+        performed = log.parse(source.read_text(encoding="utf-8"))
+
+    today = date.today().isoformat()
+    with _opened() as connection:
+        _require_enrichment(connection)
+        with reported():
+            log.validate(connection, performed, today)
+            blocks = log.to_performed(connection, performed)
+            # The flags are read off `blocks` rather than off the document,
+            # because `blocks` is what gets written: adherence fills in what
+            # the report did not mention, and an exercise filled in that way
+            # is as much a performed exercise as one the user named.
+            flagged = log.flags(connection, performed, blocks, today)
+
+            # Printed before it is written, for the reason `trainer plan`
+            # gives: a database that cannot be written to is worth an error,
+            # and it is not worth throwing away what the user reported in
+            # order to report one.
+            for line in log.render(connection, performed, blocks, flagged):
+                click.echo(line)
+
+            exclusion, retest_date = log.proposed(connection, performed)
+            workouts.record_performed(
+                connection,
+                blocks,
+                on=today,
+                report=performed.report,
+                workout_id=performed.workout_id,
+                exclusion=exclusion,
+                retest_date=retest_date,
+            )
 
 
 def _require_enrichment(connection: sqlite3.Connection) -> None:

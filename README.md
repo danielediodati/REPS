@@ -43,6 +43,8 @@ uv run trainer plan --equipment dumbbell --workout 3 --avoid Dumbbell_Lunges
 uv run trainer plan --equipment dumbbell --workout 3 --refused plan.json --because "not today"
 uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
+uv run trainer log --from report.json                          # no model: report a workout you did
+
 uv run trainer config                         # what you declared: cycle, cap, split
 uv run trainer config --muscle-groups         # the seventeen muscles, and their six groups
 
@@ -103,6 +105,49 @@ A prescription is an amount and the unit it counts — reps, or seconds for a ca
 The reason a block carries is the field that makes this the agent's shape rather than the engine's: TRAINER.md has the agent give its reasons, and a plan with nowhere to put them turns those reasons into prose beside the plan — which is what structured output exists to stop.
 
 This is the door session 4's agent comes out through, built and testable before there is an agent. Reading the plan from a file instead of a model changes what is upstream of the validator and nothing downstream of it.
+
+## The report
+
+The other half of the same door. `trainer log --from FILE` reads a **performed
+workout** — which prescribed workout it is about, the blocks actually done with
+their rounds, rest and an optional RPE, a load where there was one, and the
+user's own words verbatim — writes it in one transaction, and prints what was
+prescribed set against what was performed.
+
+```json
+{"workout_id": 12,
+ "report": "bench fine, only 3 sets of military because the shoulder was pulling",
+ "blocks": [
+   {"items": [{"exercise_id": "Standing_Military_Press", "unit": "reps",
+               "amount": 10, "amount_source": "reported"}],
+    "rounds": 3, "rounds_source": "reported", "rest": 90, "rest_source": "assumed"}
+ ]}
+```
+
+**Logging is by deviation.** What the report does not mention was done as
+prescribed: the unmentioned exercises come back filled in from the plan, and
+every value that arrived that way carries a **provenance** of `assumed` — a
+column, not a slogan, printed marked so you can see at a glance which numbers
+are yours. `workout_id` may be null, because training nobody planned is still
+training.
+
+**And this validator does not reject.** Session 4's refuses a plan outside the
+admissible set, because that plan has not happened and can still be prevented.
+This one cannot refuse **a fact**: you had an exclusion on `vertical push` and
+you pressed anyway, and that row is the most valuable one in the database. So a
+performed workout is **recorded and flagged** — the substitution, the exclusion
+trained straight through, the workout nobody planned, a load that moved further
+than the history explains. What is still refused is only ever a statement about
+the *document*: an exercise id the catalog does not have, a provenance outside
+the three, a proposed exclusion naming neither a movement pattern nor a joint.
+
+A report may propose an **exclusion** — a value and the day to try it again —
+and it is written in the same transaction as the workout or not at all.
+`exclusions.classify` decides whether the value is a pattern or a joint,
+against the catalog's own vocabulary; the document never says which.
+
+This is the door session 5's logging agent comes out through, built and
+testable before there is an agent.
 
 ## The agent
 

@@ -23,7 +23,9 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 
-from trainer.engine import catalog, muscle_groups
+from trainer.engine import catalog
+from trainer.engine import exclusions as exclusion_state
+from trainer.engine import muscle_groups
 from trainer.engine.catalog import Exercise
 from trainer.engine.exclusions import Exclusion
 
@@ -180,11 +182,14 @@ def rejection(
         # here would give the same state two phrasings that drift apart.
         return str(error)
 
-    for exclusion in exclusions:
-        if exclusion.granularity == "pattern" and exclusion.value == profile.movement_pattern:
+    # `exclusions.covering` decides which of them reach this exercise; the
+    # wording is this function's. Session 5 flags a performed exercise the same
+    # way, and the two must never be able to disagree about what an exclusion
+    # reaches -- only about what to say when it does.
+    for exclusion in exclusion_state.covering(connection, exclusions, exercise_id):
+        if exclusion.granularity == "pattern":
             return f"is a {exclusion.value} movement, which is excluded"
-        if exclusion.granularity == "joint" and exclusion.value in profile.loaded_joints:
-            return f"loads the {exclusion.value}, which is excluded"
+        return f"loads the {exclusion.value}, which is excluded"
 
     found = catalog.exercise(connection, exercise_id)
     assert found is not None  # `catalog.enrichment` above found the same row
