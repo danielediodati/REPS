@@ -234,6 +234,10 @@ The suite never reaches a provider: `conftest.py` removes sockets and credential
 
 ## The measurement
 
+There are two, under one command. `trainer eval` — or `--suite plan` — is session 4's, and `--suite log` is session 5's. Both run the real agent many times and are decided by code; what differs is what code can decide about them.
+
+### `--suite plan` — six situations, six invariants
+
 `trainer eval` runs six hand-written, deliberately nasty situations against the real agent and checks six properties over every run — **decided by code**, never by a second model judging the first. For a decidable constraint a validator costs nothing, is not persuadable, and catches all of them rather than most.
 
 The six situations are data: a seventh is a row. Each runs a declared number of times, because a model is a distribution and one green run is not a measurement, and **every run counts** — a run that could not be made counts against the metric too, since a measurement that quietly skipped what it could not do would report on the easy ones. The output is the situation-by-invariant matrix, the single percentage, and what the pass cost in tool calls and tokens. The bar is 100% and the command exits non-zero below it.
@@ -253,6 +257,29 @@ Every run's record is written to `eval-runs/`, and a failure names the situation
 **It is the one command that reaches a provider**, and the only one that spends money. `pytest` never runs it: the suite has no sockets and no credentials, and the checks are pure functions over a record, so all of them are covered there instead.
 
 **A full pass does not fit Groq's free tier in one day.** The daily ceiling is 200,000 tokens and a pass at three repetitions is roughly twice that. `--only NAME` and `--repetitions N` cut it down; a paid tier runs it whole.
+
+### `--suite log` — thirty reports, written blind
+
+`trainer eval --suite log` scores the logging agent against [thirty hand-written reports](docs/logging/eval-set.md), in Italian, written **before** the agent's prompt or any of its output was seen. Eighteen the sentence determines and twelve it does not, and the second half is the one that matters.
+
+The eighteen are scored by **equality on the document** the agent emitted — the exercise ids, the rounds, the loads, the provenance on every number — and on the **volume that document produces on both axes**, once adherence has filled in whatever the report left out. The twelve are scored on one bit: **did it ask**. A report that says *«ho tolto qualche serie»* states a deviation and not its size, and a document that fills the number in is wrong however plausible the number; the agent asks by writing a marked line, so *it asked* is a field in the run record rather than something read out of a terminal. **A value written where the row declares one unknowable counts double against**, because a system that knows it does not know is what is being measured.
+
+```
+2 the report determines
+       document         volume        validator        not run
+U1        ok              ok              ok              -
+U2     1 failed        1 failed           ok              -
+
+1 that must make it ask
+        asked        false confidence      not run
+A1        ok                ok                -
+```
+
+The set is a document and the command only reads it: every expected outcome, and the volume figures beside it, are the author's. Before anything reaches the provider the command checks what it can for free — an id the catalog does not have, a row reporting against the wrong workout, and **a volume figure the row's own expected document does not produce**, which would otherwise fail a correct agent three runs at a time and read as a fault in the model.
+
+The rows run against a **throwaway copy** of your database holding the set's four prescriptions and nothing else of yours, so thirty reports leave no performed workouts in the state the measurement is taken from. `TRAINER_LOG_SET` points the command at a different set.
+
+**It is the more expensive of the two by a wide margin**: thirty rows at three repetitions is around ninety agent runs and well over a million tokens, so on the free tier it runs in slices — `--only U1 --only A1`, `--repetitions 1` — and a full pass needs a paid tier.
 
 ## Inspecting the engine from a generic client
 

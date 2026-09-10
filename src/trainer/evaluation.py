@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -381,12 +381,19 @@ def _prescribed(record: agent.RunRecord) -> set[str]:
 
 @dataclass(frozen=True)
 class Outcome:
-    """One run, and what held."""
+    """One run, and what held.
 
-    situation: str
+    `case` is what the run was of -- one of the six situations here, one of
+    the thirty reports in `log_evaluation`. Both suites keep their outcomes in
+    this shape because both are *a model run many times and checked by code*,
+    and a second copy of the counting would be a second answer to *what
+    percentage held*.
+    """
+
+    case: str
     attempt: int
     failures: tuple[tuple[str, str], ...] = ()
-    record: agent.RunRecord | None = None
+    record: agent.Run | None = None
     written: Path | None = None
     error: str | None = None
     """The run never finished -- no credentials, the provider refusing, a rate
@@ -395,18 +402,30 @@ class Outcome:
     *failure* of any of them either, which is why the matrix gives it a column
     of its own rather than blanking the ones it says nothing about."""
 
-    also: tuple[agent.RunRecord, ...] = ()
+    also: tuple[agent.Run, ...] = ()
     """Runs made to set this one up and not measured -- the plan that gets
     turned down, on the refusal situation. They hold no invariants and they
     are not counted towards the metric, but they were paid for, so they count
     towards the cost."""
+
+    weight: int = 1
+    """How much this run counts **against** the metric when it fails.
+
+    One everywhere except the failure ROADMAP.md § Session 5 and TRAINER.md's
+    golden-set rules single out: a report that could not be answered, answered
+    confidently anyway. It is weighted double because it is the error the
+    whole must-ask half exists to detect -- a system that knows it does not
+    know is the thing being measured, and a wrong value written without
+    hesitation costs more than a question left unasked. A run that held is
+    never weighted: the weight is a cost, and nothing was paid.
+    """
 
     @property
     def held(self) -> bool:
         return self.error is None and not self.failures
 
     @property
-    def records(self) -> tuple[agent.RunRecord, ...]:
+    def records(self) -> tuple[agent.Run, ...]:
         return (*self.also, *((self.record,) if self.record else ()))
 
 
@@ -423,8 +442,22 @@ class Report:
         return sum(1 for outcome in self.outcomes if outcome.held)
 
     @property
+    def against(self) -> int:
+        """What the percentage is out of, once weights are counted.
+
+        Runs, plus one more for every failure weighted double. `total` stays
+        the number of runs, because *how many runs held* and *what the metric
+        is out of* are two different facts and the report prints both. With
+        every weight at one -- which is every run of the six situations --
+        the two are the same number and the figure is unchanged.
+        """
+        return sum(
+            outcome.weight if not outcome.held else 1 for outcome in self.outcomes
+        )
+
+    @property
     def percentage(self) -> float:
-        return 100.0 * self.held / self.total if self.total else 0.0
+        return 100.0 * self.held / self.against if self.against else 0.0
 
     @property
     def passed(self) -> bool:
@@ -509,7 +542,7 @@ def _once(
                 connection, request, model=build(), budget=budget
             )
             also.append(first)
-            _write(records, f"{situation.name}-{attempt}-turned-down", first)
+            write(records, f"{situation.name}-{attempt}-turned-down", first)
             request = plans.Request(
                 equipment=request.equipment,
                 budget_min=request.budget_min,
@@ -524,7 +557,7 @@ def _once(
     except agent.AgentError as error:
         return Outcome(situation.name, attempt, error=str(error), also=tuple(also))
 
-    written = _write(records, f"{situation.name}-{attempt}", record)
+    written = write(records, f"{situation.name}-{attempt}", record)
 
     failures = check(connection, Situation(
         name=situation.name,
@@ -541,7 +574,7 @@ def _once(
     return Outcome(situation.name, attempt, failures, record, written, also=tuple(also))
 
 
-def _write(records: Path, name: str, record: agent.RunRecord) -> Path:
+def write(records: Path, name: str, record: agent.Run) -> Path:
     """One record to disk. The directory is made here rather than when the run
     starts, so a pass that never reaches a provider leaves nothing behind --
     the suite invokes this command to check it stops at the credentials state,
@@ -564,44 +597,95 @@ def render(report: Report, chosen: Sequence[Situation]) -> list[str]:
     about the two that did run, and blanking their verdicts would hide real
     failures behind an unrelated transport error.
     """
-    width = max((len(s.name) for s in chosen), default=0) + 2
     columns = [invariant.name for invariant in INVARIANTS] + [VALIDATOR, NOT_RUN]
-
-    lines = [
-        "".ljust(width) + "  ".join(f"{name:^14}" for name in columns),
+    return [
+        *matrix(report, [situation.name for situation in chosen], columns),
+        "",
+        *failures(report),
+        "",
+        *totals(report, "held every invariant"),
     ]
-    for situation in chosen:
-        runs = [o for o in report.outcomes if o.situation == situation.name]
-        measured = [o for o in runs if o.error is None]
+
+
+def matrix(report: Report, cases: Sequence[str], columns: Sequence[str]) -> list[str]:
+    """One row per case, one column per check, `N failed` in the cells.
+
+    Shared with the log suite, which has different cases and different columns
+    and the same question to answer: *of the runs of this case, how many broke
+    this check*. The distribution is the point -- a cell saying `1 failed` out
+    of three runs is a different fact from one saying `3 failed`, and a
+    pass/fail cell would print them the same.
+    """
+    width = max((len(case) for case in cases), default=0) + 2
+    # Each column as wide as it needs to be, and no narrower than the number
+    # under it: `false confidence` is 16 characters, and a fixed 14 would put
+    # every cell in its row half a column to the right of its heading.
+    widths = {name: max(14, len(name) + 2) for name in columns}
+
+    lines = ["".ljust(width) + "  ".join(f"{n:^{widths[n]}}" for n in columns)]
+    for case in cases:
+        runs = [outcome for outcome in report.outcomes if outcome.case == case]
+        measured = [outcome for outcome in runs if outcome.error is None]
         cells = []
         for name in columns:
             if name == NOT_RUN:
-                missed = sum(1 for o in runs if o.error is not None)
-                cells.append(f"{(str(missed) if missed else '-'):^14}")
-                continue
-            broke = sum(1 for o in measured if any(n == name for n, _ in o.failures))
-            if not measured:
-                cells.append(f"{'-':^14}")
+                missed = sum(1 for outcome in runs if outcome.error is not None)
+                said = str(missed) if missed else "-"
+            elif not measured:
+                said = "-"
             else:
-                cells.append(f"{('ok' if not broke else f'{broke} failed'):^14}")
-        lines.append(situation.name.ljust(width) + "  ".join(cells))
+                broke = sum(
+                    1 for o in measured if any(n == name for n, _ in o.failures)
+                )
+                said = "ok" if not broke else f"{broke} failed"
+            cells.append(f"{said:^{widths[name]}}")
+        lines.append(case.ljust(width) + "  ".join(cells))
+    return lines
 
-    lines.append("")
+
+def failures(report: Report, about: Mapping[str, str] | None = None) -> list[str]:
+    """Every failure, one to a line, with the record that says why.
+
+    `about` says what a case *is*, for a suite whose names do not: `U11` is a
+    row number and `no-equipment` is a description, so the log suite passes
+    its headings and the six situations do not need to.
+    """
+    said = about or {}
+    lines = []
     for outcome in report.outcomes:
+        named = outcome.case
+        if outcome.case in said:
+            named = f"{outcome.case} ({said[outcome.case]})"
         if outcome.error is not None:
-            lines.append(f"{outcome.situation} #{outcome.attempt}: {outcome.error}")
+            lines.append(f"{named} #{outcome.attempt}: {outcome.error}")
         for name, why in outcome.failures:
             where = outcome.written or "(not written)"
-            lines.append(f"{outcome.situation} #{outcome.attempt} {name}: {why}")
+            lines.append(f"{named} #{outcome.attempt} {name}: {why}")
             lines.append(f"    {where}")
+    return lines
 
-    lines.append("")
+
+def totals(report: Report, held: str) -> list[str]:
+    """The number, what it cost, and the bar it is measured against.
+
+    `held` is what holding meant -- every invariant, or the outcome the row
+    declared. The bar is the same either way and it is not a knob: a labelled
+    row is an expected outcome somebody wrote down before the run, so a row
+    that fails is either the agent being wrong or the row being wrong, and
+    both are things to go and read.
+    """
+    lines = []
     # Floored, never rounded. At 249 of 250 a rounded figure prints 100% on
     # the line above "the bar is 100%" and then exits non-zero -- the one
     # number this command exists to produce, contradicting itself.
+    counted = (
+        ""
+        if report.against == report.total
+        else f", out of {report.against} with false confidence counted double"
+    )
     lines.append(
-        f"{report.held} of {report.total} runs held every invariant "
-        f"-- {math.floor(report.percentage)}%"
+        f"{report.held} of {report.total} runs {held} "
+        f"-- {math.floor(report.percentage)}%{counted}"
     )
     lines.append(
         f"cost: {report.calls} tool calls, {report.input_tokens} tokens in, "

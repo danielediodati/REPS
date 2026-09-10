@@ -1148,12 +1148,17 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
     in order to fill in what a report did not mention, and it names the two
     performed dataclasses because those are what a complete block is.
     `tools.py` joined it for `prescribed_workout`, which is the same read
-    offered to a model. The claim that the writer itself is out of reach is
-    the next test, and it is the one that matters.
+    offered to a model. `log_set.py` names `PrescribedBlock` because a
+    prescription in the log set *is* one and there is no second shape for it,
+    and `log_evaluation.py` writes those four blocks into the fixture the set
+    is measured against -- see the next test, which is the one that matters
+    and which says exactly what that exception covers.
     """
     assert _importers_of("trainer.engine.workouts") == {
         "cli.py",
         "log.py",
+        "log_evaluation.py",
+        "log_set.py",
         "tools.py",
     }
 
@@ -1208,8 +1213,19 @@ def test_only_the_cli_calls_a_writer() -> None:
     reader through, and relaxing it is what loses the claim. Written about the
     writers, it says exactly what ROADMAP.md says -- the agent emits, the
     engine writes -- and it stays sharp.
+
+    **`log_evaluation.py` is the one exception, and it is a narrow one.** The
+    log set is measured against four prescribed workouts and one performed
+    one, and building those means writing them: there is no fixture without a
+    writer. What the exception does not cover is the part that would matter --
+    **scoring a run writes nothing**, because a document is resolved and
+    costed with `workouts.volume`, which reads -- and what the fixture writes
+    into is a throwaway copy, deleted with the temp directory it was made in.
+    The database the user trains against is opened once, read, and never
+    written. `test_log_evaluation.py` holds the runtime guard on that claim,
+    and it is what keeps this line from being a hole.
     """
-    assert _callers_of() == {"cli.py"}
+    assert _callers_of() == {"cli.py", "log_evaluation.py"}
 
 
 @pytest.mark.parametrize(

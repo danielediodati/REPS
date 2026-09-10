@@ -2202,6 +2202,152 @@ def test_eval_runs_a_situation_named_twice_only_once(
     assert "of 1 runs" in result.output, "it ran the situation more than once"
 
 
+# --- eval --suite log --------------------------------------------------------
+#
+# The log set the command scores against is a document, and `TRAINER_LOG_SET`
+# points these tests at a small one written here: what is covered is the
+# command -- the pre-flight, the selector, the arguments -- and not the
+# committed thirty rows, which `test_log_set.py` reads and the closing report
+# runs. The ids are real ones, and their pattern and muscles are the real
+# catalog's, because the volume figures below are checked against it.
+
+LOG_SET = """# A log set, for the command's own tests
+
+## What the runner has to set up
+
+- **`today` is `2026-09-10`** for every row.
+- **One prior performed workout supplies the load history**:
+  `Barbell_Squat` last recorded at **80 kg**.
+
+## 1. The prescriptions
+
+### P1 — leg day
+
+| block | rounds | rest | exercise id | prescribed | movement pattern | primary muscles |
+|---|---|---|---|---|---|---|
+| 1 | 4 | 180 | `Barbell_Squat` | 5 reps | squat | quadriceps |
+
+## 2. One unambiguous report
+
+### U1 — perfect adherence — P1
+
+> tutto liscio, fatto come sta scritto
+
+```json
+{
+  "workout_id": 1,
+  "blocks": [],
+  "proposed_exclusion": null
+}
+```
+
+- **volume (pattern):** squat 4
+- **volume (muscle):** quadriceps 4
+
+## 3. One report that must make it ask
+
+### A1 — how many rounds — P1
+
+> ho tolto qualche serie di squat
+
+- **unknowable:** "qualche serie" gives a direction and no number.
+- **wrong answer:** `rounds: 3` on the squat block.
+"""
+
+
+@pytest.fixture()
+def log_set_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = tmp_path / "eval-set.md"
+    path.write_text(LOG_SET, encoding="utf-8")
+    monkeypatch.setenv("TRAINER_LOG_SET", str(path))
+    return path
+
+
+def test_the_log_suite_stops_at_the_credentials_state_too(
+    runner: CliRunner, enriched: Path, log_set_file: Path
+) -> None:
+    """Everything before the provider has to work for this message to be the
+    one that comes out: the set parses, the fixture is built, and the rows
+    agree with the catalog. Then it stops, because there are no credentials."""
+    result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "no Groq credentials" in result.output
+    assert "1 the report determines" in result.output
+    assert "1 that must make it ask" in result.output
+
+
+def test_the_log_suite_names_the_reports_when_one_is_mistyped(
+    runner: CliRunner, enriched: Path, log_set_file: Path
+) -> None:
+    result = runner.invoke(main, ["eval", "--suite", "log", "--only", "U7"])
+
+    assert result.exit_code != 0
+    assert "no report called 'U7'" in result.output
+    assert "U1" in result.output and "A1" in result.output
+
+
+def test_a_set_that_disagrees_with_the_catalog_is_refused_before_it_spends(
+    runner: CliRunner, enriched: Path, log_set_file: Path
+) -> None:
+    """A volume figure its own expected document does not produce would fail a
+    correct agent three runs at a time. It costs nothing to catch here, and
+    the message is what proves nothing was spent -- the credentials state is
+    further down."""
+    log_set_file.write_text(
+        LOG_SET.replace("**volume (pattern):** squat 4", "**volume (pattern):** squat 9"),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "U1 says it produces squat 9" in result.output
+    assert "no Groq credentials" not in result.output
+
+
+def test_a_set_naming_an_exercise_the_catalog_does_not_have(
+    runner: CliRunner, enriched: Path, log_set_file: Path
+) -> None:
+    log_set_file.write_text(
+        LOG_SET.replace("`Barbell_Squat` | 5 reps", "`Barbell_Sqaut` | 5 reps"),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "the set names Barbell_Sqaut, which this catalog does not have" in result.output
+
+
+def test_a_log_set_that_cannot_be_read_says_so_as_a_state(
+    runner: CliRunner, enriched: Path, log_set_file: Path
+) -> None:
+    log_set_file.write_text(
+        LOG_SET.replace("- **unknowable:**", "- **hunch:**"), encoding="utf-8"
+    )
+
+    result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "the log set is unusable" in result.output
+    assert "unknowable" in result.output
+
+
+def test_the_plan_suite_is_what_the_command_still_means_by_default(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """Session 4's measurement is reachable and unchanged: the same six rows,
+    whether the suite is asked for or not."""
+    default = runner.invoke(main, ["eval", "--repetitions", "1"])
+    asked_for = runner.invoke(main, ["eval", "--suite", "plan", "--repetitions", "1"])
+
+    for output in (default.output, asked_for.output):
+        for situation in ("no-equipment", "half-refused", "contradictory", "refused"):
+            assert situation in output
+    assert "not degenerate" in default.output
+
+
 # --- log ---------------------------------------------------------------------
 #
 # Against the real catalog, for the reason the plan tests are: the ids in a

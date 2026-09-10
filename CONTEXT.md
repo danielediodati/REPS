@@ -125,6 +125,21 @@ The difference between what was prescribed and what was done, which is all a
 report actually has to carry. Logging is by deviation: adherence is the
 default and only the difference is said.
 
+**Skipped**:
+An exercise the user says they did not do — and **the document has no way to
+say it**. A performed block holds at least one exercise and at least one
+round, so *«i tricipiti li ho saltati»* has no emission that means it: the
+honest document is the empty one, and adherence then fills the block in and
+counts volume the user did not perform. The gap is real and it is recorded
+rather than papered over: the log set's U7 is the row that measures it, and it
+measures only that the agent invents nothing — no round of zero, which the
+schema refuses anyway, and no exclusion. A clarifying question here is neither
+right nor wrong: on a report the sentence determines, asking one is counted
+and not scored. Whoever gives the shape a way to say *not performed* changes
+that row's expected outcome with it.
+_Avoid_: reading a skipped exercise as a deviation of zero rounds. Zero is not
+a prescription that was removed; it is a number the schema refuses.
+
 **Provenance**:
 Which of three ways a value in a performed workout got there — *reported* (the
 user said it), *assumed* (the adherence default), or *asked* (confirmed in a

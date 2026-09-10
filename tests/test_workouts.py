@@ -7,6 +7,7 @@ comes back out the shape it went in.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import make_exercise
+from conftest import enrich, make_exercise
 from trainer.engine import (
     catalog,
     database,
@@ -645,3 +646,149 @@ def test_the_transition_refuses_a_workout_that_moved_under_it(
     written = workouts.workout(connection, identifier)
     assert written is not None
     assert written.report == "first"
+
+
+def test_the_volume_of_a_workout_is_the_same_before_and_after_it_is_written(
+    connection: sqlite3.Connection,
+) -> None:
+    """The one thing that keeps two definitions of volume from being two
+    answers.
+
+    Migration 0007 counts rounds per pattern and per muscle over stored rows,
+    and `workouts.volume` counts them over blocks that are not stored yet --
+    which is what the log measurement has to ask, because it scores a document
+    the agent emitted and writes nothing. They are held against each other
+    here, over the same workout, so the day one of them changes the other
+    fails rather than drifts.
+    """
+    enrich(
+        connection,
+        {
+            "Barbell_Squat": ("squat", "hip, knee, ankle", "yes", "high", 3),
+            "Dumbbell_Row": ("horizontal pull", "shoulder, elbow", "no", "medium", 1),
+            "Farmers_Walk": ("carry", "shoulder", "yes", "medium", 1),
+        },
+    )
+    connection.execute(
+        "UPDATE exercises SET primary_muscles = ? WHERE id = 'Barbell_Squat'",
+        (json.dumps(["quadriceps", "glutes"]),),
+    )
+    connection.execute(
+        "UPDATE exercises SET primary_muscles = ? WHERE id = 'Dumbbell_Row'",
+        (json.dumps(["middle back"]),),
+    )
+    blocks = (
+        workouts.PerformedBlock(
+            items=(
+                workouts.PerformedItem(
+                    exercise_id="Barbell_Squat",
+                    unit="reps",
+                    amount=5,
+                    amount_source="reported",
+                ),
+            ),
+            rounds=4,
+            rounds_source="reported",
+            rest=180,
+            rest_source="assumed",
+        ),
+        # A superset: one round is one trip through both, and it counts whole
+        # to each of them.
+        workouts.PerformedBlock(
+            items=(
+                workouts.PerformedItem(
+                    exercise_id="Dumbbell_Row",
+                    unit="reps",
+                    amount=10,
+                    amount_source="reported",
+                ),
+                workouts.PerformedItem(
+                    exercise_id="Farmers_Walk",
+                    unit="seconds",
+                    amount=45,
+                    amount_source="reported",
+                ),
+            ),
+            rounds=3,
+            rounds_source="reported",
+            rest=90,
+            rest_source="reported",
+        ),
+    )
+
+    before = workouts.volume(connection, blocks)
+    workout_id = workouts.record_performed(
+        connection, blocks, on="2026-09-10", report="squats and a carry"
+    )
+
+    patterns = {
+        row["movement_pattern"]: int(row["rounds"])
+        for row in connection.execute(
+            "SELECT movement_pattern, SUM(rounds) AS rounds FROM pattern_state "
+            "WHERE workout_id = ? AND phase = 'performed' GROUP BY movement_pattern",
+            (workout_id,),
+        )
+    }
+    muscles = {
+        row["muscle"]: int(row["rounds"])
+        for row in connection.execute(
+            "SELECT muscle, SUM(rounds) AS rounds FROM muscle_state "
+            "WHERE workout_id = ? AND phase = 'performed' GROUP BY muscle",
+            (workout_id,),
+        )
+    }
+
+    assert before == (patterns, muscles)
+    assert patterns == {"squat": 4, "horizontal pull": 3, "carry": 3}
+    assert muscles == {"quadriceps": 4, "glutes": 4, "middle back": 3, "shoulders": 3}
+
+
+def test_an_exercise_with_no_pattern_counts_towards_no_pattern(
+    connection: sqlite3.Connection,
+) -> None:
+    """An unenriched row contributes to no pattern rather than to a bucket
+    nobody can act on -- the view says so, and so does this."""
+    blocks = (
+        workouts.PerformedBlock(
+            items=(
+                workouts.PerformedItem(
+                    exercise_id="Barbell_Squat",
+                    unit="reps",
+                    amount=5,
+                    amount_source="reported",
+                ),
+            ),
+            rounds=2,
+            rounds_source="reported",
+            rest=120,
+            rest_source="reported",
+        ),
+    )
+
+    patterns, muscles = workouts.volume(connection, blocks)
+
+    assert patterns == {}
+    assert muscles == {"shoulders": 2}
+
+
+def test_costing_an_exercise_the_catalog_does_not_have_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    blocks = (
+        workouts.PerformedBlock(
+            items=(
+                workouts.PerformedItem(
+                    exercise_id="Nope", unit="reps", amount=5, amount_source="reported"
+                ),
+            ),
+            rounds=2,
+            rounds_source="reported",
+            rest=120,
+            rest_source="reported",
+        ),
+    )
+
+    with pytest.raises(workouts.WorkoutError) as raised:
+        workouts.volume(connection, blocks)
+
+    assert "no such exercise: 'Nope'" in str(raised.value)

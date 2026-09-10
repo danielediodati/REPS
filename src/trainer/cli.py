@@ -11,15 +11,24 @@ decides how a person should read it.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
+from typing import TypeVar
 
 import click
 from click.core import ParameterSource
 
-from trainer import __version__, agent, evaluation, log, plan
+from trainer import (
+    __version__,
+    agent,
+    evaluation,
+    log,
+    log_evaluation,
+    log_set,
+    plan,
+)
 from trainer.engine import (
     admissible,
     budget,
@@ -51,6 +60,8 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the dataset is unusable: {error}") from error
     except reference_set.ReferenceSetError as error:
         raise click.ClickException(f"the reference set is unusable: {error}") from error
+    except log_set.LogSetError as error:
+        raise click.ClickException(f"the log set is unusable: {error}") from error
     except residue.ResidueError as error:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
@@ -544,7 +555,31 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
+PLAN_SUITE, LOG_SUITE = "plan", "log"
+"""The two measurements, under one command.
+
+Session 4's six situations and session 5's thirty reports are checked on
+different things -- properties that must hold always against a plan nobody
+wrote down, and expected outcomes somebody did -- so they are two suites and
+not one with a wider matrix. What they share is the loop, the cost, the
+distribution over repetitions and the bar, which is why they share a command.
+
+`plan` is the default because `trainer eval` meant the six before it meant
+anything else, and a default that moved would change what a command in
+somebody's notes does.
+"""
+
+
 @main.command("eval")
+@click.option(
+    "--suite",
+    "suite",
+    type=click.Choice((PLAN_SUITE, LOG_SUITE)),
+    default=PLAN_SUITE,
+    show_default=True,
+    help="Which measurement to run: the six planning situations, or the "
+    "logging set's thirty hand-written reports.",
+)
 @click.option(
     "--repetitions",
     "repetitions",
@@ -552,16 +587,16 @@ def catalog_command(
     type=click.IntRange(min=1),
     default=evaluation.REPETITIONS,
     show_default=True,
-    help="How many times each situation runs. A model is a distribution, so "
-    "one run measures nothing.",
+    help="How many times each situation or report runs. A model is a "
+    "distribution, so one run measures nothing.",
 )
 @click.option(
     "--only",
     "only",
     metavar="NAME",
     multiple=True,
-    help="Run just these situations, by name. Every run still counts, so a "
-    "partial pass is a partial answer.",
+    help="Run just these situations or reports, by name. Every run still "
+    "counts, so a partial pass is a partial answer.",
 )
 @click.option(
     "--records",
@@ -582,13 +617,25 @@ def catalog_command(
     help="Tool calls each run may make before it is asked to emit anyway.",
 )
 def eval_command(
-    repetitions: int, only: tuple[str, ...], records: Path, call_budget: int
+    suite: str,
+    repetitions: int,
+    only: tuple[str, ...],
+    records: Path,
+    call_budget: int,
 ) -> None:
-    """Run the six adverse situations against the real agent, and check the
-    six invariants over every run.
+    """Run a measurement against the real agent, and check it by code.
 
-    Not *good plan / bad plan*: properties that must hold always, decided by
-    code reading the run record. No model judges another model's output.
+    `--suite plan` is session 4's: the six adverse situations, and the six
+    invariants over every run. Not *good plan / bad plan* -- properties that
+    must hold always.
+
+    `--suite log` is session 5's: thirty hand-written reports, eighteen the
+    sentence determines and twelve it does not. The first eighteen are scored
+    by equality on the document the agent emitted and the volume it produces;
+    the twelve on whether it asked, with a value written where a question was
+    needed counted double against.
+
+    No model judges another model's output in either of them.
 
     **This is the one command in the project that reaches a provider**, and
     the only one that spends money. `pytest` never runs it: the suite has no
@@ -600,36 +647,98 @@ def eval_command(
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
-            available = evaluation.situations(connection)
-            chosen = _chosen(available, only)
-            report = evaluation.run(
-                connection,
-                chosen,
-                build=lambda: agent.groq(agent.PLANNER),
-                repetitions=repetitions,
-                records=records,
-                budget=call_budget,
-            )
+            if suite == LOG_SUITE:
+                lines, report = _log_suite(
+                    connection, only, repetitions, records, call_budget
+                )
+            else:
+                lines, report = _plan_suite(
+                    connection, only, repetitions, records, call_budget
+                )
 
-    for line in evaluation.render(report, chosen):
-        click.echo(line)
+    for line in lines:
+        # The reports, the questions and the exclusions in this output were
+        # written by a person and a model, not by this project. `trainer log`
+        # folds them to ASCII for the same console and the same reason.
+        click.echo(_ascii(line))
     if not report.passed:
         raise SystemExit(1)
 
 
+def _plan_suite(
+    connection: sqlite3.Connection,
+    only: tuple[str, ...],
+    repetitions: int,
+    records: Path,
+    call_budget: int,
+) -> tuple[list[str], evaluation.Report]:
+    chosen = _chosen(evaluation.situations(connection), only, "situation")
+    report = evaluation.run(
+        connection,
+        chosen,
+        build=lambda: agent.groq(agent.PLANNER),
+        repetitions=repetitions,
+        records=records,
+        budget=call_budget,
+    )
+    return evaluation.render(report, chosen), report
+
+
+def _log_suite(
+    connection: sqlite3.Connection,
+    only: tuple[str, ...],
+    repetitions: int,
+    records: Path,
+    call_budget: int,
+) -> tuple[list[str], evaluation.Report]:
+    """The thirty reports, against a database built for them.
+
+    Everything that can be wrong without a model is checked first: an id the
+    catalog does not have, a row whose expected document reports against the
+    wrong workout, a volume figure its own document does not produce. Thirty
+    agent runs cost minutes and money, and every one of them measures nothing
+    if the set and the catalog disagree.
+    """
+    holds = log_set.load()
+    _refuse(log_evaluation.missing(connection, holds))
+    chosen = _chosen(holds.rows, only, "report")
+    with log_evaluation.prepared(connection, holds) as where:
+        _refuse(log_evaluation.verify(where, holds))
+        report = log_evaluation.run(
+            where,
+            chosen,
+            build=lambda: agent.groq(agent.LOGGER),
+            repetitions=repetitions,
+            records=records,
+            budget=call_budget,
+        )
+    return log_evaluation.render(report, chosen), report
+
+
+def _refuse(problems: Sequence[str]) -> None:
+    if problems:
+        raise click.ClickException("\n".join(problems))
+
+
+_Named = TypeVar("_Named", evaluation.Situation, log_set.Row)
+"""What both suites' cases have in common at this boundary: a name typed at
+`--only`. Two concrete types rather than a protocol, because there are two and
+naming them is what makes the error message able to say which."""
+
+
 def _chosen(
-    available: tuple[evaluation.Situation, ...], only: tuple[str, ...]
-) -> tuple[evaluation.Situation, ...]:
+    available: Sequence[_Named], only: tuple[str, ...], what: str
+) -> tuple[_Named, ...]:
     if not only:
-        return available
-    known = {situation.name: situation for situation in available}
+        return tuple(available)
+    known = {case.name: case for case in available}
     for name in only:
         if name not in known:
             raise click.ClickException(
-                f"no situation called {name!r}; they are {', '.join(known)}"
+                f"no {what} called {name!r}; they are {', '.join(known)}"
             )
-    # Named twice is named once. Left in, the situation runs twice the
-    # repetitions against a paid provider and prints two identical rows.
+    # Named twice is named once. Left in, the case runs twice the repetitions
+    # against a paid provider and prints two identical rows.
     return tuple(known[name] for name in dict.fromkeys(only))
 
 

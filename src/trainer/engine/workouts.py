@@ -31,6 +31,7 @@ computed against it later would be the whole session.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -585,3 +586,45 @@ def _performed(row: sqlite3.Row, items: Sequence[PerformedItem]) -> PerformedBlo
         rest_source=row["rest_source"],
         rpe=None if row["rpe"] is None else float(row["rpe"]),
     )
+
+
+def volume(
+    connection: sqlite3.Connection, blocks: Sequence[PerformedBlock]
+) -> tuple[dict[str, int], dict[str, int]]:
+    """What these blocks would add to each of the two axes, before they are
+    written -- rounds per movement pattern, and rounds per primary muscle.
+
+    **The same arithmetic `workout_volume` does, on a workout that is not in
+    the database yet.** Migration 0007 answers this question over stored rows
+    and is the definition; nothing that has not been recorded can be asked of
+    a view, and the measurement in `log_evaluation` has to ask it of a
+    document the agent emitted without recording anything. `test_workouts.py`
+    holds the two against each other over the same workout, which is what
+    stops this drifting into a second answer.
+
+    CONTEXT.md's rule, unchanged: a round counts **whole** to the exercise's
+    movement pattern and whole to each of its primary muscles, and nothing is
+    divided -- a block of two exercises for four rounds is four rounds of
+    each. An exercise the enrichment has no pattern for contributes to no
+    pattern, rather than to a bucket nobody can act on.
+    """
+    patterns: dict[str, int] = {}
+    muscles: dict[str, int] = {}
+    for block in blocks:
+        for item in block.items:
+            row = connection.execute(
+                "SELECT movement_pattern, primary_muscles FROM exercises WHERE id = ?",
+                (item.exercise_id,),
+            ).fetchone()
+            if row is None:
+                raise WorkoutError(
+                    f"no such exercise: {item.exercise_id!r}; ids come from "
+                    "the catalog"
+                )
+            if row["movement_pattern"] is not None:
+                patterns[row["movement_pattern"]] = (
+                    patterns.get(row["movement_pattern"], 0) + block.rounds
+                )
+            for muscle in json.loads(row["primary_muscles"]):
+                muscles[muscle] = muscles.get(muscle, 0) + block.rounds
+    return patterns, muscles

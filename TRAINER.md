@@ -527,6 +527,8 @@ Not for the checkbox: the library is **already** a tool surface, so the wrapper 
 
 The eight-week criterion measures the product, not the system. The system is measured earlier, and it is measured **one component at a time**.
 
+**Every measurement of an agent runs against a fixture the environment names.** The tool surface opens its own connection from `TRAINER_DB` — by design, because the same definitions serve a generic MCP client that has no connection to hand — so the database the *agent* reads is the one the environment points at, and never the connection the runner is holding. Session 5's log set found this the expensive way: handed a fixture nothing pointed at, the agent's first tool call came back *there is no workout 1*, it emitted `workout_id: null`, and every row failed against a set the model had never been shown. A measurement that builds itself a state has to point the variable at it, and put it back afterwards.
+
 ### Level 1 — the supervisor: labeled examples
 
 Two axes, with an obvious human label in most cases.
