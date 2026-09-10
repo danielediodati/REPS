@@ -605,7 +605,7 @@ def eval_command(
             report = evaluation.run(
                 connection,
                 chosen,
-                build=agent.groq,
+                build=lambda: agent.groq(agent.PLANNER),
                 repetitions=repetitions,
                 records=records,
                 budget=call_budget,
@@ -1199,30 +1199,80 @@ def _recorded(
     "--from",
     "source",
     metavar="FILE",
-    required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="A performed workout written by hand, in the shape the agent will emit.",
+    help="A performed workout written by hand, in the shape the agent emits. "
+    "No model is asked, and nothing is read from what you say.",
 )
-def log_command(source: Path) -> None:
+@click.option(
+    "--say",
+    "said",
+    metavar="TEXT",
+    help="What you did, in your own words. Prompted for when it is not given.",
+)
+@click.option(
+    "--call-budget",
+    "call_budget",
+    metavar="N",
+    type=click.IntRange(min=1),
+    default=agent.CALL_BUDGET,
+    show_default=True,
+    help="Tool calls the model may make before it is asked to emit anyway.",
+)
+@click.option(
+    "--record",
+    "record_path",
+    metavar="FILE",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the run record here: the calls, the questions, the document.",
+)
+@click.pass_context
+def log_command(
+    context: click.Context,
+    source: Path | None,
+    said: str | None,
+    call_budget: int,
+    record_path: Path | None,
+) -> None:
     """Report a workout you performed, and print what was understood.
 
-    `--from FILE` is the whole of this command for now: a document somebody
-    wrote by hand goes through the same validator, the same writer and the
-    same renderer the logging agent will use. The interactive `trainer log`,
-    where a model reads what you actually said, is session 5's issue 04.
+    Say what you did in your own words and a model reads it against what was
+    prescribed, asking you about anything the sentence does not settle. With
+    `--from FILE` no model is involved and a document written by hand goes
+    through the same validator, the same writer and the same renderer.
 
     What you do not mention was done as prescribed -- that is adherence, and
     every value it fills in is printed marked `(assumed)`. Nothing here is
     refused for being a bad workout: a report is a **fact**, and an exercise
     you were told not to do is written, flagged, and kept.
+
+    Nothing is written until the whole report has been understood, so
+    interrupting a question leaves the database exactly as it was.
     """
-    with reported():
-        performed = log.parse(source.read_text(encoding="utf-8"))
+    if source is not None:
+        _only_with_a_model(
+            context,
+            ("--say", "said"),
+            ("--call-budget", "call_budget"),
+            ("--record", "record_path"),
+        )
+    elif record_path is not None:
+        # Before the model is called rather than after, for the reason
+        # `trainer plan` checks it there: a path that cannot be written is
+        # worth finding out about while the run is still free.
+        _writable(record_path)
 
     today = date.today().isoformat()
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
+            if source is not None:
+                performed = log.parse(source.read_text(encoding="utf-8"))
+                trailer: list[str] = []
+            else:
+                performed, trailer = _read(
+                    connection, said, today, call_budget, record_path
+                )
+
             log.validate(connection, performed, today)
             blocks = log.to_performed(connection, performed)
             # The flags are read off `blocks` rather than off the document,
@@ -1236,9 +1286,16 @@ def log_command(source: Path) -> None:
             # and it is not worth throwing away what the user reported in
             # order to report one.
             for line in log.render(connection, performed, blocks, flagged):
-                click.echo(line)
+                click.echo(_ascii(line))
+            for line in trailer:
+                click.echo(_ascii(line))
 
             exclusion, retest_date = log.proposed(connection, performed)
+            if exclusion is not None and source is None:
+                assert retest_date is not None  # `proposed` pairs both or neither
+                if not _confirmed(exclusion, retest_date):
+                    exclusion, retest_date = None, None
+
             workouts.record_performed(
                 connection,
                 blocks,
@@ -1248,6 +1305,127 @@ def log_command(source: Path) -> None:
                 exclusion=exclusion,
                 retest_date=retest_date,
             )
+
+
+def _read(
+    connection: sqlite3.Connection,
+    said: str | None,
+    today: str,
+    call_budget: int,
+    record_path: Path | None,
+) -> tuple[log.PerformedWorkout, list[str]]:
+    """One logging run: the document the model emitted, and how it went.
+
+    The record is written *before* a refusal is raised, on purpose: it is what
+    you open to find out why the model emitted what it did, and a refusal is
+    exactly the case you want it for.
+
+    Which workout is open is resolved here and put in the brief. Which workout
+    the report is *about* is not: a user who trained something else entirely
+    says so in the sentence, and the sentence is the model's to read.
+
+    **The model is built before the report is asked for.** No credentials, or
+    a backend nobody built, is a state that is knowable before anything is
+    typed -- and prompting first means the user writes out their whole workout
+    and then loses it to an error that was already true.
+    """
+    model = agent.groq(agent.LOGGER)
+    if not said:
+        said = str(click.prompt("What did you do", type=str))
+    open_workout = workouts.awaiting(connection)
+    record = agent.log_workout(
+        connection,
+        said,
+        today,
+        model=model,
+        ask=_ask,
+        awaiting=None if open_workout is None else open_workout.id,
+        prescribed_on=None if open_workout is None else open_workout.prescribed_on,
+        budget=call_budget,
+    )
+    if record_path is not None:
+        record_path.write_text(record.model_dump_json(indent=1), encoding="utf-8")
+    if record.refused is not None:
+        raise click.ClickException(record.refused)
+    return record.document, ["", *agent.summary(record)]
+
+
+TYPOGRAPHY = {
+    "\u2014": "--",
+    "\u2013": "-",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2026": "...",
+    "\u00a0": " ",
+}
+"""The characters a model reaches for, and what they become on the way out."""
+
+
+def _ascii(text: str) -> str:
+    """Text somebody else wrote, in the only alphabet the console can print.
+
+    CLAUDE.md's standing rule -- *anything the CLI prints is ASCII* -- was
+    written about this project's own output, where it is kept by writing `--`.
+    `trainer log` is the first command that prints prose **this project did not
+    write**: the report in the user's own words, and a model's clarifying
+    question. This console runs at code page 437, and a run of it put
+    `finch\u00e9` and an em dash on screen as replacement characters.
+
+    Accents are dropped rather than transliterated, so `perch\u00e9` prints as
+    `perche` -- which is how the user types it anyway, and is in every case
+    better than `perch?`. **Presentation only**: `report` is stored verbatim,
+    because it is what session 9 re-reads when it forms a hypothesis and a
+    paraphrase is the system's reading of the user rather than the user.
+    """
+    import unicodedata
+
+    folded = "".join(TYPOGRAPHY.get(character, character) for character in text)
+    stripped = unicodedata.normalize("NFKD", folded)
+    return "".join(
+        character
+        for character in stripped
+        if character.isascii() and not unicodedata.combining(character)
+    )
+
+
+def _ask(question: str) -> str:
+    """One clarifying question, at the terminal.
+
+    `click.prompt` already asks again on an empty line. The loop is for a line
+    of **spaces**, which it does not count as empty: that reaches the model as
+    a turn saying nothing, and it fills the field in anyway -- which is the
+    whole thing the question exists to prevent. Nothing here spins, because a
+    closed stdin aborts the command rather than answering it.
+    """
+    while True:
+        answer = str(click.prompt(f"? {_ascii(question)}", type=str)).strip()
+        if answer:
+            return answer
+
+
+def _confirmed(exclusion: exclusions.Exclusion, retest_date: str) -> bool:
+    """Whether the exclusion the model proposed is actually written.
+
+    Asked only on the model path. A document given with `--from` carries the
+    author's own proposal, and asking somebody to confirm the line they just
+    typed is noise; a model proposing one has read it out of a passing remark,
+    and an exclusion on `shoulder` takes 251 of the catalog's 582 exercises
+    out of what may ever be prescribed.
+
+    Declining writes the workout and no exclusion. The report keeps the user's
+    words either way, so the remark that prompted it is still on the row.
+    """
+    return bool(
+        click.confirm(
+            _ascii(
+                f"Stop prescribing {exclusion.granularity} '{exclusion.value}' "
+                f"until {retest_date}?"
+            ),
+            default=False,
+        )
+    )
 
 
 @main.command("state")

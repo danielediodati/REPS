@@ -291,6 +291,141 @@ def test_an_assumed_value_is_fine_when_there_is_a_prescription(
     log.validate(connection, parsed, TODAY)
 
 
+def test_an_assumed_amount_the_prescription_does_not_say_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """`assumed` means *as prescribed*, so it has to say what was prescribed.
+
+    A real emission: asked to report *"only 3 sets of military because the
+    shoulder was pulling"* against a prescription of 10 reps, a model wrote
+    `amount: 8, amount_source: "assumed"`. Every other rule passes it -- the
+    id exists, the number is a number, there is a workout to deviate from --
+    and the row it writes says *the user never gave this number, it came from
+    the plan* about a number that came from nowhere.
+    """
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(
+                item("Standing_Military_Press", amount=8, amount_source="assumed"),
+                rounds=3,
+            ),
+            workout_id=identifier,
+        )
+    )
+
+    with pytest.raises(log.LogRejected) as refused:
+        log.validate(connection, parsed, TODAY)
+
+    assert "8 reps of Standing_Military_Press" in str(refused.value)
+    assert "prescribed as 10 reps" in str(refused.value)
+
+
+def test_an_assumed_amount_that_matches_the_prescription_is_fine(
+    connection: sqlite3.Connection,
+) -> None:
+    """The engine's own fill is exactly this, and refusing it would refuse
+    every report that mentions one exercise of a block and not its sibling."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(item("Standing_Military_Press", amount=10, amount_source="assumed")),
+            workout_id=identifier,
+        )
+    )
+
+    log.validate(connection, parsed, TODAY)
+
+
+def test_assumed_rounds_the_prescription_does_not_say_are_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """Volume is rounds performed, so this is the number that would be wrong
+    on both axes -- and the column would say the user never gave it."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(item("Barbell_Squat"), rounds=7, rounds_source="assumed"),
+            workout_id=identifier,
+        )
+    )
+
+    with pytest.raises(log.LogRejected) as refused:
+        log.validate(connection, parsed, TODAY)
+
+    assert "7 rounds, prescribed as 4" in str(refused.value)
+
+
+def test_a_substituted_block_may_call_what_the_user_did_not_say_assumed(
+    connection: sqlite3.Connection,
+) -> None:
+    """The refusal is for a **contradiction**, never for silence.
+
+    *"I did the dumbbell bench instead, three sets"* leaves the rest nobody
+    asked about, and `rest` and `rest_source` are required fields. There is no
+    prescribed counterpart to check the number against -- which prescribed
+    exercise a substitute stands in for is a judgement the engine deliberately
+    does not make -- so `reported` would be a lie about what the user said and
+    `assumed` keeps its useful half: *the user did not give this number*.
+    Refused, this report would be unwritable, and a substitution is the case
+    the whole logging path exists for.
+    """
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(
+                item("Dumbbell_Bench_Press", amount=10, amount_source="assumed"),
+                rest=90,
+                rest_source="assumed",
+            ),
+            workout_id=identifier,
+        )
+    )
+
+    log.validate(connection, parsed, TODAY)
+
+
+def test_an_assumed_load_is_refused_because_a_plan_prescribes_none(
+    connection: sqlite3.Connection,
+) -> None:
+    """`_assumed_items` sets no load, because there is nothing to set it from.
+    A document claiming one is claiming the plan said what the bar weighed."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(item("Barbell_Squat", load_kg=60, load_kg_source="assumed")),
+            workout_id=identifier,
+        )
+    )
+
+    with pytest.raises(log.LogRejected) as refused:
+        log.validate(connection, parsed, TODAY)
+
+    assert "prescribes no load" in str(refused.value)
+
+
+def test_the_assumed_check_reads_the_block_the_report_is_actually_about(
+    connection: sqlite3.Connection,
+) -> None:
+    """Matched by exercise, never by position -- the same matching the writer
+    fills gaps from. Read by position, this plank would be checked against the
+    squat block and refused for a number that is exactly what was prescribed.
+    """
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(
+                item("Plank", unit="seconds", amount=45, amount_source="assumed"),
+                rounds=3,
+                rest=90,
+            ),
+            workout_id=identifier,
+        )
+    )
+
+    log.validate(connection, parsed, TODAY)
+
+
 def test_an_exercise_the_catalog_does_not_have_is_refused(
     connection: sqlite3.Connection,
 ) -> None:

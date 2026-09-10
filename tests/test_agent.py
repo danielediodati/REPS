@@ -14,19 +14,30 @@ from __future__ import annotations
 
 import ast
 import enum
+import inspect
 import json
 import sqlite3
-from collections.abc import Iterator, Sequence
+import textwrap
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
 from conftest import enrich, make_exercise
-from trainer import agent, plan as plans, tools
-from trainer.engine import catalog, database, migrations
+from pydantic import BaseModel
+
+from trainer import agent, log as logs, plan as plans, tools
+from trainer.engine import (
+    catalog,
+    database,
+    duration,
+    exclusions,
+    migrations,
+    workouts,
+)
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
@@ -79,17 +90,20 @@ def good_plan(*exercise_ids: str) -> plans.WorkoutPlan:
 class Scripted:
     """A model whose turns were written in advance.
 
-    `turns` is what it replies with, one per `respond`; when they run out it
-    keeps replying with nothing, which is a model that has stopped asking for
-    tools. `emitted` is what it hands over when asked for the plan, and it
-    counts the asks, because *emitted exactly once* is how this suite states
-    that a refused plan is never re-asked.
+    `turns` is what it replies with, one per `respond`, each a `Turn` -- or the
+    shorthand for one: a tuple of calls, or a string, which is prose with no
+    tool calls in it. Prose is a clarifying question on the logging door and
+    the end of the loop on the planning one. When the turns run out it keeps
+    replying with nothing, which is a model that has stopped asking. `emitted`
+    is what it hands over when asked for the document, and it counts the asks,
+    because *emitted exactly once* is how this suite states that a refused
+    document is never re-asked.
     """
 
     def __init__(
         self,
-        turns: Sequence[tuple[agent.Call, ...]] | None = None,
-        emitted: plans.WorkoutPlan | None = None,
+        turns: Sequence[Turn | tuple[agent.Call, ...] | str] | None = None,
+        emitted: BaseModel | None = None,
     ) -> None:
         self.turns = list(turns or [])
         self.emitted = emitted if emitted is not None else good_plan()
@@ -97,6 +111,7 @@ class Scripted:
         self.offers: list[list[dict[str, Any]] | None] = []
         self.emissions = 0
         self.seen: list[Any] = []
+        self.briefs: list[str] = []
 
     def respond(
         self,
@@ -106,39 +121,81 @@ class Scripted:
     ) -> agent.Reply:
         self.offers.append(list(offered) if offered is not None else None)
         self.seen = list(exchanges)
-        calls = self.turns.pop(0) if self.turns else ()
+        self.briefs.append(brief)
+        turn = _turn(self.turns.pop(0) if self.turns else ())
         return agent.Reply(
             content={"role": "assistant", "content": "thinking"},
-            calls=calls,
+            calls=turn.calls,
+            text=turn.text,
             input_tokens=100,
             output_tokens=20,
         )
 
-    def emit(self, brief: str, exchanges: Sequence[agent.Exchange]) -> agent.Emission:
+    def emit(
+        self,
+        brief: str,
+        exchanges: Sequence[agent.Exchange],
+        shape: type[Any],
+    ) -> agent.Emission[Any]:
         self.emissions += 1
         self.seen = list(exchanges)
-        return agent.Emission(plan=self.emitted, input_tokens=200, output_tokens=50)
+        self.briefs.append(brief)
+        assert isinstance(self.emitted, shape), (
+            f"the loop asked for a {shape.__name__} and the script holds a "
+            f"{type(self.emitted).__name__}"
+        )
+        return agent.Emission(document=self.emitted, input_tokens=200, output_tokens=50)
 
 
 def call(name: str, **arguments: Any) -> agent.Call:
     return agent.Call(id=f"toolu_{name}", name=name, arguments=arguments)
 
 
+class Turn(NamedTuple):
+    """One scripted reply: what it called, and what it wrote.
+
+    Both at once is a real turn and not a contrivance -- a model that searches
+    the catalog and asks which of two benches it was is doing both things it
+    is supposed to do -- so the stand-in has to be able to produce one.
+    """
+
+    calls: tuple[agent.Call, ...] = ()
+    text: str = ""
+
+
+def _turn(scripted: Any) -> Turn:
+    """A scripted turn, out of `Turn` or either shorthand for one."""
+    if isinstance(scripted, Turn):
+        return scripted
+    if isinstance(scripted, str):
+        return Turn(text=scripted)
+    return Turn(calls=tuple(scripted))
+
+
+def executed(one: agent.Call, door: agent.Door = agent.PLANNER) -> agent.Result:
+    """One call, through the door that offered it -- which is what decides
+    both whether the tool exists and what its answer carries back."""
+    return agent._execute(one, agent.registered(door), door.hides)
+
+
 # -- the tools this door offers -----------------------------------------------
 
 
 def test_the_tools_offered_are_the_shared_surface_and_nothing_else() -> None:
-    """No second definition: the agent's door registers `tools.TOOLS`, the
+    """No second definition: a door registers names out of `tools.TOOLS`, the
     same tuple `trainer mcp` registers."""
-    offered = agent.surface()
+    offered = agent.surface(agent.PLANNER)
+    defined = [tool.__name__ for tool in tools.TOOLS]
 
-    assert [tool["name"] for tool in offered] == [tool.__name__ for tool in tools.TOOLS]
+    assert [tool["name"] for tool in offered] == [
+        name for name in defined if name in agent.PLANNER.tools
+    ]
 
 
 def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None:
     """A tool the model cannot fill the arguments in for is a tool it cannot
     call, and a tool with no description is one it cannot choose."""
-    for offered in agent.surface():
+    for offered in agent.surface(agent.PLANNER) + agent.surface(agent.LOGGER):
         assert offered["description"], f"{offered['name']} has no description"
         assert offered["parameters"]["type"] == "object"
         if offered["name"] == "unreported_workouts":
@@ -153,7 +210,9 @@ def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None
 def test_an_argument_with_a_default_is_not_required() -> None:
     """`admissible_set`'s exclusions are optional, and a schema that demanded
     them would make the common call the harder one to write."""
-    (admissible,) = [t for t in agent.surface() if t["name"] == "admissible_set"]
+    (admissible,) = [
+        t for t in agent.surface(agent.PLANNER) if t["name"] == "admissible_set"
+    ]
 
     assert set(admissible["parameters"]["required"]) == {"equipment", "budget_min"}
 
@@ -424,7 +483,7 @@ def test_the_prompt_carries_the_rules_the_validator_will_apply() -> None:
     """A model that is not told the rules is one whose refusals are the
     prompt's fault rather than a finding."""
     for rule in ("admissible_set", "never trimmed to fit", "at most once", "reason"):
-        assert rule.lower() in agent.SYSTEM.lower(), rule
+        assert rule.lower() in agent.PLANNING.lower(), rule
 
 
 # -- credentials --------------------------------------------------------------
@@ -533,7 +592,7 @@ def test_a_result_reaches_the_model_as_json(connection: sqlite3.Connection) -> N
     """The tool docstrings describe `known: false`; Python would hand back
     `'known': False`, and a model translating between two dialects mid-loop is
     one more thing that can go wrong for nothing."""
-    result = agent._execute(call("pattern_history", pattern="squat", cycles=3))
+    result = executed(call("pattern_history", pattern="squat", cycles=3))
 
     assert result.failed is False
     assert json.loads(result.content)["known"] is False
@@ -545,7 +604,7 @@ def test_an_admissible_set_reaches_the_model_without_its_prose(
     """One answer must not be larger than the whole output budget. Instructions
     and image paths are most of an exercise record and nothing in planning
     reads either, and the loop re-sends every result on every later turn."""
-    result = agent._execute(call("admissible_set", equipment=["barbell"], budget_min=45))
+    result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
     (first, *_) = json.loads(result.content)
 
     assert result.failed is False
@@ -560,7 +619,7 @@ def test_the_model_is_not_shown_the_name_it_could_write_by_mistake(
     `Butt Lift (Bridge)` is `Butt_Lift_Bridge` -- so the field is removed
     rather than explained, which makes the mistake impossible instead of
     rare."""
-    result = agent._execute(call("admissible_set", equipment=["barbell"], budget_min=45))
+    result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
 
     assert "name" not in json.loads(result.content)[0]
     assert "Barbell Squat" not in result.content
@@ -670,11 +729,14 @@ def a_tool_call(name: str, arguments: str) -> SimpleNamespace:
 def test_the_tool_phase_offers_the_tools_in_the_envelope_groq_reads() -> None:
     client = FakeGroq(FakeMessage(content="thinking"))
 
-    agent.Groq(client=client, model="qwen/qwen3.8-27b").respond("today", [], agent.surface())
+    agent.Groq(agent.PLANNER, client=client, model="qwen/qwen3.8-27b").respond(
+        "today", [], agent.surface(agent.PLANNER)
+    )
 
     (request,) = client.requests
-    assert [tool["type"] for tool in request["tools"]] == ["function"] * len(tools.TOOLS)
-    assert request["tools"][0]["function"]["name"] == tools.TOOLS[0].__name__
+    offered = agent.PLANNER.tools
+    assert [tool["type"] for tool in request["tools"]] == ["function"] * len(offered)
+    assert request["tools"][0]["function"]["name"] == offered[0]
     assert "response_format" not in request
 
 
@@ -683,7 +745,9 @@ def test_the_emission_offers_no_tools_at_all() -> None:
     is the assertion that would have caught a request built the other way."""
     client = FakeGroq(FakeMessage(content=good_plan().model_dump_json()))
 
-    agent.Groq(client=client, model="qwen/qwen3.8-27b").emit("today", [])
+    agent.Groq(agent.PLANNER, client=client, model="qwen/qwen3.8-27b").emit(
+        "today", [], plans.WorkoutPlan
+    )
 
     (request,) = client.requests
     assert "tools" not in request
@@ -704,7 +768,7 @@ def test_the_conversation_replays_in_the_shape_groq_reads() -> None:
     )
     client = FakeGroq(FakeMessage(content="thinking"))
 
-    agent.Groq(client=client, model="m").respond("today", [exchange], None)
+    agent.Groq(agent.PLANNER, client=client, model="m").respond("today", [exchange], None)
 
     (request,) = client.requests
     roles = [message["role"] for message in request["messages"]]
@@ -725,7 +789,9 @@ def test_arguments_arrive_as_a_json_string_and_are_parsed() -> None:
         )
     )
 
-    reply = agent.Groq(client=client, model="m").respond("today", [], agent.surface())
+    reply = agent.Groq(agent.PLANNER, client=client, model="m").respond(
+        "today", [], agent.surface(agent.PLANNER)
+    )
 
     (call_,) = reply.calls
     assert call_.arguments == {"minutes": 45, "proportions": {"legs": 1.0}}
@@ -735,14 +801,18 @@ def test_an_emission_that_is_not_a_plan_is_a_state_not_a_traceback() -> None:
     client = FakeGroq(FakeMessage(content='{"blocks": "nonsense"}'))
 
     with pytest.raises(agent.AgentError, match="did not parse"):
-        agent.Groq(client=client, model="m").emit("today", [])
+        agent.Groq(agent.PLANNER, client=client, model="m").emit(
+            "today", [], plans.WorkoutPlan
+        )
 
 
 def test_an_empty_emission_is_a_state_not_a_traceback() -> None:
     client = FakeGroq(FakeMessage(content=None))
 
-    with pytest.raises(agent.AgentError, match="no plan"):
-        agent.Groq(client=client, model="m").emit("today", [])
+    with pytest.raises(agent.AgentError, match="no workout_plan"):
+        agent.Groq(agent.PLANNER, client=client, model="m").emit(
+            "today", [], plans.WorkoutPlan
+        )
 
 
 def test_a_provider_that_cannot_be_reached_is_reported_in_words() -> None:
@@ -801,7 +871,7 @@ def test_the_record_names_the_model_that_ran_not_the_environment(
 
 
 def test_the_provider_adapter_reports_the_model_it_was_built_with() -> None:
-    assert agent.Groq(client=FakeGroq(), model="qwen/qwen3.8-27b").name == (
+    assert agent.Groq(agent.PLANNER, client=FakeGroq(), model="qwen/qwen3.8-27b").name == (
         "qwen/qwen3.8-27b"
     )
 
@@ -844,7 +914,7 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     bound, with nothing failing to say so."""
     answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
 
-    trimmed = agent._trimmed(answer)
+    trimmed = agent._trimmed(answer, agent.NOT_FOR_CONTEXT)
 
     assert trimmed == {"variants": [{"id": "X"}]}
 
@@ -873,8 +943,8 @@ def test_the_model_can_ask_for_only_the_groups_today_trains(
     dumbbells the catalog leaves 119 exercises standing and a leg day needs
     14 of them; the other 105 are arms, shoulders, chest and back, re-read on
     every later turn for nothing."""
-    whole = agent._execute(call("admissible_set", equipment=["barbell"], budget_min=45))
-    narrowed = agent._execute(
+    whole = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
+    narrowed = executed(
         call(
             "admissible_set",
             equipment=["barbell"],
@@ -1075,12 +1145,17 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
 
     `log.py` joined it in session 5 and does not write: it reads the
     prescribed phase back, because adherence has to know what was prescribed
-    in order to fill in what a report left out, and it names the two performed
-    dataclasses because those are what a complete block is. The claim that the
-    writer itself is out of reach is the next test, and it is the one that
-    matters.
+    in order to fill in what a report did not mention, and it names the two
+    performed dataclasses because those are what a complete block is.
+    `tools.py` joined it for `prescribed_workout`, which is the same read
+    offered to a model. The claim that the writer itself is out of reach is
+    the next test, and it is the one that matters.
     """
-    assert _importers_of("trainer.engine.workouts") == {"cli.py", "log.py"}
+    assert _importers_of("trainer.engine.workouts") == {
+        "cli.py",
+        "log.py",
+        "tools.py",
+    }
 
 
 WRITERS = ("record_prescribed", "record_performed")
@@ -1168,3 +1243,677 @@ def test_the_writer_call_guard_does_not_fire_on_a_reader(tmp_path: Path) -> None
     )
 
     assert _callers_of(root=tmp_path) == set()
+
+
+# -- the logging door ---------------------------------------------------------
+#
+# The second agent. Same loop, same record, same seam -- what changes is which
+# tools are on the table, what its results carry, and that a turn with no tool
+# calls in it can be a question to the user rather than the end.
+
+TODAY = "2026-09-10"
+
+
+def prescribe(connection: sqlite3.Connection, on: str = "2026-09-09") -> int:
+    """One prescribed workout on the fixture catalog: squats, four rounds.
+
+    Written straight through the engine. The guard that only the CLI may call
+    a writer is about `src/trainer`, and a test that could not set up a
+    prescription could not exercise a single thing this door does.
+    """
+    return workouts.record_prescribed(
+        connection,
+        (
+            workouts.PrescribedBlock(
+                block=duration.Block(
+                    items=(
+                        duration.BlockItem(exercise_id="Barbell_Squat", reps=8),
+                        duration.BlockItem(
+                            exercise_id="Standing_Military_Press", reps=10
+                        ),
+                    ),
+                    rounds=4,
+                    rest=150,
+                ),
+                reason="legs and a press",
+            ),
+        ),
+        on=on,
+    )
+
+
+def performed(**fields: Any) -> logs.PerformedWorkout:
+    """A report in the shape the logging agent emits, deviations only."""
+    base: dict[str, Any] = {"report": "tutto come scritto"}
+    base.update(fields)
+    return logs.PerformedWorkout(**base)
+
+
+def done(
+    exercise_id: str, source: logs.Provenance = "reported", **fields: Any
+) -> logs.PerformedBlock:
+    """One block as it was performed, with the provenance under test on it."""
+    block: dict[str, Any] = {
+        "items": [
+            logs.PerformedItem(
+                exercise_id=exercise_id, unit="reps", amount=8, amount_source=source
+            )
+        ],
+        "rounds": 3,
+        "rounds_source": source,
+        "rest": 150,
+        "rest_source": source,
+    }
+    block.update(fields)
+    return logs.PerformedBlock(**block)
+
+
+def answers(*given: str) -> tuple[Callable[[str], str], list[str]]:
+    """An answerer scripted in advance, and the questions it was put.
+
+    A parameter rather than a call to `click`: the turn belongs to the loop and
+    the terminal does not, which is the whole reason it can be measured at all.
+    """
+    asked: list[str] = []
+    remaining = list(given)
+
+    def ask(question: str) -> str:
+        asked.append(question)
+        return remaining.pop(0) if remaining else "yes"
+
+    return ask, asked
+
+
+def test_the_logging_door_offers_six_tools_and_none_of_them_writes() -> None:
+    """The number is the ticket's, and the claim under it is the session's: if
+    the model can call the write, the model decides when the database changes.
+
+    Checked against the functions the door actually registers rather than
+    against its list of names -- a name that resolved to something else would
+    pass a test written about the constant.
+    """
+    offered = agent.registered(agent.LOGGER)
+
+    assert len(offered) == 6
+    for tool in offered:
+        source = ast.parse(textwrap.dedent(inspect.getsource(tool)))
+        named = {
+            node.attr if isinstance(node, ast.Attribute) else node.id
+            for node in ast.walk(source)
+            if isinstance(node, (ast.Attribute, ast.Name))
+        }
+        assert not named & set(WRITERS), f"{tool.__name__} reaches a writer"
+        assert "add" not in named, f"{tool.__name__} may write an exclusion"
+
+
+def test_the_two_doors_offer_different_sets_of_the_same_definitions() -> None:
+    """One definition per tool, two doors onto it. A tool on both doors is the
+    **same function object** on each: a copy diverges at the first fix applied
+    to one and not the other, and nothing would fail when it did."""
+    planner = {tool.__name__: tool for tool in agent.registered(agent.PLANNER)}
+    logger = {tool.__name__: tool for tool in agent.registered(agent.LOGGER)}
+
+    assert set(planner) != set(logger)
+    assert "allocate" in planner and "allocate" not in logger
+    assert "prescribed_workout" in logger and "prescribed_workout" not in planner
+    for shared in set(planner) & set(logger):
+        assert planner[shared] is logger[shared], shared
+
+
+def test_every_tool_that_exists_reaches_at_least_one_door() -> None:
+    """A tool defined and offered to nobody is a tool that cannot be called.
+
+    `registered` guards the names a door **asks** for; nothing guards the
+    other direction, and a tool added to `tools.TOOLS` without a door is
+    exactly as invisible as one that was never written. `trainer mcp` would
+    still serve it, which is what makes the gap survivable long enough to
+    forget about.
+    """
+    offered = set(agent.PLANNER.tools) | set(agent.LOGGER.tools)
+
+    assert {tool.__name__ for tool in tools.TOOLS} == offered
+
+
+def test_a_door_asking_for_a_tool_nobody_defined_is_a_state() -> None:
+    """The door constants are the one place a tool name can be misspelled, and
+    a surface quietly one tool short looks like a model that chose not to
+    call it."""
+    door = agent.Door(
+        name="typo", tools=("prescribed_wrokout",), hides=(), system="", emit=""
+    )
+
+    with pytest.raises(agent.AgentError, match="prescribed_wrokout"):
+        agent.surface(door)
+
+
+def test_the_logger_cannot_call_a_tool_from_the_other_door(
+    connection: sqlite3.Connection,
+) -> None:
+    """A tool that exists is not a tool this agent was offered. It comes back
+    as a result it can recover from, listing what it does have."""
+    result = executed(
+        call("admissible_set", equipment=["barbell"], budget_min=45), agent.LOGGER
+    )
+
+    assert result.failed is True
+    assert "no tool called 'admissible_set'" in result.content
+    assert "prescribed_workout" in result.content
+
+
+def test_the_logger_is_shown_the_exercise_names_the_user_says_out_loud(
+    connection: sqlite3.Connection,
+) -> None:
+    """The planner's door drops `name`, because a plan is written in ids and a
+    model shown both copied the readable one into `exercise_id`. This door has
+    the opposite job: resolving *"the bench"* against the prescribed workout is
+    not possible when everything in it is an id nobody says out loud."""
+    identifier = prescribe(connection)
+
+    result = executed(call("prescribed_workout", workout_id=identifier), agent.LOGGER)
+    planned = executed(call("search_exercises", text="squat"))
+
+    assert "Barbell Squat" in result.content
+    assert "Barbell Squat" not in planned.content, "the planner still hides it"
+
+
+def test_a_windowed_read_with_no_configuration_is_a_failed_result(
+    connection: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`pattern_history` counts in cycles and only `training.toml` says how
+    long one is. On a machine that has not declared one it comes back as a
+    stated failure naming the file to copy -- not a crash, and not an empty
+    history, which would read as *nobody has trained this*."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = executed(call("pattern_history", pattern="squat", cycles=1), agent.LOGGER)
+
+    assert result.failed is True
+    assert "no training configuration yet" in result.content
+    assert "absent.toml" in result.content, "it names the file to write"
+    assert ".example.toml" in result.content, "and the one to copy"
+
+
+def test_a_run_reads_the_prescription_and_emits_a_report(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = prescribe(connection)
+    ask, asked = answers()
+    model = Scripted(
+        turns=[(call("prescribed_workout", workout_id=identifier),), "tutto chiaro"],
+        emitted=performed(
+            workout_id=identifier,
+            blocks=[done("Barbell_Squat", rounds=3)],
+            report="solo tre serie di squat",
+        ),
+    )
+
+    record = agent.log_workout(
+        connection, "solo tre serie di squat", TODAY, ask=ask, awaiting=identifier,
+        model=model,
+    )
+
+    assert record.refused is None
+    assert [c.name for c in record.calls] == ["prescribed_workout"]
+    assert record.document.workout_id == identifier
+    assert asked == [], "nothing in that sentence needed clarifying"
+
+
+def test_the_brief_names_the_workout_that_is_open_and_the_words_that_were_said(
+    connection: sqlite3.Connection,
+) -> None:
+    written = agent.log_brief("panca pesante", TODAY, awaiting=12, prescribed_on="2026-09-09")
+
+    assert "prescribed_workout(12)" in written
+    assert "2026-09-09" in written
+    assert "panca pesante" in written
+    assert TODAY in written, "a re-test date has to be after a day it knows"
+
+
+def test_the_brief_says_when_nothing_is_waiting_for_a_report() -> None:
+    """Training nobody planned is training. The state is named rather than
+    left for the model to infer from a workout id it was not given."""
+    written = agent.log_brief("sono andato a correre", TODAY)
+
+    assert "No prescribed workout is waiting" in written
+    assert "null" in written
+
+
+# -- resolving an exercise: the closed set first -------------------------------
+
+
+def test_a_substitution_reaches_the_catalog_only_after_the_prescribed_set_fails(
+    connection: sqlite3.Connection,
+) -> None:
+    """The candidates are the exercises of the prescribed workout. Catalog
+    search is the fallback, called exactly when the closed set has nothing that
+    can be what the user meant -- which is exactly when there was a
+    substitution, and that is the interesting case."""
+    identifier = prescribe(connection)
+    ask, _ = answers()
+    model = Scripted(
+        turns=[
+            (call("prescribed_workout", workout_id=identifier),),
+            (call("search_exercises", text="dumbbell bench"),),
+            "tutto chiaro",
+        ],
+        emitted=performed(
+            workout_id=identifier,
+            blocks=[done("Dumbbell_Bench_Press")],
+            report="ho scambiato i military con la panca coi manubri",
+        ),
+    )
+
+    record = agent.log_workout(
+        connection, "ho scambiato i military", TODAY, ask=ask,
+        awaiting=identifier, model=model,
+    )
+
+    assert [c.name for c in record.calls] == [
+        "prescribed_workout",
+        "search_exercises",
+    ]
+    assert record.refused is None
+    substituted = record.document.blocks[0].items[0].exercise_id
+    assert catalog.exercise(connection, substituted) is not None
+
+
+def test_an_id_the_model_remembered_rather_than_read_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """A well-formed dead id passes anything that does not check the catalog,
+    and the error becomes volume filed under the wrong exercise, silently.
+
+    It is refused rather than made impossible, and that is the trade this door
+    makes for showing the model exercise names at all."""
+    identifier = prescribe(connection)
+    ask, _ = answers()
+    model = Scripted(
+        turns=["tutto chiaro"],
+        emitted=performed(
+            workout_id=identifier,
+            blocks=[done("Barbell_Bench_Press_Medium_Grip")],
+            report="panca",
+        ),
+    )
+
+    record = agent.log_workout(
+        connection, "panca", TODAY, ask=ask, awaiting=identifier, model=model
+    )
+
+    assert record.refused is not None
+    assert "Barbell_Bench_Press_Medium_Grip" in record.refused
+    assert record.document.blocks, "the document is still recorded whole"
+
+
+# -- the clarifying question ---------------------------------------------------
+
+
+def test_a_report_that_does_not_determine_a_value_produces_a_question(
+    connection: sqlite3.Connection,
+) -> None:
+    """*"4 out of 10"* is effort **or** discomfort, and TRAINER.md's own
+    sentence does not say which. The agent asks rather than filling it in."""
+    identifier = prescribe(connection)
+    ask, asked = answers("fastidio, non fatica")
+    model = Scripted(
+        turns=[
+            (call("prescribed_workout", workout_id=identifier),),
+            "QUESTION: Quel 4 su 10 e' fatica o fastidio?",
+            "tutto chiaro",
+        ],
+        emitted=performed(workout_id=identifier, report="squat, 4 su 10"),
+    )
+
+    record = agent.log_workout(
+        connection, "squat, 4 su 10", TODAY, ask=ask, awaiting=identifier, model=model
+    )
+
+    assert asked == ["Quel 4 su 10 e' fatica o fastidio?"]
+    assert [q.answered for q in record.questions] == ["fastidio, non fatica"]
+    assert record.spent == 1, "asking is not a tool call"
+
+
+def test_the_answer_reaches_the_model_as_a_turn_of_its_own(
+    connection: sqlite3.Connection,
+) -> None:
+    """In memory, inside one invocation. It is an exchange like any other, and
+    that is what makes it impossible to persist: there is nowhere for it to be
+    left when the run is interrupted."""
+    ask, _ = answers("fastidio")
+    model = Scripted(
+        turns=["QUESTION: Fatica o fastidio?", "tutto chiaro"],
+        emitted=performed(report="4 su 10", blocks=[done("Barbell_Squat")]),
+    )
+
+    agent.log_workout(connection, "4 su 10", TODAY, ask=ask, model=model)
+
+    (asked_turn, *_rest) = model.seen
+    assert asked_turn.answer == "fastidio"
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        "QUESTION: Fatica o fastidio?",
+        "**QUESTION:** Fatica o fastidio?",
+        "- QUESTION: Fatica o fastidio?",
+        "### QUESTION: Fatica o fastidio?",
+        "Ci penso su.\n\n> QUESTION: Fatica o fastidio?",
+    ],
+)
+def test_the_marker_is_found_behind_whatever_the_model_decorates_it_with(
+    connection: sqlite3.Connection, written: str
+) -> None:
+    """Emphasising or bulleting a labelled line is ordinary model behaviour,
+    and a strict prefix match misses every one of these.
+
+    Missing is **silent**, and it lands in exactly the failure the marker
+    exists to prevent: the turn reads as *nothing to ask*, the loop ends, and
+    the document is emitted carrying the value the model meant to check.
+    """
+    ask, asked = answers("fastidio")
+    model = Scripted(
+        turns=[written, "fine"],
+        emitted=performed(report="4 su 10", blocks=[done("Barbell_Squat")]),
+    )
+
+    record = agent.log_workout(connection, "4 su 10", TODAY, ask=ask, model=model)
+
+    assert asked == ["Fatica o fastidio?"]
+    assert record.questions[0].asked == "Fatica o fastidio?"
+
+
+def test_the_last_marked_line_is_the_question_because_reasoning_rehearses(
+    connection: sqlite3.Connection,
+) -> None:
+    """A turn that talks itself through two candidate questions before
+    settling on one has both in it, and the one it settled on is the last."""
+    ask, asked = answers("fastidio")
+    model = Scripted(
+        turns=[
+            "QUESTION: Quante serie?\nNo, quello lo so gia.\n"
+            "QUESTION: Fatica o fastidio?",
+            "fine",
+        ],
+        emitted=performed(report="4 su 10", blocks=[done("Barbell_Squat")]),
+    )
+
+    agent.log_workout(connection, "4 su 10", TODAY, ask=ask, model=model)
+
+    assert asked == ["Fatica o fastidio?"]
+
+
+def test_a_turn_that_calls_a_tool_and_asks_does_both(
+    connection: sqlite3.Connection,
+) -> None:
+    """Read only on a turn with no tool calls in it, the question is dropped
+    silently -- and the run reads, in the record ticket 05 scores, as one that
+    never needed to ask."""
+    identifier = prescribe(connection)
+    ask, asked = answers("quelli coi manubri")
+    model = Scripted(
+        turns=[
+            Turn(
+                calls=(call("search_exercises", text="bench"),),
+                text="QUESTION: Manubri o bilanciere?",
+            ),
+            "fine",
+        ],
+        emitted=performed(workout_id=identifier, report="panca"),
+    )
+
+    record = agent.log_workout(
+        connection, "panca", TODAY, ask=ask, awaiting=identifier, model=model
+    )
+
+    assert record.spent == 1, "the tool still ran"
+    assert asked == ["Manubri o bilanciere?"]
+    assert [q.answered for q in record.questions] == ["quelli coi manubri"]
+    (first, *_) = model.seen
+    assert first.results, "the results are on the same exchange"
+    assert first.answer == "quelli coi manubri"
+
+
+def test_the_question_budget_stops_a_model_that_only_asks(
+    connection: sqlite3.Connection,
+) -> None:
+    """It emits with what it has rather than looping -- the same property the
+    call budget has, applied to the other thing a turn can be. Somebody is
+    answering these in a terminal after training."""
+    ask, asked = answers(*["si"] * 10)
+    model = Scripted(
+        turns=["QUESTION: Prima?",
+            "QUESTION: Seconda?",
+            "QUESTION: Terza?",
+            "QUESTION: Quarta?",
+            "QUESTION: Quinta?"],
+        emitted=performed(report="4 su 10", blocks=[done("Barbell_Squat")]),
+    )
+
+    record = agent.log_workout(connection, "4 su 10", TODAY, ask=ask, model=model)
+
+    assert len(asked) == agent.ASK_BUDGET
+    assert len(record.questions) == agent.ASK_BUDGET
+    assert model.emissions == 1
+
+
+def test_a_turn_with_nothing_in_it_ends_the_loop_rather_than_asking_a_blank(
+    connection: sqlite3.Connection,
+) -> None:
+    """A truncated completion looks exactly like a model with nothing to say,
+    and handing the user an empty prompt is worse than emitting."""
+    ask, asked = answers()
+    model = Scripted(
+        turns=["   "],
+        emitted=performed(report="fatto", blocks=[done("Barbell_Squat")]),
+    )
+
+    agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
+
+    assert asked == []
+
+
+def test_the_planner_never_asks_even_when_it_talks(
+    connection: sqlite3.Connection,
+) -> None:
+    """Prose with no tool calls is the planner finished. It has no user in
+    front of it -- the plan is the answer, and there is no way back in."""
+    model = Scripted(turns=["QUESTION: Shall I use dumbbells?"])
+
+    record = agent.plan_workout(connection, BARBELL_45, model=model)
+
+    assert record.spent == 0
+    assert model.emissions == 1
+
+
+# -- the exclusion it may propose ----------------------------------------------
+
+
+def test_a_proposed_exclusion_travels_in_the_document_and_writes_nothing(
+    connection: sqlite3.Connection,
+) -> None:
+    """The agent emits and the engine writes. Even the one thing in a report
+    that changes what may be prescribed tomorrow leaves this function as a
+    field on a document, and the confirmation is the command's."""
+    identifier = prescribe(connection)
+    ask, _ = answers()
+    model = Scripted(
+        turns=["tutto chiaro"],
+        emitted=performed(
+            workout_id=identifier,
+            report="la spalla tirava sui military",
+            proposed_exclusion=logs.ProposedExclusion(
+                value="shoulder", retest_date="2026-10-15", why="la spalla tirava"
+            ),
+        ),
+    )
+
+    record = agent.log_workout(
+        connection, "la spalla tirava", TODAY, ask=ask, awaiting=identifier, model=model
+    )
+
+    assert record.refused is None
+    assert record.document.proposed_exclusion is not None
+    assert exclusions.active(connection, TODAY) == ()
+
+
+def test_a_re_test_date_that_has_already_passed_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """A wall that was never a wall is the same failure as a wall with no way
+    back, with the sign flipped: nothing re-reads the row, and the render
+    prints a confident sentence about a movement that is not excluded."""
+    ask, _ = answers()
+    model = Scripted(
+        turns=["tutto chiaro"],
+        emitted=performed(
+            report="spalla",
+            blocks=[done("Barbell_Squat")],
+            proposed_exclusion=logs.ProposedExclusion(
+                value="shoulder", retest_date="2026-01-01", why="spalla"
+            ),
+        ),
+    )
+
+    record = agent.log_workout(connection, "spalla", TODAY, ask=ask, model=model)
+
+    assert record.refused is not None
+    assert "2026-01-01" in record.refused
+
+
+# -- the budget, and the record ------------------------------------------------
+
+
+def test_a_logging_run_that_spends_its_budget_emits_anyway(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = prescribe(connection)
+    ask, _ = answers()
+    model = Scripted(
+        turns=[(call("prescribed_workout", workout_id=identifier),)] * 6,
+        emitted=performed(workout_id=identifier, report="fatto"),
+    )
+
+    record = agent.log_workout(
+        connection, "fatto", TODAY, ask=ask, awaiting=identifier, model=model, budget=3
+    )
+
+    assert record.spent == 3
+    assert record.emitted_on_exhaustion is True
+    assert model.emissions == 1
+
+
+def test_the_logging_record_writes_out_as_json(connection: sqlite3.Connection) -> None:
+    """Ticket 05 reads this rather than asking the model what it did, so
+    everything a check needs is a field."""
+    identifier = prescribe(connection)
+    ask, _ = answers("fastidio")
+    model = Scripted(
+        turns=["QUESTION: Fatica o fastidio?", "tutto chiaro"],
+        emitted=performed(workout_id=identifier, report="4 su 10"),
+    )
+
+    record = agent.log_workout(
+        connection, "4 su 10", TODAY, ask=ask, awaiting=identifier, model=model
+    )
+    written = json.loads(record.model_dump_json())
+
+    assert written["questions"] == [
+        {"asked": "Fatica o fastidio?", "answered": "fastidio"}
+    ]
+    assert written["document"]["report"] == "4 su 10"
+    assert written["model"] == "a-stand-in"
+
+
+def test_the_summary_of_a_logging_run_is_ascii_and_counts_the_questions(
+    connection: sqlite3.Connection,
+) -> None:
+    ask, _ = answers("fastidio")
+    model = Scripted(
+        turns=["QUESTION: Fatica o fastidio?", "tutto chiaro"],
+        emitted=performed(report="4 su 10", blocks=[done("Barbell_Squat")]),
+    )
+
+    record = agent.log_workout(connection, "4 su 10", TODAY, ask=ask, model=model)
+    lines = agent.summary(record)
+
+    assert all(line.isascii() for line in lines)
+    assert any("1 question(s) asked" in line for line in lines)
+
+
+def test_an_interrupted_conversation_writes_nothing_at_all(
+    connection: sqlite3.Connection,
+) -> None:
+    """Ctrl-C at a question. Nothing about a report reaches the database --
+    not the workout, not the exclusion, and not a word of the conversation.
+
+    Session 6's issue 5 is the non-negotiable test that LangGraph never
+    persists domain and SQLite never persists conversation; a half-finished
+    report parked in a table would make it red before it is written.
+    """
+    identifier = prescribe(connection)
+    said = "la spalla tirava, 4 su 10"
+
+    def interrupt(question: str) -> str:
+        raise KeyboardInterrupt
+
+    model = Scripted(turns=["QUESTION: Fatica o fastidio?"], emitted=performed(report=said))
+
+    with pytest.raises(KeyboardInterrupt):
+        agent.log_workout(
+            connection, said, TODAY, ask=interrupt, awaiting=identifier, model=model
+        )
+
+    found = workouts.workout(connection, identifier)
+    assert found is not None and found.state == "prescribed"
+    assert exclusions.active(connection, TODAY) == ()
+    assert said not in _everything_stored(connection)
+
+
+def _everything_stored(connection: sqlite3.Connection) -> str:
+    """Every value in every table this schema has, as one string.
+
+    Blunt on purpose: the claim is that no conversation is persisted anywhere,
+    and a test that named the tables it expected to be empty would pass for a
+    table added next session to hold exactly that.
+    """
+    tables = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).fetchall()
+    found: list[str] = []
+    for table in tables:
+        for row in connection.execute(f'SELECT * FROM "{table["name"]}"'):  # a name
+            found.extend(str(value) for value in tuple(row))
+    return "\n".join(found)
+
+
+# -- what the logging prompt has to say ----------------------------------------
+
+
+def test_the_logging_prompt_carries_the_rules_this_ticket_decided() -> None:
+    """Each of these is a rule with nowhere else to live: no code can make a
+    model resolve an id inside a closed set first, and a rule the model was
+    never told is a finding that is the prompt's fault."""
+    for rule in (
+        "prescribed_workout",
+        "never write an id you remember",
+        "only what deviated",
+        "verbatim",
+        "never ask for it",
+        "at most 3 in all",
+        "never an exercise id",
+        agent.QUESTION_MARKER.lower(),
+    ):
+        assert rule.lower() in agent.LOGGING.lower(), rule
+
+
+def test_a_bare_number_has_no_way_of_becoming_an_rpe_without_being_offered(
+    connection: sqlite3.Connection,
+) -> None:
+    """`rpe` carries no provenance, because it is recorded only when the user
+    volunteers it -- so `assumed` and `asked` cannot arise for it. The rule the
+    prompt states is the one that keeps a bare number off it, and the shape is
+    what stops a filled-in one being dressed as something the user was asked."""
+    assert "rpe" not in logs.PerformedItem.model_fields
+    assert set(logs.PerformedBlock.model_fields) & {"rpe_source"} == set()
+    assert "never ask for it" in agent.LOGGING.lower()

@@ -132,6 +132,13 @@ clarifying turn). It is carried per field, which is what makes *«assume
 adherence and flag the uncertainty»* a column rather than a slogan. The same
 discipline the enrichment fields already use, where a value a rule derived and
 a value a person decided are not worth the same.
+*assumed* means **as prescribed**, so a document is refused for marking a value
+*assumed* that the prescription does not say — there being no prescription
+behind the workout at all, or the number simply not being the prescribed one.
+Both are statements about the document rather than about the training: the
+column exists to separate a number the user gave from one the system supplied,
+and a wrong *assumed* is that column lying in the one direction nothing
+downstream can catch.
 
 **Flag**:
 Something the engine noticed about a performed workout and **recorded

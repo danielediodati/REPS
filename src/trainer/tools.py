@@ -2,10 +2,11 @@
 
 TRAINER.md's `admissible_set`, `remaining_budget`, `allocate`,
 `pattern_history`, `adherence_history`, `last_performed_load` and
-`compare_variants`, plus the three this project found it needed --
-`search_exercises`, `volume_deficit`, `unreported_workouts` -- each of which
-unpacks its arguments, opens the connection, calls the library function and
-shapes the result for a caller that speaks JSON. No validation of its own, no
+`compare_variants`, plus the four this project found it needed --
+`search_exercises`, `volume_deficit`, `unreported_workouts` and
+`prescribed_workout` -- each of which unpacks its arguments, opens the
+connection, calls the library function and shapes the result for a caller that
+speaks JSON. No validation of its own, no
 decision, no new logic: `tests/test_engine_boundary.py` exists precisely so
 that the CLI, this surface and a direct call stay doors onto the same code
 rather than copies of it.
@@ -61,6 +62,7 @@ from trainer.engine import (
     migrations,
     muscle_groups,
     state,
+    workouts,
 )
 from trainer.engine.exclusions import Exclusion, ExclusionError
 
@@ -79,6 +81,8 @@ exercises that could be it, and answers nothing rather than guessing.
 and `unreported_workouts` read what has actually been trained. They answer
 *"I don't know"* where nothing has been recorded, which is an answer and not a
 failure: a movement nobody has trained is a fact to plan around.
+`prescribed_workout` is what one workout asked for, which is the thing a report
+is a deviation from.
 
 None of these writes anything. The engine records a workout; a tool never does.
 """
@@ -103,6 +107,7 @@ _ENGINE_ERRORS = (
     migrations.MigrationError,
     muscle_groups.MuscleGroupError,
     state.StateError,
+    workouts.WorkoutError,
 )
 """Every failure the library states in words. Each is re-raised as a
 `ToolFailure` so it reaches the caller as a result marked failed, rather than
@@ -402,6 +407,69 @@ def unreported_workouts() -> list[dict[str, Any]]:
     return [asdict(waiting) for waiting in found]
 
 
+def prescribed_workout(workout_id: int) -> dict[str, Any]:
+    """What one workout asked for: the blocks in the order they were to be
+    done, the exercises in them by id **and** by name, and the reason each
+    block was there.
+
+    This is the thing a report is a deviation from, so it is also the closed
+    set an exercise the user names should be resolved against first: ten
+    exercises with their catalog names beside their ids, rather than eight
+    hundred. Reach for `search_exercises` only when nothing here can be what
+    they meant -- which is exactly the case where something was substituted.
+
+    `state` is `prescribed` or `performed`. A workout already reported is
+    still readable, and reading it changes nothing; what it cannot take is a
+    second report.
+
+    A workout id nobody has is a failure naming it, never an empty plan --
+    which would read as *the workout was prescribed and asked for nothing*.
+    """
+    with reported(), opened() as connection:
+        found = workouts.workout(connection, workout_id)
+        if found is None:
+            raise ToolFailure(
+                f"there is no workout {workout_id}; `unreported_workouts` "
+                "lists the prescribed workouts still waiting for a report"
+            )
+        blocks = workouts.prescribed(connection, workout_id)
+        return {
+            "workout_id": found.id,
+            "state": found.state,
+            "prescribed_on": found.prescribed_on,
+            "blocks": [
+                {
+                    "rounds": block.block.rounds,
+                    "rest": block.block.rest,
+                    "reason": block.reason,
+                    "items": [
+                        _prescribed_item(connection, item) for item in block.block.items
+                    ],
+                }
+                for block in blocks
+            ],
+        }
+
+
+def _prescribed_item(
+    connection: sqlite3.Connection, item: duration.BlockItem
+) -> dict[str, Any]:
+    """One prescribed exercise, with the catalog's own name beside its id.
+
+    The name is here because this tool exists to be matched against prose:
+    *"the bench"* is resolved by reading `Dumbbell Bench Press`, and an id is
+    not a thing anybody says out loud. The id beside it is what gets written,
+    and it is the one that has to be copied character for character.
+    """
+    found = catalog.exercise(connection, item.exercise_id)
+    return {
+        "exercise_id": item.exercise_id,
+        "name": found.name if found is not None else None,
+        "unit": "reps" if item.reps is not None else "seconds",
+        "amount": item.reps if item.reps is not None else item.seconds,
+    }
+
+
 def compare_variants(id_a: str, id_b: str) -> dict[str, Any]:
     """Two exercises side by side, and what the curated graph says about them.
 
@@ -435,6 +503,7 @@ TOOLS: tuple[Callable[..., Any], ...] = (
     adherence_history,
     volume_deficit,
     unreported_workouts,
+    prescribed_workout,
     compare_variants,
 )
 """The surface, enumerated once.
@@ -445,6 +514,6 @@ against is this tuple rather than a copy of it.
 
 Not every agent is offered all of them -- session 5's logging agent reads what
 was trained and never plans, so it has no use for `allocate`. Which subset a
-given agent sees is `agent.surface()`'s to decide; what may exist at all is
+given agent sees is an `agent.Door`'s to decide; what may exist at all is
 decided here.
 """

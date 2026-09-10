@@ -21,6 +21,7 @@ from trainer.engine import (
     duration,
     exclusions,
     migrations,
+    state,
     workouts,
 )
 from trainer.engine.exclusions import Exclusion
@@ -197,6 +198,77 @@ def test_a_workout_nobody_planned_has_no_prescribed_phase(
     assert written.state == "performed"
     assert written.prescribed_on is None
     assert workouts.prescribed(connection, identifier) == ()
+
+
+def test_nothing_is_awaiting_a_report_on_an_empty_database(
+    connection: sqlite3.Connection,
+) -> None:
+    """Training nobody planned is training, so *there is no open workout* is a
+    state and not a failure."""
+    assert workouts.awaiting(connection) is None
+
+
+def test_the_workout_awaiting_a_report_is_the_one_last_prescribed(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-09"
+    )
+    later = workouts.record_prescribed(connection, (superset(),), on="2026-09-10")
+
+    found = workouts.awaiting(connection)
+
+    assert found is not None and found.id == later
+    assert found.id != identifier
+
+
+def test_a_workout_a_later_one_overtook_is_not_awaiting_a_report(
+    connection: sqlite3.Connection,
+) -> None:
+    """The one that matters. An old prescription nobody reported is
+    `state.unreported` -- a different mechanism, which nothing closes and
+    which assumes nothing happened. Offered as the open workout, today's
+    training would be filed against a plan three weeks dead, and every
+    exercise it did not mention filled in from that plan as `assumed`.
+    """
+    stale = workouts.record_prescribed(connection, (squat_block(),), on="2026-08-19")
+    reported = workouts.record_prescribed(
+        connection, (superset(),), on="2026-09-05"
+    )
+    workouts.record_performed(
+        connection,
+        (squat_performed(),),
+        on="2026-09-05",
+        report="done",
+        workout_id=reported,
+    )
+
+    assert state.unreported(connection, "2026-09-09")[0].workout_id == stale
+    assert workouts.awaiting(connection) is None
+
+
+def test_a_prescription_older_than_the_last_report_is_still_open_until_overtaken(
+    connection: sqlite3.Connection,
+) -> None:
+    """Prescribed today, after this morning's report: nothing has overtaken
+    it, so it is what tonight's report is about."""
+    reported = workouts.record_prescribed(
+        connection, (superset(),), on="2026-09-05"
+    )
+    workouts.record_performed(
+        connection,
+        (squat_performed(),),
+        on="2026-09-05",
+        report="done",
+        workout_id=reported,
+    )
+    tonight = workouts.record_prescribed(
+        connection, (squat_block(),), on="2026-09-06"
+    )
+
+    found = workouts.awaiting(connection)
+
+    assert found is not None and found.id == tonight
 
 
 def test_a_stored_block_with_no_exercises_is_refused_not_skipped(

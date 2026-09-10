@@ -44,7 +44,9 @@ uv run trainer plan --equipment dumbbell --workout 3 --avoid Dumbbell_Lunges
 uv run trainer plan --equipment dumbbell --workout 3 --refused plan.json --because "not today"
 uv run trainer plan --from workout.json --equipment dumbbell --time 45   # no model: check a plan you wrote
 
-uv run trainer log --from report.json                          # no model: report a workout you did
+uv run trainer log                                             # say what you did; a model reads it
+uv run trainer log --say "panca bene, solo 3 serie di military"
+uv run trainer log --from report.json                          # no model: a document you wrote
 
 uv run trainer state                          # where the rotation is, and what it has accumulated
 uv run trainer state --cycles 3               # over a wider window
@@ -112,11 +114,12 @@ This is the door session 4's agent comes out through, built and testable before 
 
 ## The report
 
-The other half of the same door. `trainer log --from FILE` reads a **performed
-workout** — which prescribed workout it is about, the blocks actually done with
-their rounds, rest and an optional RPE, a load where there was one, and the
-user's own words verbatim — writes it in one transaction, and prints what was
-prescribed set against what was performed.
+The other half of the same door. A **performed workout** — which prescribed
+workout it is about, the blocks actually done with their rounds, rest and an
+optional RPE, a load where there was one, and the user's own words verbatim —
+is written in one transaction, and what was prescribed is printed set against
+what was performed. `trainer log --from FILE` is that door with no model in
+front of it, reading a document somebody wrote by hand.
 
 ```json
 {"workout_id": 12,
@@ -143,17 +146,69 @@ performed workout is **recorded and flagged** — the substitution, the exclusio
 trained straight through, the workout nobody planned, a load that moved further
 than the history explains. What is still refused is only ever a statement about
 the *document*: an exercise id the catalog does not have, a provenance outside
-the three, a proposed exclusion naming neither a movement pattern nor a joint.
+the three, a value marked `assumed` that the prescription does not say, a
+proposed exclusion naming neither a movement pattern nor a joint.
 
 A report may propose an **exclusion** — a value and the day to try it again —
 and it is written in the same transaction as the workout or not at all.
 `exclusions.classify` decides whether the value is a pattern or a joint,
-against the catalog's own vocabulary; the document never says which.
+against the catalog's own vocabulary; the document never says which. A
+proposal a **model** made is shown and confirmed before it is written; one you
+typed into the file yourself is not, because you already decided it.
 
-This is the door session 5's logging agent comes out through, built and
-testable before there is an agent.
+## The logging agent
 
-## The agent
+`trainer log` is the door with a model in front of it. Say what you did in your
+own words and it reads that against what was prescribed — a second agent on the
+same loop, the same call budget and the same run record as the planner, with a
+different set of tools and a different prompt.
+
+```
+$ trainer log --say "panca bene, solo 3 serie di military perche la spalla tirava"
+```
+
+**A report is interpreted, not extracted.** `text → rows` is drawable before it
+runs, which is this project's own test for a pipeline. *«the bench felt heavy»*
+becomes a fact only after `last_performed_load`; *«I swapped the presses»* needs
+what was prescribed, what replaces it and whether the two are the same movement
+— three tools, in an order decided on the spot.
+
+**Six tools, all reads, and no writer among them.** The prescribed workout being
+reported against, the prescribed workouts nobody reported, `last_performed_load`,
+`pattern_history`, catalog search and `compare_variants`. If the model could call
+the write, the model would decide when the database changes: the single door
+disappears, the validator becomes optional, and an interrupted run leaves half a
+workout behind. The agent emits and the command writes.
+
+**The exercise is resolved inside a closed set first.** The candidates are the
+ten exercises of the prescribed workout, not the eight hundred in the catalog,
+and search is the fallback — called exactly when nothing prescribed can be what
+you meant, which is exactly when something was substituted. An id recalled from
+the model's own memory is refused: a well-formed dead id passes anything that
+does not check the catalog, and the error becomes volume filed under the wrong
+exercise, silently.
+
+**It asks rather than filling the field in.** *«4 out of 10»* is effort **or**
+discomfort and the sentence does not say which, so it asks, and the answer lands
+with a provenance of `asked`. The turn happens inside one invocation, in memory:
+nothing about a conversation is persisted, so interrupting one leaves the
+database exactly as it was. At most three questions — somebody is answering them
+in a terminal after training.
+
+**Pain is prose, and the one thing it may propose is an exclusion.** No scale,
+no threshold, nothing accumulating. If what you said means a movement should
+stop being prescribed for a while, the proposal travels inside the document, is
+printed, and **you confirm it before anything is written** — an exclusion on
+`shoulder` takes 251 of the catalog's 582 exercises out of what may ever be
+prescribed, and creating one silently from a passing remark would cost you a
+third of the catalog with nobody telling you. Decline it and the workout is
+written without it; accept it and both enter in one transaction.
+
+`--record FILE` writes the run record — the calls, the questions with their
+answers, the emitted document — and `--call-budget N` overrides the default of
+12.
+
+## The planning agent
 
 `trainer plan` asks a model for the workout. It gets the tools `trainer.tools` defines — the same ones `trainer mcp` serves, derived from the same function signatures — calls them until it has what it needs, and emits a plan in the shape above.
 

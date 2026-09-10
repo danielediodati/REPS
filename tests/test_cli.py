@@ -1585,13 +1585,18 @@ def test_a_plan_the_shape_check_refuses_writes_nothing(
 
 
 def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> object:
-    """Put a scripted model where `agent.plan_workout` builds a real one."""
+    """Put a scripted model where the loop builds a real one.
+
+    Both agents come through `agent.groq`, so this serves `trainer plan` and
+    `trainer log` alike -- what decides which document the script has to hold
+    is the door the command asked for.
+    """
     from trainer import agent
 
     from test_agent import Scripted
 
     model = Scripted(**kwargs)  # type: ignore[arg-type]
-    monkeypatch.setattr(agent, "groq", lambda client=None: model)
+    monkeypatch.setattr(agent, "groq", lambda door, client=None: model)
     return model
 
 
@@ -2518,13 +2523,350 @@ def test_log_needs_a_file_that_exists(
     assert "Traceback" not in result.output
 
 
-def test_log_needs_a_file_at_all(runner: CliRunner, enriched: Path) -> None:
-    """There is no interactive path yet -- that is issue 04 -- so a bare
-    `trainer log` has nothing to read."""
-    result = runner.invoke(main, ["log"])
+def test_log_with_no_file_reaches_for_a_model_rather_than_a_file(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """A bare `trainer log` is the interactive path. The suite has no
+    credentials, so it gets as far as the state that says so -- which is the
+    proof it went looking for a model and not for `--from`.
+
+    And it says so **before** asking for the report. Prompting first means the
+    user writes out their whole workout and then loses it to an error that was
+    already true when they started typing.
+    """
+    result = runner.invoke(main, ["log"], input="panca bene, tutto come scritto\n")
+
+    assert "no Groq credentials" in result.output
+    assert "What did you do" not in result.output
+
+
+# --- log, with a model -------------------------------------------------------
+#
+# The stand-in again: `conftest.py` takes sockets and credentials away from the
+# whole suite, and `trainer eval` is where the real one runs. What is covered
+# here is the command -- which workout it opens with, what it prints, what it
+# asks before writing, and the fact that nothing is written until it is done.
+
+
+def logged(
+    monkeypatch: pytest.MonkeyPatch, emitted: object, turns: object = None
+) -> object:
+    """A scripted logging model, holding the document it will emit."""
+    return scripted(monkeypatch, turns=turns or ["tutto chiaro"], emitted=emitted)
+
+
+def report_of(**fields: object) -> object:
+    from trainer import log as logs
+
+    base: dict[str, object] = {"report": "fatto"}
+    base.update(fields)
+    return logs.PerformedWorkout(**base)  # type: ignore[arg-type]
+
+
+def performed_document_block(exercise_id: str, **fields: object) -> object:
+    from trainer import log as logs
+
+    item: dict[str, object] = {
+        "exercise_id": exercise_id,
+        "unit": "reps",
+        "amount": 8,
+        "amount_source": "reported",
+    }
+    item.update(
+        {
+            key: fields.pop(key)
+            for key in ("amount", "amount_source")
+            if key in fields
+        }
+    )
+    base: dict[str, object] = {
+        "items": [logs.PerformedItem(**item)],  # type: ignore[arg-type]
+        "rounds": 3,
+        "rounds_source": "reported",
+        "rest": 150,
+        "rest_source": "reported",
+    }
+    base.update(fields)
+    return logs.PerformedBlock(**base)  # type: ignore[arg-type]
+
+
+def test_log_reads_what_you_said_against_what_was_prescribed(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TRAINER.md's own sentence, end to end: the deviation is recorded and
+    the state moves on both axes."""
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(
+        monkeypatch,
+        report_of(
+            workout_id=identifier,
+            blocks=[performed_document_block("Barbell_Squat", rounds=3)],
+            report="panca bene, solo 3 serie di squat perche la spalla tirava",
+        ),
+    )
+
+    result = runner.invoke(
+        main,
+        ["log", "--say", "panca bene, solo 3 serie di squat perche la spalla tirava"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert f"prescribed (workout {identifier}):" in result.output
+    assert "block 1 -- 3 rounds" in result.output
+    assert "said: panca bene" in result.output
+    with closing(database.connect(enriched)) as connection:
+        found = workouts.workout(connection, identifier)
+        assert found is not None and found.state == "performed"
+
+
+def test_log_opens_with_the_workout_that_is_waiting_for_a_report(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Which workout is open is a fact and the command resolves it. Which
+    workout the report is *about* stays the model's reading of the sentence."""
+    identifier = prescribed_workout(runner, tmp_path)
+    model = logged(
+        monkeypatch,
+        report_of(workout_id=identifier, report="tutto come scritto"),
+    )
+
+    result = runner.invoke(main, ["log", "--say", "tutto come scritto"])
+
+    assert result.exit_code == 0, result.output
+    written = " ".join(model.briefs)  # type: ignore[attr-defined]
+    assert f"prescribed_workout({identifier})" in written
+    assert "tutto come scritto" in written
+
+
+def test_log_asks_what_you_did_when_you_do_not_say(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identifier = prescribed_workout(runner, tmp_path)
+    model = logged(monkeypatch, report_of(workout_id=identifier, report="andata bene"))
+
+    result = runner.invoke(main, ["log"], input="andata bene\n")
+
+    assert result.exit_code == 0, result.output
+    assert "What did you do" in result.output
+    assert "andata bene" in " ".join(model.briefs)  # type: ignore[attr-defined]
+
+
+def test_log_puts_the_clarifying_question_to_you_and_keeps_the_answer(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The answer lands with a provenance of `asked` -- which is the column
+    that separates a number the user gave from one the system supplied."""
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(
+        monkeypatch,
+        report_of(
+            workout_id=identifier,
+            blocks=[
+                performed_document_block(
+                    "Barbell_Squat", amount=5, amount_source="asked"
+                )
+            ],
+            report="squat, 4 su 10",
+        ),
+        turns=["QUESTION: Quel 4 e' fatica o fastidio?", "tutto chiaro"],
+    )
+
+    result = runner.invoke(main, ["log", "--say", "squat, 4 su 10"], input="fastidio\n")
+
+    assert result.exit_code == 0, result.output
+    assert "? Quel 4 e' fatica o fastidio?" in result.output
+    assert "5 reps (asked)" in result.output
+    assert "1 question(s) asked" in result.output
+    with closing(database.connect(enriched)) as connection:
+        (block,) = workouts.performed(connection, identifier)
+        assert block.items[0].amount_source == "asked"
+
+
+def test_log_prints_a_question_and_a_report_the_console_can_show(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`trainer log` is the first command that prints prose this project did
+    not write -- the user's own report, and a model's question. A run of it put
+    an accented word and an em dash on a code-page-437 console as replacement
+    characters, which is the standing rule's own failure arriving by a route
+    nothing guarded.
+
+    Presentation only: the report is **stored** exactly as it was typed.
+    """
+    identifier = prescribed_workout(runner, tmp_path)
+    said = "panca bene \u2014 perch\u00e9 la spalla non tirava"
+    logged(
+        monkeypatch,
+        report_of(workout_id=identifier, report=said),
+        turns=["QUESTION: Quanto pesava \u2014 pi\u00f9 o meno?", "fine"],
+    )
+
+    result = runner.invoke(main, ["log", "--say", said], input="60 kg\n")
+
+    assert result.exit_code == 0, result.output
+    assert result.output.isascii(), result.output
+    assert "Quanto pesava -- piu o meno?" in result.output
+    assert "said: panca bene -- perche la spalla non tirava" in result.output
+    with closing(database.connect(enriched)) as connection:
+        found = workouts.workout(connection, identifier)
+        assert found is not None
+        assert found.report == said, "the row keeps the user's own words"
+
+
+def test_log_writes_the_exclusion_the_model_proposes_only_once_you_confirm(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(monkeypatch, _with_a_proposal(identifier))
+
+    result = runner.invoke(main, ["log", "--say", "la spalla tirava"], input="y\n")
+
+    assert result.exit_code == 0, result.output
+    assert "proposes excluding joint 'shoulder' until 2099-01-01" in result.output
+    assert "Stop prescribing joint 'shoulder'" in result.output
+    with closing(database.connect(enriched)) as connection:
+        assert exclusions.active(connection, "2026-09-09") == (
+            exclusions.Exclusion("joint", "shoulder"),
+        )
+
+
+def test_log_declining_the_proposal_writes_the_workout_and_no_exclusion(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The report keeps the user's words either way, so the remark that
+    prompted the proposal is still on the row."""
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(monkeypatch, _with_a_proposal(identifier))
+
+    result = runner.invoke(main, ["log", "--say", "la spalla tirava"], input="n\n")
+
+    assert result.exit_code == 0, result.output
+    with closing(database.connect(enriched)) as connection:
+        assert exclusions.active(connection, "2026-09-09") == ()
+        found = workouts.workout(connection, identifier)
+        assert found is not None and found.state == "performed"
+        assert found.report == "la spalla tirava sui military"
+
+
+def _with_a_proposal(identifier: int) -> object:
+    from trainer import log as logs
+
+    return report_of(
+        workout_id=identifier,
+        blocks=[performed_document_block("Barbell_Squat")],
+        report="la spalla tirava sui military",
+        proposed_exclusion=logs.ProposedExclusion(
+            value="shoulder", retest_date="2099-01-01", why="la spalla tirava"
+        ),
+    )
+
+
+def test_log_writes_nothing_when_the_conversation_is_interrupted(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ctrl-C at a question, which the runner delivers as no input at all.
+    The workout is still prescribed and nothing about the report is stored."""
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(
+        monkeypatch,
+        report_of(workout_id=identifier, report="4 su 10"),
+        turns=["QUESTION: Fatica o fastidio?"],
+    )
+
+    result = runner.invoke(main, ["log", "--say", "4 su 10"], input="")
 
     assert result.exit_code != 0
-    assert "--from" in result.output
+    assert "Traceback" not in result.output
+    with closing(database.connect(enriched)) as connection:
+        found = workouts.workout(connection, identifier)
+        assert found is not None and found.state == "prescribed"
+        assert workouts.performed(connection, identifier) == ()
+
+
+def test_log_reports_a_refused_document_and_writes_nothing(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An id the model remembered rather than read. The refusal names it, and
+    the workout stays prescribed."""
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(
+        monkeypatch,
+        report_of(
+            workout_id=identifier,
+            blocks=[performed_document_block("Barbell_Squat_Deep_Pause")],
+            report="squat",
+        ),
+    )
+
+    result = runner.invoke(main, ["log", "--say", "squat"])
+
+    assert result.exit_code != 0
+    assert "Barbell_Squat_Deep_Pause" in result.output
+    with closing(database.connect(enriched)) as connection:
+        found = workouts.workout(connection, identifier)
+        assert found is not None and found.state == "prescribed"
+
+
+def test_log_writes_the_run_record_when_asked(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identifier = prescribed_workout(runner, tmp_path)
+    logged(
+        monkeypatch,
+        report_of(workout_id=identifier, report="4 su 10"),
+        turns=["QUESTION: Fatica o fastidio?", "tutto chiaro"],
+    )
+    record = tmp_path / "run.json"
+
+    result = runner.invoke(
+        main, ["log", "--say", "4 su 10", "--record", str(record)], input="fastidio\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    written = json.loads(record.read_text(encoding="utf-8"))
+    assert written["questions"] == [
+        {"asked": "Fatica o fastidio?", "answered": "fastidio"}
+    ]
+    assert written["document"]["workout_id"] == identifier
+
+
+def test_log_from_a_file_refuses_the_options_that_ask_a_model(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`--from` is the no-model path, so there is no run to record and nothing
+    to say to anybody. Silently ignored, the command exits zero having written
+    no file, which reads exactly like a record that was written."""
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(tmp_path), "--record", str(tmp_path / "r.json")],
+    )
+
+    assert result.exit_code != 0
+    assert "--record has no meaning with --from" in result.output
+
+
+def test_log_from_a_file_still_writes_its_exclusion_without_being_asked(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """The author of a hand-written document wrote the proposal themselves.
+    The confirmation exists because a *model* read one out of a passing
+    remark, and asking somebody to confirm the line they just typed is noise.
+    """
+    result = runner.invoke(
+        main,
+        ["log", "--from", write_report(
+            tmp_path,
+            blocks=[performed_block(performed_item("Barbell_Squat"))],
+            proposed_exclusion={
+                "value": "vertical push",
+                "retest_date": "2099-01-01",
+                "why": "scritto a mano",
+            },
+        )],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Stop prescribing" not in result.output
 
 
 # --- `trainer state`: what has been trained, and what has not ----------------

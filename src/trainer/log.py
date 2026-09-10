@@ -1,11 +1,11 @@
 """A performed workout is a document: the shape it arrives in, the little it
 can be refused for, the flags it carries instead, and how it is printed.
 
-The door session 5's agent will come out through, built and testable before
-there is an agent -- the mirror of session 4's `plan.py`. `trainer log --from
-FILE` reads a report somebody wrote by hand, validates it, writes it in one
-transaction and renders what it understood. No model and no network anywhere
-in here.
+The door session 5's agent comes out through -- the mirror of session 4's
+`plan.py`. `trainer log` reads what a model made of what you said and
+`trainer log --from FILE` reads a report somebody wrote by hand; both are
+validated, written in one transaction and rendered by what is in this file. No
+model and no network anywhere in here.
 
 **The symmetry with `plan.py` breaks at the validator, and that break is the
 point of this ticket.** That one refuses a plan outside the admissible set,
@@ -19,11 +19,12 @@ workout is **recorded and flagged**, never rejected.
 So the two are separate functions. `validate` raises, and only for things that
 are not a matter of opinion: an id the catalog does not have, a unit or an
 amount the schema cannot express, a provenance outside the three values, a
-provenance that could not be true, and a proposed exclusion naming neither a
-pattern nor a joint or naming no way back. Every one of those is a statement
-about the *document* -- a typo, a mistyped field -- and none of them is a
-statement about what the user did. `flags` returns, never raises, and is the
-whole of what can be said about the training.
+provenance that could not be true -- `assumed` with no prescription behind it,
+or `assumed` saying something the prescription does not -- and a proposed
+exclusion naming neither a pattern nor a joint or naming no way back. Every one
+of those is a statement about the *document* -- a typo, a mistyped field -- and
+none of them is a statement about what the user did. `flags` returns, never
+raises, and is the whole of what can be said about the training.
 
 **Adherence is a property of the document, not of the database**, which is why
 `to_performed` lives here and not in `engine/`. Logging is by deviation: what
@@ -41,6 +42,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -89,8 +91,9 @@ class LogError(RuntimeError):
 
 class LogRejected(RuntimeError):
     """What arrived is a performed workout, and something in it cannot be
-    resolved: an exercise id the catalog does not have, a proposed exclusion
-    naming neither a pattern nor a joint, a workout that was already reported.
+    resolved: an exercise id the catalog does not have, a value marked
+    `assumed` that the prescription does not say, a proposed exclusion naming
+    neither a pattern nor a joint, a workout that was already reported.
 
     Never a statement about what the user did. Everything about *that* is a
     `Flag`.
@@ -358,6 +361,7 @@ def validate(
     _nothing_assumed_without_a_prescription(performed)
     _every_id_in_the_catalog(connection, performed)
     _the_workout_it_reports_against(connection, performed)
+    _nothing_assumed_the_prescription_does_not_say(connection, performed)
     _the_exclusion_it_proposes(connection, performed, today)
 
 
@@ -490,6 +494,95 @@ def _the_workout_it_reports_against(
         workouts.reportable(connection, performed.workout_id)
     except workouts.WorkoutError as error:
         raise LogRejected(str(error)) from error
+
+
+def _nothing_assumed_the_prescription_does_not_say(
+    connection: sqlite3.Connection, performed: PerformedWorkout
+) -> None:
+    """`assumed` means *as prescribed*, so where there is a prescription to
+    check it against, it has to say what the prescription says.
+
+    The sibling of `_nothing_assumed_without_a_prescription`, and the same
+    kind of statement: a provenance that could not be true. That one catches a
+    document with no prescription behind it at all; this one catches a
+    document that has one and marks a number `assumed` that **contradicts**
+    it.
+
+    **Found by running the agent.** Asked to report *"only 3 sets of military
+    because the shoulder was pulling"* against a prescription of 10 reps, a
+    model emitted `amount: 8, amount_source: "assumed"`. Every rule up to here
+    passed it: the id exists, the number is a number, there is a workout to
+    deviate from. What it wrote is a row saying *the user never gave this
+    number, it came from the plan* -- about a number that came from nowhere,
+    in the one column whose whole job is to separate the two.
+
+    **Contradiction, and not merely silence.** A substituted exercise has no
+    prescribed line at all, and the block it sits in has no prescribed
+    counterpart: `rounds`, `rounds_source`, `rest` and `rest_source` are
+    required fields, so a report of *"I did dumbbell bench instead, three
+    sets"* has to say **something** about the rest nobody asked about, and
+    `reported` would be a lie about what the user said. Where the prescription
+    is silent this rule is silent too, and `assumed` keeps its useful half --
+    *the user did not give this number*. What is refused is only what can be
+    shown false.
+
+    A load is the exception, and it is refused everywhere: a plan prescribes
+    no load anywhere, so there is nothing for one ever to have been assumed
+    from. `_assumed_items` sets none, and a document claiming one is claiming
+    the plan said what the bar weighed.
+
+    The block a reported one is about is decided by `_paired`, which is what
+    `to_performed` fills the gaps from, so the answer here and the answer at
+    the write are one matching read twice.
+    """
+    if performed.workout_id is None:
+        return
+
+    prescribed = workouts.prescribed(connection, performed.workout_id)
+    planned = {
+        item.exercise_id: item for block in prescribed for item in block.block.items
+    }
+    found: list[str] = []
+    for position, (block, index) in enumerate(
+        _paired(prescribed, performed.blocks), start=1
+    ):
+        where = f"block {position}"
+        source = None if index is None else prescribed[index]
+        if source is not None:
+            if block.rounds_source == "assumed" and block.rounds != source.block.rounds:
+                found.append(
+                    f"{where}: {block.rounds} rounds, prescribed as "
+                    f"{source.block.rounds}"
+                )
+            if block.rest_source == "assumed" and block.rest != source.block.rest:
+                found.append(
+                    f"{where}: {block.rest}s rest, prescribed as {source.block.rest}"
+                )
+        for item in block.items:
+            if item.load_kg_source == "assumed":
+                found.append(
+                    f"{where}: {item.exercise_id}'s load, and a plan "
+                    "prescribes no load to have assumed it from"
+                )
+            was = planned.get(item.exercise_id)
+            if item.amount_source != "assumed" or was is None:
+                continue
+            unit = "reps" if was.reps is not None else "seconds"
+            amount = was.reps if was.reps is not None else was.seconds
+            if (unit, amount) != (item.unit, item.amount):
+                found.append(
+                    f"{where}: {item.amount} {item.unit} of {item.exercise_id}, "
+                    f"prescribed as {amount} {unit}"
+                )
+    if not found:
+        return
+    raise LogRejected(
+        "this report marks values `assumed`, which means *as prescribed*, "
+        "that the prescription contradicts:\n"
+        + "\n".join(f"  {where}" for where in found)
+        + "\nA value the user did not give is left out and adherence fills "
+        "it in; one they did give is `reported`."
+    )
 
 
 def _the_exclusion_it_proposes(
@@ -668,15 +761,11 @@ def to_performed(
     uncertainty"* a column rather than a slogan: `WHERE amount_source =
     'assumed'` is the list of numbers the user never actually said.
 
-    **Matched by exercise, never by position.** A report is prose about the
-    parts that differed, so the blocks in it are the ones the user talked
-    about and their order is the order they talked about them -- neither is a
-    map onto the prescribed positions. Matched by position, a user who
-    mentions the third block and nothing else has their words filed under the
-    first one. So a prescribed block is *reported* when the document names any
-    of its exercises, its unmentioned siblings are filled into the same block,
-    and a prescribed block the document never touches comes through whole and
-    entirely assumed.
+    **Matched by exercise, never by position** -- `_paired` is that matching,
+    and the validator reads it too. A prescribed block is *reported* when the
+    document names any of its exercises, its unmentioned siblings are filled
+    into the same block, and a prescribed block the document never touches
+    comes through whole and entirely assumed.
 
     A substitution therefore leaves the prescribed exercise assumed as well as
     recording the substitute, and both are flagged -- the substitute as
@@ -695,21 +784,11 @@ def to_performed(
 
     blocks: list[workouts.PerformedBlock] = []
     matched: set[int] = set()
-    for reported in performed.blocks:
-        named = {item.exercise_id for item in reported.items}
-        source = next(
-            (
-                index
-                for index, block in enumerate(prescribed)
-                if index not in matched
-                and any(item.exercise_id in named for item in block.block.items)
-            ),
-            None,
-        )
+    for reported, index in _paired(prescribed, performed.blocks):
         filled: tuple[workouts.PerformedItem, ...] = ()
-        if source is not None:
-            matched.add(source)
-            filled = _assumed_items(prescribed[source], accounted)
+        if index is not None:
+            matched.add(index)
+            filled = _assumed_items(prescribed[index], accounted)
             accounted.update(item.exercise_id for item in filled)
         blocks.append(_reported(reported, filled))
 
@@ -734,6 +813,47 @@ def to_performed(
             )
         )
     return tuple(blocks)
+
+
+def _paired(
+    prescribed: Sequence[workouts.PrescribedBlock],
+    reported: Sequence[PerformedBlock],
+) -> list[tuple[PerformedBlock, int | None]]:
+    """Which prescribed block each reported one is talking about, by position.
+
+    **Matched by exercise, never by position.** A report is prose about the
+    parts that differed, so the blocks in it are the ones the user talked
+    about and their order is the order they talked about them -- neither is a
+    map onto the prescribed positions. Matched by position, a user who
+    mentions the third block and nothing else has their words filed under the
+    first one.
+
+    `None` is a reported block naming nothing that was prescribed, which is a
+    substitution or something done on the end. Nothing in it can be `assumed`
+    and nothing is filled into it.
+
+    One definition, two readers: `to_performed` fills the gaps from what this
+    returns, and `validate` checks an `assumed` value against it. Written
+    twice, the day they disagreed a number would be refused against one block
+    and written from another.
+    """
+    matched: set[int] = set()
+    pairs: list[tuple[PerformedBlock, int | None]] = []
+    for block in reported:
+        named = {item.exercise_id for item in block.items}
+        index = next(
+            (
+                position
+                for position, candidate in enumerate(prescribed)
+                if position not in matched
+                and any(item.exercise_id in named for item in candidate.block.items)
+            ),
+            None,
+        )
+        if index is not None:
+            matched.add(index)
+        pairs.append((block, index))
+    return pairs
 
 
 def _reported(

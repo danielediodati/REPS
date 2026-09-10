@@ -217,6 +217,37 @@ def workout(connection: sqlite3.Connection, workout_id: int) -> Workout | None:
     )
 
 
+def awaiting(connection: sqlite3.Connection) -> Workout | None:
+    """The prescribed workout a report would be filed against, or `None`.
+
+    The most recently prescribed workout that has not been reported: what
+    `trainer log` opens with, because the report a person writes after
+    training is a report of the workout they were last given.
+
+    Older prescriptions with no report are **not** this. They are
+    `state.unreported`, they are a different mechanism -- nothing closes them
+    and nothing assumes they happened -- and offering one here would file
+    today's training against a workout from three weeks ago, filling in every
+    exercise it did not mention from a plan three weeks dead.
+
+    So the `unreported_workouts` view is what this subtracts, rather than a
+    second reading of *has it had its chance*: migration 0007 made that view
+    the one definition, `volume_deficit` already reads it, and a rule written
+    again here is a rule that would drift from it. A prescribed workout a
+    later performed one overtook is out; whatever is left is open.
+
+    `None` is a state and not a failure: training nobody planned is training,
+    and it is recorded like any other.
+    """
+    row = connection.execute(
+        "SELECT w.id FROM workouts AS w WHERE w.state = 'prescribed' "
+        "AND NOT EXISTS (SELECT 1 FROM unreported_workouts AS u "
+        "                WHERE u.workout_id = w.id) "
+        "ORDER BY w.prescribed_on DESC, w.id DESC LIMIT 1"
+    ).fetchone()
+    return None if row is None else workout(connection, int(row["id"]))
+
+
 def prescribed(
     connection: sqlite3.Connection, workout_id: int
 ) -> tuple[PrescribedBlock, ...]:
