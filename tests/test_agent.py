@@ -175,7 +175,7 @@ def _turn(scripted: Any) -> Turn:
 def executed(one: agent.Call, door: agent.Door = agent.PLANNER) -> agent.Result:
     """One call, through the door that offered it -- which is what decides
     both whether the tool exists and what its answer carries back."""
-    return agent.execute(one, agent.registered(door), door.hides)
+    return agent.execute(one, agent.registered(door), door.keeps)
 
 
 # -- the tools this door offers -----------------------------------------------
@@ -205,6 +205,18 @@ def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None
             assert offered["parameters"]["properties"] == {}
             continue
         assert offered["parameters"]["properties"], f"{offered['name']} takes nothing"
+
+
+def test_the_logger_still_sees_the_name_it_resolves_a_report_against(
+    connection: sqlite3.Connection,
+) -> None:
+    """Its task is *"the bench"* against what was prescribed, and an id is not
+    a thing anybody says out loud."""
+    answered = executed(call("search_exercises", text="squat"), agent.LOGGER)
+
+    record = json.loads(answered.content)["exercises"][0]
+
+    assert sorted(record) == ["equipment", "id", "mechanic", "name", "primary_muscles"]
 
 
 def test_an_argument_with_a_default_is_not_required() -> None:
@@ -601,14 +613,15 @@ def test_a_result_reaches_the_model_as_json(connection: sqlite3.Connection) -> N
 def test_an_admissible_set_reaches_the_model_without_its_prose(
     connection: sqlite3.Connection,
 ) -> None:
-    """One answer must not be larger than the whole output budget. Instructions
-    and image paths are most of an exercise record and nothing in planning
-    reads either, and the loop re-sends every result on every later turn."""
+    """One answer must not be larger than the whole output budget, and the loop
+    re-sends every result on every later turn. What is left is what a plan is
+    written from: the id it names, whether today's equipment reaches it, and
+    the muscles its time is divided over."""
     result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
     (first, *_) = json.loads(result.content)
 
     assert result.failed is False
-    assert set(first) == {"id", "equipment", "mechanic", "primary_muscles"}
+    assert set(first) == {"id", "equipment", "primary_muscles"}
 
 
 def test_the_model_is_not_shown_the_name_it_could_write_by_mistake(
@@ -914,9 +927,29 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     bound, with nothing failing to say so."""
     answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
 
-    trimmed = agent._trimmed(answer, agent.NOT_FOR_CONTEXT)
+    trimmed = agent._trimmed(answer, agent.FOR_PLANNING)
 
     assert trimmed == {"variants": [{"id": "X"}]}
+
+
+def test_an_answer_envelope_is_not_cut_to_an_exercise_record() -> None:
+    """`known: false` is the difference between *nobody has trained this* and a
+    field that happens to be empty, and it is not a catalog field to drop."""
+    answer = {"about": "squat", "known": False, "value": None}
+
+    assert agent._trimmed(answer, agent.FOR_PLANNING) == answer
+
+
+def test_the_planner_is_shown_no_name_even_beside_an_enrichment() -> None:
+    """`compare_variants` answers with two enrichments, which are not catalog
+    records -- but `name` is a catalog field, and writing it into `exercise_id`
+    is the mistake the planner's list exists to prevent. What is not a catalog
+    field at all is nobody's to drop."""
+    answer = {"a": {"exercise_id": "X", "name": "Barbell Squat", "movement_pattern": "squat"}}
+
+    trimmed = agent._trimmed(answer, agent.FOR_PLANNING)
+
+    assert trimmed == {"a": {"exercise_id": "X", "movement_pattern": "squat"}}
 
 
 def test_a_provider_failure_outside_the_status_hierarchy_is_still_words() -> None:
@@ -1395,7 +1428,7 @@ def test_a_door_asking_for_a_tool_nobody_defined_is_a_state() -> None:
     a surface quietly one tool short looks like a model that chose not to
     call it."""
     door = agent.Door(
-        name="typo", tools=("prescribed_wrokout",), hides=(), system="", emit=""
+        name="typo", tools=("prescribed_wrokout",), keeps=(), system="", emit=""
     )
 
     with pytest.raises(agent.AgentError, match="prescribed_wrokout"):

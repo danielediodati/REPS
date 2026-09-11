@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import sqlite3
+from datetime import date
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -21,7 +23,7 @@ from pydantic import TypeAdapter
 from trainer import agent, tools
 from trainer import plan as plans
 from trainer.coach import models
-from trainer.engine import admissible
+from trainer.engine import admissible, constraints
 
 ATTEMPTS = 3
 """Plans one run may emit before a refusal ends it."""
@@ -86,6 +88,23 @@ def build(
             request = TypeAdapter(plans.Request).validate_python(request)
         opening: list[AnyMessage] = []
         if not state.get("messages"):
+            with tools.reported(), tools.opened() as connection:
+                today = constraints.constraining_today(
+                    connection,
+                    date.today().isoformat(),
+                    budget_min=request.budget_min,
+                    groups=request.groups,
+                    given=request.exclusions,
+                )
+            # Folded into the request once, here: the emit schema and the
+            # validator both read the request, and applied on one side only
+            # they would describe different spaces.
+            request = dataclasses.replace(
+                request,
+                exclusions=today.exclusions,
+                budget_min=today.budget_min,
+                groups=today.groups,
+            )
             opening = [SystemMessage(agent.PLANNING), HumanMessage(agent.brief(request))]
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model
         reply = bound.invoke([*state.get("messages", []), *opening])
@@ -100,7 +119,7 @@ def build(
             result = agent.execute(
                 agent.Call(id=call_id, name=call["name"], arguments=call["args"]),
                 offered,
-                agent.PLANNER.hides,
+                agent.PLANNER.keeps,
             )
             answers.append(
                 ToolMessage(

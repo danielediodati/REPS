@@ -1110,6 +1110,18 @@ def test_admissible_rejects_an_unknown_exclude_value(
     assert "not a movement pattern or a loaded joint" in result.output
 
 
+def test_admissible_refuses_a_time_over_the_declared_cap(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """The cap is a ceiling on any workout, and this command answers *what can
+    I do today* -- answered against 90 minutes it describes a workout the
+    declaration says never happens."""
+    result = runner.invoke(main, ["admissible", "--equipment", "barbell", "--time", "90"])
+
+    assert result.exit_code != 0
+    assert "over the 60" in result.output
+
+
 def test_admissible_reads_a_stored_exclusion_automatically(
     runner: CliRunner, enriched: Path
 ) -> None:

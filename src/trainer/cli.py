@@ -34,6 +34,7 @@ from trainer.engine import (
     budget,
     catalog,
     config,
+    constraints,
     database,
     duration,
     enrichment,
@@ -77,6 +78,8 @@ def reported() -> Iterator[None]:
     except muscle_groups.MuscleGroupError as error:
         raise click.ClickException(f"the muscle group mapping is unusable: {error}") from error
     except exclusions.ExclusionError as error:
+        raise click.ClickException(str(error)) from error
+    except constraints.ConstraintError as error:
         raise click.ClickException(str(error)) from error
     except admissible.AdmissibleError as error:
         raise click.ClickException(str(error)) from error
@@ -854,15 +857,24 @@ def admissible_command(
     exercise id -- and is not persisted. An exclusion with a re-test date
     lives in the `exclusions` table instead, and is read automatically
     alongside it.
+
+    `--time` over the cap declared in `training.toml` is refused rather than
+    answered: a workout that long is one the declaration says never happens.
     """
     with _opened() as connection:
         _require_enrichment(connection)
 
         classified = [exclusions.classify(connection, value) for value in exclude]
-        standing = exclusions.active(connection, date.today().isoformat())
+        todays = constraints.constraining_today(
+            connection,
+            date.today().isoformat(),
+            budget_min=budget,
+            groups=groups,
+            given=classified,
+        )
         try:
             found = admissible.admissible_set(
-                connection, [*standing, *classified], equipment, budget, groups
+                connection, todays.exclusions, equipment, todays.budget_min, todays.groups
             )
         except catalog.UnknownFilterValue as error:
             raise _rejected(error) from error
@@ -1030,13 +1042,19 @@ def plan_command(
         with reported():
             groups = _rotated(connection, declared, groups)
             classified = [exclusions.classify(connection, value) for value in exclude]
-            standing = exclusions.active(connection, today)
+            todays = constraints.constraining_today(
+                connection,
+                today,
+                budget_min=budget,
+                groups=groups,
+                given=classified,
+            )
             request = plan.Request(
                 equipment=equipment,
-                budget_min=budget,
-                exclusions=(*standing, *classified),
-                groups=groups,
-                allocation=_divided(budget, groups),
+                budget_min=todays.budget_min,
+                exclusions=todays.exclusions,
+                groups=todays.groups,
+                allocation=_divided(todays.budget_min, todays.groups),
                 preferences=_preferred(connection, avoid),
                 refused=refused,
                 because=because,
@@ -1103,13 +1121,9 @@ def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
         return asked
     if asked is None:
         return declared.duration_cap_min
-    if asked > declared.duration_cap_min:
-        raise click.ClickException(
-            f"{asked} minutes is over the {declared.duration_cap_min} you "
-            f"declared as the cap in {config.config_path().name}. Raise the "
-            "cap there if a longer workout is what you meant"
-        )
-    return asked
+    # One refusal in one wording: the tool surface raises this same one when a
+    # model asks for a workout longer than the declaration allows.
+    return constraints.within_the_cap(asked)
 
 
 def _groups(

@@ -17,7 +17,16 @@ import pytest
 
 from conftest import enrich, make_exercise
 from trainer import tools
-from trainer.engine import catalog, database, duration, graph, migrations, workouts
+from trainer.engine import (
+    catalog,
+    database,
+    duration,
+    exclusions,
+    graph,
+    migrations,
+    workouts,
+)
+from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
@@ -71,6 +80,54 @@ def stocked(database_file: Path) -> Iterator[sqlite3.Connection]:
         enrich(opened, _PATTERNS)
         graph.apply(opened, *graph.parse(GRAPH))
         yield opened
+
+
+# -- what constrains training today -------------------------------------------
+
+
+def test_a_persisted_exclusion_is_applied_when_the_caller_names_none(
+    stocked: sqlite3.Connection,
+) -> None:
+    """Only the CLI read the exclusions table. A door that does not would hand
+    the agent exercises the validator then refuses."""
+    exclusions.add(stocked, Exclusion("pattern", "squat"), "2099-01-01")
+    stocked.commit()
+
+    found = tools.admissible_set(["barbell", "dumbbell", "body only"], 45)
+
+    assert [exercise["id"] for exercise in found] == ["Standing_Military_Press"]
+
+
+def test_a_budget_over_the_declared_cap_is_refused_naming_the_cap(
+    stocked: sqlite3.Connection,
+) -> None:
+    """The cap is the one number in `training.toml` that says a workout never
+    runs longer than this. Answered instead, the agent plans against minutes
+    the user does not have."""
+    with pytest.raises(tools.ToolFailure, match="60"):
+        tools.admissible_set(["barbell"], 90)
+
+
+def test_the_tool_itself_answers_with_the_whole_record(
+    stocked: sqlite3.Connection,
+) -> None:
+    """What a door hides is the door's business: `trainer mcp` is an inspector
+    and pays none of it."""
+    found = tools.admissible_set(["barbell"], 45)
+
+    assert sorted(found[0]) == [
+        "category",
+        "equipment",
+        "force",
+        "id",
+        "images",
+        "instructions",
+        "level",
+        "mechanic",
+        "name",
+        "primary_muscles",
+        "secondary_muscles",
+    ]
 
 
 # -- compare_variants, the tool this ticket adds ------------------------------

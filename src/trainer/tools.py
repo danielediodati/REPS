@@ -14,6 +14,7 @@ from trainer.engine import (
     budget,
     catalog,
     config,
+    constraints,
     database,
     duration,
     graph,
@@ -59,6 +60,7 @@ _ENGINE_ERRORS = (
     budget.BudgetError,
     catalog.CatalogError,
     config.ConfigError,
+    constraints.ConstraintError,
     duration.DurationError,
     ExclusionError,
     graph.GraphError,
@@ -192,17 +194,22 @@ def admissible_set(
     muscle_groups: list[str] | None = None,
     exclusions: list[dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
-    """The exercises today's equipment, the time available, the muscle groups
-    being trained and the exclusions given leave standing -- the space a plan
-    is chosen inside.
+    """The exercises today's equipment, the time available and the muscle
+    groups being trained leave standing -- the space a plan is chosen inside.
+
+    The exclusions in force today are applied whether or not you name any:
+    `exclusions` adds to them for this one call. Each is `{"granularity":
+    "pattern" | "joint", "value": ...}`, and an exclusion never names an
+    exercise id.
 
     `equipment` names the catalog's own values (`barbell`, `body only`) and
-    must hold at least one. `muscle_groups` names the groups this workout
-    trains, from `chest`, `back`, `shoulders`, `arms`, `legs`, `core`: give
-    them, because the whole space is several times larger than any one
-    workout needs and every exercise you are handed you are also paying to
-    re-read on every later turn. Each exclusion is `{"granularity": "pattern"
-    | "joint", "value": ...}`; an exclusion never names an exercise id.
+    must hold at least one. `budget_min` over the cap declared in
+    `training.toml` is refused rather than answered, because a workout that
+    long is one the declaration says never happens. `muscle_groups` names the
+    groups this workout trains, from `chest`, `back`, `shoulders`, `arms`,
+    `legs`, `core`: give them, because the whole space is several times larger
+    than any one workout needs and every exercise you are handed you are also
+    paying to re-read on every later turn.
     """
     given = [
         Exclusion(
@@ -212,8 +219,15 @@ def admissible_set(
         for item in exclusions or []
     ]
     with reported(), opened() as connection:
+        today = constraints.constraining_today(
+            connection,
+            date.today().isoformat(),
+            budget_min=budget_min,
+            groups=muscle_groups or (),
+            given=given,
+        )
         found = admissible.admissible_set(
-            connection, given, equipment, budget_min, muscle_groups or ()
+            connection, today.exclusions, equipment, today.budget_min, today.groups
         )
     return [_exercise(exercise) for exercise in found]
 

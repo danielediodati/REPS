@@ -22,7 +22,8 @@ from conftest import enrich, make_exercise
 from trainer import agent
 from trainer import plan as plans
 from trainer.coach import planner
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, exclusions, migrations
+from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
@@ -266,6 +267,21 @@ def test_the_emit_schema_offers_exactly_todays_admissible_ids(
     for enum in enums:
         assert enum is not None
         assert sorted(enum) == ["Barbell_Squat", "Standing_Military_Press"]
+
+
+def test_the_emit_schema_leaves_out_what_a_persisted_exclusion_covers(
+    connection: sqlite3.Connection,
+) -> None:
+    """The request names no exclusion: the graph reads the standing ones the
+    same way the tools do, so no door can offer what the validator refuses."""
+    exclusions.add(connection, Exclusion("pattern", "squat"), "2099-01-01")
+    connection.commit()
+    model = Scripted(documents=[plan_of("Standing_Military_Press")])
+
+    planner.build(model).invoke({"request": BARBELL_45})
+
+    for enum in exercise_id_enums(model.schemas[0]):
+        assert enum == ["Standing_Military_Press"]
 
 
 def test_the_emit_schema_cannot_express_an_id_outside_todays_set(

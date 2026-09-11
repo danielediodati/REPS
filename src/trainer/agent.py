@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Generic, Protocol, TypeVar, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter
@@ -15,6 +15,7 @@ from pydantic import BaseModel, TypeAdapter
 from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
+from trainer.engine import catalog
 
 BACKEND_ENV = "LLM_BACKEND"
 MODEL_ENV = "GROQ_MODEL"
@@ -367,7 +368,7 @@ class Door:
 
     name: str
     tools: tuple[str, ...]
-    hides: tuple[str, ...]
+    keeps: tuple[str, ...]
     system: str
     emit: str
 
@@ -397,7 +398,7 @@ def surface(door: Door) -> list[dict[str, Any]]:
 
 
 def execute(
-    call: Call, offered: Sequence[Callable[..., Any]], hides: Sequence[str]
+    call: Call, offered: Sequence[Callable[..., Any]], keeps: Sequence[str]
 ) -> Result:
     """Run one call: what the model got wrong comes back as a failed result, anything else propagates."""
     import pydantic
@@ -428,7 +429,7 @@ def execute(
         # An argument left out, or given twice. The shapes are checked above,
         # so what is left is the call itself not fitting the signature.
         return failed(f"{call.name} cannot be called that way: {error}")
-    return Result(call_id=call.id, name=call.name, content=_serialised(answer, hides))
+    return Result(call_id=call.id, name=call.name, content=_serialised(answer, keeps))
 
 
 def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str, Any]:
@@ -453,69 +454,17 @@ def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str,
     return fitted
 
 
-NOT_FOR_CONTEXT = (
-    "instructions",
-    "images",
-    "force",
-    "level",
-    "category",
-    "secondary_muscles",
-    "name",
-)
-"""Fields dropped on the way to the model, and only on the way to the model.
+EXERCISE_FIELDS = frozenset(declared.name for declared in fields(catalog.Exercise))
+"""Every field of a catalog record, read from the dataclass rather than listed a second time."""
 
-The admissible set is the largest thing the loop ever carries, and it carries
-it again on every later turn: 119 dumbbell exercises came to 31,000 characters
-whole, against a free-tier ceiling of 7,000 input tokens a minute. The call
-budget rests on a round-trip whose cost is bounded (TRAINER.md § The tool
-surface), and it was not bounded.
+FOR_PLANNING = ("id", "equipment", "primary_muscles")
+"""What a plan is written from: the id it names, whether today's equipment reaches it, and the muscles its time is divided over."""
 
-What is dropped is what nothing in planning reads. `instructions` and `images`
-because `catalog.py` already says they are fetched by id when something needs
-to *show* an exercise rather than choose one. `force` because TRAINER.md's own
-appendix judges it insufficient on its own terms and `movement_pattern`
-replaced it. `level` and `category` because the admissible set has already
-filtered on what today allows. `secondary_muscles` because allocation is over
-the six groups a workout trains, and the primaries are what answer that.
-
-`name` goes for a different reason: not because it is large, but because it
-is *the wrong one of two strings*. A plan is written in ids, and a model shown
-both fields copied the readable one into `exercise_id` -- five refused plans
-across the first runs. No rule recovers the id from the name either: `Butt
-Lift (Bridge)` is `Butt_Lift_Bridge`, parentheses dropped rather than
-underscored, in 36 of the 876 rows. Removing the field makes the mistake
-impossible instead of rare, and costs nothing, because the name was never the
-model's to carry: `plan.render` reads it back out of the catalog by id when
-the workout is printed.
-
-`mechanic` stays: compound against isolation is the distinction the plan eval's
-sixth invariant -- *it does not degenerate* -- is about, and a model that
-cannot see it cannot be asked to respect it.
-
-The MCP door pays none of this and keeps the record whole. That is the
-difference between an inspector and a context window, not two definitions of
-what an exercise is.
-"""
-
-NOT_FOR_THE_LOG = tuple(field for field in NOT_FOR_CONTEXT if field != "name")
-"""The same list, less `name`, for the agent that reads a report.
-
-`name` is dropped on the planning door because a plan is written in ids and a
-model shown both strings copied the readable one into `exercise_id`. The
-logging door has the opposite problem: its whole task is resolving *"the
-bench"* against what was prescribed, and an id is not a thing anybody says out
-loud. Take the name away and the closed set the ticket asks it to resolve
-inside becomes eleven opaque strings, which is a model guessing.
-
-The mistake the planner's rule prevents is still possible here, and it is
-caught rather than made impossible: `log.validate` refuses an id the catalog
-does not have, and a name written into `exercise_id` is exactly that. That is
-the trade -- a refusal the run can be read back from, in exchange for the
-field without which the run cannot be done at all.
-"""
+FOR_THE_LOG = ("id", "name", "equipment", "mechanic", "primary_muscles")
+"""What reading a report needs. `name` is here and not above, because a report says *"the bench"* and a plan is written in ids."""
 
 
-def _serialised(answer: Any, hides: Sequence[str]) -> str:
+def _serialised(answer: Any, keeps: Sequence[str]) -> str:
     """The engine's answer, in the dialect the tool definitions promised.
 
     JSON rather than `repr`: the docstrings the model reads describe
@@ -523,25 +472,36 @@ def _serialised(answer: Any, hides: Sequence[str]) -> str:
     back `'known': False`. A model translating between two dialects mid-loop
     is one more thing that can go wrong for no reason at all.
     """
-    return json.dumps(_trimmed(answer, hides), default=str)
+    return json.dumps(_trimmed(answer, keeps), default=str)
 
 
-def _trimmed(answer: Any, hides: Sequence[str]) -> Any:
-    """All the way down, not just the top level.
+def _trimmed(answer: Any, keeps: Sequence[str]) -> Any:
+    """Every exercise record, cut to the fields this door reads; every envelope around one, left whole.
 
-    `compare_variants` already answers `{"a": {...}, "b": {...}}`, and the day
-    a tool nests a list of exercises under a key the payload this function
-    exists to bound comes back whole, with nothing failing to say so.
+    A catalog field the door does not keep -- `name` above all, which a model
+    shown both strings copied into `exercise_id` -- reaches it under no key at
+    all. A key that is not a catalog field is nobody's to drop.
     """
+    return _cut(answer, tuple(keeps), EXERCISE_FIELDS - set(keeps))
+
+
+def _cut(answer: Any, keeps: tuple[str, ...], hidden: frozenset[str]) -> Any:
     if isinstance(answer, list):
-        return [_trimmed(item, hides) for item in answer]
+        return [_cut(item, keeps, hidden) for item in answer]
     if isinstance(answer, dict):
+        if _an_exercise(answer):
+            return {key: value for key, value in answer.items() if key in keeps}
         return {
-            key: _trimmed(value, hides)
+            key: _cut(value, keeps, hidden)
             for key, value in answer.items()
-            if key not in hides
+            if key not in hidden
         }
     return answer
+
+
+def _an_exercise(answer: Mapping[str, Any]) -> bool:
+    """A catalog record, and not an envelope that happens to share a field name with one."""
+    return "id" in answer and set(answer) <= EXERCISE_FIELDS
 
 
 # -- the prompts -------------------------------------------------------------
@@ -759,7 +719,7 @@ PLANNER = Door(
         "unreported_workouts",
         "compare_variants",
     ),
-    hides=NOT_FOR_CONTEXT,
+    keeps=FOR_PLANNING,
     system=PLANNING,
     emit=EMIT_PLAN,
 )
@@ -788,7 +748,7 @@ LOGGER = Door(
         "search_exercises",
         "compare_variants",
     ),
-    hides=NOT_FOR_THE_LOG,
+    keeps=FOR_THE_LOG,
     system=LOGGING,
     emit=EMIT_LOG,
 )
@@ -985,7 +945,7 @@ def _ran(
 
         results = []
         for call in reply.calls:
-            result = execute(call, offered, door.hides)
+            result = execute(call, offered, door.keeps)
             ran.calls.append(
                 RecordedCall(
                     name=call.name,
