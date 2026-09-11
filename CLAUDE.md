@@ -6,7 +6,7 @@ Docs, code, identifiers and commits are in **English**. Conversation with the us
 
 ## Agent skills
 
-- **Issue tracker**: markdown files under `docs/work/<feature-slug>/`, one per ticket. The repo has no remote. See `docs/agents/issue-tracker.md`.
+- **Issue tracker**: markdown files under `docs/work/<feature-slug>/`, one per ticket, never GitHub Issues. See `docs/agents/issue-tracker.md`.
 - **Triage labels**: the five canonical roles, written as a `Status:` line in the ticket. See `docs/agents/triage-labels.md`.
 - **Domain docs**: single context, with `CONTEXT.md` and `docs/adr/` at the root. See `docs/agents/domain.md`.
 
