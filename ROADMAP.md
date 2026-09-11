@@ -20,7 +20,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: in LangGraph Studio, the planner proposes a plan, the validator refuses it, and the planner reads why and fixes it.
 
-1. **Feasibility first.** The smallest planner graph that answers one question: does `gpt-oss:20b` reach a valid plan on this laptop when refusals come back to it?
+1. **Feasibility first.** The smallest planner graph that answers one question: does `gpt-oss:20b` reach a valid plan on this laptop when refusals come back to it? — **done** `8b9bcbe`
    - A planner node over the tools, and a `validate` node with a bounded edge back to the planner.
    - The emit schema lists today's admissible ids as the only allowed values of `exercise_id`.
    - `langgraph.json`, so that `langgraph dev` serves the graph.
