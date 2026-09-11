@@ -27,7 +27,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
    - One run over the six adverse situations, recording the valid rate, attempts, wall time and memory.
 
    If the model does not hold, the model choice is revisited before issue 2.
-2. **Compact tool results, and today's constraints in one place.**
+2. **Compact tool results, and today's constraints in one place.** — **done** `7966b1e`
    - `admissible_set` returns only what planning reads. Today it returns about 12k characters.
    - Standing exclusions are applied on the tool surface. Today only the CLI reads them.
 3. **Named violations, a checkpointer, and the run record from the graph state.**
