@@ -1,57 +1,9 @@
-# Domain Docs
+# Domain docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+This is a single-context repo: `CONTEXT.md` and `docs/adr/` sit at the root.
 
-This repo is **single-context**: one `CONTEXT.md` and one `docs/adr/` at the root.
-
-## Before exploring, read these
-
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
-
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Single-context repo (most repos — including this one):
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-engine-is-a-library-not-a-service.md
-│   └── 0002-sqlite-for-state-and-catalog.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-`CONTEXT.md` is the **only** glossary: [TRAINER.md](../../TRAINER.md) § Glossary points at it and defines nothing, so a term read in one and a term read in the other can no longer drift apart. Note the distinctions it draws deliberately: a *workout* is a training session, a *session* in ROADMAP.md is a unit of development work, and a *plan* is what the agent emits for one workout.
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
-
-TRAINER.md carries several decisions that behave like ADRs even though they aren't filed as ones — the engine holds no LLM, LangGraph never persists domain state, a validator beats an agent judge for decidable constraints. Treat a contradiction with those the same way.
+- **Before exploring**, read `CONTEXT.md` and the ADRs that touch the area. If one of them does not exist, carry on without mentioning it.
+- **Use the glossary's terms** in issue titles, proposals and test names. Never use a synonym the glossary tells you to avoid.
+  - A concept missing from the glossary means one of two things: you are inventing language (reconsider), or there is a real gap (note it for `/domain-modeling`).
+  - Keep three words distinct: a *workout* is training, a *session* is development work, a *plan* is what the agent emits for one workout.
+- **Flag ADR conflicts** explicitly instead of silently overriding them, for example: *Contradicts ADR-0004 (…), but worth reopening because…*. TRAINER.md's principles count as decisions too, e.g. no LLM in the engine, writes are never tools, and a validator is preferred over a judge for decidable constraints.

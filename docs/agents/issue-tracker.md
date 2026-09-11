@@ -1,50 +1,26 @@
-# Issue tracker: Local Markdown
+# Issue tracker: local markdown
 
-Issues and specs for this repo live as markdown files in `docs/work/`.
-
-This repo has no git remote, so there is no GitHub/GitLab issue tracker to talk to. The files under `docs/work/` **are** the tracker, and they are versioned along with the code — do not add `docs/work/` to `.gitignore`.
+This repo has no git remote. The tracker is `docs/work/`, versioned with the code; never add it to `.gitignore`.
 
 ## Conventions
 
-- One feature per directory: `docs/work/<feature-slug>/`
-- The spec is `docs/work/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `docs/work/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
-- A ticket is **deleted** when it closes, following the closing procedure in [CLAUDE.md](../../CLAUDE.md). The matching issue in [ROADMAP.md](../../ROADMAP.md) is marked `**done**` with the closing commit, which is where finished work stays visible; anything else that outlives the ticket has to be moved somewhere it will be read before the file goes
+- **One feature per directory**: `docs/work/<feature-slug>/`, with its spec at `spec.md`.
+- **One file per ticket**: `docs/work/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`.
+- **Triage state**: a `Status:` line near the top of the ticket (see `triage-labels.md`).
+- **Comments**: appended under a `## Comments` heading.
+- **Closing**: a closed ticket is deleted, following CLAUDE.md § Closing a ticket. ROADMAP.md marks it done, with the commit hash.
+- **Mapping to the roadmap**: a feature directory is a roadmap session. Each ticket must stand alone in a clean context and point at the TRAINER.md sections and ADRs it needs.
 
-## Mapping onto the roadmap
+## Skill operations
 
-[ROADMAP.md](../../ROADMAP.md) is already sliced into numbered sessions of no more than five issues each. A feature directory is a session:
+- **Publish to the tracker**: create a file under `docs/work/<feature-slug>/`.
+- **Fetch a ticket**: read the file at the path you were given.
 
-```
-docs/work/
-└── 01-raw-catalog/
-    ├── spec.md
-    └── issues/
-        ├── 01-skeleton.md
-        ├── 02-import-free-exercise-db.md
-        ├── 03-catalog-command.md
-        └── 04-markdown-dump.md
-```
+## Wayfinding (`/wayfinder`)
 
-Each issue has to stand on its own in a clean context and point at the sections of [TRAINER.md](../../TRAINER.md) it needs — that is the roadmap's slicing rule, and it is what makes a ticket closable with `/implement`.
-
-## When a skill says "publish to the issue tracker"
-
-Create a new file under `docs/work/<feature-slug>/` (creating the directory if needed).
-
-## When a skill says "fetch the relevant ticket"
-
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
-
-## Wayfinding operations
-
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
-
-- **Map**: `docs/work/<effort>/map.md` — the Notes / Decisions-so-far / Fog body.
-- **Child ticket**: `docs/work/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `docs/work/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Map**: `docs/work/<effort>/map.md`, with the sections Notes, Decisions-so-far and Fog.
+- **Child ticket**: `docs/work/<effort>/issues/NN-<slug>.md`. It carries a `Type:` line (`research`, `prototype`, `grilling` or `task`) and a `Status:` line (`claimed` or `resolved`).
+- **Blocking**: a `Blocked by: NN, NN` line. The ticket is unblocked once every listed file is `resolved`.
+- **Frontier**: the tickets that are open, unblocked and unclaimed, lowest number first.
+- **Claim**: set `Status: claimed` before starting any work.
+- **Resolve**: append the answer under `## Answer`, set `Status: resolved`, and add a one-line gist with a link to the map's Decisions-so-far.
