@@ -396,18 +396,10 @@ def surface(door: Door) -> list[dict[str, Any]]:
     return [schema(tool) for tool in registered(door)]
 
 
-def _execute(
+def execute(
     call: Call, offered: Sequence[Callable[..., Any]], hides: Sequence[str]
 ) -> Result:
-    """Run one call, and say what goes back to the model.
-
-    Everything the *model* can get wrong -- a tool that does not exist,
-    arguments that do not fit the schema, a question the engine states it
-    cannot answer -- comes back as a result it can act on next turn. Anything
-    else is a bug in this project and is left to propagate: reported to the
-    model as a tool error it would come back as an evaluation failure with no
-    signal in it, days later, with the traceback long gone.
-    """
+    """Run one call: what the model got wrong comes back as a failed result, anything else propagates."""
     import pydantic
 
     def failed(sentence: str) -> Result:
@@ -993,7 +985,7 @@ def _ran(
 
         results = []
         for call in reply.calls:
-            result = _execute(call, offered, door.hides)
+            result = execute(call, offered, door.hides)
             ran.calls.append(
                 RecordedCall(
                     name=call.name,

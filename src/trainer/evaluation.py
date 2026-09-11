@@ -58,6 +58,9 @@ RECORDS = Path("eval-runs")
 *invariant 3 failed* is a fact and the record is the only thing that says
 why."""
 
+TURNED_DOWN_BECAUSE = "I don't feel like it"
+"""What the user says when they turn down the first plan of the after-a-refusal situation."""
+
 
 @dataclass(frozen=True)
 class Situation:
@@ -551,7 +554,7 @@ def _once(
                 allocation=request.allocation,
                 preferences=request.preferences,
                 refused=first.plan,
-                because="I don't feel like it",
+                because=TURNED_DOWN_BECAUSE,
             )
         record = agent.plan_workout(connection, request, model=build(), budget=budget)
     except agent.AgentError as error:

@@ -1,0 +1,6 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "planner": "./src/trainer/coach/planner.py:studio"
+  }
+}

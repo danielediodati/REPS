@@ -255,6 +255,30 @@ A 1-4B model can emit *syntactically* valid calls, and constrained decoding guar
     - send the validator's feedback back to the model;
     - run asynchronously, so no one waits on the minutes.
 
+  **Planner graph probe, same evening (ticket 6.1):**
+  - *Setup:*
+    - The LangGraph planner (`trainer.coach.planner`) on `gpt-oss:20b`, `reasoning: low`, a 16384 context set on the server, 12 GB loaded at 100% GPU.
+    - The emit schema holds `exercise_id` to today's admissible ids. A refusal goes back to the planner, up to 3 attempts.
+    - `python -m trainer.coach.probe`: one run per situation in `evaluation.py`, heavy apps closed.
+
+  | situation | outcome | attempts | tool calls | wall time |
+  |---|---|---|---|---|
+  | no-equipment | valid | 1 | 2 | 299 s |
+  | half-refused | valid | 2 | 2 | 313 s |
+  | contradictory | refused | 3 | 2 | 474 s |
+  | no-history | refused | 3 | 1 | 454 s |
+  | refused, the plan turned down | valid | 1 | 2 | 89 s |
+  | refused | valid | 3 | 3 | 576 s |
+  | preference-against-the-split | valid | 1 | 1 | 84 s |
+
+  - *Outcome:* 4 of 6 valid, 38 min in all. No invented id: the enum held.
+  - *Refusals fed back:* 7, and 2 runs recovered from them.
+    - 5 were the clock, 1-12 min over a 30 min budget.
+    - 1 was a duplicate exercise, 1 a preference prescribed without `despite`.
+    - `contradictory` still ended over the clock. `no-history` ended on a `despite` naming exercises nobody refused.
+  - *Memory:* 12 GB loaded, as Ollama's `/api/ps` reports it, and free system memory fell to 1.9 GiB. Ollama's working set reads 0.1 GiB, because on the iGPU the weights sit in shared memory.
+  - *Studio, same evening:* 45 min, dumbbell, chest/shoulders/arms through `langgraph dev`. Valid at the first attempt, 1 tool call, 182 s.
+
 ### (b) Other runtimes on this hardware
 
 | Runtime | Uses the 860M or NPU | OpenAI-compatible API | Tool calling | Structured output |

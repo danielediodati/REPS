@@ -64,7 +64,11 @@ Until session 6 the agents run on Groq: copy `.env.example` to `.env` and set `G
 ```sh
 uv run pytest    # offline: conftest.py removes sockets and credentials
 uv run mypy      # strict
+uv run langgraph dev                  # the planner graph in LangGraph Studio, on Ollama
+uv run python -m trainer.coach.probe  # one measured planner run per adverse situation
 ```
+
+In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`.
 
 ## Layout
 

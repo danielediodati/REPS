@@ -40,6 +40,7 @@ This ADR resets the agent layer. The engine and its tools stay.
 - **Telegram removes three problems in one move:** the app, the API between app and server, and reaching the PC over the network. Its costs are accepted:
   - messages pass through Telegram's servers and are not end-to-end encrypted;
   - updates wait there for at most 24 hours while the PC is off.
+- **Verdict on `gpt-oss:20b` at `reasoning: low` (ticket 6.1): it does not hold yet.** 4 of 6 situations reached a valid plan, 2 of them only after a refusal came back, and most refusals were the clock. The numbers are in `docs/research/on-device-llm-android.md` § 5. The fallback to measure next is `qwen3.5:9b`, or Groq through `LLM_BACKEND`.
 
 ## Consequences
 

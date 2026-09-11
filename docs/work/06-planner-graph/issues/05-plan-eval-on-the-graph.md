@@ -9,6 +9,7 @@ Blocked by: 04
 - **The matrix gains the planner's own numbers:** attempts to a valid plan, and wall time per run. When a run is still refused after its last attempt, the matrix names the rule that refused it.
 - **The bar stays at 100%**, and the command exits non-zero below it (TRAINER.md § Evaluation).
 - **The fixtures are named in the environment** (`TRAINER_DB`), as CLAUDE.md requires.
+- **Delete `trainer.coach.probe`.** Ticket 01's one measured pass over the six situations is what this suite now does. Keep its way of measuring memory, Ollama's `/api/ps` plus the least free system memory: on the iGPU the weights sit outside Ollama's working set.
 - **Delete the Groq planner loop**, now that nothing measures through it.
   - First move what the graph still reads from `agent.py` into `coach/planner.py`: the planner's tool names, its field allow-list, `PLANNING` and `brief`.
   - Then delete `agent.plan_workout`, `RunRecord`, `agent.PLANNER` and their tests, along with the eval's use of them (`evaluation.py`, `cli._plan_suite`).

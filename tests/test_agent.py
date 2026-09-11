@@ -175,7 +175,7 @@ def _turn(scripted: Any) -> Turn:
 def executed(one: agent.Call, door: agent.Door = agent.PLANNER) -> agent.Result:
     """One call, through the door that offered it -- which is what decides
     both whether the tool exists and what its answer carries back."""
-    return agent._execute(one, agent.registered(door), door.hides)
+    return agent.execute(one, agent.registered(door), door.hides)
 
 
 # -- the tools this door offers -----------------------------------------------
