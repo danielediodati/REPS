@@ -1,46 +1,4 @@
-"""The tool surface: one set of definitions, registered behind two doors.
-
-TRAINER.md's `admissible_set`, `remaining_budget`, `allocate`,
-`pattern_history`, `adherence_history`, `last_performed_load` and
-`compare_variants`, plus the four this project found it needed --
-`search_exercises`, `volume_deficit`, `unreported_workouts` and
-`prescribed_workout` -- each of which unpacks its arguments, opens the
-connection, calls the library function and shapes the result for a caller that
-speaks JSON. No validation of its own, no
-decision, no new logic: `tests/test_engine_boundary.py` exists precisely so
-that the CLI, this surface and a direct call stay doors onto the same code
-rather than copies of it.
-
-**One definition, two registrations.** `trainer mcp` serves these to a generic
-client and session 4's agent loops over the same objects. The alternative --
-a set of MCP tools and a set of agent tools that happen to wrap the same
-library -- diverges at the first tool added to one door and not the other, and
-the divergence is invisible until the agent asks for something the inspector
-cannot show. `TOOLS` is the single enumeration; a door registers what is in it
-and nothing else.
-
-**What each door still owns.** Its transport, and its own error type. This
-module states a failure as a `ToolFailure` in the words the caller should
-read; `mcp_server` turns that into the SDK's `ToolError`, and the agent will
-turn it into a tool result the model can act on. What neither door owns is
-*which* failures exist or how they are worded.
-
-**Beside `trainer.cli`, never inside `engine/`.** The engine is the pure
-library the boundary test keeps free of any knowledge of a client, and `mcp`
-is in its forbidden list next to `click` for the same reason: a convention
-that is not enforced is a convention forgotten in a month.
-
-**What is not here.** `active_conclusions` is in TRAINER.md's tool surface and
-has nothing to wrap yet -- it needs `conclusions`, in session 8. Wrapping a
-function that does not exist is not this module's job. `adherence_history` was
-here in that sentence too until session 5 gave it rows to read.
-
-**Nothing here writes.** Every tool on this surface is a question, and that is
-a rule and not an observation: if the model can call the write, the model
-decides when the database changes -- the single door disappears, the validator
-becomes optional, and an interrupted run leaves half a workout behind. The
-agent emits and the engine writes (ROADMAP.md § Session 5).
-"""
+"""The engine's read-only tool surface, defined once and served by the agents and `trainer mcp`."""
 
 from __future__ import annotations
 

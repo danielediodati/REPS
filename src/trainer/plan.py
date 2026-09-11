@@ -1,29 +1,4 @@
-"""A plan is a document: the shape it arrives in, the rules it has to pass,
-and how it is printed.
-
-The door session 4's agent will come out through, built and testable before
-there is an agent. `trainer plan --from FILE` reads a plan somebody wrote by
-hand, puts it through the same validator and the same renderer, and either
-prints the workout or names the rule that refused it. No model and no network
-anywhere in here.
-
-**The shape is the wire shape, not the engine's.** `WorkoutPlan` is what a
-model emits and what a JSON file holds; `duration.Block` and
-`duration.BlockItem` are what the engine costs. The two are kept apart
-deliberately: the engine gains no new type and learns nothing about how a plan
-reaches it, and the fields the wire needs -- a block's `reason`, above all --
-do not have to be defensible as something the costing formula reads.
-
-**The validator rejects. It never repairs.** Three rules, and a plan that
-fails any of them comes back as a rejection naming the rule, with nothing
-trimmed and nothing re-asked. ADR-0001: a repaired plan hides from whoever
-built it that they got the arithmetic wrong, and from session 4 on that
-"whoever" is a model whose next plan would be built on the same mistake.
-
-**Beside `trainer.cli`, never inside `engine/`**, for the reason
-`trainer.tools` is: pydantic is a wire concern, and `test_engine_boundary.py`
-keeps the engine free of every client's vocabulary.
-"""
+"""A plan as a document: its wire shape, the rules it must pass, and how it prints."""
 
 from __future__ import annotations
 
@@ -207,22 +182,14 @@ class Request:
     nothing here checks that it did not."""
 
     preferences: tuple[str, ...] = ()
-    """Exercise ids the user said they would rather not do.
-
-    Not exclusions. An exclusion is safety and the engine removes it from the
-    admissible space; a preference is knowledge of the person, and the agent
-    may still propose one -- as long as the plan says so, in its `despite`.
-    Stated per run, because `conclusions` is session 8 and there is nowhere to
-    keep them yet."""
+    """Exercise ids the user would rather not do; a plan names one only with a `despite` row."""
 
     refused: WorkoutPlan | None = None
     """A plan the user just turned down, on a second pass. The new one has to
     differ from it; how is the agent's business."""
 
     because: str = ""
-    """What the user said when they turned it down. Reaches the model, is
-    checked by nothing, and is persisted nowhere: SQLite never keeps a
-    conversation fact."""
+    """What the user said when they turned it down; it reaches the model and no rule checks it."""
 
 
 def parse(text: str) -> WorkoutPlan:
@@ -291,7 +258,7 @@ def validate(
     request: Request,
     plan: WorkoutPlan,
 ) -> None:
-    """The three rules, in the order that makes the message useful.
+    """The rules, in the order that makes the message useful.
 
     Duplicates first, because the two rules after it both cost the plan and
     `plan_seconds` refuses a duplicate on its own -- reached that way it would
@@ -305,7 +272,7 @@ def validate(
     it is a typo, and saying so in the wrong order sends the reader looking in
     the wrong place.
 
-    Nothing is trimmed and nothing is re-asked. ADR-0001.
+    Nothing is trimmed. ADR-0001.
     """
     _no_exercise_twice(blocks)
     _every_id_admissible(connection, blocks, request)

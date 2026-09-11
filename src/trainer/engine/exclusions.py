@@ -7,8 +7,7 @@ same door. This module is what makes that hard rather than merely
 documented: `classify` only ever returns one of the two granularities or
 refuses outright, and nothing here accepts an exercise id.
 
-Session 6's triage is the one thing that will call `add` for real, once it
-exists. Until then, tests write rows directly to exercise the mechanism, and
+Triage is the one thing that will call `add` for real, once it exists. Until then, tests write rows directly to exercise the mechanism, and
 `--exclude` on the CLI classifies an ad-hoc value for a single query without
 persisting it -- a re-test date only means something for a decision meant to
 outlive the command that made it.
@@ -77,8 +76,8 @@ def active(connection: sqlite3.Connection, today: str) -> tuple[Exclusion, ...]:
 
     Once `today` reaches `retest_date` the row stops excluding -- TRAINER.md
     is explicit that a wall with no way back is the one failure this state
-    cannot afford. The row itself is never deleted: retiring the decision is
-    session 6's business, this is only whether it currently applies.
+    cannot afford. The row itself is never deleted; this answers only whether
+    it currently applies.
     """
     rows = connection.execute(
         "SELECT granularity, value FROM exclusions WHERE retest_date > ? "

@@ -771,7 +771,7 @@ def config_command(show_groups: bool) -> None:
     """Show what the user has declared: cycle, duration cap, split, denominator.
 
     Read-only. Nothing in trainer writes this file; it is hand-edited until
-    session 6's onboarding fills it by talking to you (ADR-0003).
+    onboarding fills it by talking to you (ADR-0003).
     """
     with reported():
         if show_groups:
@@ -1485,7 +1485,7 @@ def _ascii(text: str) -> str:
     Accents are dropped rather than transliterated, so `perch\u00e9` prints as
     `perche` -- which is how the user types it anyway, and is in every case
     better than `perch?`. **Presentation only**: `report` is stored verbatim,
-    because it is what session 9 re-reads when it forms a hypothesis and a
+    because it is what a hypothesis is formed from and a
     paraphrase is the system's reading of the user rather than the user.
     """
     import unicodedata

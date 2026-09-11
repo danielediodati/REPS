@@ -1,61 +1,4 @@
-"""The models: a node that loops over a tool surface, inside a call budget.
-
-`trainer plan` without `--from` asks a model for a workout, and `trainer log`
-asks one to read a report. Each gets a subset of the tools `trainer.tools`
-defines -- the same ones `trainer mcp` serves -- calls them until it has what
-it needs, and emits a document. It goes out through that document's validator
-and **does not come back in**.
-
-**Two agents, one loop.** What differs between them is a `Door`: the tools it
-may call, what its results carry into the context, the prompt it works under
-and the sentence that asks it to emit. Everything else -- the budget, the
-exchanges, the record, the provider adapter -- is shared, because a second
-copy of any of it is a copy that diverges at the first fix applied to one and
-not the other.
-
-**The logger asks; the planner does not.** A report is interpreted rather than
-extracted, and where the sentence does not determine a value the logging agent
-puts a question to the user and carries on with the answer. That turn lives in
-memory, inside one invocation: nothing about a conversation is persisted
-anywhere, so an interrupted report leaves no rubble (ROADMAP.md § Session 5).
-
-**Neither of them writes.** Every tool on both doors is a read, and the
-document goes back to the command that asked for it. If the model could call
-the write, the model would decide when the database changes.
-
-**A node, not a graph.** TRAINER.md is explicit that the workout loop *"is a
-node looping over a tool surface, and a graph adds nothing to a node that
-loops"*. So this is the provider SDK and a `while`, and LangGraph arrives in
-session 6 for onboarding, where checkpointing and resume are the point.
-
-**The call budget.** Tool calls are local Python: zero network, zero tokens to
-execute. What they cost is the context round-trip, and that is bounded
-(TRAINER.md § The tool surface). When the budget runs out the loop does not
-fail -- it stops offering tools and asks for the plan with what it has. That
-is invariant 1 of § Level 1: the agent, and it is behaviour rather than an
-error path.
-
-**No way back in.** A plan the validator refuses is recorded as refused, with
-the rule that refused it. It is not trimmed, and it is not handed back to the
-model to fix: *propose -> check -> correct* is the loop TRAINER.md
-deliberately does not have, because the constraints are applied upstream, in
-the request. A refusal here is a bug to go and read, and ticket 05 counts
-them.
-
-**Two phases, and on Groq that is not a choice.** The plan is asked for in a
-final call of its own, with the tools off the table and the structured shape
-required. Groq does not allow structured outputs and tool use in the same
-request at all, so the separation the loop was built with is the only shape
-that works -- and it has the property that mattered anyway: running out of
-budget and finishing early leave by the *same* door, which is what makes "it
-emits anyway" a property of the loop rather than a branch inside it.
-
-**The seam.** Everything above talks to a `Model`, two methods wide, over a
-conversation described in this project's own terms -- a brief, and the
-exchanges that followed. No provider's message shape reaches the loop: that
-lives in the adapter, which is the whole reason swapping providers touched
-one class and not the loop.
-"""
+"""The planner and logger tool loops on Groq, which ADR-0004's graph replaces."""
 
 from __future__ import annotations
 
@@ -79,12 +22,7 @@ API_KEY_ENV = "GROQ_API_KEY"
 
 GROQ = "groq"
 BACKENDS = (GROQ,)
-"""What `LLM_BACKEND` may name today.
-
-`ollama` is the value this will grow next -- the local backend, free and
-offline. It is read and refused by name rather than ignored, so a `.env` that
-asks for it gets told it is not built yet instead of quietly getting Groq.
-"""
+"""What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
 
 DEFAULT_MODEL = "qwen/qwen3.8-27b"
 """The model, when `GROQ_MODEL` does not name one.
@@ -101,11 +39,7 @@ STRICT_OUTPUT = "structured outputs in strict mode"
 MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
 
 CALL_BUDGET = 12
-"""Tool calls one run may make before the loop stops offering tools.
-
-A starting value, not a measurement: ticket 05 is what says whether a workout
-needs more or fewer, and until it has run this is the number that keeps a
-runaway loop from spending an afternoon. `--call-budget` overrides it."""
+"""Tool calls one run may make before the loop stops offering tools; `--call-budget` overrides it."""
 
 DEFAULT_MAX_TOKENS = 1000
 """How much the model may write in one turn, by default.
@@ -280,14 +214,7 @@ class Model(Protocol):
 
     @property
     def name(self) -> str:
-        """What ran, for the record.
-
-        Asked of the model rather than read back out of the environment.
-        Ticket 05 compares invariants across models by constructing one per
-        run, and a record that re-read `GROQ_MODEL` afterwards would stamp
-        every one of them with whatever the environment happened to say --
-        unattributable, and passing every test that compares the two.
-        """
+        """What ran, for the record: asked of the model, never read back from the environment."""
         ...
 
     def respond(
@@ -308,7 +235,7 @@ class Model(Protocol):
 
 # -- the run record -----------------------------------------------------------
 #
-# An artifact, not a log. Ticket 05 decides its six invariants by reading this
+# An artifact, not a log. `trainer eval` decides its invariants by reading this
 # rather than by asking the model what it did, so everything a check needs is
 # a field: pydantic models, so the whole thing writes out as JSON.
 
@@ -327,7 +254,7 @@ class RecordedQuestion(BaseModel):
     """One clarifying turn: what the agent asked, and what the user said.
 
     Recorded because *it asked instead of filling the field in* is the
-    property ticket 05 scores twelve of its reports on, and a run that guessed
+    property the log eval scores twelve of its reports on, and a run that guessed
     confidently and a run that checked are indistinguishable from the document
     alone.
     """
@@ -384,7 +311,7 @@ def schema(tool: Callable[..., Any]) -> dict[str, Any]:
 
     `mcp_server.py` gets its schemas from the SDK reading the same signatures;
     this is the same derivation for the other door. Hand-written schemas here
-    would be the second definition ticket 01 exists to prevent -- and the one
+    would be a second definition -- and the one
     that drifts, because nothing would fail when it did.
 
     Provider-neutral: name, description, parameters. The envelope a given API
@@ -569,7 +496,7 @@ impossible instead of rare, and costs nothing, because the name was never the
 model's to carry: `plan.render` reads it back out of the catalog by id when
 the workout is printed.
 
-`mechanic` stays: compound against isolation is the distinction ticket 05's
+`mechanic` stays: compound against isolation is the distinction the plan eval's
 sixth invariant -- *it does not degenerate* -- is about, and a model that
 cannot see it cannot be asked to respect it.
 
@@ -636,16 +563,14 @@ The rules you are working inside, none of which you can talk your way around:
 - Every exercise you prescribe must be in what `admissible_set` returns for
   today's request, written as the `id` that came back, character for
   character. Anything else is rejected by a deterministic check after you
-  emit, and the workout does not happen.
+  emit.
 - The plan must fit the time declared. It is never trimmed to fit: a plan that
   runs over is rejected whole, so ask `remaining_budget` before you commit to
   a block rather than after.
 - An exercise appears at most once in the whole plan. One line per exercise,
   with the rounds and reps it needs.
-- Each exercise is prescribed in **either** reps **or** seconds, never both
-  and never neither. Both fields are always present in the shape you emit, so
-  put a value in one and null in the other. A plank is seconds; a push-up is
-  reps. Filling both is rejected.
+- Each exercise is prescribed in reps or in seconds: its `prescription` gives
+  the `unit` and the `amount`. A plank is seconds; a push-up is reps.
 - Rest is yours to prescribe and travels with the block. There are reference
   bands -- around 3 min for heavy low-rep work, 90-120 s for hypertrophy, 60 s
   for isolation -- and they are a reference, not a rule.
@@ -934,7 +859,7 @@ def plan_workout(
     """Ask a model for a workout, and record everything it did to get there.
 
     Returns the record whether the plan passed or was refused. Refusal is an
-    outcome of the run, not an exception: ticket 05 counts refusals across
+    outcome of the run, not an exception: the plan eval counts refusals across
     many runs, and a function that raised on one would make the count the
     caller's job to reassemble.
     """
@@ -969,7 +894,7 @@ def log_workout(
 
     `ask` is how a clarifying question reaches the person who wrote the
     report. It is a parameter rather than a call to `click` because the turn
-    belongs to the loop and the terminal does not: ticket 05 runs thirty
+    belongs to the loop and the terminal does not: the log eval runs thirty
     reports through this function with a scripted answerer, and a loop that
     reached for stdin could not be measured at all.
 
@@ -1139,13 +1064,7 @@ def _question(reply: Reply, ask: Ask | None, asked: int) -> str | None:
 def _refusal(
     connection: sqlite3.Connection, emitted: plans.WorkoutPlan, request: plans.Request
 ) -> str | None:
-    """The way out, and there is no way back in.
-
-    Both failures are recorded in one field because from the run's point of
-    view they are one outcome: the plan did not get through the door. What
-    they are is still legible -- a shape failure names a block, a refusal
-    names a rule.
-    """
+    """Why the validator refused the emitted plan, or `None` when it passed."""
     try:
         plans.validate(connection, plans.to_blocks(emitted), request, emitted)
     except (plans.PlanError, plans.PlanRejected) as error:
@@ -1162,7 +1081,7 @@ def _log_refusal(
     an id the catalog does not have, a provenance that could not be true, a
     re-test date already past. It never refuses a statement about the
     training: a report is a fact, and everything about what the user actually
-    did is a flag on the row (ROADMAP.md § Session 5).
+    did is a flag on the row.
     """
     try:
         logs.validate(connection, emitted, today)
@@ -1175,22 +1094,7 @@ def _log_refusal(
 
 
 def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
-    """A pydantic model's schema, in the shape strict mode will accept.
-
-    Strict mode is constrained decoding: it makes the emitted JSON conform by
-    construction rather than by luck, which is what a loop with no way to ask
-    again needs. It also demands that **every** property be listed in
-    `required`, and pydantic leaves out the ones with defaults -- `reps` and
-    `seconds`, which are exactly the pair that carries *either reps or
-    seconds*. Their optionality survives as the null in their type; what
-    changes here is only that the model must decide about them rather than
-    leave them out.
-
-    `additionalProperties: false` is already there, from the wire shape's own
-    `extra="forbid"`. Strict mode wants it for its reasons and the plan format
-    wants it for the ticket-02 reason -- a misspelled field quietly ignored is
-    a prescription the author believes they wrote -- and they agree.
-    """
+    """A pydantic model's schema as strict mode accepts it: every property required, no extras."""
     built = model.model_json_schema()
 
     def require_everything(node: Any) -> None:
@@ -1433,7 +1337,7 @@ def summary(record: Run) -> list[str]:
 
     One function for both agents because every line of it is about the loop.
     The questions are the one thing only a logging run has, and they are said
-    out loud: *it asked instead of guessing* is the behaviour ticket 05
+    out loud: *it asked instead of guessing* is the behaviour the log eval
     measures, and it is the behaviour a user should be able to see happening.
     """
     emitted = "the plan" if isinstance(record, RunRecord) else "the report"

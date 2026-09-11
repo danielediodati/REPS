@@ -14,7 +14,7 @@ Build the smallest planner graph that can answer this question, and measure it b
   - `planner`: the model bound to the planner's tools (`agent.PLANNER`), with `agent.PLANNING` as the system prompt and `agent.brief(request)` as the brief.
   - `tools`: runs each call through the existing tool functions, trimming results with `agent.NOT_FOR_CONTEXT`.
   - `emit`: the model with no tools and a JSON schema built for this request. The schema is `WorkoutPlan`'s strict schema, with `exercise_id` restricted to an `enum` of the ids that `admissible_set` returns for the request.
-  - `validate`: calls `plan.validate`. On a refusal, the refusal message goes back to `planner` as feedback, up to 3 attempts in total.
+  - `validate`: calls `plan.validate`. On a refusal, the refusal message goes back to `planner` as feedback, up to 3 attempts in total. The feedback is a message of its own: `agent.PLANNING` is shared with the Groq loop until ticket 04, so it does not promise a retry.
 - **Edges.**
   - `planner` goes to `tools` when it calls a tool, and to `emit` when it does not. A turn of prose never ends the run.
   - A spent call budget also goes to `emit`.

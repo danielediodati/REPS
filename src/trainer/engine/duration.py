@@ -279,8 +279,7 @@ ISOLATION_PATTERN = "isolation"
 
 STRENGTH_REP_CEILING = 6
 """At or below this, a set is strength work; above it, hypertrophy. Six is the
-conventional boundary in the literature session 7's methodology document
-already leans on, not a number chosen for this module."""
+conventional boundary in the literature, not a number chosen for this module."""
 
 REST_SECONDS = {
     "strength": 180,

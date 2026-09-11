@@ -8,8 +8,8 @@ exclusions and their re-test dates. These four are declared by the user,
 changed by hand, and read back by the user, and in a file `git diff` says when
 the user changed their mind about the cycle, which is itself training history.
 
-**This module reads. Nothing in `engine/` writes it.** Session 6's onboarding is
-what fills the file by talking to the user; until then it is hand-written, and
+**This module reads. Nothing in `engine/` writes it.** Onboarding is what will
+fill the file by talking to the user; until then it is hand-written, and
 `training.example.toml` is the committed example to start from.
 
 TOML, because `tomllib` is in the standard library and the file has to survive

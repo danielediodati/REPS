@@ -12,7 +12,7 @@ point of this ticket.** That one refuses a plan outside the admissible set,
 because the plan has not happened yet and can still be prevented. This one
 cannot refuse **a fact**. You had an exclusion on `vertical push` and you
 pressed anyway: that row is the most valuable one in the database -- it is
-what feeds session 9's hypotheses and the medical escalation -- and rejecting
+what feeds the hypotheses and the medical escalation -- and rejecting
 it would mean keeping a clean state by lying about what happened. A performed
 workout is **recorded and flagged**, never rejected.
 
@@ -263,8 +263,8 @@ class PerformedWorkout(BaseModel):
     refuses a workout with no blocks in it.
 
     `report` is the user's own words, verbatim, and the only prose this
-    document keeps. Not a summary: it is what session 9 re-reads when it is
-    forming a hypothesis, and a paraphrase is the agent's reading of the user
+    document keeps. Not a summary: it is what a hypothesis is formed from,
+    and a paraphrase is the agent's reading of the user
     rather than the user.
     """
 
@@ -683,7 +683,7 @@ def _under_an_exclusion(
 
     **The row this whole ticket exists to protect.** It is written, it is
     flagged, and it is never refused: an exclusion the user trained straight
-    through is what session 9 forms a hypothesis about and what a medical
+    through is what a hypothesis is formed about and what a medical
     escalation would be read off. Refused, the state stays clean by not
     knowing.
 
