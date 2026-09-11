@@ -1,6 +1,6 @@
 # Issue tracker: local markdown
 
-This repo has no git remote. The tracker is `docs/work/`, versioned with the code; never add it to `.gitignore`.
+The tracker is `docs/work/`, versioned with the code, never GitHub Issues; never add it to `.gitignore`.
 
 ## Conventions
 

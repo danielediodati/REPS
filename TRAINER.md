@@ -64,7 +64,7 @@ Telegram  <->  bot on the PC (long polling)
 
 memory writer --> LangGraph store (only with a source)
 supervisor: a separate graph, a different model, run between workouts
-models: Ollama, locally
+models: Ollama locally, or Groq (LLM_BACKEND)
 ```
 
 ### Engine: the analytic layer

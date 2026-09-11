@@ -33,8 +33,8 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 3. **Named violations, a checkpointer, and the run record from the graph state.**
    - `validate` returns every violation, by name, instead of raising the first.
    - The run record comes from the graph state: calls, attempts, tokens, wall time per node.
-4. **`trainer plan` runs the graph.** The Groq planner path is deleted. The adapter stays until session 8, for `trainer log`.
-5. **The plan eval suite runs against the graph.** The six invariants must hold at 100%, and each run also reports attempts to a valid plan and wall time.
+4. **`trainer plan` runs the graph**, on the provider `LLM_BACKEND` names: Ollama or Groq.
+5. **The plan eval suite runs against the graph.** The six invariants must hold at 100%, and each run also reports attempts to a valid plan and wall time. The Groq planner loop is then deleted; the hand-written adapter stays until session 8, for `trainer log`.
 
 ## Session 7 — `0.7.0` — On the phone
 
@@ -44,7 +44,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 2. **The plan in the chat**, formatted for Telegram and streamed while it is produced (`sendMessageDraft`).
 3. **Refusal and *"only 30 minutes"* as `interrupt()`**, with buttons that resume the thread.
 4. **Today's inputs.** Equipment and time are asked in the chat, or defaulted from `training.toml`.
-5. **Ollama's state is checked when the bot starts:** it is reachable, the model is present, and the context length is set. Each failure is reported as a state, with its fix.
+5. **The provider's state is checked when the bot starts.** Ollama is reachable, the model is present and the context length is set; Groq has its key. Each failure is reported as a state, with its fix.
 
 ## Session 8 — `0.8.0` — The report in the chat
 
@@ -56,7 +56,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 2. **The router.** A message is a report, a plan request, or a question.
 3. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat.
 4. **The log eval suite runs against the graph.**
-5. **The old loop, the `QUESTION:` marker and the Groq adapter are deleted.**
+5. **The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted.** Groq stays, as a provider of the graph.
 
 ## Later sessions
 
@@ -76,6 +76,6 @@ Their issues are cut when each session opens.
 
 ## Risks
 
-- **Memory.** A 12 GB model plus its context is at the edge of a 32 GB laptop in use, and the OS killed the first probe. The fallback to measure is `qwen3.5:9b`.
+- **Memory.** A 12 GB model plus its context is at the edge of a 32 GB laptop in use, and the OS killed the first probe. The fallbacks are `qwen3.5:9b`, to measure, and `LLM_BACKEND=groq`.
 - **Local tool use.** If `gpt-oss:20b` with feedback cannot hold the invariants at 100%, that is a finding about the model, not a reason to lower the bar.
 - **Telegram's 24-hour window.** Messages sent while the PC is off for longer than that are lost.

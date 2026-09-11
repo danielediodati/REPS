@@ -21,10 +21,10 @@ This ADR resets the agent layer. The engine and its tools stay.
    No store writes another's facts.
 6. **The interface is a Telegram bot running on the PC.** It uses long polling, so there is no public IP, no tunnel and no cloud deploy. The bot runs in the same process as the graph, one chat is one thread, and it answers only the owner's user id.
 7. **The graph is asynchronous.** A report is processed when it arrives, and the next plan is prepared at that point rather than on request. A pending question waits as long as it takes.
-8. **Models run locally on Ollama.**
-   - The default is `gpt-oss:20b` on the integrated GPU, with `OLLAMA_IGPU_ENABLE=1` and the context length set explicitly.
+8. **The provider is configuration.** `LLM_BACKEND` names `ollama` or `groq`, and the graph reaches either through LangChain's chat-model interface.
+   - The default is Ollama: `gpt-oss:20b` on the integrated GPU, with `OLLAMA_IGPU_ENABLE=1` and the context length set explicitly.
    - The supervisor runs on a different model.
-   - The Groq adapter goes.
+   - The hand-written Groq adapter goes with the old loop. Groq stays, as a provider.
 9. **Nothing runs on the phone.**
 
 ## Why
@@ -35,6 +35,7 @@ This ADR resets the agent layer. The engine and its tools stay.
   - The first planner probe took about 4 minutes to reach a refused plan.
 
   Minutes are acceptable only when nobody is waiting, which is what Telegram and an asynchronous graph give.
+- **Groq stays selectable.** A 12 GB model plus its context is at the edge of this laptop's memory, and the OS killed the first probe. When the laptop cannot hold the model, the same graph runs on Groq.
 - **Most of those minutes came from the design:** a 12k-character tool result, prefix-cache misses, a turn of prose, and an invented id. Items 2 and 3 address them.
 - **Telegram removes three problems in one move:** the app, the API between app and server, and reaching the PC over the network. Its costs are accepted:
   - messages pass through Telegram's servers and are not end-to-end encrypted;
@@ -44,7 +45,7 @@ This ADR resets the agent layer. The engine and its tools stay.
 
 - **Replaced:**
   - `agent.py`'s loop;
-  - the Groq adapter;
+  - the hand-written Groq adapter (Groq stays, through `langchain-groq`);
   - the `QUESTION:` marker;
   - the plan and log orchestration in `cli.py`.
 - **Kept and ported:**
