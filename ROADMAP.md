@@ -30,7 +30,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 2. **Compact tool results, and today's constraints in one place.** — **done** `7966b1e`
    - `admissible_set` returns only what planning reads. Today it returns about 12k characters.
    - Standing exclusions are applied on the tool surface. Today only the CLI reads them.
-3. **Named violations, a checkpointer, and the run record from the graph state.**
+3. **Named violations, a checkpointer, and the run record from the graph state.** — **done** `b2c20d0`
    - `validate` returns every violation, by name, instead of raising the first.
    - The run record comes from the graph state: calls, attempts, tokens, wall time per node.
 4. **`trainer plan` runs the graph**, on the provider `LLM_BACKEND` names: Ollama or Groq.
