@@ -222,5 +222,5 @@ def build(
 
 
 def studio() -> CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]:
-    """The planner graph on Ollama, as `langgraph dev` serves it."""
-    return build(models.ollama())
+    """The planner graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it."""
+    return build(models.chat().model)

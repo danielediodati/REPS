@@ -7,6 +7,7 @@ Blocked by: 04
 
 - **`trainer eval --suite plan` runs the six situations against the planner graph**, on the provider `LLM_BACKEND` names, reading ticket 03's run records.
 - **The matrix gains the planner's own numbers:** attempts to a valid plan, and wall time per run. When a run is still refused after its last attempt, the matrix names the rule that refused it.
+  - Tool calls overshoot `--call-budget`: `spent` is counted after a whole batch of calls is answered, so a turn asking for seven at once ends at *16 of 12*. Observed on Groq in ticket 04, which left the semantics alone. The matrix reports what was actually spent, not the budget.
 - **The bar stays at 100%**, and the command exits non-zero below it (TRAINER.md § Evaluation).
 - **The fixtures are named in the environment** (`TRAINER_DB`), as CLAUDE.md requires.
 - **Delete `trainer.coach.probe`.** Ticket 01's one measured pass over the six situations is what this suite now does. Keep its way of measuring memory, Ollama's `/api/ps` plus the least free system memory: on the iGPU the weights sit outside Ollama's working set.

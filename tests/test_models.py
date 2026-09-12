@@ -1,7 +1,10 @@
-"""The chat models the coach builds from the environment."""
+"""The chat models the coach builds from the environment, and their preconditions."""
 
 from __future__ import annotations
 
+from typing import Any
+
+import ollama
 import pytest
 
 from trainer.coach import models
@@ -13,10 +16,167 @@ def test_a_context_length_that_is_not_a_number_is_a_state_naming_the_variable(
     monkeypatch.setenv("OLLAMA_CONTEXT_LENGTH", "16k")
 
     with pytest.raises(models.ModelError, match="OLLAMA_CONTEXT_LENGTH is '16k'"):
-        models.ollama()
+        models.ollama_model()
 
 
 def test_the_context_length_reaches_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLLAMA_CONTEXT_LENGTH", "16384")
 
-    assert models.ollama().num_ctx == 16384
+    assert models.ollama_model().num_ctx == 16384
+
+
+# -- which provider ------------------------------------------------------------
+
+
+def test_the_backend_defaults_to_ollama_when_nothing_names_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-0004 item 8: the default is the laptop, not the paid provider."""
+    monkeypatch.delenv(models.BACKEND_ENV, raising=False)
+
+    assert models.backend() == models.OLLAMA
+
+
+def test_a_backend_nobody_built_is_named_with_the_ones_that_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Falling through to a provider the user did not ask for would spend
+    their key, or their laptop, on a typo."""
+    monkeypatch.setenv(models.BACKEND_ENV, "openai")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.backend()
+
+    assert "openai" in str(raised.value)
+    assert models.OLLAMA in str(raised.value)
+    assert models.GROQ in str(raised.value)
+
+
+def test_the_ollama_chat_says_which_provider_and_model_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record's `provider` comes from here rather than from a constant."""
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.MODEL_ENV, "qwen3.5:9b")
+
+    chat = models.chat()
+
+    assert chat.provider == models.OLLAMA
+    assert chat.name == "qwen3.5:9b"
+
+
+def test_the_groq_chat_says_which_provider_and_model_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.setenv(agent_key(), "a-stand-in")
+    monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-20b")
+
+    chat = models.chat()
+
+    assert chat.provider == models.GROQ
+    assert chat.name == "openai/gpt-oss-20b"
+
+
+def agent_key() -> str:
+    from trainer import agent
+
+    return agent.API_KEY_ENV
+
+
+def test_groq_with_no_key_is_a_state_with_the_way_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`conftest.py` takes every credential away, so this is the state under
+    test rather than something about this machine. Checked before a request
+    goes out: left to the SDK it is a 401 after a round-trip."""
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.chat()
+
+    assert agent_key() in str(raised.value)
+    assert ".env" in str(raised.value)
+
+
+# -- the provider's state ------------------------------------------------------
+
+
+def listing(*names: str) -> Any:
+    """What `ollama.Client.list` answers, with only the field `ready` reads."""
+
+    class Listed:
+        def __init__(self, name: str) -> None:
+            self.model = name
+
+    class Response:
+        def __init__(self) -> None:
+            self.models = [Listed(name) for name in names]
+
+    def answer(self: ollama.Client, *args: Any, **kwargs: Any) -> Any:
+        return Response()
+
+    return answer
+
+
+def test_an_unreachable_ollama_is_a_state_with_the_fix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unreachable(self: ollama.Client, *args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("Failed to connect to Ollama.")
+
+    monkeypatch.setattr(ollama.Client, "list", unreachable)
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+
+    with pytest.raises(models.ModelError, match="start Ollama"):
+        models.ready(models.chat())
+
+
+def test_a_model_that_is_not_pulled_names_the_command_that_pulls_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The state a fresh clone hits. Left to the run it arrives as a 404 from
+    the server, which names neither the model nor the way out."""
+    monkeypatch.setattr(ollama.Client, "list", listing("llama3.1:latest"))
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.MODEL_ENV, "gpt-oss:20b")
+
+    with pytest.raises(models.ModelError, match="ollama pull gpt-oss:20b"):
+        models.ready(models.chat())
+
+
+def test_a_model_named_without_its_tag_is_the_one_that_is_pulled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ollama resolves a bare name to `:latest` and `ollama list` always
+    reports the tag, so the two name one model. Compared as written, a model
+    that is there is refused with a pull that would change nothing."""
+    monkeypatch.setattr(ollama.Client, "list", listing("llama3.1:latest"))
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.MODEL_ENV, "llama3.1")
+
+    models.ready(models.chat())
+
+
+def test_a_model_that_is_pulled_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ollama.Client, "list", listing("gpt-oss:20b"))
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.MODEL_ENV, "gpt-oss:20b")
+
+    models.ready(models.chat())
+
+
+def test_groq_is_not_asked_whether_ollama_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The key was already checked when the model was built; a provider in the
+    cloud has no local state to report."""
+
+    def refuse(self: ollama.Client, *args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("Groq must not be checked against a local server")
+
+    monkeypatch.setattr(ollama.Client, "list", refuse)
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.setenv(agent_key(), "a-stand-in")
+
+    models.ready(models.chat())

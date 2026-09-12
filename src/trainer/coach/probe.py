@@ -13,6 +13,7 @@ from typing import Any
 import ollama
 import psutil
 from langchain_core.messages import HumanMessage
+from langchain_ollama import ChatOllama
 from langgraph.graph.state import CompiledStateGraph
 
 from trainer import evaluation, tools
@@ -23,9 +24,6 @@ from trainer.engine import database
 Planner = CompiledStateGraph[
     planner.PlannerState, None, planner.PlannerState, planner.PlannerState
 ]
-
-PROVIDER = "ollama"
-"""What ran this probe. `LLM_BACKEND` chooses it from ticket 04 on."""
 
 
 class MemorySampler:
@@ -63,17 +61,6 @@ class MemorySampler:
             self.loaded = max(self.loaded, sum(model.size or 0 for model in running))
 
 
-def ready(client: ollama.Client) -> None:
-    """Stop with the fix when Ollama cannot be reached."""
-    try:
-        client.ps()
-    except (ConnectionError, ollama.ResponseError) as error:
-        raise SystemExit(
-            f"Ollama cannot be reached ({error}); start Ollama, or point "
-            f"{models.BASE_URL_ENV} at the server"
-        ) from error
-
-
 def say(text: str) -> None:
     """Print ASCII only, whatever the model or the server wrote."""
     print(text.encode("ascii", "replace").decode("ascii"), flush=True)
@@ -88,11 +75,11 @@ def timed(
     return final, time.monotonic() - started
 
 
-def keep(final: dict[str, Any], model: str, name: str) -> Path:
+def keep(final: dict[str, Any], on: models.Chat, name: str) -> Path:
     """The run record, written where the eval writes its own."""
     written = evaluation.RECORDS / f"probe-{name}.json"
     written.parent.mkdir(parents=True, exist_ok=True)
-    written.write_text(record.written(final, model, PROVIDER), encoding="utf-8")
+    written.write_text(record.written(final, on.name, on.provider), encoding="utf-8")
     return written
 
 
@@ -113,9 +100,20 @@ def show(name: str, final: dict[str, Any], seconds: float) -> None:
 
 def main() -> None:
     """Measure the planner graph over the six situations."""
-    model = models.ollama()
+    try:
+        on = models.chat()
+        if on.provider != models.OLLAMA:
+            raise models.ModelError(
+                f"this probe measures what a run costs on this laptop; set "
+                f"{models.BACKEND_ENV}=ollama"
+            )
+        models.ready(on)
+    except models.ModelError as error:
+        raise SystemExit(str(error)) from error
+
+    model = on.model
+    assert isinstance(model, ChatOllama)
     client = ollama.Client(host=model.base_url)
-    ready(client)
 
     path = database.database_path().resolve()
     # The tools open their own connection from this variable, so the situations
@@ -128,7 +126,7 @@ def main() -> None:
         raise SystemExit(str(error)) from error
 
     context = model.num_ctx or "the server's default"
-    say(f"{model.model}, reasoning {model.reasoning}, context {context}, database {path}")
+    say(f"{on.name}, reasoning {model.reasoning}, context {context}, database {path}")
 
     with checkpoints.saver() as saver, MemorySampler(client) as memory:
         graph = planner.build(model, checkpointer=saver)
@@ -139,7 +137,7 @@ def main() -> None:
                 if situation.after_a_refusal:
                     first, seconds = timed(graph, request, f"{situation.name}-turned-down")
                     show(f"{situation.name} (turned down)", first, seconds)
-                    keep(first, model.model, f"{situation.name}-turned-down")
+                    keep(first, on, f"{situation.name}-turned-down")
                     request = dataclasses.replace(
                         request,
                         refused=first["plan"],
@@ -150,7 +148,7 @@ def main() -> None:
                 say(f"{situation.name:<36} failed: {error}")
                 continue
             show(situation.name, final, seconds)
-            say(f"    record: {keep(final, model.model, situation.name)}")
+            say(f"    record: {keep(final, on, situation.name)}")
         total = time.monotonic() - started
 
     gib = 2**30

@@ -29,6 +29,8 @@ from trainer import (
     log_set,
     plan,
 )
+from trainer.coach import models, planner
+from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
     budget,
@@ -126,6 +128,10 @@ def reported() -> Iterator[None]:
     except agent.AgentError as error:
         # No credentials, or the provider refusing the request. A state the
         # user can act on, not a failure of the plan they asked for.
+        raise click.ClickException(str(error)) from error
+    except models.ModelError as error:
+        # The provider the graph runs on: a server nobody started, a model
+        # nobody pulled, a backend nobody built. Each already carries its fix.
         raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
@@ -942,20 +948,6 @@ def admissible_command(
     "exclusion: it stays admissible, and the agent may propose it if it says why.",
 )
 @click.option(
-    "--refused",
-    "refused_path",
-    metavar="FILE",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="A plan you have just turned down. Asks for a different one.",
-)
-@click.option(
-    "--because",
-    "because",
-    metavar="TEXT",
-    default="",
-    help="Why you turned it down. Reaches the model; nothing is written down.",
-)
-@click.option(
     "--call-budget",
     "call_budget",
     metavar="N",
@@ -969,7 +961,7 @@ def admissible_command(
     "record_path",
     metavar="FILE",
     type=click.Path(dir_okay=False, path_type=Path),
-    help="Write the run record here: the calls, the budget spent, the plan.",
+    help="Write the run record here: the calls, the attempts, what each node cost.",
 )
 @click.pass_context
 def plan_command(
@@ -981,40 +973,35 @@ def plan_command(
     exclude: tuple[str, ...],
     groups: tuple[str, ...],
     avoid: tuple[str, ...],
-    refused_path: Path | None,
-    because: str,
     call_budget: int,
     record_path: Path | None,
 ) -> None:
     """Plan a workout, and print it.
 
-    A model is asked for the plan, using the same tools `trainer mcp` serves,
-    inside a budget of tool calls; when the budget runs out it is asked to
-    emit with what it has. With `--from FILE` no model is involved at all and
-    a hand-written plan is checked instead -- the same rules, the same
-    rendering, the agent left out.
+    The planner graph is asked for the plan, on the provider `LLM_BACKEND`
+    names, using the same tools `trainer mcp` serves and inside a budget of
+    tool calls; when the budget runs out it is asked to emit with what it has.
+    With `--from FILE` no model is involved at all and a hand-written plan is
+    checked instead -- the same rules, the same rendering, the agent left out.
 
-    Either way the plan is **rejected** if it breaks a rule, naming the rule.
-    Nothing is trimmed to fit and nothing is asked again (ADR-0001), and a
-    rejected plan is not printed: half a workout with a refusal under it reads
-    as a workout with a footnote.
+    Either way the plan is **rejected** if it breaks a rule, naming the rule,
+    and nothing is trimmed to fit (ADR-0001). On the graph's path a refusal
+    goes back to the planner with its reasons for a bounded number of attempts
+    (ADR-0004), and what is printed is a plan that passed every rule or
+    nothing at all: half a workout with a refusal under it reads as a workout
+    with a footnote.
     """
     if source is not None:
         _only_with_a_model(
             context,
             ("--call-budget", "call_budget"),
             ("--record", "record_path"),
-            ("--refused", "refused_path"),
-            ("--because", "because"),
         )
     elif record_path is not None:
         # Checked before the model is called rather than after. `--record` is
         # the artefact the run exists to produce, and a path that cannot be
         # written is worth finding out about while the run is still free.
         _writable(record_path)
-
-    if because and refused_path is None:
-        raise click.UsageError("--because says why you refused a plan; --refused says which")
 
     # The request first, and the plan after it. The plan is checked *against*
     # the request, so a workout outside the cycle or a time over the cap is
@@ -1024,11 +1011,6 @@ def plan_command(
         declared = _declared()
         budget = _minutes(budget, declared)
         groups = _groups(workout, declared, groups)
-        refused = (
-            plan.parse(refused_path.read_text(encoding="utf-8"))
-            if refused_path is not None
-            else None
-        )
 
     parsed: plan.WorkoutPlan | None = None
     if source is not None:
@@ -1056,15 +1038,13 @@ def plan_command(
                 groups=todays.groups,
                 allocation=_divided(todays.budget_min, todays.groups),
                 preferences=_preferred(connection, avoid),
-                refused=refused,
-                because=because,
             )
             try:
                 if parsed is not None:
                     accepted, lines = _checked(connection, parsed, request, budget)
                 else:
                     accepted, lines = _asked(
-                        connection, request, budget, call_budget, record_path
+                        connection, request, call_budget, record_path
                     )
             except catalog.UnknownFilterValue as error:
                 raise _rejected(error) from error
@@ -1075,8 +1055,14 @@ def plan_command(
             # user's workout, and on the model path it cost a real run. A
             # database that cannot be written to is worth an error; it is not
             # worth throwing the workout away to report one.
+            #
+            # Folded to ASCII for the reason `trainer log` folds what it
+            # prints: every block carries a reason the model wrote, and this
+            # console runs at a code page that cannot encode what a model
+            # reaches for. A valid plan from `gpt-oss:20b` was lost to a
+            # non-breaking hyphen in exactly this echo.
             for line in lines:
-                click.echo(line)
+                click.echo(_ascii(line))
 
             # The workout is written **here**, in the command, and nowhere
             # else. Not in `plan.py` and not in `agent.py`: `trainer eval`
@@ -1272,27 +1258,37 @@ def _checked(
 def _asked(
     connection: sqlite3.Connection,
     request: plan.Request,
-    budget: int,
     call_budget: int,
     record_path: Path | None,
 ) -> tuple[plan.WorkoutPlan, list[str]]:
-    """One run, with the record written whichever way it goes.
+    """One run of the planner graph, with the record written whichever way it goes.
 
     Written *before* a refusal is raised, on purpose: the record is what you
-    open to find out why the model emitted what it did, and a refusal is
-    exactly the case you want it for.
-    """
-    record = agent.plan_workout(connection, request, budget=call_budget)
-    if record_path is not None:
-        record_path.write_text(record.model_dump_json(indent=1), encoding="utf-8")
-    if record.refused is not None:
-        raise click.ClickException(record.refused)
+    open to find out why the model emitted what it did, and a run refused on
+    its last attempt is exactly the case you want it for.
 
-    blocks = plan.to_blocks(record.plan)
-    return record.plan, [
-        *plan.render(connection, record.plan, blocks, request.budget_min),
+    No checkpointer. Nothing here pauses, and a thread nobody can resume is a
+    file written for no reader; session 7's interrupts are what give the graph
+    something to come back to.
+    """
+    on = models.chat()
+    models.ready(on)
+    final = planner.build(on.model, budget=call_budget).invoke({"request": request})
+
+    if record_path is not None:
+        record_path.write_text(
+            run_record.written(final, on.name, on.provider), encoding="utf-8"
+        )
+    if final["violations"]:
+        raise click.ClickException(plan.refusal(final["violations"]))
+
+    emitted = final["plan"]
+    assert emitted is not None, "a run with no violations emitted a plan"
+    blocks = plan.to_blocks(emitted)
+    return emitted, [
+        *plan.render(connection, emitted, blocks, request.budget_min),
         "",
-        *agent.summary(record),
+        *run_record.summary(final, on.name, on.provider, call_budget),
     ]
 
 
@@ -1478,6 +1474,8 @@ def _read(
 TYPOGRAPHY = {
     "\u2014": "--",
     "\u2013": "-",
+    "\u2010": "-",
+    "\u2011": "-",
     "\u2018": "'",
     "\u2019": "'",
     "\u201c": '"',

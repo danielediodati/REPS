@@ -43,6 +43,30 @@ def written(state: Mapping[str, Any], model: str, provider: str) -> str:
     return json.dumps(of(state, model, provider), indent=1)
 
 
+def summary(state: Mapping[str, Any], model: str, provider: str, budget: int) -> list[str]:
+    """The run in a few lines, for the terminal. ASCII.
+
+    The attempts are said out loud because they are the thing session 6 added:
+    a plan that was refused and fixed is a different run from one that passed
+    first time, and the record is the only other place that says so.
+    """
+    messages: Sequence[AnyMessage] = state.get("messages", ())
+    spent = state.get("spent", 0)
+    used = f"{spent} of {budget} tool calls"
+    if spent >= budget:
+        used += " (budget spent; the plan was emitted with what it had)"
+    lines = [f"{model} on {provider} -- {used}"]
+    failed = sum(1 for call in _calls(messages) if call["failed"])
+    if failed:
+        lines.append(f"  {failed} of those calls came back an error")
+    attempts = state.get("attempts", 0)
+    if attempts > 1:
+        lines.append(f"  {attempts} attempts; the validator refused the earlier ones")
+    counted = _tokens(messages)
+    lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
+    return lines
+
+
 def _calls(messages: Sequence[AnyMessage]) -> list[dict[str, Any]]:
     """Every tool call the model made, with what it asked for and whether it came back an error."""
     failed = {

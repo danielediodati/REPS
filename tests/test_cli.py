@@ -1596,12 +1596,11 @@ def test_a_plan_the_shape_check_refuses_writes_nothing(
 # from the whole suite, and `trainer eval` is where the real one runs.
 
 
-def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> object:
-    """Put a scripted model where the loop builds a real one.
+def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
+    """Put a scripted model where the old loop builds a real one.
 
-    Both agents come through `agent.groq`, so this serves `trainer plan` and
-    `trainer log` alike -- what decides which document the script has to hold
-    is the door the command asked for.
+    `trainer log` keeps its Groq door until session 8, whatever `LLM_BACKEND`
+    names, so this is the seam the logging tests still come through.
     """
     from trainer import agent
 
@@ -1612,15 +1611,37 @@ def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> object:
     return model
 
 
+def scripted_graph(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
+    """Put a scripted chat model where the planner graph builds a real one.
+
+    `models.chat` is the one seam `trainer plan` comes through, and the
+    provider and the model name travel with it into the run record.
+
+    Each scripted turn must be a message of its own. `add_messages` keys on
+    the message id, so the same `AIMessage` handed back twice is read as an
+    edit of the first rather than a new turn -- and the run ends an exchange
+    early, having apparently spent one fewer tool call than it did.
+    """
+    from trainer.coach import models
+
+    from test_planner import Scripted
+
+    model = Scripted(**kwargs)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        models, "chat", lambda: models.Chat(model, "scripted", "a-stand-in")
+    )
+    return model
+
+
 def test_plan_asks_a_model_when_no_file_is_given(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from test_agent import call, good_plan
+    from test_planner import calling, plan_of
 
-    scripted(
+    scripted_graph(
         monkeypatch,
-        turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),), ()],
-        emitted=good_plan("Barbell_Squat"),
+        turns=[calling("admissible_set", equipment=["barbell"], budget_min=45)],
+        documents=[plan_of("Barbell_Squat")],
     )
 
     result = runner.invoke(
@@ -1630,17 +1651,44 @@ def test_plan_asks_a_model_when_no_file_is_given(
     assert result.exit_code == 0, result.output
     assert "Barbell Squat" in result.output
     assert "1 of 12 tool calls" in result.output
+    assert "a-stand-in on scripted" in result.output
     assert result.output.isascii()
 
 
-def test_plan_reports_a_refused_plan_and_prints_no_workout(
+def test_plan_prints_a_reason_the_console_cannot_encode(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The plan the model emitted needs dumbbells nobody has today. It is
-    refused, not trimmed, and not shown."""
-    from test_agent import good_plan
+    """Every block carries a reason the model wrote, and a local model reaches
+    for typography a cp1252 console cannot encode. A valid plan from
+    `gpt-oss:20b` was lost to a non-breaking hyphen on its way to the screen."""
+    from test_planner import plan_of
 
-    model = scripted(monkeypatch, emitted=good_plan("Dumbbell_Bicep_Curl"))
+    scripted_graph(
+        monkeypatch,
+        documents=[plan_of("Barbell_Squat", reason="squat‑first, then the rest")],
+    )
+
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.isascii()
+    assert "squat-first, then the rest" in result.output
+
+
+def test_plan_reports_a_plan_refused_on_its_last_attempt_and_prints_no_workout(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plan the model emitted needs dumbbells nobody has today. The
+    refusal goes back to the planner (ADR-0004), and when the attempts run out
+    the workout is refused, not trimmed, and not shown."""
+    from test_planner import plan_of
+    from trainer.coach import planner
+
+    model = scripted_graph(
+        monkeypatch, documents=[plan_of("Dumbbell_Bicep_Curl") for _ in range(planner.ATTEMPTS)]
+    )
 
     result = runner.invoke(
         main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
@@ -1649,18 +1697,18 @@ def test_plan_reports_a_refused_plan_and_prints_no_workout(
     assert result.exit_code != 0
     assert "Dumbbell_Bicep_Curl" in result.output
     assert "Barbell Squat" not in result.output
-    assert model.emissions == 1, "the refused plan was handed back to the model"  # type: ignore[attr-defined]
+    assert model.documents == [], "the refusal never went back to the planner"
 
 
 def test_plan_writes_the_run_record_when_asked(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from test_agent import call, good_plan
+    from test_planner import calling, plan_of
 
-    scripted(
+    scripted_graph(
         monkeypatch,
-        turns=[(call("allocate", minutes=45, proportions={"legs": 1.0}),), ()],
-        emitted=good_plan("Barbell_Squat"),
+        turns=[calling("allocate", minutes=45, proportions={"legs": 1.0})],
+        documents=[plan_of("Barbell_Squat")],
     )
     record = tmp_path / "run.json"
 
@@ -1672,18 +1720,24 @@ def test_plan_writes_the_run_record_when_asked(
 
     assert result.exit_code == 0, result.output
     written = json.loads(record.read_text(encoding="utf-8"))
-    assert written["calls"][0]["name"] == "allocate"
-    assert written["spent"] == 1
+    assert written["provider"] == "scripted"
+    assert written["outcome"] == "valid"
+    assert [call["name"] for call in written["calls"]] == ["allocate"]
     assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
 
 
 def test_plan_writes_the_record_even_when_the_plan_is_refused(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A refusal is exactly the case you open the record for."""
-    from test_agent import good_plan
+    """A refusal is exactly the case you open the record for, and it is the
+    record that says which rule refused which attempt."""
+    from test_planner import plan_of
+    from trainer.coach import planner
 
-    scripted(monkeypatch, emitted=good_plan("Dumbbell_Bicep_Curl"))
+    scripted_graph(
+        monkeypatch,
+        documents=[plan_of("Dumbbell_Bicep_Curl") for _ in range(planner.ATTEMPTS)],
+    )
     record = tmp_path / "run.json"
 
     result = runner.invoke(
@@ -1694,19 +1748,21 @@ def test_plan_writes_the_record_even_when_the_plan_is_refused(
 
     assert result.exit_code != 0
     written = json.loads(record.read_text(encoding="utf-8"))
-    assert written["refused"] is not None
+    assert written["outcome"] == "refused"
+    assert len(written["attempts"]) == planner.ATTEMPTS
+    assert written["attempts"][-1]["violations"], "a refused run recorded no violation"
     assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Dumbbell_Bicep_Curl"
 
 
 def test_plan_says_when_the_budget_ran_out(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from test_agent import call, good_plan
+    from test_planner import calling, plan_of
 
-    scripted(
+    scripted_graph(
         monkeypatch,
-        turns=[(call("pattern_history", pattern="squat", cycles=3),)] * 10,
-        emitted=good_plan("Barbell_Squat"),
+        turns=[calling("pattern_history", pattern="squat", cycles=3) for _ in range(10)],
+        documents=[plan_of("Barbell_Squat")],
     )
 
     result = runner.invoke(
@@ -1724,13 +1780,13 @@ def test_plan_with_a_file_asks_no_model(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`--from` is the no-model path, and it has to stay one: a model built
-    behind it would make the offline door depend on a credential."""
-    from trainer import agent
+    behind it would make the offline door depend on a provider."""
+    from trainer.coach import models
 
-    def refuse(client: object = None) -> object:
+    def refuse() -> object:
         raise AssertionError("--from must not reach a model")
 
-    monkeypatch.setattr(agent, "groq", refuse)
+    monkeypatch.setattr(models, "chat", refuse)
 
     result = runner.invoke(
         main,
@@ -1777,12 +1833,12 @@ def test_plan_refuses_a_record_path_it_cannot_write_before_calling_a_model(
 ) -> None:
     """The record is the artefact the run exists to produce. Finding out the
     path is unwritable afterwards throws away a run that was paid for."""
-    from trainer import agent
+    from trainer.coach import models
 
-    def refuse(client: object = None) -> object:
+    def refuse() -> object:
         raise AssertionError("the model was called before the path was checked")
 
-    monkeypatch.setattr(agent, "groq", refuse)
+    monkeypatch.setattr(models, "chat", refuse)
 
     result = runner.invoke(
         main,
@@ -1960,117 +2016,6 @@ def test_plan_refuses_a_workout_and_a_group_together(
 
     assert result.exit_code != 0
     assert "one or the other" in result.output
-
-
-def test_plan_refuses_a_reason_with_nothing_it_is_about(
-    runner: CliRunner, enriched: Path, tmp_path: Path
-) -> None:
-    result = runner.invoke(
-        main,
-        ["plan", "--equipment", "barbell", "--time", "45",
-         "--because", "I do not feel like it"],
-    )
-
-    assert result.exit_code != 0
-    assert "--refused" in result.output
-
-
-# --- the plan you turned down ------------------------------------------------
-
-
-def test_plan_proposes_again_when_one_is_refused(
-    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Two turns, not a conversation: the refused plan and the reason are
-    inputs to a fresh run."""
-    from test_agent import good_plan
-
-    refused = tmp_path / "refused.json"
-    refused.write_text(good_plan("Barbell_Squat").model_dump_json(), encoding="utf-8")
-    scripted(monkeypatch, emitted=good_plan("Standing_Military_Press"))
-
-    result = runner.invoke(
-        main,
-        ["plan", "--equipment", "barbell", "--time", "45", "--group", "shoulders",
-         "--refused", str(refused), "--because", "I do not feel like squatting"],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert "Standing Military Press" in result.output
-    assert "Barbell Squat" not in result.output
-
-
-def test_plan_refuses_to_hand_back_the_plan_that_was_refused(
-    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from test_agent import good_plan
-
-    same = good_plan("Barbell_Squat")
-    refused = tmp_path / "refused.json"
-    refused.write_text(same.model_dump_json(), encoding="utf-8")
-    scripted(monkeypatch, emitted=same)
-
-    result = runner.invoke(
-        main,
-        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
-         "--refused", str(refused), "--because", "no"],
-    )
-
-    assert result.exit_code != 0
-    assert "just refused" in result.output
-
-
-def test_the_refusal_writes_nothing_to_the_database(
-    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """TRAINER.md's non-negotiable constraint: SQLite never persists a
-    conversation fact. The refused plan and what the user said about it are
-    the most conversational things this project handles.
-
-    The workout that *was* prescribed is written, and that is a domain fact.
-    What must not survive is the sentence: the assertion is over every text
-    value in every table, so a column added later that happened to keep it
-    would fail this rather than slip past a check on one table."""
-    from test_agent import good_plan
-
-    refused = tmp_path / "refused.json"
-    refused.write_text(good_plan("Barbell_Squat").model_dump_json(), encoding="utf-8")
-    scripted(monkeypatch, emitted=good_plan("Standing_Military_Press"))
-
-    result = runner.invoke(
-        main,
-        ["plan", "--equipment", "barbell", "--time", "45", "--group", "shoulders",
-         "--refused", str(refused), "--because", "the squat rack was taken"],
-    )
-
-    assert result.exit_code == 0, result.output
-    with closing(database.connect(enriched)) as connection:
-        assert "the squat rack was taken" not in every_stored_value(connection)
-        prescribed = connection.execute(
-            "SELECT exercise_id FROM workout_exercises"
-        ).fetchall()
-    assert [row["exercise_id"] for row in prescribed] == ["Standing_Military_Press"]
-
-
-def every_stored_value(connection: sqlite3.Connection) -> str:
-    """Every value in every table of the database, as one blob of text.
-
-    Deliberately blunt. A test that only looked where the sentence would go
-    today would keep passing the moment somebody adds the column it actually
-    ends up in.
-    """
-    tables = [
-        row["name"]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
-    ]
-    return "\n".join(
-        str(value)
-        for table in tables
-        for row in connection.execute(f"SELECT * FROM {table}")  # names from sqlite_master
-        for value in tuple(row)
-    )
 
 
 def test_plan_refuses_a_time_over_the_cap_without_a_workout_too(

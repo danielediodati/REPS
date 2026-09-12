@@ -57,7 +57,9 @@ def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
         yield opened
 
 
-def plan_of(*exercise_ids: str, rounds: int = 3) -> plans.WorkoutPlan:
+def plan_of(
+    *exercise_ids: str, rounds: int = 3, reason: str = "it trains what today asks for"
+) -> plans.WorkoutPlan:
     return plans.WorkoutPlan(
         blocks=[
             plans.PlanBlock(
@@ -69,7 +71,7 @@ def plan_of(*exercise_ids: str, rounds: int = 3) -> plans.WorkoutPlan:
                 ],
                 rounds=rounds,
                 rest=120,
-                reason="it trains what today asks for",
+                reason=reason,
             )
             for exercise_id in exercise_ids
         ]

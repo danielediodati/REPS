@@ -17,13 +17,8 @@ from trainer import plan as plans
 from trainer import tools
 from trainer.engine import catalog
 
-BACKEND_ENV = "LLM_BACKEND"
 MODEL_ENV = "GROQ_MODEL"
 API_KEY_ENV = "GROQ_API_KEY"
-
-GROQ = "groq"
-BACKENDS = (GROQ,)
-"""What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
 
 DEFAULT_MODEL = "qwen/qwen3.8-27b"
 """The model, when `GROQ_MODEL` does not name one.
@@ -97,17 +92,6 @@ thing that is actually missing.
 class AgentError(RuntimeError):
     """The run could not be made: no credentials, a backend that is not built,
     or the provider refusing."""
-
-
-def backend() -> str:
-    """Which provider this run talks to, and a state for one nobody built."""
-    named = os.environ.get(BACKEND_ENV) or GROQ
-    if named not in BACKENDS:
-        raise AgentError(
-            f"{BACKEND_ENV} names {named!r}, and the backends built are "
-            f"{', '.join(BACKENDS)}"
-        )
-    return named
 
 
 def model_name() -> str:
@@ -1234,8 +1218,11 @@ def groq(door: Door, client: Any | None = None) -> Groq:
     A function rather than a constructor call at import: nothing in the suite
     may build a client, and a module that made one on import would break the
     no-credentials guarantee for every test that happens to import it.
+
+    `LLM_BACKEND` is not consulted. This loop is Groq's by definition until
+    session 8 deletes it, and `trainer log` has to keep working while the
+    graph beside it runs on Ollama.
     """
-    backend()
     return Groq(door, client)
 
 

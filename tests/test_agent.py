@@ -513,25 +513,6 @@ def test_no_credentials_is_a_state_with_the_way_out() -> None:
     assert ".env" in str(raised.value)
 
 
-def test_the_backend_defaults_to_groq_when_nothing_names_one(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(agent.BACKEND_ENV, raising=False)
-
-    assert agent.backend() == agent.GROQ
-
-
-def test_a_backend_nobody_built_is_named_rather_than_ignored(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`.env.example` offers ollama as the one to come. Falling through to Groq
-    would answer a question the user did not ask, with their key."""
-    monkeypatch.setenv(agent.BACKEND_ENV, "ollama")
-
-    with pytest.raises(agent.AgentError, match="ollama"):
-        agent.backend()
-
-
 def test_the_model_is_read_from_the_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
