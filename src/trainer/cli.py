@@ -1263,7 +1263,9 @@ def _checked(
     answers would eventually differ.
     """
     blocks = plan.to_blocks(parsed)
-    plan.validate(connection, blocks, request, parsed)
+    violations = plan.validate(connection, blocks, request, parsed)
+    if violations:
+        raise plan.PlanRejected(plan.refusal(violations))
     return parsed, plan.render(connection, parsed, blocks, budget)
 
 

@@ -9,6 +9,7 @@ Blocked by: 02, 03
   - The variable already exists (`agent.backend`) and can only name `groq`. It gains `ollama`.
   - One function builds the chat model from it. `trainer plan`, the graph in `langgraph.json` and ticket 01's probe all use it.
   - Groq goes through `langchain-groq`, reading the settings `agent.py` reads today: `GROQ_MODEL`, `GROQ_API_KEY`, `GROQ_MAX_TOKENS`.
+  - The run record's `provider` comes from it. `coach.probe.PROVIDER` is a constant until then.
   - `.env.example` lists `LLM_BACKEND` and the Ollama settings.
 - **`trainer plan` without `--from`** builds the request as it does today and runs the planner graph.
   - `--record FILE` writes ticket 03's run record.

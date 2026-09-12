@@ -165,12 +165,23 @@ def _half_of(
 @dataclass(frozen=True)
 class Invariant:
     name: str
-    holds: Callable[[sqlite3.Connection, Situation, agent.RunRecord], str | None]
-    """`None` when it holds, and the sentence saying how it failed otherwise."""
+    holds: Callable[
+        [sqlite3.Connection, Situation, agent.RunRecord, tuple[plans.Violation, ...]],
+        str | None,
+    ]
+    """`None` when it holds, and the sentence saying how it failed otherwise.
+
+    The violations are handed in rather than asked for: they cost three
+    queries and a costing pass, and every invariant that reads them would
+    otherwise run that again.
+    """
 
 
 def _terminates(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """A plan, within the call budget -- and if the budget ran out, one anyway.
 
@@ -197,49 +208,64 @@ def _terminates(
     return None
 
 
-def _respects_the_time(
+def violations_of(
     connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
-) -> str | None:
-    """Estimated duration inside the declared budget. Never trimmed to fit."""
+) -> tuple[plans.Violation, ...]:
+    """Every rule this run's plan breaks, decided once for all the invariants that read one.
+
+    The rules themselves, not a second reading of them: read twice, the day
+    the two disagree the run is measured against whichever one is wrong.
+    """
     try:
         blocks = plans.to_blocks(record.plan)
-        spent = duration.plan_duration(connection, blocks)
+        return plans.validate(connection, blocks, situation.request, record.plan)
     except (plans.PlanError, duration.DurationError) as error:
-        return f"it cannot be costed: {error}"
-    if spent > situation.request.budget_min:
-        return f"it runs {spent} min against {situation.request.budget_min}"
+        return (plans.Violation(plans.SHAPE, f"it cannot be costed: {error}"),)
+
+
+def _says(violations: tuple[plans.Violation, ...], *rules: str) -> str | None:
+    """What the first of these rules that fired says, or `None` when none did."""
+    for violation in violations:
+        if violation.rule in rules:
+            return violation.says
     return None
+
+
+def _respects_the_time(
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
+) -> str | None:
+    """Estimated duration inside the declared budget. Never trimmed to fit.
+
+    A plan the clock could not be read on at all fails here rather than
+    passing: `validate` skips the budget when an exercise is written twice or
+    an id is not in the catalog, and *no violation* would read as *it fits*.
+    """
+    return _says(violations, plans.BUDGET, plans.DUPLICATES, plans.ADMISSIBLE, plans.SHAPE)
 
 
 def _respects_the_constraints(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing outside the admissible set.
 
-    The set is asked for again here rather than trusted from the run: the
-    invariant is about the plan against the request, and reading it back off
-    whatever the model was handed mid-loop would measure the loop's bookkeeping
-    instead of the plan.
+    The set is asked for against the request rather than read back off
+    whatever the model was handed mid-loop, which would measure the loop's
+    bookkeeping instead of the plan.
     """
-    request = situation.request
-    inside = {
-        exercise.id
-        for exercise in admissible.admissible_set(
-            connection,
-            request.exclusions,
-            request.equipment,
-            request.budget_min,
-            request.groups,
-        )
-    }
-    outside = sorted(_prescribed(record) - inside)
-    if outside:
-        return f"it prescribes {', '.join(outside)}, which is outside the set"
-    return None
+    return _says(violations, plans.ADMISSIBLE)
 
 
 def _respects_the_preferences(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing the user refused -- and if it proposes one again, it says so.
 
@@ -247,21 +273,14 @@ def _respects_the_preferences(
     attached is allowed and is the behaviour the invariant wants; proposing one
     in silence is the failure.
     """
-    refused = set(situation.request.preferences)
-    spoken = {said.exercise_id for said in record.plan.despite}
-    silent = sorted(
-        item.exercise_id
-        for block in record.plan.blocks
-        for item in block.items
-        if item.exercise_id in refused and item.exercise_id not in spoken
-    )
-    if silent:
-        return f"it prescribes {', '.join(silent)} without saying why"
-    return None
+    return _says(violations, plans.PREFERENCES)
 
 
 def _todays_equipment_only(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Every exercise is one today's equipment reaches.
 
@@ -283,7 +302,10 @@ def _todays_equipment_only(
 
 
 def _does_not_degenerate(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection,
+    situation: Situation,
+    record: agent.RunRecord,
+    violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """It uses the space it was given.
 
@@ -495,8 +517,9 @@ def check(
     identical line in the matrix.
     """
     failures = []
+    violations = violations_of(connection, situation, record)
     for invariant in INVARIANTS:
-        why = invariant.holds(connection, situation, record)
+        why = invariant.holds(connection, situation, record, violations)
         if why is not None:
             failures.append((invariant.name, why))
     return tuple(failures)

@@ -6,6 +6,8 @@ venv/
 .env
 *.sqlite
 *.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 .DS_Store
 eval-runs/
 .langgraph_api/

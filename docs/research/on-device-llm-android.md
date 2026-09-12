@@ -279,6 +279,12 @@ A 1-4B model can emit *syntactically* valid calls, and constrained decoding guar
   - *Memory:* 12 GB loaded, as Ollama's `/api/ps` reports it, and free system memory fell to 1.9 GiB. Ollama's working set reads 0.1 GiB, because on the iGPU the weights sit in shared memory.
   - *Studio, same evening:* 45 min, dumbbell, chest/shoulders/arms through `langgraph dev`. Valid at the first attempt, 1 tool call, 182 s.
 
+  **Second probe, 2026-09-12 (ticket 6.3), with every violation fed back at once:**
+  - Four situations ran before Windows killed the probe for low memory: `no-equipment` valid at the first attempt (118 s), `half-refused` at the third (257 s), `contradictory` at the second (300 s), `no-history` at the second (234 s). The first plan of `refused` was valid in 59 s.
+  - Both of the situations the first probe ended refused now reach a valid plan. `no-history` was refused once on the clock **and** an invented `despite` together, and fixed both in one attempt.
+  - One refusal was a document that is not a plan: `despite` written onto the items, where the shape puts it on the plan.
+  - Per node, from the run records: emit 40-62 s, a planner turn 9-88 s, validate 0.01 s. The clock is the model's, not the engine's.
+
 ### (b) Other runtimes on this hardware
 
 | Runtime | Uses the 860M or NPU | OpenAI-compatible API | Tool calling | Structured output |

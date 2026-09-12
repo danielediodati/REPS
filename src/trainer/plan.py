@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -19,9 +20,28 @@ class PlanError(RuntimeError):
 
 
 class PlanRejected(RuntimeError):
-    """What arrived is a plan, and a rule refuses it. A statement about the
-    workout: an exercise that is not admissible today, a plan that does not
-    fit the time, an exercise written twice."""
+    """The violations, raised: what a caller does with them when there is
+    nobody to hand them back to. A statement about the workout -- an exercise
+    that is not admissible today, a plan that does not fit the time, an
+    exercise written twice -- never about the document."""
+
+
+@dataclass(frozen=True)
+class Violation:
+    """One rule this plan breaks, named so that a reader can say which."""
+
+    rule: str
+    says: str
+
+
+SHAPE = "shape"
+"""What refuses a document that is not a plan at all. `validate` never returns it: no rule can be read off such a document, and it is refused before any of them runs."""
+
+DUPLICATES = "duplicates"
+ADMISSIBLE = "admissible"
+BUDGET = "budget"
+PREFERENCES = "preferences"
+REFUSED = "refused"
 
 
 # -- the shape ----------------------------------------------------------------
@@ -257,40 +277,57 @@ def validate(
     blocks: duration.Plan,
     request: Request,
     plan: WorkoutPlan,
-) -> None:
-    """The rules, in the order that makes the message useful.
+) -> tuple[Violation, ...]:
+    """Every rule this plan breaks, in the order that makes the message useful.
 
-    Duplicates first, because the two rules after it both cost the plan and
-    `plan_seconds` refuses a duplicate on its own -- reached that way it would
-    arrive as a costing failure rather than as the rule it is. Then
-    admissibility, so an id the catalog does not have is named as an id rather
-    than as an exercise that could not be costed. The clock last, because it
-    is the only one of the three that is about the plan as a whole.
-
-    The last two are about the request rather than the catalog, and they come
-    after it for that reason: an id nobody has is not a preference violation,
-    it is a typo, and saying so in the wrong order sends the reader looking in
-    the wrong place.
+    Duplicates first, then admissibility, so an id the catalog does not have
+    is named as an id rather than as an exercise that could not be costed.
+    The clock is skipped when either of those failed: `plan_seconds` cannot
+    cost a plan naming one exercise twice, and *it cannot be costed* is the
+    wrong sentence for a mistake already named. The last two are about the
+    request rather than the catalog, and come after for that reason.
 
     Nothing is trimmed. ADR-0001.
     """
-    _no_exercise_twice(blocks)
-    _every_id_admissible(connection, blocks, request)
-    _inside_the_budget(connection, blocks, request)
-    _preferences_acknowledged(plan, request)
-    _not_the_plan_that_was_refused(plan, request)
+    found = [
+        broken
+        for broken in (
+            _no_exercise_twice(blocks),
+            _every_id_admissible(connection, blocks, request),
+        )
+        if broken is not None
+    ]
+    if not found:
+        costed = _inside_the_budget(connection, blocks, request)
+        if costed is not None:
+            found.append(costed)
+    found.extend(
+        broken
+        for broken in (
+            _preferences_acknowledged(plan, request),
+            _not_the_plan_that_was_refused(plan, request),
+        )
+        if broken is not None
+    )
+    return tuple(found)
 
 
-def _no_exercise_twice(blocks: duration.Plan) -> None:
+def refusal(violations: Sequence[Violation]) -> str:
+    """The violations as one message, in the order the rules decided them."""
+    return "\n".join(violation.says for violation in violations)
+
+
+def _no_exercise_twice(blocks: duration.Plan) -> Violation | None:
     try:
         duration.check_plan(blocks)
     except duration.DurationError as error:
-        raise PlanRejected(str(error)) from error
+        return Violation(DUPLICATES, str(error))
+    return None
 
 
 def _every_id_admissible(
     connection: sqlite3.Connection, blocks: duration.Plan, request: Request
-) -> None:
+) -> Violation | None:
     """The set decides; `admissible.rejection` only explains.
 
     Asking each id whether it is admissible would make this a second reading
@@ -315,7 +352,7 @@ def _every_id_admissible(
         if item.exercise_id not in inside
     ]
     if not offenders:
-        return
+        return None
 
     lines = ["the plan names exercises that are not admissible today:"]
     for exercise_id in offenders:
@@ -328,10 +365,10 @@ def _every_id_admissible(
             request.groups,
         )
         lines.append(f"  {exercise_id}: {why or 'not in the admissible set'}")
-    raise PlanRejected("\n".join(lines))
+    return Violation(ADMISSIBLE, "\n".join(lines))
 
 
-def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> None:
+def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> Violation | None:
     """Nothing the user refused -- unless the agent says why.
 
     TRAINER.md's fourth invariant is *nothing the user has refused; and if it
@@ -351,15 +388,16 @@ def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> None:
     if invented:
         # A refusal the user never made, which the renderer would otherwise
         # print back to them as their own words.
-        raise PlanRejected(
+        return Violation(
+            PREFERENCES,
             "the plan says the user refused exercises they did not:\n"
             + "\n".join(f"  {exercise_id}" for exercise_id in invented)
             + "\n`despite` names exercises they actually said no to, and is "
-            "empty otherwise."
+            "empty otherwise.",
         )
 
     if not request.preferences:
-        return
+        return None
 
     spoken = {said.exercise_id for said in plan.despite}
     unspoken = [
@@ -369,16 +407,18 @@ def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> None:
         if item.exercise_id in request.preferences and item.exercise_id not in spoken
     ]
     if unspoken:
-        raise PlanRejected(
+        return Violation(
+            PREFERENCES,
             "the plan prescribes exercises the user said they would rather not "
             "do, without saying why:\n"
             + "\n".join(f"  {exercise_id}" for exercise_id in unspoken)
             + "\nA preference is not an exclusion -- propose it again if there "
-            "is a reason, and put the reason in the item's `despite`."
+            "is a reason, and put the reason in the item's `despite`.",
         )
+    return None
 
 
-def _not_the_plan_that_was_refused(plan: WorkoutPlan, request: Request) -> None:
+def _not_the_plan_that_was_refused(plan: WorkoutPlan, request: Request) -> Violation | None:
     """Asked again, it has to answer differently.
 
     The weakest possible reading of *proposes again* -- not the same document
@@ -388,25 +428,29 @@ def _not_the_plan_that_was_refused(plan: WorkoutPlan, request: Request) -> None:
     second proposal.
     """
     if request.refused is None:
-        return
+        return None
     if plan == request.refused:
-        raise PlanRejected(
+        return Violation(
+            REFUSED,
             "this is the plan that was just refused, unchanged. Propose a "
             "different one: the user said no, and saying it again is not an "
-            "answer"
+            "answer",
         )
+    return None
 
 
 def _inside_the_budget(
     connection: sqlite3.Connection, blocks: duration.Plan, request: Request
-) -> None:
+) -> Violation | None:
     spent = duration.plan_duration(connection, blocks)
     if spent > request.budget_min:
-        raise PlanRejected(
+        return Violation(
+            BUDGET,
             f"the plan runs {spent} min against a budget of {request.budget_min} "
             f"min, {spent - request.budget_min} min over. It is not cut to fit: "
-            "allocate the time first and build a shorter plan"
+            "allocate the time first and build a shorter plan",
         )
+    return None
 
 
 # -- the renderer -------------------------------------------------------------

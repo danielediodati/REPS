@@ -57,7 +57,7 @@ uv run trainer eval --suite plan                              # or --suite log
 uv run trainer mcp                                            # the engine's tools over MCP
 ```
 
-Until session 6 the agents run on Groq: copy `.env.example` to `.env` and set `GROQ_API_KEY`. `TRAINER_DB` overrides the database path, which defaults to `trainer.sqlite` in the working directory.
+Until session 6 the agents run on Groq: copy `.env.example` to `.env` and set `GROQ_API_KEY`. `TRAINER_DB` overrides the database path, which defaults to `trainer.sqlite` in the working directory. `TRAINER_CHECKPOINTS` does the same for the graph's own state, which defaults to `checkpoints.sqlite` and is never the training database.
 
 ## Development
 

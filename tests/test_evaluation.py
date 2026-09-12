@@ -172,7 +172,7 @@ def test_a_plan_over_the_time_fails_the_clock(connection: sqlite3.Connection) ->
     broke = failing(connection, LEGS_AND_CORE, record)
 
     assert "time" in broke
-    assert "against 45" in broke["time"]
+    assert "against a budget of 45" in broke["time"]
 
 
 def test_an_exercise_outside_the_set_fails_the_constraints(

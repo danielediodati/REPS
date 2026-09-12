@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+import operator
 import sqlite3
+import time
 from datetime import date
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, Protocol, TypedDict
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
@@ -15,6 +17,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -23,15 +26,22 @@ from pydantic import TypeAdapter
 from trainer import agent, tools
 from trainer import plan as plans
 from trainer.coach import models
+from trainer.coach.calls import answered
 from trainer.engine import admissible, constraints
 
 ATTEMPTS = 3
 """Plans one run may emit before a refusal ends it."""
 
-REFUSED = """\
+FEEDBACK = """\
 The validator refused that plan:
 {violations}
 Plan the workout again with this in mind."""
+
+
+class Node(Protocol):
+    """One step of the graph. The parameter is named, which is what LangGraph asks of a node."""
+
+    def __call__(self, state: PlannerState) -> dict[str, Any]: ...
 
 
 def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict[str, Any]:
@@ -68,12 +78,16 @@ class PlannerState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     spent: int
     attempts: int
-    violations: str | None
+    violations: tuple[plans.Violation, ...]
+    refusals: Annotated[list[tuple[plans.Violation, ...]], operator.add]
+    timings: Annotated[list[tuple[str, float]], operator.add]
     plan: plans.WorkoutPlan | None
 
 
 def build(
-    model: BaseChatModel, budget: int = agent.CALL_BUDGET
+    model: BaseChatModel,
+    budget: int = agent.CALL_BUDGET,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
 ) -> CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]:
     """The compiled planner graph, running on `model`."""
     offered = agent.registered(agent.PLANNER)
@@ -115,7 +129,7 @@ def build(
         assert isinstance(reply, AIMessage)
         answers = []
         for call in reply.tool_calls:
-            call_id = call["id"] or call["name"]
+            call_id = answered(call)
             result = agent.execute(
                 agent.Call(id=call_id, name=call["name"], arguments=call["args"]),
                 offered,
@@ -150,19 +164,24 @@ def build(
         try:
             emitted = plans.parse(document.text)
             with tools.opened() as connection:
-                plans.validate(connection, plans.to_blocks(emitted), state["request"], emitted)
-        except (plans.PlanError, plans.PlanRejected) as error:
-            refused: dict[str, Any] = {
-                "attempts": attempts,
-                "violations": str(error),
-                "plan": emitted,
-            }
-            if attempts < ATTEMPTS:
-                refused["messages"] = [
-                    HumanMessage(REFUSED.format(violations=error), name="validator")
-                ]
-            return refused
-        return {"attempts": attempts, "violations": None, "plan": emitted}
+                violations = plans.validate(
+                    connection, plans.to_blocks(emitted), state["request"], emitted
+                )
+        except plans.PlanError as error:
+            violations = (plans.Violation(plans.SHAPE, str(error)),)
+        decided: dict[str, Any] = {
+            "attempts": attempts,
+            "violations": violations,
+            "refusals": [violations],
+            "plan": emitted,
+        }
+        if violations and attempts < ATTEMPTS:
+            decided["messages"] = [
+                HumanMessage(
+                    FEEDBACK.format(violations=plans.refusal(violations)), name="validator"
+                )
+            ]
+        return decided
 
     def after_planner(state: PlannerState) -> Literal["tools", "emit"]:
         reply = state["messages"][-1]
@@ -174,15 +193,24 @@ def build(
         return "emit" if state.get("spent", 0) >= budget else "planner"
 
     def after_validate(state: PlannerState) -> Literal["planner", "done"]:
-        if state["violations"] is None or state["attempts"] >= ATTEMPTS:
+        if not state["violations"] or state["attempts"] >= ATTEMPTS:
             return "done"
         return "planner"
 
+    def timed(node: str, run: Node) -> Node:
+        """Every node says what it cost: the minutes are the thing being measured."""
+
+        def counted(state: PlannerState) -> dict[str, Any]:
+            started = time.monotonic()
+            return run(state) | {"timings": [(node, time.monotonic() - started)]}
+
+        return counted
+
     graph = StateGraph(PlannerState)
-    graph.add_node("planner", turn)
-    graph.add_node("tools", run_tools)
-    graph.add_node("emit", emit)
-    graph.add_node("validate", validate)
+    graph.add_node("planner", timed("planner", turn))
+    graph.add_node("tools", timed("tools", run_tools))
+    graph.add_node("emit", timed("emit", emit))
+    graph.add_node("validate", timed("validate", validate))
     graph.add_edge(START, "planner")
     graph.add_conditional_edges("planner", after_planner)
     graph.add_conditional_edges("tools", after_tools)
@@ -190,7 +218,7 @@ def build(
     graph.add_conditional_edges(
         "validate", after_validate, {"planner": "planner", "done": END}
     )
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
 def studio() -> CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
@@ -14,14 +15,14 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 from conftest import enrich, make_exercise
 from trainer import agent
 from trainer import plan as plans
-from trainer.coach import planner
+from trainer.coach import checkpoints, planner, record
 from trainer.engine import catalog, database, exclusions, migrations
 from trainer.engine.exclusions import Exclusion
 
@@ -133,7 +134,7 @@ def test_a_turn_with_no_tool_call_goes_to_emit(connection: sqlite3.Connection) -
     final = planner.build(model).invoke({"request": BARBELL_45})
 
     assert final["plan"] == plan_of("Barbell_Squat")
-    assert final["violations"] is None
+    assert final["violations"] == ()
     assert final["attempts"] == 1
 
 
@@ -207,7 +208,7 @@ def test_a_run_that_spends_the_budget_and_every_attempt_still_ends(
     final = planner.build(model).invoke({"request": BARBELL_45})
 
     assert final["attempts"] == planner.ATTEMPTS
-    assert final["violations"] is not None
+    assert final["violations"]
 
 
 def test_a_refusal_goes_back_to_the_planner_with_the_validators_message(
@@ -224,8 +225,38 @@ def test_a_refusal_goes_back_to_the_planner_with_the_validators_message(
     assert isinstance(feedback, HumanMessage)
     assert "Dumbbell_Bench_Press" in feedback.text
     assert final["attempts"] == 2
-    assert final["violations"] is None
+    assert final["violations"] == ()
     assert final["plan"] == plan_of("Barbell_Squat")
+
+
+def test_a_plan_that_breaks_two_rules_gets_both_back_in_one_message(
+    connection: sqlite3.Connection,
+) -> None:
+    """Both of them in one message, and the planner plans again from it."""
+    request = plans.Request(
+        equipment=("barbell",),
+        budget_min=45,
+        preferences=("Standing_Military_Press",),
+    )
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Fixed.")],
+        documents=[
+            plan_of("Dumbbell_Bench_Press", "Standing_Military_Press"),
+            plan_of("Barbell_Squat"),
+        ],
+    )
+
+    final = planner.build(model).invoke({"request": request})
+
+    fed_back = [
+        message
+        for message in model.seen[1]
+        if isinstance(message, HumanMessage) and message.name == "validator"
+    ]
+    assert len(fed_back) == 1
+    assert "Dumbbell_Bench_Press" in fed_back[0].text
+    assert "Standing_Military_Press" in fed_back[0].text
+    assert final["violations"] == ()
 
 
 def test_the_third_refusal_ends_the_run_as_refused(connection: sqlite3.Connection) -> None:
@@ -234,10 +265,97 @@ def test_the_third_refusal_ends_the_run_as_refused(connection: sqlite3.Connectio
     final = planner.build(model).invoke({"request": BARBELL_45})
 
     assert final["attempts"] == 3
-    assert final["violations"] is not None
-    assert "Dumbbell_Bench_Press" in final["violations"]
+    assert [violation.rule for violation in final["violations"]] == [plans.ADMISSIBLE]
+    assert "Dumbbell_Bench_Press" in plans.refusal(final["violations"])
     assert final["plan"] == plan_of("Dumbbell_Bench_Press")
     assert len(model.documents) == 1
+
+
+def test_the_record_holds_every_attempt_and_what_each_node_cost(
+    connection: sqlite3.Connection,
+) -> None:
+    """A run refused once and fixed on the second attempt: the record says
+    which rule refused which attempt, and where the minutes went."""
+    model = Scripted(
+        turns=[
+            calling("allocate", minutes=45, proportions={"legs": 1.0}),
+            AIMessage(content="Fixed."),
+        ],
+        documents=[plan_of("Dumbbell_Bench_Press"), plan_of("Barbell_Squat")],
+    )
+
+    final = planner.build(model).invoke({"request": BARBELL_45})
+    written = record.of(final, model="a-stand-in", provider="scripted")
+
+    assert written["provider"] == "scripted"
+    assert written["model"] == "a-stand-in"
+    assert written["outcome"] == "valid"
+    assert [attempt["violations"] for attempt in written["attempts"]][0][0]["rule"] == (
+        plans.ADMISSIBLE
+    )
+    assert written["attempts"][1]["violations"] == []
+    assert [call["name"] for call in written["calls"]] == ["allocate"]
+    assert {node["node"] for node in written["nodes"]} == {
+        "planner",
+        "tools",
+        "emit",
+        "validate",
+    }
+    assert all(node["seconds"] >= 0 for node in written["nodes"])
+    assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
+    assert json.dumps(written)
+
+
+def test_a_failed_call_the_model_gave_no_id_is_recorded_as_failed(
+    connection: sqlite3.Connection,
+) -> None:
+    """A local model does not always send one. Looked up under a different
+    fallback than it was filed under, every call reads as having worked."""
+    model = Scripted(
+        turns=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "allocate",
+                        "args": {"minutes": 45, "proportions": {"legs": 0.5}},
+                        "id": None,
+                        "type": "tool_call",
+                    }
+                ],
+            )
+        ],
+        documents=[plan_of("Barbell_Squat")],
+    )
+
+    final = planner.build(model).invoke({"request": BARBELL_45})
+    written = record.of(final, model="a-stand-in", provider="scripted")
+
+    assert written["calls"][0]["failed"] is True
+
+
+def test_the_checkpointer_refuses_to_open_the_training_database(
+    database_file: Path,
+) -> None:
+    """Each store has one owner (ADR-0004, item 5): the conversation is the
+    graph's and the training facts are the engine's."""
+    with pytest.raises(checkpoints.CheckpointError, match="trainer.sqlite"):
+        with checkpoints.saver(database_file):
+            pass
+
+
+def test_a_finished_runs_state_is_read_back_by_its_thread_id(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A run nobody watched is still a run somebody can read back."""
+    model = Scripted(documents=[plan_of("Barbell_Squat")])
+    thread: RunnableConfig = {"configurable": {"thread_id": "one"}}
+
+    with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
+        graph = planner.build(model, checkpointer=saver)
+        graph.invoke({"request": BARBELL_45}, thread)
+
+        assert graph.get_state(thread).values["plan"] == plan_of("Barbell_Squat")
 
 
 def exercise_id_enums(node: Any) -> list[list[str] | None]:

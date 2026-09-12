@@ -1018,10 +1018,10 @@ def _refusal(
 ) -> str | None:
     """Why the validator refused the emitted plan, or `None` when it passed."""
     try:
-        plans.validate(connection, plans.to_blocks(emitted), request, emitted)
-    except (plans.PlanError, plans.PlanRejected) as error:
+        violations = plans.validate(connection, plans.to_blocks(emitted), request, emitted)
+    except plans.PlanError as error:
         return str(error)
-    return None
+    return plans.refusal(violations) if violations else None
 
 
 def _log_refusal(

@@ -183,7 +183,7 @@ def test_an_amount_of_zero_is_refused_by_the_block_itself() -> None:
 def test_a_plan_inside_every_rule_passes(connection: sqlite3.Connection) -> None:
     parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
-    plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+    assert plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed) == ()
 
 
 def test_an_id_outside_the_set_names_the_equipment(
@@ -191,11 +191,11 @@ def test_an_id_outside_the_set_names_the_equipment(
 ) -> None:
     parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}})))
 
-    with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
 
-    assert "Dumbbell_Bench_Press" in str(rejected.value)
-    assert "dumbbell" in str(rejected.value)
+    assert refused.rule == plans.ADMISSIBLE
+    assert "Dumbbell_Bench_Press" in refused.says
+    assert "dumbbell" in refused.says
 
 
 def test_an_id_outside_the_set_names_the_exclusion(
@@ -210,8 +210,9 @@ def test_an_id_outside_the_set_names_the_exclusion(
         document(block({"exercise_id": "Standing_Military_Press", "prescription": {"unit": "reps", "amount": 8}}))
     )
 
-    with pytest.raises(plans.PlanRejected, match="excluded"):
-        plans.validate(connection, plans.to_blocks(parsed), request, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), request, parsed)
+
+    assert "excluded" in refused.says
 
 
 def test_an_id_outside_the_set_names_the_setup_cost(
@@ -220,13 +221,14 @@ def test_an_id_outside_the_set_names_the_setup_cost(
     """Two minutes available, a bar that takes three to load."""
     parsed = plans.parse(document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}})))
 
-    with pytest.raises(plans.PlanRejected, match="set up"):
-        plans.validate(
-            connection,
-            plans.to_blocks(parsed),
-            plans.Request(equipment=("barbell",), budget_min=2),
-            parsed,
-        )
+    (refused,) = plans.validate(
+        connection,
+        plans.to_blocks(parsed),
+        plans.Request(equipment=("barbell",), budget_min=2),
+        parsed,
+    )
+
+    assert "set up" in refused.says
 
 
 def test_an_id_the_catalog_does_not_have_is_named_as_an_id(
@@ -234,8 +236,9 @@ def test_an_id_the_catalog_does_not_have_is_named_as_an_id(
 ) -> None:
     parsed = plans.parse(document(block({"exercise_id": "Barbell_Sqvat", "prescription": {"unit": "reps", "amount": 8}})))
 
-    with pytest.raises(plans.PlanRejected, match="Barbell_Sqvat"):
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert "Barbell_Sqvat" in refused.says
 
 
 def test_a_row_enrichment_does_not_cover_is_rejected_as_that_state(
@@ -245,13 +248,14 @@ def test_a_row_enrichment_does_not_cover_is_rejected_as_that_state(
     *needs no equipment* about it would send the reader looking for a fix."""
     parsed = plans.parse(document(block({"exercise_id": "Ankle_Circles", "prescription": {"unit": "seconds", "amount": 30}})))
 
-    with pytest.raises(plans.PlanRejected, match="stretching"):
-        plans.validate(
-            connection,
-            plans.to_blocks(parsed),
-            plans.Request(equipment=("barbell", "body only"), budget_min=45),
-            parsed,
-        )
+    (refused,) = plans.validate(
+        connection,
+        plans.to_blocks(parsed),
+        plans.Request(equipment=("barbell", "body only"), budget_min=45),
+        parsed,
+    )
+
+    assert "stretching" in refused.says
 
 
 def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
@@ -262,11 +266,11 @@ def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
     )
     blocks = plans.to_blocks(parsed)
 
-    with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(connection, blocks, BARBELL_45, parsed)
+    (refused,) = plans.validate(connection, blocks, BARBELL_45, parsed)
 
-    assert "45" in str(rejected.value)
-    assert "over" in str(rejected.value)
+    assert refused.rule == plans.BUDGET
+    assert "45" in refused.says
+    assert "over" in refused.says
     assert len(blocks[0].items) == 1 and blocks[0].rounds == 20
 
 
@@ -278,8 +282,52 @@ def test_an_exercise_written_twice_is_refused(connection: sqlite3.Connection) ->
         )
     )
 
-    with pytest.raises(plans.PlanRejected, match="more than once"):
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert refused.rule == plans.DUPLICATES
+    assert "more than once" in refused.says
+
+
+def test_every_broken_rule_comes_back_at_once(connection: sqlite3.Connection) -> None:
+    """Both rules, in the order the validator decided them."""
+    request = plans.Request(
+        equipment=("barbell",),
+        budget_min=45,
+        preferences=("Standing_Military_Press",),
+    )
+    parsed = plans.parse(
+        document(
+            block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}}),
+            block({"exercise_id": "Standing_Military_Press", "prescription": {"unit": "reps", "amount": 8}}),
+        )
+    )
+
+    violations = plans.validate(connection, plans.to_blocks(parsed), request, parsed)
+
+    assert [violation.rule for violation in violations] == [
+        plans.ADMISSIBLE,
+        plans.PREFERENCES,
+    ]
+    assert "Dumbbell_Bench_Press" in violations[0].says
+    assert "Standing_Military_Press" in violations[1].says
+
+
+def test_a_duplicate_does_not_also_arrive_as_a_costing_error(
+    connection: sqlite3.Connection,
+) -> None:
+    """The clock cannot be read on a plan that names one exercise twice: the
+    cost of setting it up is charged once or twice and nothing says which. The
+    rule that can be decided is the one reported."""
+    parsed = plans.parse(
+        document(
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}}),
+            block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 12}}),
+        )
+    )
+
+    violations = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert [violation.rule for violation in violations] == [plans.DUPLICATES]
 
 
 def test_an_unenriched_catalog_is_a_state_not_an_empty_set(database_file: Path) -> None:
@@ -445,16 +493,15 @@ def test_an_exercise_for_another_day_is_rejected_naming_what_today_trains(
     workout, and the rejection has to say which of the two it is."""
     parsed = plans.parse(document(block({"exercise_id": "Dumbbell_Bench_Press", "prescription": {"unit": "reps", "amount": 8}})))
 
-    with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(
-            connection,
-            plans.to_blocks(parsed),
-            plans.Request(equipment=("dumbbell",), budget_min=45, groups=("legs",)),
-            parsed,
-        )
+    (refused,) = plans.validate(
+        connection,
+        plans.to_blocks(parsed),
+        plans.Request(equipment=("dumbbell",), budget_min=45, groups=("legs",)),
+        parsed,
+    )
 
-    assert "chest" in str(rejected.value)
-    assert "legs" in str(rejected.value)
+    assert "chest" in refused.says
+    assert "legs" in refused.says
 
 
 # -- the preferences, and the plan you turned down ----------------------------
@@ -479,11 +526,11 @@ def test_a_preference_prescribed_silently_is_refused(
                         "prescription": {"unit": "reps", "amount": 8}}))
     )
 
-    with pytest.raises(plans.PlanRejected) as rejected:
-        plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
 
-    assert "Barbell_Squat" in str(rejected.value)
-    assert "rather not" in str(rejected.value)
+    assert refused.rule == plans.PREFERENCES
+    assert "Barbell_Squat" in refused.says
+    assert "rather not" in refused.says
 
 
 def test_a_preference_prescribed_with_a_reason_is_allowed(
@@ -500,7 +547,7 @@ def test_a_preference_prescribed_with_a_reason_is_allowed(
         )
     )
 
-    plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+    assert plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed) == ()
 
 
 def test_an_empty_acknowledgement_does_not_count() -> None:
@@ -563,8 +610,10 @@ def test_the_plan_that_was_refused_is_not_an_answer(
         equipment=("barbell",), budget_min=45, refused=plans.parse(text)
     )
 
-    with pytest.raises(plans.PlanRejected, match="just refused"):
-        plans.validate(connection, plans.to_blocks(again), request, again)
+    (refused,) = plans.validate(connection, plans.to_blocks(again), request, again)
+
+    assert refused.rule == plans.REFUSED
+    assert "just refused" in refused.says
 
 
 def test_a_different_plan_after_a_refusal_passes(
@@ -582,7 +631,7 @@ def test_a_different_plan_after_a_refusal_passes(
     )
     request = plans.Request(equipment=("barbell",), budget_min=45, refused=refused)
 
-    plans.validate(connection, plans.to_blocks(offered), request, offered)
+    assert plans.validate(connection, plans.to_blocks(offered), request, offered) == ()
 
 
 def test_an_acknowledgement_of_something_nobody_refused_is_rejected(
@@ -600,5 +649,7 @@ def test_an_acknowledgement_of_something_nobody_refused_is_rejected(
         )
     )
 
-    with pytest.raises(plans.PlanRejected, match="did not"):
-        plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert refused.rule == plans.PREFERENCES
+    assert "did not" in refused.says

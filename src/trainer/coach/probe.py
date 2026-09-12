@@ -6,6 +6,7 @@ import dataclasses
 import os
 import threading
 import time
+from pathlib import Path
 from types import TracebackType
 from typing import Any
 
@@ -16,12 +17,15 @@ from langgraph.graph.state import CompiledStateGraph
 
 from trainer import evaluation, tools
 from trainer import plan as plans
-from trainer.coach import models, planner
+from trainer.coach import checkpoints, models, planner, record
 from trainer.engine import database
 
 Planner = CompiledStateGraph[
     planner.PlannerState, None, planner.PlannerState, planner.PlannerState
 ]
+
+PROVIDER = "ollama"
+"""What ran this probe. `LLM_BACKEND` chooses it from ticket 04 on."""
 
 
 class MemorySampler:
@@ -75,16 +79,26 @@ def say(text: str) -> None:
     print(text.encode("ascii", "replace").decode("ascii"), flush=True)
 
 
-def timed(graph: Planner, request: plans.Request) -> tuple[dict[str, Any], float]:
-    """One run of the graph, and its wall time in seconds."""
+def timed(
+    graph: Planner, request: plans.Request, thread: str
+) -> tuple[dict[str, Any], float]:
+    """One run of the graph, on a thread of its own, and its wall time in seconds."""
     started = time.monotonic()
-    final = graph.invoke({"request": request})
+    final = graph.invoke({"request": request}, {"configurable": {"thread_id": thread}})
     return final, time.monotonic() - started
+
+
+def keep(final: dict[str, Any], model: str, name: str) -> Path:
+    """The run record, written where the eval writes its own."""
+    written = evaluation.RECORDS / f"probe-{name}.json"
+    written.parent.mkdir(parents=True, exist_ok=True)
+    written.write_text(record.written(final, model, PROVIDER), encoding="utf-8")
+    return written
 
 
 def show(name: str, final: dict[str, Any], seconds: float) -> None:
     """One run's line, then every refusal the validator sent back."""
-    outcome = "valid" if final["violations"] is None else "refused"
+    outcome = "valid" if not final["violations"] else "refused"
     say(
         f"{name:<36} {outcome:<8} attempts {final['attempts']}  "
         f"tool calls {final.get('spent', 0):>2}  {seconds:5.0f} s"
@@ -92,8 +106,9 @@ def show(name: str, final: dict[str, Any], seconds: float) -> None:
     for message in final["messages"]:
         if isinstance(message, HumanMessage) and message.name == "validator":
             say("    fed back: " + message.text.replace("\n", "\n    "))
-    if final["violations"] is not None:
-        say("    final refusal: " + final["violations"].replace("\n", "\n    "))
+    if final["violations"]:
+        refusal = plans.refusal(final["violations"])
+        say("    final refusal: " + refusal.replace("\n", "\n    "))
 
 
 def main() -> None:
@@ -112,28 +127,30 @@ def main() -> None:
     except tools.ToolFailure as error:
         raise SystemExit(str(error)) from error
 
-    graph = planner.build(model)
     context = model.num_ctx or "the server's default"
     say(f"{model.model}, reasoning {model.reasoning}, context {context}, database {path}")
 
-    with MemorySampler(client) as memory:
+    with checkpoints.saver() as saver, MemorySampler(client) as memory:
+        graph = planner.build(model, checkpointer=saver)
         started = time.monotonic()
         for situation in situations:
             request = situation.request
             try:
                 if situation.after_a_refusal:
-                    first, seconds = timed(graph, request)
+                    first, seconds = timed(graph, request, f"{situation.name}-turned-down")
                     show(f"{situation.name} (turned down)", first, seconds)
+                    keep(first, model.model, f"{situation.name}-turned-down")
                     request = dataclasses.replace(
                         request,
                         refused=first["plan"],
                         because=evaluation.TURNED_DOWN_BECAUSE,
                     )
-                final, seconds = timed(graph, request)
+                final, seconds = timed(graph, request, situation.name)
             except Exception as error:  # a probe records every failure and carries on
                 say(f"{situation.name:<36} failed: {error}")
                 continue
             show(situation.name, final, seconds)
+            say(f"    record: {keep(final, model.model, situation.name)}")
         total = time.monotonic() - started
 
     gib = 2**30
