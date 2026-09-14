@@ -40,12 +40,12 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: a screen recording. You ask Telegram for today's workout, the plan arrives with buttons, you tap *Non mi va*, and a different plan follows.
 
-1. **The bot.** `trainer bot` long-polls from the graph's process and answers only the owner. One chat is one thread.
-2. **The plan in the chat**, formatted for Telegram and streamed while it is produced (`sendMessageDraft`).
-3. **Refusal and *"only 30 minutes"* as `interrupt()`**, with buttons that resume the thread.
-   - What the user says when they turn a plan down reaches the model and is never stored. `--refused --because` carried this in session 6 and the test that guarded it went with them; the guarantee comes back here, asserted over every value in every table.
-4. **Today's inputs.** Equipment, time and the groups are asked in the chat, or taken from `training.toml` and the rotation. `constraints.constraining_today` gathers what limits the space; which workout of the split today is stays `cli._rotated`'s until here.
-5. **The provider's state is checked when the bot starts.** Ollama is reachable, the model is present and the context length is set; Groq has its key. Each failure is reported as a state, with its fix.
+1. **The bot.** `trainer bot` long-polls from the graph's process and answers only the owner. One chat is one thread, and a message arriving mid-run is queued rather than dropped.
+2. **The plan in the chat**, formatted for Telegram and streamed with `sendMessageDraft`. What is streamed is the graph's progress — the tools it calls, and the violations it is sent back — because that is what makes the refusal loop visible; the plan itself arrives as one message.
+3. **Refusal and *"only 30 minutes"* as `interrupt()`**, with buttons that resume the thread. A plan becomes a prescribed workout when it is accepted and not before (ADR-0005), so a refused plan never reaches SQLite.
+   - What the user says when they turn a plan down reaches the model and never becomes a training fact. `--refused --because` carried this in session 6 and the test that guarded it went with them; the guarantee comes back here, asserted over every table in `TRAINER_DB`.
+4. **Today's inputs.** Equipment, time and the groups are asked in the chat, or taken from `training.toml` and the rotation. `constraints.constraining_today` gathers what limits the space; the rotation moves out of `cli._rotated` into the engine, and both doors assemble the request through one function.
+5. **The provider's state is checked when the bot starts.** Ollama is reachable, the model is present and the context length is set; Groq has its key; Telegram has its token and its owner id. Only the selected provider is checked, and each failure is reported as a state, with its fix.
 
 ## Session 8 — `0.8.0` — The report in the chat
 
