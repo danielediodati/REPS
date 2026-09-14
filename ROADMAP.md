@@ -34,7 +34,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
    - `validate` returns every violation, by name, instead of raising the first.
    - The run record comes from the graph state: calls, attempts, tokens, wall time per node.
 4. **`trainer plan` runs the graph**, on the provider `LLM_BACKEND` names: Ollama or Groq. — **done** `91c2712`
-5. **The plan eval suite runs against the graph.** The six invariants must hold at 100%, and each run also reports attempts to a valid plan and wall time. The Groq planner loop is then deleted; the hand-written adapter stays until session 8, for `trainer log`.
+5. **The plan eval suite runs against the graph.** The six invariants must hold at 100%, and each run also reports attempts to a valid plan and wall time. The Groq planner loop is then deleted; the hand-written adapter stays until session 8, for `trainer log`. — **done** `0f40acb`
 
 ## Session 7 — `0.7.0` — On the phone
 
