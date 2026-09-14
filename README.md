@@ -10,13 +10,15 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.5.0` closes the engine-first phase.** It has:
-- an enriched catalog and the admissible set;
-- plan duration;
-- workout logging with provenance, and volume on two axes;
-- two tool-loop agents with their evals.
+**`0.6.0` makes the planner a graph.** On top of the engine-first phase — `0.5.0`: an enriched catalog and the admissible set, plan duration, logging with provenance, volume on two axes — it has:
+- a LangGraph planner over the engine's tool surface, on Ollama or Groq as `LLM_BACKEND` says;
+- an emit schema that holds `exercise_id` to today's admissible ids, so an invented id cannot be decoded;
+- a validator whose refusals go back to the planner with every rule they broke, for a bounded number of attempts;
+- `trainer eval --suite plan` measured against that graph: six situations, six invariants, and what the planner spent getting there.
 
-ADR-0004 re-cuts the agent layer as a LangGraph graph reached through Telegram. **Session 6** turns the planner into that graph.
+Measured on `gpt-oss:20b` at context 8192, one repetition: **6 of 6 held every invariant**.
+
+**Session 7** puts it on the phone: `trainer bot` long-polls from the graph's process, the plan arrives in Telegram as it is written, and turning it down is an `interrupt()` you answer with a button.
 
 ## Architecture (target)
 
