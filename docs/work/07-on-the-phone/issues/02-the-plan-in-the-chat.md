@@ -35,3 +35,7 @@ The plan is rendered for Telegram, and what happens while it is being built is s
 ## Comments
 
 This ticket gates the demo recording. A local run is minutes long, and recorded without it the demo is a still screen.
+
+**The link to Telegram stalls, and this ticket writes to it far more often than ticket 01 did.** Measured on the dev laptop while diagnosing the first real run: `api.telegram.org` answers in about 135 ms eight times out of eight, and once in three stalled past 20 seconds without reaching TCP at all — ahead of the socket, not IPv6, which has no route here and fails in 15 ms. python-telegram-bot's default `connect_timeout` is 5 seconds, so a send caught by one of those stalls times out.
+
+Ticket 01 left the defaults alone deliberately: one observation is thin evidence for a number, and `Coach._tell` already makes a failed send survivable — the bot logs it, keeps its queue and answers the next message. A draft re-sent every few seconds for the length of a run is a different exposure, so if progress lines start disappearing, raise the timeouts on `ApplicationBuilder` here, where there is enough traffic to measure whether it helped.
