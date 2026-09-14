@@ -29,7 +29,7 @@ from trainer import (
     log_set,
     plan,
 )
-from trainer.coach import memory, models, planner
+from trainer.coach import bot, checkpoints, memory, models, planner
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -132,6 +132,15 @@ def reported() -> Iterator[None]:
     except models.ModelError as error:
         # The provider the graph runs on: a server nobody started, a model
         # nobody pulled, a backend nobody built. Each already carries its fix.
+        raise click.ClickException(str(error)) from error
+    except bot.BotError as error:
+        # The Telegram settings: a token nobody set, an owner id given as the
+        # username the user knows themselves by. Each already carries its fix.
+        raise click.ClickException(str(error)) from error
+    except checkpoints.CheckpointError as error:
+        # `trainer bot` is the first command to open the checkpointer, so this
+        # is the first path on which pointing TRAINER_CHECKPOINTS at the
+        # training database can be said out loud rather than raised.
         raise click.ClickException(str(error)) from error
     except sqlite3.Error as error:
         raise click.ClickException(f"the database could not be used: {error}") from error
@@ -781,6 +790,46 @@ def mcp_command() -> None:
     from trainer import mcp_server
 
     mcp_server.main()
+
+
+@main.command("bot")
+def bot_command() -> None:
+    """Answer Telegram from the graph's process, until interrupted.
+
+    Long polling, so there is no public IP, no tunnel and no cloud deploy
+    (ADR-0004, item 6). The model, the checkpointer and the compiled graph are
+    built once and held for the life of the process, and one chat is one
+    thread: the conversation survives a restart, because the checkpointer is a
+    file on disk.
+
+    Only `TELEGRAM_OWNER_ID` is answered, and anything arriving from anybody
+    else is ignored. Both settings are read from the environment, never from
+    `training.toml`, which holds what you declare about your training.
+    """
+    with reported():
+        declared = bot.settings()
+        on = models.chat()
+
+        # Opened before the block is printed, not after: the checkpointer is
+        # the one line in it that can be refused -- pointed at the training
+        # database it is a `CheckpointError` -- and a block that says where the
+        # checkpoints go and that the bot is polling, immediately before saying
+        # neither was true, is worse than no block at all.
+        with checkpoints.saver() as saver:
+            click.echo(f"provider:    {on.provider}")
+            click.echo(f"model:       {on.name}")
+            click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
+            # The owner's chat id is their user id, a private chat being
+            # between the two of them, so the thread is knowable before
+            # anybody has written anything. Ticket 05 turns this into a real
+            # check of the provider.
+            click.echo(
+                f"owner:       {declared.owner_id} -> "
+                f"thread {bot.thread_for(declared.owner_id)}"
+            )
+            click.echo("long-polling; ctrl-c to stop")
+
+            bot.serve(declared, on, saver)
 
 
 @main.command("config")

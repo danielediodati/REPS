@@ -14,6 +14,7 @@ Everything the bot needs to answer at all is knowable before the first message. 
   - **`OLLAMA_CONTEXT_LENGTH` is set**, and the bot refuses to start when it is not. Unset, Ollama uses a default far below the 8192 that session 6 measured 6 of 6 at. The tool result carrying today's admissible set is then truncated, the model plans against a cut list, and the validator refuses it for reasons that have nothing to do with the cause. The message says exactly that: *set it to 8192 in `.env` — below that the admissible set is truncated and plans are refused for no visible reason.*
 - **Groq**: the key, which `agent.NO_CREDENTIALS` already words.
 - **Telegram**: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_OWNER_ID`, from ticket 01.
+  - Ticket 01 checks only that the two are **there**, and a token Telegram *refuses* is not covered. Measured at the end of ticket 01: `trainer bot` with a wrong token prints the whole startup block, then a `telegram.error.InvalidToken` traceback out of `Application.initialize` — past every state this project words, because it happens inside `run_polling`. It belongs here: *the token in `.env` is not one Telegram knows; @BotFather issued it and can show it again.*
 - **One startup block** naming the provider, the model, the context length and the chat it will answer.
 
 ## Acceptance criteria
@@ -22,6 +23,7 @@ Everything the bot needs to answer at all is knowable before the first message. 
 - [ ] With `OLLAMA_CONTEXT_LENGTH` unset, `trainer bot` stops and explains what a short context does to planning.
 - [ ] With `LLM_BACKEND=groq` and no key, the bot stops with the Groq state; with a key, it does **not** check Ollama at all.
 - [ ] Missing Telegram settings stop the bot by name.
+- [ ] A token Telegram refuses stops the bot with a state naming @BotFather, not with a traceback.
 - [ ] The startup block prints provider, model, context length and owner chat.
 - [ ] Every check is covered by a test, offline.
 - [ ] The full test suite and mypy are green.

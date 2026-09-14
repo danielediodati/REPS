@@ -3248,3 +3248,77 @@ def test_nothing_is_derived_without_a_declared_split(
 
     assert result.exit_code == 0, result.output
     assert "rotation:" not in result.output
+
+
+# -- the bot -------------------------------------------------------------------
+
+
+def test_bot_with_no_token_names_the_variable_and_the_example(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The state a fresh clone hits. `conftest.py` takes every credential away,
+    so this is the state under test rather than something about this machine."""
+    monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code != 0
+    assert "TELEGRAM_BOT_TOKEN" in result.output
+    assert ".env.example" in result.output
+
+
+def test_bot_with_no_owner_names_the_variable_and_the_example(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
+    monkeypatch.delenv("TELEGRAM_OWNER_ID", raising=False)
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code != 0
+    assert "TELEGRAM_OWNER_ID" in result.output
+    assert ".env.example" in result.output
+
+
+def test_bot_reports_a_username_where_the_owner_id_goes_as_a_state(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The obvious mistake: the handle you know yourself by, where the number
+    Telegram knows you by belongs. Left to `int` it is a traceback about base
+    10, naming neither the variable nor where the number comes from."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
+    monkeypatch.setenv("TELEGRAM_OWNER_ID", "@daniele")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code != 0
+    assert "TELEGRAM_OWNER_ID" in result.output
+    assert "@userinfobot" in result.output
+
+
+def test_bot_says_what_it_runs_on_before_it_polls(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The startup block, which ticket 05 turns into a real check of the
+    provider. Nothing polls: long polling needs a network the suite does not
+    have, and what is under test is the block above it."""
+    from trainer.coach import bot
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
+    monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
+    monkeypatch.setenv("LLM_BACKEND", "ollama")
+    monkeypatch.setenv("OLLAMA_MODEL", "gpt-oss:20b")
+    monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
+    polled: list[bot.Settings] = []
+    monkeypatch.setattr(
+        bot, "serve", lambda declared, on, saver: polled.append(declared)
+    )
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert "provider:    ollama" in result.output
+    assert "model:       gpt-oss:20b" in result.output
+    assert "thread chat:6421" in result.output
+    assert result.output.isascii()
+    assert [declared.owner_id for declared in polled] == [6421]

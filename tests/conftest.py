@@ -22,15 +22,47 @@ from trainer.engine.catalog import Exercise
 _CREDENTIAL_HINTS = ("API_KEY", "_TOKEN", "SECRET")
 
 
+_REAL_SOCKET = socket.socket
+_REAL_SOCKETPAIR = socket.socketpair
+
+
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any attempt to open a socket fails loudly."""
+    """Any attempt to reach something outside this process fails loudly.
+
+    `socketpair` is the one exception, and it is not a hole: it returns two
+    ends of the same pipe inside this process, reaches nothing, and works with
+    the network cable out. It is allowed because asyncio's event loop opens one
+    to wake itself up -- on Windows through `socket.socketpair()` -- so with it
+    refused `asyncio.run` dies before any test body runs, and nothing
+    asynchronous can be tested at all. The bot is asynchronous by nature: a run
+    that blocked the loop could not receive the message it is supposed to queue.
+
+    It is rebuilt on the real class rather than passed through, because
+    `socket.socketpair` reaches for the module global `socket`, which is
+    `refuse` by the time it runs.
+
+    That swap is process-wide for the length of the call, so a thread opening a
+    socket inside that window meets no guard. Left that way on purpose: closing
+    it means copying the standard library's `socketpair` into this file, and
+    what the guard is for is catching a test that *grows* a dependency on the
+    network -- which it still does, because every attempt outside the window,
+    including the next one, fails loudly.
+    """
 
     def refuse(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("the test suite must not touch the network")
 
+    def paired(*args: Any, **kwargs: Any) -> Any:
+        setattr(socket, "socket", _REAL_SOCKET)
+        try:
+            return _REAL_SOCKETPAIR(*args, **kwargs)
+        finally:
+            setattr(socket, "socket", refuse)
+
     monkeypatch.setattr(socket, "socket", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
+    monkeypatch.setattr(socket, "socketpair", paired)
 
 
 @pytest.fixture(autouse=True)

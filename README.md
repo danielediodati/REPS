@@ -57,6 +57,7 @@ uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
 uv run trainer eval --suite plan                              # or --suite log
 uv run trainer mcp                                            # the engine's tools over MCP
+uv run trainer bot                                            # answer Telegram, the owner only
 ```
 
 **Choosing the provider.** `trainer plan` and `trainer eval --suite plan` run the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
@@ -67,6 +68,8 @@ uv run trainer mcp                                            # the engine's too
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
 
 An unreachable server, a model nobody pulled and a missing key are each reported as a state with the command that fixes it. `trainer log` stays on Groq until session 8 whatever `LLM_BACKEND` names, so it needs `GROQ_API_KEY` either way.
+
+**Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
 `TRAINER_DB` overrides the database path, which defaults to `trainer.sqlite` in the working directory. `TRAINER_CHECKPOINTS` does the same for the graph's own state, which defaults to `checkpoints.sqlite` and is never the training database.
 
