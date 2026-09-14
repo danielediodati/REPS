@@ -57,7 +57,7 @@ uv run trainer eval --suite plan                              # or --suite log
 uv run trainer mcp                                            # the engine's tools over MCP
 ```
 
-**Choosing the provider.** `trainer plan` runs the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
+**Choosing the provider.** `trainer plan` and `trainer eval --suite plan` run the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
 
 | `LLM_BACKEND` | what it needs |
 |---|---|
@@ -74,7 +74,6 @@ An unreachable server, a model nobody pulled and a missing key are each reported
 uv run pytest    # offline: conftest.py removes sockets and credentials
 uv run mypy      # strict
 uv run langgraph dev                  # the planner graph in LangGraph Studio
-uv run python -m trainer.coach.probe  # one measured planner run per adverse situation
 ```
 
 In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`.

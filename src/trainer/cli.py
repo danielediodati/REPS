@@ -29,7 +29,7 @@ from trainer import (
     log_set,
     plan,
 )
-from trainer.coach import models, planner
+from trainer.coach import memory, models, planner
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -632,11 +632,13 @@ def eval_command(
     records: Path,
     call_budget: int,
 ) -> None:
-    """Run a measurement against the real agent, and check it by code.
+    """Run a measurement against the real model, and check it by code.
 
-    `--suite plan` is session 4's: the six adverse situations, and the six
-    invariants over every run. Not *good plan / bad plan* -- properties that
-    must hold always.
+    `--suite plan` runs the planner graph over the six adverse situations, on
+    the provider `LLM_BACKEND` names, and checks the six invariants over every
+    run. Not *good plan / bad plan* -- properties that must hold always. It
+    also reports what the planner itself spent: attempts to a valid plan, wall
+    time, tool calls, and the rule still refusing a run that never got there.
 
     `--suite log` is session 5's: thirty hand-written reports, eighteen the
     sentence determines and twelve it does not. The first eighteen are scored
@@ -681,16 +683,29 @@ def _plan_suite(
     records: Path,
     call_budget: int,
 ) -> tuple[list[str], evaluation.Report]:
+    """The six situations against the planner graph, on the provider `LLM_BACKEND` names.
+
+    The provider's state is checked once, before anything runs. A server
+    nobody started or a key nobody set is a precondition with a fix, not
+    eighteen rows of *not run* under a matrix of dashes.
+
+    What the pass costs this laptop is sampled while it runs, because on a
+    local model the minutes and the memory are half of what ticket 01 set out
+    to find out.
+    """
     chosen = _chosen(evaluation.situations(connection), only, "situation")
-    report = evaluation.run(
-        connection,
-        chosen,
-        build=lambda: agent.groq(agent.PLANNER),
-        repetitions=repetitions,
-        records=records,
-        budget=call_budget,
-    )
-    return evaluation.render(report, chosen), report
+    on = models.chat()
+    models.ready(on)
+    with evaluation.pointed_at_the_database(), memory.sampling(on) as sampled:
+        report = evaluation.run(
+            connection,
+            chosen,
+            on=on,
+            repetitions=repetitions,
+            records=records,
+            budget=call_budget,
+        )
+    return [*evaluation.render(report, chosen), *sampled.lines()], report
 
 
 def _log_suite(

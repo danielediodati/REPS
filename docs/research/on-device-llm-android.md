@@ -240,7 +240,7 @@ A 1-4B model can emit *syntactically* valid calls, and constrained decoding guar
 
   **Planner probe, same day, on the same setup:**
   - *Setup:*
-    - The real `PLANNER` tool surface, `agent.PLANNING`, `think: low`, `num_ctx` 16384.
+    - The real `PLANNER` tool surface, `agent.PLANNING`, `think: low`, `num_ctx` 16384. Both moved to `coach.planner` (`TOOLS`, `PLANNING`) in ticket 6.5.
     - The request: 45 min, dumbbell, chest/shoulders/arms.
     - The existing `plan.validate`, with one retry that fed the refusal back to the model.
   - *Turn 1:* called `admissible_set`, 32 s. The result was **12,061 chars** (about 4k tokens).
@@ -259,7 +259,7 @@ A 1-4B model can emit *syntactically* valid calls, and constrained decoding guar
   - *Setup:*
     - The LangGraph planner (`trainer.coach.planner`) on `gpt-oss:20b`, `reasoning: low`, a 16384 context set on the server, 12 GB loaded at 100% GPU.
     - The emit schema holds `exercise_id` to today's admissible ids. A refusal goes back to the planner, up to 3 attempts.
-    - `python -m trainer.coach.probe`: one run per situation in `evaluation.py`, heavy apps closed.
+    - `python -m trainer.coach.probe`: one run per situation in `evaluation.py`, heavy apps closed. Ticket 6.5 deleted that probe; `trainer eval --suite plan --repetitions 1` is the same pass now, and it checks the six invariants as well.
 
   | situation | outcome | attempts | tool calls | wall time |
   |---|---|---|---|---|
@@ -284,6 +284,26 @@ A 1-4B model can emit *syntactically* valid calls, and constrained decoding guar
   - Both of the situations the first probe ended refused now reach a valid plan. `no-history` was refused once on the clock **and** an invented `despite` together, and fixed both in one attempt.
   - One refusal was a document that is not a plan: `despite` written onto the items, where the shape puts it on the plan.
   - Per node, from the run records: emit 40-62 s, a planner turn 9-88 s, validate 0.01 s. The clock is the model's, not the engine's.
+
+  **Measured pass, 2026-09-14 (ticket 6.5), through `trainer eval --suite plan`:**
+  - *Setup:* `gpt-oss:20b`, `reasoning: low`, **context 8192**, one repetition over the six situations. No probe: this is the suite, so the six invariants are checked as well as the cost.
+  - **16384 does not fit on this laptop.** Two passes were killed for low memory before a single run finished. With the model loaded the machine sat at 0.4 GiB free — 12 GB of weights on top of the ~17 GiB Chrome, Creative Cloud and the rest already hold, out of 31.2 GiB. At 8192 every run completed. The context length is the lever, not the number of situations.
+  - A **background** command is killed where a foreground one survives, so the pass runs in the foreground, one situation at a time, or from a terminal of its own.
+
+  | situation | attempts | tool calls | wall time |
+  |---|---|---|---|
+  | no-equipment | 3 | 4 | 342 s |
+  | half-refused | 2 | 5 | 279 s |
+  | contradictory | 1 | 1 | 105 s |
+  | no-history | 2 | 1 | 127 s |
+  | refused | 1 | 7 | 108 s |
+  | preference-against-the-split | 3 | 6 | 229 s |
+
+  - *Outcome:* **6 of 6 held every invariant**, 100%, about 20 min in all. 11.9 GiB loaded as `/api/ps` reports it; least free system memory 0.4-0.7 GiB.
+  - *Two failures, both fixed in the prompt and not in the bar:*
+    - `contradictory` reached a **valid** plan that trained nothing for arms: two blocks on core, and arms claimed in prose only — *(chest/arms)* on a push-up. Invariant 6 is checked by `trainer eval` and by no rule in `plan.validate`, so nothing had ever told the model it.
+    - Stated in `PLANNING`, that rule then read as *cover every group*: `no-equipment` names none, and the model asked `admissible_set` for all six, coming back 40, 20 and 21 min against a 15 min budget. Which groups today trains is a fact about the request, so it lives in `brief()`, where it disappears when there are none.
+    - `half-refused` lost a whole run to a field name: the `PREFERENCES` refusal said *put the reason in the item's `despite`*, and the model wrote `{exercise_id, reason}` where the shape wants `why`.
 
 ### (b) Other runtimes on this hardware
 

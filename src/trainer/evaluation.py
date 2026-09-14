@@ -19,19 +19,39 @@ both. The *checks* are pure functions over a record and are covered there; the
 measurement, so each situation runs a declared number of times. The bar stays
 at 100% across all of them: anything below is a bug to go and read, not a
 tuning knob.
+
+**The runs are the planner graph's** (ADR-0004), one `invoke` each, and what a
+run leaves behind is ticket 03's record: the attempts, the rule that refused
+each of them, the calls, the tokens and what every node cost. The checks below
+read that record and the plan the graph held; nothing here asks a model what it
+did.
+
+**The database is named in the environment.** Every tool on the surface opens
+its own connection from `TRAINER_DB` (`tools.opened`), so the database the
+*model* reads is the one the environment names and not the connection this
+module holds. `pointed_at_the_database` is what makes those the same file, and
+CLAUDE.md asks for it because a fixture nothing points at is invisible to the
+agent.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import math
+import os
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from trainer import agent
 from trainer import plan as plans
-from trainer.engine import admissible, catalog, duration, muscle_groups
+from trainer.coach import models, planner
+from trainer.coach import record as run_record
+from trainer.engine import admissible, catalog, database, duration, muscle_groups
 
 REPETITIONS = 3
 """How many times each situation runs, unless told otherwise.
@@ -159,6 +179,72 @@ def _half_of(
     return tuple(exercise.id for exercise in standing[::2])
 
 
+# -- one run of the graph -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Ran:
+    """One run of the planner graph: ticket 03's record, and what it cost.
+
+    The record is what is written to disk **and** what every number the matrix
+    reports is read off, so the file a failure names and the row above it
+    cannot disagree.
+
+    The plan and the request are kept as the objects the graph held rather
+    than parsed back out of the record: the invariants validate them, and a
+    round trip through JSON would be measuring the round trip.
+    """
+
+    record: Mapping[str, Any]
+    request: plans.Request
+    """What the graph planned against: the situation's request with today's
+    standing exclusions and the declared cap folded in, which is the space the
+    model was actually shown."""
+
+    plan: plans.WorkoutPlan | None
+    """`None` when nothing it emitted parses as a plan at all."""
+
+    spent: int
+    """What the run actually paid, which is not the budget: a turn's calls are
+    answered as a batch, so the last one can carry the count past it."""
+
+    seconds: float
+
+    @property
+    def document(self) -> str:
+        """The record as it is written down -- ticket 03's, unchanged."""
+        return run_record.document(self.record)
+
+    @property
+    def attempts(self) -> int:
+        """Plans emitted, which is one more than the number of refusals it read."""
+        return len(self.record["attempts"])
+
+    @property
+    def refused(self) -> tuple[tuple[str, str], ...]:
+        """What refused the last attempt, by rule and by sentence, or nothing when it passed."""
+        attempts = self.record["attempts"]
+        if not attempts:
+            return ()
+        return tuple(
+            (violation["rule"], violation["says"])
+            for violation in attempts[-1]["violations"]
+        )
+
+    @property
+    def calls(self) -> list[Any]:
+        """Every tool call the run made, as the record holds them."""
+        return list(self.record["calls"])
+
+    @property
+    def input_tokens(self) -> int:
+        return int(self.record["tokens"]["input"])
+
+    @property
+    def output_tokens(self) -> int:
+        return int(self.record["tokens"]["output"])
+
+
 # -- the six invariants -------------------------------------------------------
 
 
@@ -166,7 +252,7 @@ def _half_of(
 class Invariant:
     name: str
     holds: Callable[
-        [sqlite3.Connection, Situation, agent.RunRecord, tuple[plans.Violation, ...]],
+        [sqlite3.Connection, Situation, Ran, tuple[plans.Violation, ...]],
         str | None,
     ]
     """`None` when it holds, and the sentence saying how it failed otherwise.
@@ -180,45 +266,52 @@ class Invariant:
 def _terminates(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
-    """A plan, within the call budget -- and if the budget ran out, one anyway.
+    """A plan came out, inside the bounds the graph runs under.
 
     **A run that never returned is not measured here.** It has no record to
     read, so it arrives as `Outcome.error`, shows in the *not run* column and
-    counts against the metric there. What this checks is the loop's own
-    bookkeeping on a run that did return: that it stopped asking for tools
-    once the budget was gone, and that the plan it emitted has something in
-    it.
+    counts against the metric there. What this checks is a run that did
+    return: that it emitted a plan with something in it, and that it stopped
+    where it was built to stop.
 
-    The budget is a point at which tools stop being offered rather than a
-    number the loop lands on exactly -- a turn's calls are executed together,
-    so the last one can carry the count past it. What would be a fault is
-    overshooting *without* having crossed the line, which is a loop that kept
-    going after it decided to stop.
+    **The call budget is reported rather than checked**, and that moved here
+    from the old loop deliberately. Tools stop being offered the moment the
+    budget is crossed, but a turn's calls are answered as a whole batch, so a
+    turn asking for seven at once ends at *16 of 12* -- observed on Groq in
+    ticket 04. Overshooting is therefore not a fault to fail a run for; what
+    it is, is a number worth seeing, and `numbers` prints what was actually
+    spent beside every run.
     """
-    if not record.plan.blocks:
+    if ran.plan is None:
+        return "it emitted nothing that parses as a plan"
+    if not ran.plan.blocks:
         return "it emitted a plan with no blocks in it"
-    if record.spent > record.budget and not record.emitted_on_exhaustion:
+    if ran.attempts > planner.ATTEMPTS:
         return (
-            f"it made {record.spent} calls against a budget of {record.budget} "
-            "without the loop recording that the budget ran out"
+            f"it emitted {ran.attempts} plans against a bound of "
+            f"{planner.ATTEMPTS} attempts"
         )
     return None
 
 
 def violations_of(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection, situation: Situation, ran: Ran
 ) -> tuple[plans.Violation, ...]:
     """Every rule this run's plan breaks, decided once for all the invariants that read one.
 
     The rules themselves, not a second reading of them: read twice, the day
     the two disagree the run is measured against whichever one is wrong.
     """
+    if ran.plan is None:
+        return (
+            plans.Violation(plans.SHAPE, "it emitted nothing that parses as a plan"),
+        )
     try:
-        blocks = plans.to_blocks(record.plan)
-        return plans.validate(connection, blocks, situation.request, record.plan)
+        blocks = plans.to_blocks(ran.plan)
+        return plans.validate(connection, blocks, situation.request, ran.plan)
     except (plans.PlanError, duration.DurationError) as error:
         return (plans.Violation(plans.SHAPE, f"it cannot be costed: {error}"),)
 
@@ -234,7 +327,7 @@ def _says(violations: tuple[plans.Violation, ...], *rules: str) -> str | None:
 def _respects_the_time(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Estimated duration inside the declared budget. Never trimmed to fit.
@@ -249,7 +342,7 @@ def _respects_the_time(
 def _respects_the_constraints(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing outside the admissible set.
@@ -264,7 +357,7 @@ def _respects_the_constraints(
 def _respects_the_preferences(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing the user refused -- and if it proposes one again, it says so.
@@ -279,7 +372,7 @@ def _respects_the_preferences(
 def _todays_equipment_only(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Every exercise is one today's equipment reaches.
@@ -290,7 +383,7 @@ def _todays_equipment_only(
     """
     allowed = set(situation.request.equipment)
     wrong = []
-    for exercise_id in sorted(_prescribed(record)):
+    for exercise_id in sorted(_prescribed(ran)):
         found = catalog.exercise(connection, exercise_id)
         if found is None:
             wrong.append(f"{exercise_id} (no such exercise)")
@@ -304,7 +397,7 @@ def _todays_equipment_only(
 def _does_not_degenerate(
     connection: sqlite3.Connection,
     situation: Situation,
-    record: agent.RunRecord,
+    ran: Ran,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """It uses the space it was given.
@@ -337,7 +430,7 @@ def _does_not_degenerate(
     one that is weak.
     """
     request = situation.request
-    prescribed = _prescribed(record)
+    prescribed = _prescribed(ran)
 
     available = admissible.admissible_set(
         connection,
@@ -395,10 +488,11 @@ INVARIANTS = (
 )
 
 
-def _prescribed(record: agent.RunRecord) -> set[str]:
-    return {
-        item.exercise_id for block in record.plan.blocks for item in block.items
-    }
+def _prescribed(ran: Ran) -> set[str]:
+    """Every exercise the plan names, and nothing at all when there is no plan to read."""
+    if ran.plan is None:
+        return set()
+    return {item.exercise_id for block in ran.plan.blocks for item in block.items}
 
 
 # -- running them -------------------------------------------------------------
@@ -418,7 +512,11 @@ class Outcome:
     case: str
     attempt: int
     failures: tuple[tuple[str, str], ...] = ()
-    record: agent.Run | None = None
+    record: agent.Run | Ran | None = None
+    """One run of the graph here, one run of the logger's loop in
+    `log_evaluation`. Both answer what this report reads of them -- the calls
+    and the tokens -- and neither suite reads the other's."""
+
     written: Path | None = None
     error: str | None = None
     """The run never finished -- no credentials, the provider refusing, a rate
@@ -427,7 +525,7 @@ class Outcome:
     *failure* of any of them either, which is why the matrix gives it a column
     of its own rather than blanking the ones it says nothing about."""
 
-    also: tuple[agent.Run, ...] = ()
+    also: tuple[agent.Run | Ran, ...] = ()
     """Runs made to set this one up and not measured -- the plan that gets
     turned down, on the refusal situation. They hold no invariants and they
     are not counted towards the metric, but they were paid for, so they count
@@ -450,7 +548,7 @@ class Outcome:
         return self.error is None and not self.failures
 
     @property
-    def records(self) -> tuple[agent.Run, ...]:
+    def records(self) -> tuple[agent.Run | Ran, ...]:
         return (*self.also, *((self.record,) if self.record else ()))
 
 
@@ -508,7 +606,7 @@ class Report:
 
 
 def check(
-    connection: sqlite3.Connection, situation: Situation, record: agent.RunRecord
+    connection: sqlite3.Connection, situation: Situation, ran: Ran
 ) -> tuple[tuple[str, str], ...]:
     """Every invariant against one run. All of them, not the first to fail.
 
@@ -517,97 +615,162 @@ def check(
     identical line in the matrix.
     """
     failures = []
-    violations = violations_of(connection, situation, record)
+    violations = violations_of(connection, situation, ran)
     for invariant in INVARIANTS:
-        why = invariant.holds(connection, situation, record, violations)
+        why = invariant.holds(connection, situation, ran, violations)
         if why is not None:
             failures.append((invariant.name, why))
     return tuple(failures)
+
+
+@contextmanager
+def pointed_at_the_database() -> Iterator[Path]:
+    """`TRAINER_DB` naming the database this pass measures, for as long as it runs.
+
+    The tools open their own connection from that variable, so the database
+    the *model* reads is the one the environment names. Left to the default
+    the two are the same file by coincidence of the working directory, and a
+    coincidence is not what CLAUDE.md's standing rule asks for -- a fixture
+    nothing points at is invisible to the agent, and the pass measures a model
+    answering *there is no such workout* thirty times.
+
+    Put back afterwards, because a command that moved it would change where
+    every later one in the same process reads.
+    """
+    path = database.database_path().resolve()
+    previous = os.environ.get(database.DATABASE_ENV_VAR)
+    os.environ[database.DATABASE_ENV_VAR] = str(path)
+    try:
+        yield path
+    finally:
+        if previous is None:
+            os.environ.pop(database.DATABASE_ENV_VAR, None)
+        else:
+            os.environ[database.DATABASE_ENV_VAR] = previous
 
 
 def run(
     connection: sqlite3.Connection,
     chosen: Sequence[Situation],
     *,
-    build: Callable[[], agent.Model],
+    on: models.Chat,
     repetitions: int = REPETITIONS,
     records: Path = RECORDS,
     budget: int = agent.CALL_BUDGET,
 ) -> Report:
-    """Every situation, every repetition, against the real agent.
+    """Every situation, every repetition, against the planner graph.
 
-    `build` makes the model, once per run: the model is a parameter so that
-    nothing here reaches a provider on its own, and so the caller decides which
-    one is being measured.
+    `on` is the model the graph runs on, handed in rather than built here:
+    nothing in this module reaches a provider on its own, and the caller is
+    what decides which one is being measured.
+
+    The graph is compiled once. A run is one `invoke` of it and carries
+    everything it knows in its own state, so a second compilation per run
+    would buy nothing.
+
+    No checkpointer: nothing here pauses, and a thread nobody can resume is a
+    file written for no reader.
     """
+    graph = planner.build(on.model, budget=budget)
     outcomes = []
     for situation in chosen:
         for attempt in range(1, repetitions + 1):
-            outcomes.append(
-                _once(connection, situation, attempt, build, records, budget)
-            )
+            outcomes.append(_once(connection, situation, attempt, graph, on, records))
     return Report(tuple(outcomes))
+
+
+NOTHING_TO_REFUSE = (
+    "the plan that was to be turned down did not parse, so there was nothing "
+    "to refuse and the second run would not have been this situation"
+)
+"""Why the refusal situation can fail before it starts. See `_once`."""
 
 
 def _once(
     connection: sqlite3.Connection,
     situation: Situation,
     attempt: int,
-    build: Callable[[], agent.Model],
+    graph: planner.Planner,
+    on: models.Chat,
     records: Path,
-    budget: int,
 ) -> Outcome:
     request = situation.request
-    also: list[agent.RunRecord] = []
+    also: list[Ran] = []
     try:
         if situation.after_a_refusal:
             # Two turns, not a conversation. The first plan exists only to be
             # turned down, and what is measured is what comes back after --
             # but it was paid for, so it is kept and it counts towards cost.
-            first = agent.plan_workout(
-                connection, request, model=build(), budget=budget
-            )
+            first = _invoked(graph, request, on)
             also.append(first)
-            write(records, f"{situation.name}-{attempt}-turned-down", first)
-            request = plans.Request(
-                equipment=request.equipment,
-                budget_min=request.budget_min,
-                exclusions=request.exclusions,
-                groups=request.groups,
-                allocation=request.allocation,
-                preferences=request.preferences,
-                refused=first.plan,
-                because=TURNED_DOWN_BECAUSE,
+            write(records, f"{situation.name}-{attempt}-turned-down", first.document)
+            if first.plan is None:
+                # Nothing came back that could be turned down. Handed
+                # `refused=None`, `brief` says nothing about a refusal at all
+                # -- not even the user's reason, which is nested under it --
+                # so the second run is an ordinary planning run. Measured as
+                # situation 5 it would put a green row under a situation that
+                # never happened, which at a bar of 100% is the one failure
+                # this file exists to make impossible.
+                return Outcome(
+                    situation.name, attempt, error=NOTHING_TO_REFUSE, also=tuple(also)
+                )
+            request = dataclasses.replace(
+                request, refused=first.plan, because=TURNED_DOWN_BECAUSE
             )
-        record = agent.plan_workout(connection, request, model=build(), budget=budget)
-    except agent.AgentError as error:
+        ran = _invoked(graph, request, on)
+    except Exception as error:
+        # Every way a provider can fail in the middle of a pass: no
+        # credentials, a request it refused, a rate limit, a server that went
+        # away. Caught broadly on purpose -- the run lands in the *not run*
+        # column and counts against the metric there, and a pass that lost its
+        # other seventeen runs to one transport error would measure nothing.
         return Outcome(situation.name, attempt, error=str(error), also=tuple(also))
 
-    written = write(records, f"{situation.name}-{attempt}", record)
+    written = write(records, f"{situation.name}-{attempt}", ran.document)
 
-    failures = check(connection, Situation(
-        name=situation.name,
-        describes=situation.describes,
-        request=request,
-        after_a_refusal=situation.after_a_refusal,
-    ), record)
-    if record.refused is not None and not failures:
+    # Checked against the request the graph actually planned against, not the
+    # one the situation declared: `constraining_today` folds the standing
+    # exclusions and the declared cap into it on the first turn, and measuring
+    # the other one would measure a space the model was never shown.
+    failures = check(
+        connection, dataclasses.replace(situation, request=ran.request), ran
+    )
+    if ran.refused and not failures:
         # The validator refused a plan every invariant says is fine. The two
         # disagreeing is the interesting thing, so it is recorded rather than
         # swallowed -- under its own name, and `VALIDATOR` is a column of the
         # matrix so it cannot be a failure nothing shows.
-        failures = ((VALIDATOR, record.refused),)
-    return Outcome(situation.name, attempt, failures, record, written, also=tuple(also))
+        failures = tuple((VALIDATOR, f"{rule}: {says}") for rule, says in ran.refused)
+    return Outcome(situation.name, attempt, failures, ran, written, also=tuple(also))
 
 
-def write(records: Path, name: str, record: agent.Run) -> Path:
+def _invoked(graph: planner.Planner, request: plans.Request, on: models.Chat) -> Ran:
+    """One run of the graph, and the wall time somebody waited for it.
+
+    The clock is read around the whole invocation rather than summed from the
+    record's per-node seconds: what a person waits for is the run, and the
+    gaps between nodes are part of that wait.
+    """
+    started = time.monotonic()
+    final = graph.invoke({"request": request})
+    return Ran(
+        record=run_record.of(final, on.name, on.provider),
+        request=final["request"],
+        plan=final["plan"],
+        spent=final.get("spent", 0),
+        seconds=time.monotonic() - started,
+    )
+
+
+def write(records: Path, name: str, document: str) -> Path:
     """One record to disk. The directory is made here rather than when the run
     starts, so a pass that never reaches a provider leaves nothing behind --
     the suite invokes this command to check it stops at the credentials state,
     and an empty `eval-runs/` in the repo after every `pytest` is litter."""
     records.mkdir(parents=True, exist_ok=True)
     written = records / f"{name}.json"
-    written.write_text(record.model_dump_json(indent=1), encoding="utf-8")
+    written.write_text(document, encoding="utf-8")
     return written
 
 
@@ -624,13 +787,71 @@ def render(report: Report, chosen: Sequence[Situation]) -> list[str]:
     failures behind an unrelated transport error.
     """
     columns = [invariant.name for invariant in INVARIANTS] + [VALIDATOR, NOT_RUN]
+    cases = [situation.name for situation in chosen]
     return [
-        *matrix(report, [situation.name for situation in chosen], columns),
+        *matrix(report, cases, columns),
+        "",
+        "what the planner spent getting there:",
+        *numbers(report, cases),
         "",
         *failures(report),
         "",
         *totals(report, "held every invariant"),
     ]
+
+
+PLANNER_COLUMNS = ("attempts", "seconds", "tool calls", "refused by")
+"""What the graph itself costs, which the invariants say nothing about.
+
+*It held every invariant* and *it held them on the third attempt, after two
+refusals, in four minutes* are different answers to whether this model can
+plan on this laptop, and only the second one decides whether the session was
+built on the right model.
+"""
+
+
+def numbers(report: Report, cases: Sequence[str]) -> list[str]:
+    """One row per situation: what each run took, and the rule that refused it.
+
+    **Every run's own figure, never an average.** A situation that reached a
+    valid plan first time twice and on the third attempt once is a different
+    fact from one that always needs two, and a mean prints them the same --
+    the argument the matrix makes for `2 failed` over `failed`.
+
+    The tool calls are what was actually **spent**, not the budget: a turn's
+    calls are answered as a whole batch, so the last one can carry the count
+    past the budget, and the number that means anything is the one that was
+    paid for.
+
+    `refused by` names the rules still standing after the last attempt. Empty
+    is the normal answer, and a rule here with an `ok` row above it is the
+    validator and the invariants disagreeing -- which `VALIDATOR` is a column
+    for.
+    """
+    width = max((len(case) for case in cases), default=0) + 2
+    widths = [max(12, len(name) + 2) for name in PLANNER_COLUMNS]
+
+    lines = [
+        "".ljust(width)
+        + "  ".join(f"{name:^{size}}" for name, size in zip(PLANNER_COLUMNS, widths))
+    ]
+    for case in cases:
+        ran = [
+            outcome.record
+            for outcome in report.outcomes
+            if outcome.case == case and isinstance(outcome.record, Ran)
+        ]
+        cells = (
+            ", ".join(str(one.attempts) for one in ran) or "-",
+            ", ".join(f"{one.seconds:.0f}" for one in ran) or "-",
+            ", ".join(str(one.spent) for one in ran) or "-",
+            ", ".join(sorted({rule for one in ran for rule, _ in one.refused})) or "-",
+        )
+        lines.append(
+            case.ljust(width)
+            + "  ".join(f"{cell:^{size}}" for cell, size in zip(cells, widths))
+        )
+    return lines
 
 
 def matrix(report: Report, cases: Sequence[str], columns: Sequence[str]) -> list[str]:

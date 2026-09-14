@@ -37,6 +37,129 @@ The validator refused that plan:
 {violations}
 Plan the workout again with this in mind."""
 
+TOOLS = (
+    "admissible_set",
+    "remaining_budget",
+    "allocate",
+    "pattern_history",
+    "last_performed_load",
+    "search_exercises",
+    "adherence_history",
+    "volume_deficit",
+    "unreported_workouts",
+    "compare_variants",
+)
+"""Everything on the shared surface except the one tool that reads a
+prescription back.
+
+`prescribed_workout` answers *what did workout 12 ask for*, and a planner has
+no workout 12: it is writing one. What it wants to know about the past is
+volume and adherence, and those it already has.
+
+**Named, not derived by subtracting one name from `tools.TOOLS`.** Written that
+way this was the one place a tool could arrive without anybody deciding it
+should: rename the excluded tool and the planner silently gains it, with
+`agent.registered`'s guard -- which only checks the names that are *asked* for
+-- unable to say a word.
+"""
+
+KEEPS = ("id", "equipment", "primary_muscles")
+"""What a plan is written from: the id it names, whether today's equipment reaches it, and the muscles its time is divided over."""
+
+PLANNING = f"""\
+You plan one strength workout, for one person, today.
+
+{tools.INSTRUCTIONS}
+The rules you are working inside, none of which you can talk your way around:
+
+- Every exercise you prescribe must be in what `admissible_set` returns for
+  today's request, written as the `id` that came back, character for
+  character. Anything else is rejected by a deterministic check after you
+  emit.
+- The plan must fit the time declared. It is never trimmed to fit: a plan that
+  runs over is rejected whole, so ask `remaining_budget` before you commit to
+  a block rather than after.
+- An exercise appears at most once in the whole plan. One line per exercise,
+  with the rounds and reps it needs.
+- Each exercise is prescribed in reps or in seconds: its `prescription` gives
+  the `unit` and the `amount`. A plank is seconds; a push-up is reps.
+- Rest is yours to prescribe and travels with the block. There are reference
+  bands -- around 3 min for heavy low-rep work, 90-120 s for hypertrophy, 60 s
+  for isolation -- and they are a reference, not a rule.
+- Every block carries the reason it is there, in one short sentence. That is
+  the part of the plan only you can supply.
+
+A plan that breaks one of these is refused, and the refusal comes back to you
+naming every rule it broke. You have {ATTEMPTS} attempts in all: read what it
+says and emit a plan that answers it. Handing back the same plan spends an
+attempt and changes nothing, and there is nobody to argue with -- the check is
+code.
+
+You have a budget of tool calls. When it runs out you will be asked for the
+plan with whatever you know at that point, so spend the calls on what you
+actually need and do not explore for its own sake.
+"""
+
+EMIT_PLAN = "Emit the plan now, in the required shape."
+
+
+def brief(request: plans.Request) -> str:
+    """Today's request, in words, for the model to plan against."""
+    lines = [
+        f"Equipment available today: {', '.join(request.equipment)}.",
+        f"Time available: {request.budget_min} minutes.",
+    ]
+    if request.groups:
+        lines.append(
+            f"This workout trains: {', '.join(request.groups)}. Ask "
+            "`admissible_set` for those groups; anything else is not today's "
+            "workout. Each of them needs at least one exercise whose "
+            "**primary** muscles are in it: working it as a secondary does "
+            "not count, so a push-up is chest and not arms however hard the "
+            "triceps work, and saying (chest/arms) in the reason does not "
+            "make it one. Cover each of them once before you give any one of "
+            "them a second block."
+        )
+    if request.allocation:
+        divided = ", ".join(
+            f"{group} {minutes} min" for group, minutes in request.allocation
+        )
+        lines.append(
+            f"The time divides over them as {divided}. That is a starting "
+            "point and not an instruction: `allocate` will divide it on any "
+            "proportions you think are better."
+        )
+    if request.exclusions:
+        lines.append(
+            "Excluded, and already filtered out of the admissible set: "
+            + ", ".join(f"{e.granularity} {e.value}" for e in request.exclusions)
+            + "."
+        )
+    if request.preferences:
+        lines.append(
+            "The user has said they would rather not do: "
+            + ", ".join(request.preferences)
+            + ". These are preferences, not exclusions, so they are still in "
+            "the admissible set. Leave them out, or propose one and add a row "
+            "to the plan's `despite` for it: "
+            '{"exercise_id": "...", "why": "..."}. The field is `why`; '
+            "`reason` belongs to a block. Proposing one silently is rejected."
+        )
+    if request.refused is not None:
+        lines.append(
+            "You proposed this workout and the user turned it down:\n"
+            + request.refused.model_dump_json(indent=1)
+        )
+        if request.because:
+            lines.append(f"They said: {request.because}")
+        lines.append(
+            "Propose a different one. Do not argue it, do not hand back the "
+            "same plan, and do not give up and offer something token: they "
+            "still want to train today."
+        )
+    lines.append("Plan the workout.")
+    return "\n".join(lines)
+
 
 class Node(Protocol):
     """One step of the graph. The parameter is named, which is what LangGraph asks of a node."""
@@ -84,13 +207,17 @@ class PlannerState(TypedDict, total=False):
     plan: plans.WorkoutPlan | None
 
 
+Planner = CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]
+"""The compiled graph, as `build` returns it."""
+
+
 def build(
     model: BaseChatModel,
     budget: int = agent.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
-) -> CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]:
+) -> Planner:
     """The compiled planner graph, running on `model`."""
-    offered = agent.registered(agent.PLANNER)
+    offered = agent.registered("planner", TOOLS)
     definitions = [
         {"type": "function", "function": agent.schema(tool)} for tool in offered
     ]
@@ -119,7 +246,7 @@ def build(
                 budget_min=today.budget_min,
                 groups=today.groups,
             )
-            opening = [SystemMessage(agent.PLANNING), HumanMessage(agent.brief(request))]
+            opening = [SystemMessage(PLANNING), HumanMessage(brief(request))]
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model
         reply = bound.invoke([*state.get("messages", []), *opening])
         return {"request": request, "messages": [*opening, reply]}
@@ -133,7 +260,7 @@ def build(
             result = agent.execute(
                 agent.Call(id=call_id, name=call["name"], arguments=call["args"]),
                 offered,
-                agent.PLANNER.keeps,
+                KEEPS,
             )
             answers.append(
                 ToolMessage(
@@ -146,7 +273,7 @@ def build(
         return {"messages": answers, "spent": state.get("spent", 0) + len(answers)}
 
     def emit(state: PlannerState) -> dict[str, Any]:
-        asked = HumanMessage(agent.EMIT_PLAN)
+        asked = HumanMessage(EMIT_PLAN)
         with tools.reported(), tools.opened() as connection:
             schema = _emit_schema(connection, state["request"])
         structured = model.with_structured_output(
@@ -221,6 +348,6 @@ def build(
     return graph.compile(checkpointer=checkpointer)
 
 
-def studio() -> CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]:
+def studio() -> Planner:
     """The planner graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it."""
     return build(models.chat().model)

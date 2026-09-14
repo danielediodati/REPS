@@ -2106,15 +2106,23 @@ def test_plan_refuses_a_preference_that_names_no_exercise(
 
 
 def test_eval_stops_at_the_credentials_state_rather_than_a_socket(
-    runner: CliRunner, enriched: Path
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`conftest.py` takes both away from every test. If this ever reached the
     network the no-network fixture would fail the run instead -- which is the
-    point: a suite that could quietly start spending money is not a suite."""
+    point: a suite that could quietly start spending money is not a suite.
+
+    The provider is checked **once, before anything runs**, so what comes out
+    is the state and its fix rather than eighteen rows of *not run* under a
+    matrix of dashes.
+    """
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
     result = runner.invoke(main, ["eval", "--repetitions", "1"])
 
     assert result.exit_code != 0
     assert "no Groq credentials" in result.output
+    assert "no-equipment" not in result.output, "it ran the pass anyway"
 
 
 def test_eval_names_the_situations_when_one_is_mistyped(
@@ -2128,11 +2136,12 @@ def test_eval_names_the_situations_when_one_is_mistyped(
 
 
 def test_eval_leaves_no_records_directory_behind_when_it_never_runs(
-    runner: CliRunner, enriched: Path, tmp_path: Path
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The suite invokes this command to check it stops at the credentials
     state. A directory made before the first request is litter in whatever
     working directory pytest happened to start in."""
+    monkeypatch.setenv("LLM_BACKEND", "groq")
     records = tmp_path / "eval-runs"
 
     runner.invoke(main, ["eval", "--repetitions", "1", "--records", str(records)])
@@ -2141,19 +2150,25 @@ def test_eval_leaves_no_records_directory_behind_when_it_never_runs(
 
 
 def test_eval_runs_a_situation_named_twice_only_once(
-    runner: CliRunner, enriched: Path
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Left in, it runs twice the repetitions against a paid provider and
     prints two identical rows."""
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")] * 10)
+
     result = runner.invoke(
         main,
-        ["eval", "--repetitions", "1", "--only", "no-equipment", "--only", "no-equipment"],
+        ["eval", "--repetitions", "1", "--records", str(tmp_path / "records"),
+         "--only", "no-equipment", "--only", "no-equipment"],
     )
 
+    # The invariant matrix only: the planner's own figures are a second table
+    # with a row per situation, and counting both would count one run twice.
+    invariants = result.output.split("what the planner spent")[0]
     rows = [
-        line
-        for line in result.output.splitlines()
-        if line.startswith("no-equipment") and "#" not in line
+        line for line in invariants.splitlines() if line.startswith("no-equipment")
     ]
     assert len(rows) == 1, result.output
     assert "of 1 runs" in result.output, "it ran the situation more than once"
@@ -2292,17 +2307,45 @@ def test_a_log_set_that_cannot_be_read_says_so_as_a_state(
 
 
 def test_the_plan_suite_is_what_the_command_still_means_by_default(
-    runner: CliRunner, enriched: Path
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Session 4's measurement is reachable and unchanged: the same six rows,
     whether the suite is asked for or not."""
-    default = runner.invoke(main, ["eval", "--repetitions", "1"])
-    asked_for = runner.invoke(main, ["eval", "--suite", "plan", "--repetitions", "1"])
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")] * 60)
+    written = ["--records", str(tmp_path / "records")]
+
+    default = runner.invoke(main, ["eval", "--repetitions", "1", *written])
+    asked_for = runner.invoke(
+        main, ["eval", "--suite", "plan", "--repetitions", "1", *written]
+    )
 
     for output in (default.output, asked_for.output):
         for situation in ("no-equipment", "half-refused", "contradictory", "refused"):
             assert situation in output
     assert "not degenerate" in default.output
+
+
+def test_the_plan_suite_reports_what_the_planner_itself_spent(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whether this model can plan on this laptop is a question about attempts
+    and minutes, and the invariant matrix says nothing about either."""
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")] * 10)
+
+    result = runner.invoke(
+        main,
+        ["eval", "--repetitions", "1", "--records", str(tmp_path / "records"),
+         "--only", "no-equipment"],
+    )
+
+    assert "what the planner spent getting there:" in result.output
+    for column in ("attempts", "seconds", "tool calls", "refused by"):
+        assert column in result.output
+    assert result.output.isascii()
 
 
 # --- log ---------------------------------------------------------------------

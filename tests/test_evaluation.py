@@ -5,6 +5,11 @@ has no sockets and no credentials, on purpose. The *checks* are pure functions
 over a run record, so all of them are, which is the whole reason they were
 written that way: a measurement whose checks cannot be tested is a measurement
 nobody should believe.
+
+The records here are built by `coach.record` out of a state written by hand,
+rather than spelled out as dictionaries. A hand-written record would be a
+second copy of that shape, and the day the two disagreed these tests would go
+on passing against a record the graph no longer produces.
 """
 
 from __future__ import annotations
@@ -13,12 +18,17 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from types import EllipsisType
+from typing import Any
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
-from trainer import agent, evaluation
+from trainer import evaluation
 from trainer import plan as plans
+from trainer.coach import models, planner
+from trainer.coach import record as run_record
 from trainer.engine import catalog, database, migrations
 
 CATALOG = (
@@ -84,30 +94,68 @@ def said(exercise_id: str, why: str) -> plans.Acknowledgement:
     return plans.Acknowledgement(exercise_id=exercise_id, why=why)
 
 
-def recorded(
-    *blocks: plans.PlanBlock,
-    despite: list[plans.Acknowledgement] | None = None,
-    **overrides: object,
-) -> agent.RunRecord:
-    """A run record carrying a plan, and nothing a check does not read."""
-    base: dict[str, object] = {
-        "model": "a-stand-in",
-        "budget": 12,
-        "spent": 2,
-        "emitted_on_exhaustion": False,
-        "calls": [],
-        "input_tokens": 100,
-        "output_tokens": 20,
-        "plan": plans.WorkoutPlan(blocks=list(blocks), despite=despite or []),
-    }
-    base.update(overrides)
-    return agent.RunRecord(**base)  # type: ignore[arg-type]
-
-
 def one(*items: plans.PlanItem, rounds: int = 3, rest: int = 60) -> plans.PlanBlock:
     return plans.PlanBlock(
         items=list(items), rounds=rounds, rest=rest, reason="because"
     )
+
+
+def spoke(
+    input_tokens: int = 0, output_tokens: int = 0, calls: tuple[str, ...] = ()
+) -> AIMessage:
+    """One turn of the model, as the record reads it back."""
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {"name": name, "args": {}, "id": f"call_{name}", "type": "tool_call"}
+            for name in calls
+        ],
+        usage_metadata={
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        },
+    )
+
+
+def ran(
+    *blocks: plans.PlanBlock,
+    despite: list[plans.Acknowledgement] | None = None,
+    refusals: list[tuple[plans.Violation, ...]] | None = None,
+    messages: list[AIMessage] | None = None,
+    plan: plans.WorkoutPlan | None | EllipsisType = ...,
+    request: plans.Request = LEGS_AND_CORE,
+    **overrides: Any,
+) -> evaluation.Ran:
+    """One run of the graph, in the terms the checks read.
+
+    The record is built by `coach.record` out of a state, so what these tests
+    assert against is the shape the graph actually produces. `plan` is left
+    out to build one from `blocks`, and given as `None` for the run whose
+    emission never parsed as a plan at all.
+    """
+    emitted: plans.WorkoutPlan | None
+    if isinstance(plan, EllipsisType):
+        emitted = plans.WorkoutPlan(blocks=list(blocks), despite=despite or [])
+    else:
+        emitted = plan
+    attempts = refusals if refusals is not None else [()]
+    state = {
+        "plan": emitted,
+        "violations": attempts[-1] if attempts else (),
+        "refusals": attempts,
+        "messages": messages or [],
+        "timings": [],
+    }
+    base: dict[str, Any] = {
+        "record": run_record.of(state, "a-stand-in", "scripted"),
+        "request": request,
+        "plan": emitted,
+        "spent": 2,
+        "seconds": 1.0,
+    }
+    base.update(overrides)
+    return evaluation.Ran(**base)
 
 
 def situation(request: plans.Request) -> evaluation.Situation:
@@ -115,9 +163,13 @@ def situation(request: plans.Request) -> evaluation.Situation:
 
 
 def failing(
-    connection: sqlite3.Connection, request: plans.Request, record: agent.RunRecord
+    connection: sqlite3.Connection, request: plans.Request, run: evaluation.Ran
 ) -> dict[str, str]:
-    return dict(evaluation.check(connection, situation(request), record))
+    return dict(evaluation.check(connection, situation(request), run))
+
+
+def rendered(report: evaluation.Report) -> str:
+    return "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
 
 
 # -- the six situations are data ----------------------------------------------
@@ -161,15 +213,15 @@ def test_the_preference_situations_read_the_catalog(
 def test_a_plan_that_holds_everything_fails_nothing(
     connection: sqlite3.Connection,
 ) -> None:
-    record = recorded(one(item("Bodyweight_Squat")), one(item("Plank")))
+    run = ran(one(item("Bodyweight_Squat")), one(item("Plank")))
 
-    assert failing(connection, LEGS_AND_CORE, record) == {}
+    assert failing(connection, LEGS_AND_CORE, run) == {}
 
 
 def test_a_plan_over_the_time_fails_the_clock(connection: sqlite3.Connection) -> None:
-    record = recorded(one(item("Bodyweight_Squat"), rounds=99, rest=180))
+    run = ran(one(item("Bodyweight_Squat"), rounds=99, rest=180))
 
-    broke = failing(connection, LEGS_AND_CORE, record)
+    broke = failing(connection, LEGS_AND_CORE, run)
 
     assert "time" in broke
     assert "against a budget of 45" in broke["time"]
@@ -178,9 +230,9 @@ def test_a_plan_over_the_time_fails_the_clock(connection: sqlite3.Connection) ->
 def test_an_exercise_outside_the_set_fails_the_constraints(
     connection: sqlite3.Connection,
 ) -> None:
-    record = recorded(one(item("Barbell_Curl")), one(item("Plank")))
+    run = ran(one(item("Barbell_Curl")), one(item("Plank")))
 
-    broke = failing(connection, LEGS_AND_CORE, record)
+    broke = failing(connection, LEGS_AND_CORE, run)
 
     assert "constraints" in broke
     assert "Barbell_Curl" in broke["constraints"]
@@ -191,9 +243,9 @@ def test_the_wrong_equipment_fails_on_its_own_axis(
 ) -> None:
     """Checked apart from the admissible set although the set filters on it:
     a fault in the filter would otherwise pass both."""
-    record = recorded(one(item("Barbell_Curl")))
+    run = ran(one(item("Barbell_Curl")))
 
-    broke = failing(connection, LEGS_AND_CORE, record)
+    broke = failing(connection, LEGS_AND_CORE, run)
 
     assert "equipment" in broke
     assert "barbell" in broke["equipment"]
@@ -208,9 +260,9 @@ def test_a_preference_prescribed_silently_fails_the_preferences(
         groups=("legs", "core"),
         preferences=("Bodyweight_Squat",),
     )
-    record = recorded(one(item("Bodyweight_Squat")), one(item("Plank")))
+    run = ran(one(item("Bodyweight_Squat")), one(item("Plank")))
 
-    broke = failing(connection, request, record)
+    broke = failing(connection, request, run)
 
     assert "preferences" in broke
     assert "without saying why" in broke["preferences"]
@@ -227,22 +279,47 @@ def test_a_preference_prescribed_with_a_reason_holds(
         groups=("legs", "core"),
         preferences=("Bodyweight_Squat",),
     )
-    record = recorded(
+    run = ran(
         one(item("Bodyweight_Squat")),
         one(item("Plank")),
         despite=[said("Bodyweight_Squat", "nothing else loads the knee today")],
     )
 
-    assert "preferences" not in failing(connection, request, record)
+    assert "preferences" not in failing(connection, request, run)
 
 
 def test_an_empty_plan_fails_termination(connection: sqlite3.Connection) -> None:
-    """The type guarantees a plan object; what it does not guarantee is that
+    """The schema guarantees a plan object; what it does not guarantee is that
     the model put anything in it."""
-    record = recorded(one(item("Plank")))
-    record.plan.blocks.clear()
+    run = ran(one(item("Plank")))
+    assert run.plan is not None
+    run.plan.blocks.clear()
 
-    assert "terminates" in failing(connection, LEGS_AND_CORE, record)
+    assert "terminates" in failing(connection, LEGS_AND_CORE, run)
+
+
+def test_a_run_that_emitted_nothing_that_parses_fails_termination(
+    connection: sqlite3.Connection,
+) -> None:
+    """The graph records `plan: null` when what came back is not a plan at all.
+    Read as *no exercises prescribed*, that run would hold every invariant
+    about what it prescribed and pass."""
+    run = ran(plan=None, refusals=[(plans.Violation(plans.SHAPE, "not a plan"),)])
+
+    broke = failing(connection, LEGS_AND_CORE, run)
+
+    assert "terminates" in broke
+    assert "parses" in broke["terminates"]
+
+
+def test_more_attempts_than_the_graph_allows_fails_termination(
+    connection: sqlite3.Connection,
+) -> None:
+    """The bound is the graph's, and a run past it is a loop that did not stop
+    where it was built to."""
+    run = ran(one(item("Plank")), refusals=[()] * (planner.ATTEMPTS + 1))
+
+    assert "terminates" in failing(connection, LEGS_AND_CORE, run)
 
 
 # -- invariant 6, the one that had to be defined ------------------------------
@@ -253,9 +330,9 @@ def test_a_group_the_workout_was_asked_for_and_never_trained_degenerates(
 ) -> None:
     """The muscle axis: *am I touching this at all*. A leg-and-core day with
     no core in it."""
-    record = recorded(one(item("Bodyweight_Squat")), one(item("Lunge")))
+    run = ran(one(item("Bodyweight_Squat")), one(item("Lunge")))
 
-    broke = failing(connection, LEGS_AND_CORE, record)
+    broke = failing(connection, LEGS_AND_CORE, run)
 
     assert "not degenerate" in broke
     assert "core" in broke["not degenerate"]
@@ -268,9 +345,9 @@ def test_one_movement_pattern_out_of_several_available_degenerates(
     curls is invisible on the muscle axis, because biceps, triceps and
     forearms are one bucket there (ADR-0001)."""
     legs = plans.Request(equipment=("body only",), budget_min=45, groups=("legs",))
-    record = recorded(one(item("Bodyweight_Squat")))
+    run = ran(one(item("Bodyweight_Squat")))
 
-    broke = failing(connection, legs, record)
+    broke = failing(connection, legs, run)
 
     assert "not degenerate" in broke
     assert "patterns available" in broke["not degenerate"]
@@ -278,9 +355,9 @@ def test_one_movement_pattern_out_of_several_available_degenerates(
 
 def test_two_movement_patterns_is_enough(connection: sqlite3.Connection) -> None:
     legs = plans.Request(equipment=("body only",), budget_min=45, groups=("legs",))
-    record = recorded(one(item("Bodyweight_Squat")), one(item("Lunge")))
+    run = ran(one(item("Bodyweight_Squat")), one(item("Lunge")))
 
-    assert "not degenerate" not in failing(connection, legs, record)
+    assert "not degenerate" not in failing(connection, legs, run)
 
 
 def test_a_group_nothing_could_have_trained_is_not_a_failure(
@@ -292,9 +369,9 @@ def test_a_group_nothing_could_have_trained_is_not_a_failure(
     with_back = plans.Request(
         equipment=("body only",), budget_min=45, groups=("legs", "core", "back")
     )
-    record = recorded(one(item("Bodyweight_Squat")), one(item("Lunge")), one(item("Plank")))
+    run = ran(one(item("Bodyweight_Squat")), one(item("Lunge")), one(item("Plank")))
 
-    broke = failing(connection, with_back, record)
+    broke = failing(connection, with_back, run)
 
     assert "not degenerate" not in broke, broke.get("not degenerate")
 
@@ -304,9 +381,9 @@ def test_one_pattern_is_not_a_failure_when_one_is_all_there_was(
 ) -> None:
     """Same clause on the other axis."""
     core = plans.Request(equipment=("body only",), budget_min=45, groups=("core",))
-    record = recorded(one(item("Plank")))
+    run = ran(one(item("Plank")))
 
-    assert "not degenerate" not in failing(connection, core, record)
+    assert "not degenerate" not in failing(connection, core, run)
 
 
 def test_the_ratio_of_compound_to_isolation_is_not_an_invariant(
@@ -317,7 +394,7 @@ def test_the_ratio_of_compound_to_isolation_is_not_an_invariant(
     In a measurement whose bar is 100%, an invariant that can be wrong is worse
     than one that is weak."""
     core = plans.Request(equipment=("body only",), budget_min=45, groups=("core",))
-    all_isolation = recorded(one(item("Plank")))
+    all_isolation = ran(one(item("Plank")))
 
     assert failing(connection, core, all_isolation) == {}
 
@@ -372,9 +449,9 @@ def test_every_invariant_is_reported_not_just_the_first(
     """A run that breaks three properties is a different thing from one that
     breaks one, and stopping at the first hides the difference behind an
     identical line in the matrix."""
-    record = recorded(one(item("Barbell_Curl"), rounds=99, rest=180))
+    run = ran(one(item("Barbell_Curl"), rounds=99, rest=180))
 
-    assert len(failing(connection, LEGS_AND_CORE, record)) >= 3
+    assert len(failing(connection, LEGS_AND_CORE, run)) >= 3
 
 
 def test_the_matrix_names_the_situation_the_invariant_and_the_record(
@@ -392,7 +469,7 @@ def test_the_matrix_names_the_situation_the_invariant_and_the_record(
         ),
     )
 
-    printed = "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
+    printed = rendered(report)
 
     assert "a-situation" in printed
     assert "time" in printed
@@ -403,19 +480,99 @@ def test_the_matrix_names_the_situation_the_invariant_and_the_record(
 
 def test_the_report_says_what_the_pass_cost(connection: sqlite3.Connection) -> None:
     """So the price of re-running it after a prompt change is known."""
-    record = recorded(
+    run = ran(
         one(item("Plank")),
-        calls=[agent.RecordedCall(name="admissible_set", arguments={})],
-        input_tokens=1200,
-        output_tokens=90,
+        messages=[spoke(input_tokens=1200, output_tokens=90, calls=("admissible_set",))],
     )
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=record),))
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
 
-    printed = "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
+    printed = rendered(report)
 
     assert "1 tool calls" in printed
     assert "1200 tokens in" in printed
     assert "90 out" in printed
+
+
+# -- what the planner itself cost ---------------------------------------------
+
+
+def test_the_matrix_says_what_each_run_took(connection: sqlite3.Connection) -> None:
+    """*It held every invariant* and *it held them on the third attempt, in
+    four minutes* are different answers to whether this model can plan on this
+    laptop."""
+    run = ran(
+        one(item("Plank")),
+        refusals=[(plans.Violation(plans.ADMISSIBLE, "no"),), ()],
+        seconds=42.0,
+        spent=7,
+    )
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+
+    printed = rendered(report)
+
+    assert "attempts" in printed
+    assert "seconds" in printed
+    assert "42" in printed, printed
+    assert "7" in printed, printed
+
+
+def test_a_run_still_refused_at_the_last_attempt_names_the_rule(
+    connection: sqlite3.Connection,
+) -> None:
+    """*It failed* is a fact the matrix already has. Which rule was still
+    standing when the attempts ran out is what says whether the model was
+    close."""
+    run = ran(
+        one(item("Barbell_Curl")),
+        refusals=[(plans.Violation(plans.ADMISSIBLE, "it needs a barbell"),)],
+    )
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+
+    assert plans.ADMISSIBLE in rendered(report)
+
+
+def test_a_run_that_was_never_made_leaves_the_planner_columns_blank(
+    connection: sqlite3.Connection,
+) -> None:
+    """It holds no figures because it produced none, and a zero there would
+    read as a run that took no time."""
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, error="no key"),))
+
+    printed = rendered(report)
+
+    assert evaluation.NOT_RUN in printed
+    assert printed.isascii()
+
+
+def test_the_runs_figures_are_each_shown_rather_than_averaged(
+    connection: sqlite3.Connection,
+) -> None:
+    """A situation that needs one attempt twice and three once is a different
+    fact from one that always needs two, and a mean prints them the same."""
+    once = ran(one(item("Plank")), refusals=[()])
+    thrice = ran(one(item("Plank")), refusals=[(), (), ()])
+    report = evaluation.Report(
+        (
+            evaluation.Outcome("a-situation", 1, record=once),
+            evaluation.Outcome("a-situation", 2, record=thrice),
+        )
+    )
+
+    assert "1, 3" in rendered(report)
+
+
+def test_a_run_that_spent_more_than_its_budget_is_reported_not_failed(
+    connection: sqlite3.Connection,
+) -> None:
+    """A turn's calls are answered as a whole batch, so a turn asking for seven
+    at once ends at *16 of 12* -- observed on Groq in ticket 04. The number is
+    worth seeing; it is not a run to fail, and the matrix shows what was
+    actually spent."""
+    over = ran(one(item("Bodyweight_Squat")), one(item("Plank")), spent=16)
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=over),))
+
+    assert "terminates" not in failing(connection, LEGS_AND_CORE, over)
+    assert "16" in rendered(report)
 
 
 # -- what the matrix must not hide --------------------------------------------
@@ -438,7 +595,7 @@ def test_a_run_that_never_happened_gets_its_own_column_not_the_whole_row(
     matrix = evaluation.render(report, (situation(LEGS_AND_CORE),))[1]
 
     assert "2 failed" in matrix, matrix
-    assert evaluation.NOT_RUN in "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
+    assert evaluation.NOT_RUN in rendered(report)
 
 
 def test_a_refusal_the_invariants_do_not_name_still_shows_in_the_matrix(
@@ -455,7 +612,7 @@ def test_a_refusal_the_invariants_do_not_name_still_shows_in_the_matrix(
         )
     )
 
-    printed = "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
+    printed = rendered(report)
 
     assert evaluation.VALIDATOR in printed
     assert "1 failed" in printed
@@ -468,7 +625,7 @@ def test_the_percentage_never_rounds_up_to_a_pass() -> None:
     outcomes = tuple(held("a", n) for n in range(249)) + (broke("a", 249),)
     report = evaluation.Report(outcomes)
 
-    printed = "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
+    printed = rendered(report)
 
     assert report.passed is False
     assert "99%" in printed
@@ -478,11 +635,14 @@ def test_the_percentage_never_rounds_up_to_a_pass() -> None:
 def test_the_cost_counts_the_run_that_was_only_made_to_be_turned_down(
     connection: sqlite3.Connection,
 ) -> None:
-    """The refusal situation makes two calls' worth of agent loop. Only the
-    second is measured; both are on the bill, and this number is what a pass
-    is budgeted against."""
-    turned_down = recorded(one(item("Plank")), input_tokens=1000, output_tokens=100)
-    measured = recorded(one(item("Plank")), input_tokens=2000, output_tokens=200)
+    """The refusal situation makes two runs. Only the second is measured; both
+    are on the bill, and this number is what a pass is budgeted against."""
+    turned_down = ran(
+        one(item("Plank")), messages=[spoke(input_tokens=1000, output_tokens=100)]
+    )
+    measured = ran(
+        one(item("Plank")), messages=[spoke(input_tokens=2000, output_tokens=200)]
+    )
     report = evaluation.Report(
         (evaluation.Outcome("refused", 1, record=measured, also=(turned_down,)),)
     )
@@ -491,55 +651,28 @@ def test_the_cost_counts_the_run_that_was_only_made_to_be_turned_down(
     assert report.output_tokens == 300
 
 
-def test_a_loop_that_overshot_without_saying_so_fails_termination(
-    connection: sqlite3.Connection,
-) -> None:
-    """The budget is where tools stop being offered, not a number the loop
-    lands on -- a turn's calls run together. What would be a fault is
-    overshooting without having crossed the line."""
-    record = recorded(
-        one(item("Bodyweight_Squat")),
-        one(item("Plank")),
-        spent=30,
-        budget=12,
-        emitted_on_exhaustion=False,
-    )
-
-    assert "terminates" in failing(connection, LEGS_AND_CORE, record)
-
-
-def test_overshooting_the_budget_on_the_turn_that_crossed_it_is_not_a_fault(
-    connection: sqlite3.Connection,
-) -> None:
-    record = recorded(
-        one(item("Bodyweight_Squat")),
-        one(item("Plank")),
-        spent=14,
-        budget=12,
-        emitted_on_exhaustion=True,
-    )
-
-    assert "terminates" not in failing(connection, LEGS_AND_CORE, record)
-
-
 # --- the measurement never writes --------------------------------------------
 
 
 def test_the_measurement_leaves_the_workout_count_unchanged(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """`trainer eval` runs eighteen loops against the project database. A plan
-    that persisted from inside the agent would write eighteen phantom
-    prescribed workouts into the very state the measurement is taken from,
-    where the unreported-workout tool would read them as a skipped rotation.
-    ROADMAP.md § Session 5: writes are never tools."""
-    from test_agent import Scripted, good_plan
+    """`trainer eval` runs eighteen graph invocations against the project
+    database. A plan that persisted from inside the graph would write eighteen
+    phantom prescribed workouts into the very state the measurement is taken
+    from, where the unreported-workout tool would read them as a skipped
+    rotation. ROADMAP.md § Session 5: writes are never tools."""
+    from test_planner import Scripted, plan_of
 
     chosen = evaluation.situations(connection)[:2]
+    on = models.Chat(
+        Scripted(documents=[plan_of("Bodyweight_Squat")] * 10), "scripted", "a-stand-in"
+    )
+
     report = evaluation.run(
         connection,
         chosen,
-        build=lambda: Scripted(emitted=good_plan("Bodyweight_Squat")),
+        on=on,
         repetitions=1,
         records=tmp_path / "records",
     )
@@ -548,3 +681,72 @@ def test_the_measurement_leaves_the_workout_count_unchanged(
     assert connection.execute(
         "SELECT COUNT(*) AS total FROM workouts"
     ).fetchone()["total"] == 0
+
+
+def test_a_setup_run_with_no_plan_is_not_measured_as_the_situation(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Situation 5 is *the user refuses and it proposes again*, and it needs a
+    first plan to refuse. When that run emits nothing that parses, `refused`
+    is `None` -- and the brief then says nothing about a refusal at all, not
+    even the user's reason, which is nested under it. The second run would be
+    an ordinary planning run, and counting it here would put a green row under
+    a situation that never happened."""
+    from test_planner import Scripted
+
+    (refusal,) = [s for s in evaluation.situations(connection) if s.after_a_refusal]
+    on = models.Chat(
+        Scripted(raw=["I would start with squats."] * 10), "scripted", "a-stand-in"
+    )
+
+    report = evaluation.run(
+        connection, (refusal,), on=on, repetitions=1, records=tmp_path / "records"
+    )
+
+    (outcome,) = report.outcomes
+    assert outcome.held is False
+    assert outcome.error is not None
+    assert "nothing to refuse" in outcome.error
+    assert outcome.also, "the run that was paid for is still counted"
+
+
+def test_every_run_leaves_the_record_the_failure_names(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """*Invariant 3 failed* is a fact and the record is the only thing that
+    says why, so the file has to be there whichever way the run went."""
+    from test_planner import Scripted, plan_of
+
+    chosen = evaluation.situations(connection)[:1]
+    on = models.Chat(
+        Scripted(documents=[plan_of("Bodyweight_Squat")] * 5), "scripted", "a-stand-in"
+    )
+
+    report = evaluation.run(
+        connection, chosen, on=on, repetitions=1, records=tmp_path / "records"
+    )
+
+    (outcome,) = report.outcomes
+    assert outcome.written is not None
+    assert outcome.written.exists()
+    assert "provider" in outcome.written.read_text(encoding="utf-8")
+
+
+def test_the_database_the_model_reads_is_the_one_the_environment_names(
+    database_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLAUDE.md's standing rule. The tools open their own connection from
+    `TRAINER_DB`, so a fixture nothing points at is invisible to the agent --
+    and the pass measures a model answering *there is no such workout*."""
+    monkeypatch.delenv(database.DATABASE_ENV_VAR, raising=False)
+    monkeypatch.chdir(database_file.parent)
+
+    with evaluation.pointed_at_the_database() as pointed:
+        import os
+
+        assert os.environ[database.DATABASE_ENV_VAR] == str(pointed)
+        assert pointed.is_absolute()
+
+    import os
+
+    assert database.DATABASE_ENV_VAR not in os.environ

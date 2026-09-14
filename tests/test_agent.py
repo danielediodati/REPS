@@ -1,13 +1,16 @@
 """The loop, against a stand-in model.
 
+One loop is left, the logger's: the planner moved onto the graph in session 6
+and `test_planner.py` is where its surface, prompt and brief are now covered.
+Session 8 moves this one too.
+
 `conftest.py` removes sockets and credentials from every test on purpose, so
 nothing here reaches a provider. What is covered is everything that is this
 project's: the tools offered, the call budget, emitting on exhaustion, the way
-out through the validator and the fact that there is no way back in, and the
-run record ticket 05 will measure on. `agent.Groq` is covered too, against a
-stand-in client that records the request it was handed: the request *shape* is
-where the one bug that would have failed every real run lived, and no socket
-is needed to assert on it.
+out through the validator, and the run record the log eval measures on.
+`agent.Groq` is covered too, against a stand-in client that records the
+request it was handed: the request *shape* is where the one bug that would
+have failed every real run lived, and no socket is needed to assert on it.
 """
 
 from __future__ import annotations
@@ -57,9 +60,6 @@ _PATTERNS = {
     "Dumbbell_Bench_Press": ("horizontal push", "shoulder, elbow", "no", "medium", 1),
     "Standing_Military_Press": ("vertical push", "shoulder, elbow", "yes", "medium", 3),
 }
-
-BARBELL_45 = plans.Request(equipment=("barbell",), budget_min=45)
-
 
 @pytest.fixture()
 def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
@@ -172,10 +172,10 @@ def _turn(scripted: Any) -> Turn:
     return Turn(calls=tuple(scripted))
 
 
-def executed(one: agent.Call, door: agent.Door = agent.PLANNER) -> agent.Result:
+def executed(one: agent.Call, door: agent.Door = agent.LOGGER) -> agent.Result:
     """One call, through the door that offered it -- which is what decides
     both whether the tool exists and what its answer carries back."""
-    return agent.execute(one, agent.registered(door), door.keeps)
+    return agent.execute(one, agent.registered(door.name, door.tools), door.keeps)
 
 
 # -- the tools this door offers -----------------------------------------------
@@ -184,18 +184,17 @@ def executed(one: agent.Call, door: agent.Door = agent.PLANNER) -> agent.Result:
 def test_the_tools_offered_are_the_shared_surface_and_nothing_else() -> None:
     """No second definition: a door registers names out of `tools.TOOLS`, the
     same tuple `trainer mcp` registers."""
-    offered = agent.surface(agent.PLANNER)
-    defined = [tool.__name__ for tool in tools.TOOLS]
+    offered = agent.surface(agent.LOGGER)
+    defined = {tool.__name__ for tool in tools.TOOLS}
 
-    assert [tool["name"] for tool in offered] == [
-        name for name in defined if name in agent.PLANNER.tools
-    ]
+    assert [tool["name"] for tool in offered] == list(agent.LOGGER.tools)
+    assert set(agent.LOGGER.tools) <= defined, "a door named a tool nobody defined"
 
 
 def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None:
     """A tool the model cannot fill the arguments in for is a tool it cannot
     call, and a tool with no description is one it cannot choose."""
-    for offered in agent.surface(agent.PLANNER) + agent.surface(agent.LOGGER):
+    for offered in agent.surface(agent.LOGGER):
         assert offered["description"], f"{offered['name']} has no description"
         assert offered["parameters"]["type"] == "object"
         if offered["name"] == "unreported_workouts":
@@ -212,89 +211,80 @@ def test_the_logger_still_sees_the_name_it_resolves_a_report_against(
 ) -> None:
     """Its task is *"the bench"* against what was prescribed, and an id is not
     a thing anybody says out loud."""
-    answered = executed(call("search_exercises", text="squat"), agent.LOGGER)
+    answered = executed(call("search_exercises", text="squat"))
 
     record = json.loads(answered.content)["exercises"][0]
 
     assert sorted(record) == ["equipment", "id", "mechanic", "name", "primary_muscles"]
 
 
-def test_an_argument_with_a_default_is_not_required() -> None:
-    """`admissible_set`'s exclusions are optional, and a schema that demanded
-    them would make the common call the harder one to write."""
-    (admissible,) = [
-        t for t in agent.surface(agent.PLANNER) if t["name"] == "admissible_set"
-    ]
-
-    assert set(admissible["parameters"]["required"]) == {"equipment", "budget_min"}
-
-
 # -- the loop -----------------------------------------------------------------
+#
+# The loop itself, rather than the logging in particular, which has a section
+# of its own further down. It ran both agents until session 6; what reaches it
+# now is the logger's door, and every property below is about the loop.
 
 
-def test_a_run_calls_tools_and_emits_a_plan(connection: sqlite3.Connection) -> None:
+def test_a_run_calls_tools_and_emits_a_document(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = prescribe(connection)
+    ask, _ = answers()
     model = Scripted(
-        turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),), ()],
+        turns=[(call("prescribed_workout", workout_id=identifier),), "tutto chiaro"],
+        emitted=performed(workout_id=identifier, report="fatto"),
     )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(
+        connection, "fatto", TODAY, ask=ask, awaiting=identifier, model=model
+    )
 
     assert record.spent == 1
     assert record.refused is None
     assert record.emitted_on_exhaustion is False
-    assert [c.name for c in record.calls] == ["admissible_set"]
-    assert record.calls[0].arguments == {"equipment": ["barbell"], "budget_min": 45}
+    assert [c.name for c in record.calls] == ["prescribed_workout"]
+    assert record.calls[0].arguments == {"workout_id": identifier}
 
 
 def test_the_calls_are_recorded_in_the_order_they_were_made(
     connection: sqlite3.Connection,
 ) -> None:
+    identifier = prescribe(connection)
+    ask, _ = answers()
     model = Scripted(
         turns=[
-            (call("allocate", minutes=45, proportions={"legs": 1.0}),),
+            (call("prescribed_workout", workout_id=identifier),),
             (
-                call("admissible_set", equipment=["barbell"], budget_min=45),
+                call("search_exercises", text="squat"),
                 call("pattern_history", pattern="squat", cycles=3),
             ),
-            (),
+            "tutto chiaro",
         ],
+        emitted=performed(workout_id=identifier, report="fatto"),
     )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(
+        connection, "fatto", TODAY, ask=ask, awaiting=identifier, model=model
+    )
 
     assert [c.name for c in record.calls] == [
-        "allocate",
-        "admissible_set",
+        "prescribed_workout",
+        "search_exercises",
         "pattern_history",
     ]
     assert record.spent == 3
-
-
-def test_a_run_that_spends_its_budget_emits_anyway(
-    connection: sqlite3.Connection,
-) -> None:
-    """Invariant 1 of TRAINER.md's six. Behaviour, not an error path."""
-    forever = [(call("pattern_history", pattern="squat", cycles=3),)] * 20
-    model = Scripted(turns=forever)
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model, budget=3)
-
-    assert record.spent == 3
-    assert record.emitted_on_exhaustion is True
-    assert record.refused is None
-    assert record.plan.blocks, "it emitted nothing"
-    assert model.emissions == 1
 
 
 def test_the_tools_are_taken_off_the_table_when_the_budget_runs_out(
     connection: sqlite3.Connection,
 ) -> None:
     """It does not fail and it does not keep going: it stops offering tools
-    and asks for the plan with what it has."""
+    and asks for the document with what it has."""
     forever = [(call("pattern_history", pattern="squat", cycles=3),)] * 20
-    model = Scripted(turns=forever)
+    ask, _ = answers()
+    model = Scripted(turns=forever, emitted=performed(report="fatto"))
 
-    agent.plan_workout(connection, BARBELL_45, model=model, budget=2)
+    agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model, budget=2)
 
     assert all(offer for offer in model.offers), "a turn was offered no tools"
     assert len(model.offers) == 2, "it kept asking after the budget was gone"
@@ -303,17 +293,23 @@ def test_the_tools_are_taken_off_the_table_when_the_budget_runs_out(
 def test_a_model_that_stops_asking_early_is_not_charged_the_whole_budget(
     connection: sqlite3.Connection,
 ) -> None:
-    model = Scripted(turns=[()])
+    ask, _ = answers()
+    model = Scripted(turns=["tutto chiaro"], emitted=performed(report="fatto"))
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model, budget=12)
+    record = agent.log_workout(
+        connection, "fatto", TODAY, ask=ask, model=model, budget=12
+    )
 
     assert record.spent == 0
     assert record.emitted_on_exhaustion is False
 
 
 def test_a_budget_under_one_call_is_refused(connection: sqlite3.Connection) -> None:
+    ask, _ = answers()
     with pytest.raises(agent.AgentError, match="at least one call"):
-        agent.plan_workout(connection, BARBELL_45, model=Scripted(), budget=0)
+        agent.log_workout(
+            connection, "fatto", TODAY, ask=ask, model=Scripted(), budget=0
+        )
 
 
 # -- what a tool failure does -------------------------------------------------
@@ -324,11 +320,13 @@ def test_a_tool_failure_goes_back_to_the_model_as_a_result(
 ) -> None:
     """A stated failure is something the model can act on -- it asked for an
     exercise nobody has, and the next turn it can ask for one that exists."""
+    ask, _ = answers()
     model = Scripted(
-        turns=[(call("last_performed_load", exercise_id="Barbell_Sqvat"),), ()],
+        turns=[(call("last_performed_load", exercise_id="Barbell_Sqvat"),), "fine"],
+        emitted=performed(report="fatto", blocks=[done("Barbell_Squat")]),
     )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
     assert record.calls[0].failed is True
     assert record.calls[0].detail is not None
@@ -341,161 +339,66 @@ def test_a_tool_the_surface_does_not_have_is_a_result_not_a_crash(
 ) -> None:
     """The model's mistake, not this project's, so it comes back as something
     it can recover from -- with the real names in it."""
-    model = Scripted(turns=[(call("active_conclusions",),), ()])
+    ask, _ = answers()
+    model = Scripted(
+        turns=[(call("active_conclusions",),), "fine"],
+        emitted=performed(report="fatto"),
+    )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
     assert record.calls[0].failed is True
     assert record.calls[0].detail is not None
-    assert "admissible_set" in record.calls[0].detail
+    assert "prescribed_workout" in record.calls[0].detail
 
 
 def test_arguments_that_do_not_fit_the_signature_are_a_result_not_a_crash(
     connection: sqlite3.Connection,
 ) -> None:
-    model = Scripted(turns=[(call("allocate", minutes=45, groups={"legs": 1.0}),), ()])
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.calls[0].failed is True
-
-
-# -- the way out, and no way back in ------------------------------------------
-
-
-def test_a_plan_that_breaks_a_rule_is_recorded_as_refused(
-    connection: sqlite3.Connection,
-) -> None:
-    model = Scripted(emitted=good_plan("Dumbbell_Bench_Press"))
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.refused is not None
-    assert "Dumbbell_Bench_Press" in record.refused
-    assert "dumbbell" in record.refused
-
-
-def test_a_refused_plan_is_not_handed_back_to_the_model(
-    connection: sqlite3.Connection,
-) -> None:
-    """*Propose -> check -> correct* is the loop TRAINER.md deliberately does
-    not have: the constraints are applied upstream, and a refusal here is a
-    bug to go and read rather than a turn to spend."""
-    model = Scripted(emitted=good_plan("Dumbbell_Bench_Press"))
-
-    agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert model.emissions == 1
-
-
-def test_a_refused_plan_is_still_recorded_whole(
-    connection: sqlite3.Connection,
-) -> None:
-    """The record exists to be read after a refusal; one that dropped the plan
-    would answer every question except the one being asked."""
-    model = Scripted(emitted=good_plan("Dumbbell_Bench_Press"))
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.plan.blocks[0].items[0].exercise_id == "Dumbbell_Bench_Press"
-
-
-def test_a_plan_the_block_vocabulary_cannot_express_is_refused_too(
-    connection: sqlite3.Connection,
-) -> None:
-    """Reps and seconds both given. The structured shape does not carry that
-    rule -- `BlockItem` is where it lives -- so it arrives here as a shape
-    failure, and from the run's point of view that is the same outcome: the
-    plan did not get through the door."""
-    emitted = plans.WorkoutPlan(
-        blocks=[
-            plans.PlanBlock(
-                items=[
-                    plans.PlanItem(
-                        exercise_id="Barbell_Squat",
-                        prescription=plans.Prescription(unit="reps", amount=0),
-                    )
-                ],
-                rounds=3,
-                rest=120,
-                reason="both at once",
-            )
-        ]
+    ask, _ = answers()
+    model = Scripted(
+        turns=[(call("pattern_history", pattern="squat", rounds=3),), "fine"],
+        emitted=performed(report="fatto"),
     )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=Scripted(emitted=emitted))
+    record = agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
-    assert record.refused is not None
-    assert "block 1" in record.refused
+    assert record.calls[0].failed is True
 
 
 # -- the record ---------------------------------------------------------------
 
 
-def test_the_record_writes_out_as_json(connection: sqlite3.Connection) -> None:
-    """Ticket 05 decides its invariants by reading this rather than by asking
-    the model what it did."""
-    model = Scripted(turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),), ()])
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-    written = json.loads(record.model_dump_json())
-
-    assert written["model"] == "a-stand-in"
-    assert written["budget"] == agent.CALL_BUDGET
-    assert written["spent"] == 1
-    assert written["emitted_on_exhaustion"] is False
-    assert written["calls"][0]["arguments"]["equipment"] == ["barbell"]
-    assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
-    assert written["refused"] is None
-
-
 def test_the_record_counts_what_the_run_cost(connection: sqlite3.Connection) -> None:
-    """What a pass costs is what ticket 05 reports, so it is counted here
+    """What a pass costs is what the log eval reports, so it is counted here
     rather than estimated there."""
-    model = Scripted(turns=[(call("allocate", minutes=45, proportions={"legs": 1.0}),), ()])
+    ask, _ = answers()
+    model = Scripted(
+        turns=[(call("pattern_history", pattern="squat", cycles=3),), "fine"],
+        emitted=performed(report="fatto"),
+    )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
     assert record.input_tokens == 100 + 100 + 200
     assert record.output_tokens == 20 + 20 + 50
 
 
-def test_the_summary_is_ascii(connection: sqlite3.Connection) -> None:
-    record = agent.plan_workout(connection, BARBELL_45, model=Scripted())
-
-    assert "\n".join(agent.summary(record)).isascii()
-
-
-def test_the_summary_says_when_the_plan_was_emitted_on_exhaustion(
+def test_the_summary_says_when_the_document_was_emitted_on_exhaustion(
     connection: sqlite3.Connection,
 ) -> None:
     forever = [(call("pattern_history", pattern="squat", cycles=3),)] * 20
-    record = agent.plan_workout(
-        connection, BARBELL_45, model=Scripted(turns=forever), budget=2
+    ask, _ = answers()
+    record = agent.log_workout(
+        connection,
+        "fatto",
+        TODAY,
+        ask=ask,
+        model=Scripted(turns=forever, emitted=performed(report="fatto")),
+        budget=2,
     )
 
     assert "budget spent" in "\n".join(agent.summary(record))
-
-
-# -- the request the model is given -------------------------------------------
-
-
-def test_the_model_is_told_what_it_is_planning_against(
-    connection: sqlite3.Connection,
-) -> None:
-    request = plans.Request(equipment=("barbell", "dumbbell"), budget_min=30)
-
-    written = agent.brief(request)
-
-    assert "barbell, dumbbell" in written
-    assert "30 minutes" in written
-
-
-def test_the_prompt_carries_the_rules_the_validator_will_apply() -> None:
-    """A model that is not told the rules is one whose refusals are the
-    prompt's fault rather than a finding."""
-    for rule in ("admissible_set", "never trimmed to fit", "at most once", "reason"):
-        assert rule.lower() in agent.PLANNING.lower(), rule
 
 
 # -- credentials --------------------------------------------------------------
@@ -529,55 +432,6 @@ def test_the_model_falls_back_to_the_one_that_can_be_held_to_the_shape(
     assert agent.model_name() == agent.DEFAULT_MODEL
 
 
-# -- what the model can get wrong ---------------------------------------------
-
-
-def test_an_argument_of_the_wrong_shape_is_a_result_not_a_crash(
-    connection: sqlite3.Connection,
-) -> None:
-    """Exclusions as a list of strings rather than of objects. It satisfies
-    the signature, reaches the tool body and comes apart on a string -- a
-    traceback, no record, and a paid-for run thrown away over something the
-    model could have corrected next turn."""
-    model = Scripted(
-        turns=[
-            (call("admissible_set", equipment=["barbell"], budget_min=45,
-                  exclusions=["squat"]),),
-            (),
-        ],
-    )
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.calls[0].failed is True
-    assert record.calls[0].detail is not None
-    assert "do not fit" in record.calls[0].detail
-
-
-def test_a_dict_where_a_list_belongs_is_a_result_not_a_crash(
-    connection: sqlite3.Connection,
-) -> None:
-    model = Scripted(turns=[(call("allocate", minutes=45, proportions=["legs"]),), ()])
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.calls[0].failed is True
-
-
-def test_an_argument_nobody_declared_is_a_result_not_a_crash(
-    connection: sqlite3.Connection,
-) -> None:
-    model = Scripted(
-        turns=[(call("allocate", minutes=45, proportions={"legs": 1.0}, why="because"),), ()]
-    )
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.calls[0].failed is True
-    assert record.calls[0].detail is not None
-    assert "why" in record.calls[0].detail
-
-
 # -- what the model is handed back --------------------------------------------
 
 
@@ -589,50 +443,6 @@ def test_a_result_reaches_the_model_as_json(connection: sqlite3.Connection) -> N
 
     assert result.failed is False
     assert json.loads(result.content)["known"] is False
-
-
-def test_an_admissible_set_reaches_the_model_without_its_prose(
-    connection: sqlite3.Connection,
-) -> None:
-    """One answer must not be larger than the whole output budget, and the loop
-    re-sends every result on every later turn. What is left is what a plan is
-    written from: the id it names, whether today's equipment reaches it, and
-    the muscles its time is divided over."""
-    result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
-    (first, *_) = json.loads(result.content)
-
-    assert result.failed is False
-    assert set(first) == {"id", "equipment", "primary_muscles"}
-
-
-def test_the_model_is_not_shown_the_name_it_could_write_by_mistake(
-    connection: sqlite3.Connection,
-) -> None:
-    """A plan is written in ids, and a model shown both fields copied the
-    readable one into `exercise_id`. No rule recovers the id from the name --
-    `Butt Lift (Bridge)` is `Butt_Lift_Bridge` -- so the field is removed
-    rather than explained, which makes the mistake impossible instead of
-    rare."""
-    result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
-
-    assert "name" not in json.loads(result.content)[0]
-    assert "Barbell Squat" not in result.content
-    assert "Barbell_Squat" in result.content
-
-
-def test_the_name_comes_back_when_the_workout_is_printed(
-    connection: sqlite3.Connection,
-) -> None:
-    """Removing it costs nothing: the name was never the model's to carry, and
-    the renderer reads it out of the catalog by id."""
-    record = agent.plan_workout(
-        connection, BARBELL_45, model=Scripted(emitted=good_plan("Barbell_Squat"))
-    )
-    printed = "\n".join(
-        plans.render(connection, record.plan, plans.to_blocks(record.plan), 45)
-    )
-
-    assert "Barbell Squat" in printed
 
 
 def test_the_shared_surface_still_answers_whole(
@@ -723,12 +533,12 @@ def a_tool_call(name: str, arguments: str) -> SimpleNamespace:
 def test_the_tool_phase_offers_the_tools_in_the_envelope_groq_reads() -> None:
     client = FakeGroq(FakeMessage(content="thinking"))
 
-    agent.Groq(agent.PLANNER, client=client, model="qwen/qwen3.8-27b").respond(
-        "today", [], agent.surface(agent.PLANNER)
+    agent.Groq(agent.LOGGER, client=client, model="qwen/qwen3.8-27b").respond(
+        "today", [], agent.surface(agent.LOGGER)
     )
 
     (request,) = client.requests
-    offered = agent.PLANNER.tools
+    offered = agent.LOGGER.tools
     assert [tool["type"] for tool in request["tools"]] == ["function"] * len(offered)
     assert request["tools"][0]["function"]["name"] == offered[0]
     assert "response_format" not in request
@@ -737,10 +547,10 @@ def test_the_tool_phase_offers_the_tools_in_the_envelope_groq_reads() -> None:
 def test_the_emission_offers_no_tools_at_all() -> None:
     """Groq does not allow structured outputs and tool use in one request. This
     is the assertion that would have caught a request built the other way."""
-    client = FakeGroq(FakeMessage(content=good_plan().model_dump_json()))
+    client = FakeGroq(FakeMessage(content=performed(report="fatto").model_dump_json()))
 
-    agent.Groq(agent.PLANNER, client=client, model="qwen/qwen3.8-27b").emit(
-        "today", [], plans.WorkoutPlan
+    agent.Groq(agent.LOGGER, client=client, model="qwen/qwen3.8-27b").emit(
+        "today", [], logs.PerformedWorkout
     )
 
     (request,) = client.requests
@@ -762,7 +572,7 @@ def test_the_conversation_replays_in_the_shape_groq_reads() -> None:
     )
     client = FakeGroq(FakeMessage(content="thinking"))
 
-    agent.Groq(agent.PLANNER, client=client, model="m").respond("today", [exchange], None)
+    agent.Groq(agent.LOGGER, client=client, model="m").respond("today", [exchange], None)
 
     (request,) = client.requests
     roles = [message["role"] for message in request["messages"]]
@@ -783,29 +593,29 @@ def test_arguments_arrive_as_a_json_string_and_are_parsed() -> None:
         )
     )
 
-    reply = agent.Groq(agent.PLANNER, client=client, model="m").respond(
-        "today", [], agent.surface(agent.PLANNER)
+    reply = agent.Groq(agent.LOGGER, client=client, model="m").respond(
+        "today", [], agent.surface(agent.LOGGER)
     )
 
     (call_,) = reply.calls
     assert call_.arguments == {"minutes": 45, "proportions": {"legs": 1.0}}
 
 
-def test_an_emission_that_is_not_a_plan_is_a_state_not_a_traceback() -> None:
+def test_an_emission_that_is_not_the_document_is_a_state_not_a_traceback() -> None:
     client = FakeGroq(FakeMessage(content='{"blocks": "nonsense"}'))
 
     with pytest.raises(agent.AgentError, match="did not parse"):
-        agent.Groq(agent.PLANNER, client=client, model="m").emit(
-            "today", [], plans.WorkoutPlan
+        agent.Groq(agent.LOGGER, client=client, model="m").emit(
+            "today", [], logs.PerformedWorkout
         )
 
 
 def test_an_empty_emission_is_a_state_not_a_traceback() -> None:
     client = FakeGroq(FakeMessage(content=None))
 
-    with pytest.raises(agent.AgentError, match="no workout_plan"):
-        agent.Groq(agent.PLANNER, client=client, model="m").emit(
-            "today", [], plans.WorkoutPlan
+    with pytest.raises(agent.AgentError, match="no performed_workout"):
+        agent.Groq(agent.LOGGER, client=client, model="m").emit(
+            "today", [], logs.PerformedWorkout
         )
 
 
@@ -852,20 +662,21 @@ def test_the_strict_shape_still_accepts_a_plan_the_project_calls_valid() -> None
 def test_the_record_names_the_model_that_ran_not_the_environment(
     connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Ticket 05 compares invariants across models by building one per run. A
+    """The log eval compares outcomes across models by building one per run. A
     record that re-read the environment afterwards would stamp every one of
     them with whatever `GROQ_MODEL` happened to say."""
     monkeypatch.setenv(agent.MODEL_ENV, "a-model-nobody-ran")
-    model = Scripted()
+    ask, _ = answers()
+    model = Scripted(turns=["fine"], emitted=performed(report="fatto"))
     model.name = "the-one-that-ran"
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
+    record = agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
     assert record.model == "the-one-that-ran"
 
 
 def test_the_provider_adapter_reports_the_model_it_was_built_with() -> None:
-    assert agent.Groq(agent.PLANNER, client=FakeGroq(), model="qwen/qwen3.8-27b").name == (
+    assert agent.Groq(agent.LOGGER, client=FakeGroq(), model="qwen/qwen3.8-27b").name == (
         "qwen/qwen3.8-27b"
     )
 
@@ -908,7 +719,7 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     bound, with nothing failing to say so."""
     answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
 
-    trimmed = agent._trimmed(answer, agent.FOR_PLANNING)
+    trimmed = agent._trimmed(answer, agent.FOR_THE_LOG)
 
     assert trimmed == {"variants": [{"id": "X"}]}
 
@@ -918,19 +729,7 @@ def test_an_answer_envelope_is_not_cut_to_an_exercise_record() -> None:
     field that happens to be empty, and it is not a catalog field to drop."""
     answer = {"about": "squat", "known": False, "value": None}
 
-    assert agent._trimmed(answer, agent.FOR_PLANNING) == answer
-
-
-def test_the_planner_is_shown_no_name_even_beside_an_enrichment() -> None:
-    """`compare_variants` answers with two enrichments, which are not catalog
-    records -- but `name` is a catalog field, and writing it into `exercise_id`
-    is the mistake the planner's list exists to prevent. What is not a catalog
-    field at all is nobody's to drop."""
-    answer = {"a": {"exercise_id": "X", "name": "Barbell Squat", "movement_pattern": "squat"}}
-
-    trimmed = agent._trimmed(answer, agent.FOR_PLANNING)
-
-    assert trimmed == {"a": {"exercise_id": "X", "movement_pattern": "squat"}}
+    assert agent._trimmed(answer, agent.FOR_THE_LOG) == answer
 
 
 def test_a_provider_failure_outside_the_status_hierarchy_is_still_words() -> None:
@@ -950,94 +749,6 @@ def test_a_provider_failure_outside_the_status_hierarchy_is_still_words() -> Non
         agent._reported(malformed)
 
 
-def test_the_model_can_ask_for_only_the_groups_today_trains(
-    connection: sqlite3.Connection,
-) -> None:
-    """The whole admissible space is several times any one workout. With
-    dumbbells the catalog leaves 119 exercises standing and a leg day needs
-    14 of them; the other 105 are arms, shoulders, chest and back, re-read on
-    every later turn for nothing."""
-    whole = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
-    narrowed = executed(
-        call(
-            "admissible_set",
-            equipment=["barbell"],
-            budget_min=45,
-            muscle_groups=["shoulders"],
-        )
-    )
-
-    assert narrowed.failed is False
-    assert len(narrowed.content) < len(whole.content)
-
-
-def test_the_brief_names_what_today_trains(connection: sqlite3.Connection) -> None:
-    request = plans.Request(
-        equipment=("dumbbell",), budget_min=45, groups=("legs", "core")
-    )
-
-    written = agent.brief(request)
-
-    assert "legs, core" in written
-    assert "admissible_set" in written
-
-
-# -- the request the model is actually given ----------------------------------
-
-
-def test_the_brief_offers_the_allocation_rather_than_imposing_it() -> None:
-    """Minutes divided before the plan is built rather than cut after it
-    (ADR-0001), and offered the way the rest bands are: the agent has
-    `allocate` and may divide the time differently."""
-    request = plans.Request(
-        equipment=("dumbbell",),
-        budget_min=40,
-        groups=("legs", "core"),
-        allocation=(("legs", 20), ("core", 20)),
-    )
-
-    written = agent.brief(request)
-
-    assert "legs 20 min, core 20 min" in written
-    assert "not an instruction" in written
-
-
-def test_a_preference_reaches_the_model_as_data(connection: sqlite3.Connection) -> None:
-    """Invariant 4 is measured by code against the request, so a preference
-    has to be a field on it and not a sentence somebody typed into a prompt."""
-    request = plans.Request(
-        equipment=("barbell",), budget_min=45, preferences=("Barbell_Squat",)
-    )
-
-    assert request.preferences == ("Barbell_Squat",)
-    assert "Barbell_Squat" in agent.brief(request)
-    assert "despite" in agent.brief(request)
-
-
-def test_the_refused_plan_and_the_reason_reach_the_model() -> None:
-    """Two turns, not a conversation: both are inputs to a fresh run."""
-    request = plans.Request(
-        equipment=("barbell",),
-        budget_min=45,
-        refused=good_plan("Barbell_Squat"),
-        because="I do not feel like squatting",
-    )
-
-    written = agent.brief(request)
-
-    assert "turned it down" in written
-    assert "Barbell_Squat" in written
-    assert "I do not feel like squatting" in written
-    assert "do not give up" in written
-
-
-def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
-    written = agent.brief(plans.Request(equipment=("barbell",), budget_min=45))
-
-    assert "turned it down" not in written
-    assert "rather not" not in written
-
-
 # -- the agent never writes ---------------------------------------------------
 #
 # ROADMAP.md § Session 5: writes are never tools. If the model can call the
@@ -1055,15 +766,19 @@ def workout_count(connection: sqlite3.Connection) -> int:
 def test_the_loop_leaves_the_workout_count_unchanged(
     connection: sqlite3.Connection,
 ) -> None:
+    identifier = prescribe(connection)
+    ask, _ = answers()
     model = Scripted(
-        turns=[(call("admissible_set", equipment=["barbell"], budget_min=45),)],
-        emitted=good_plan("Barbell_Squat"),
+        turns=[(call("prescribed_workout", workout_id=identifier),), "fine"],
+        emitted=performed(workout_id=identifier, report="fatto"),
     )
 
-    record = agent.plan_workout(connection, BARBELL_45, model=model, budget=4)
+    record = agent.log_workout(
+        connection, "fatto", TODAY, ask=ask, awaiting=identifier, model=model, budget=4
+    )
 
     assert record.refused is None
-    assert workout_count(connection) == 0
+    assert workout_count(connection) == 1, "the prescription, and nothing the loop wrote"
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "trainer"
@@ -1362,7 +1077,7 @@ def test_the_logging_door_offers_six_tools_and_none_of_them_writes() -> None:
     against its list of names -- a name that resolved to something else would
     pass a test written about the constant.
     """
-    offered = agent.registered(agent.LOGGER)
+    offered = agent.registered(agent.LOGGER.name, agent.LOGGER.tools)
 
     assert len(offered) == 6
     for tool in offered:
@@ -1374,34 +1089,6 @@ def test_the_logging_door_offers_six_tools_and_none_of_them_writes() -> None:
         }
         assert not named & set(WRITERS), f"{tool.__name__} reaches a writer"
         assert "add" not in named, f"{tool.__name__} may write an exclusion"
-
-
-def test_the_two_doors_offer_different_sets_of_the_same_definitions() -> None:
-    """One definition per tool, two doors onto it. A tool on both doors is the
-    **same function object** on each: a copy diverges at the first fix applied
-    to one and not the other, and nothing would fail when it did."""
-    planner = {tool.__name__: tool for tool in agent.registered(agent.PLANNER)}
-    logger = {tool.__name__: tool for tool in agent.registered(agent.LOGGER)}
-
-    assert set(planner) != set(logger)
-    assert "allocate" in planner and "allocate" not in logger
-    assert "prescribed_workout" in logger and "prescribed_workout" not in planner
-    for shared in set(planner) & set(logger):
-        assert planner[shared] is logger[shared], shared
-
-
-def test_every_tool_that_exists_reaches_at_least_one_door() -> None:
-    """A tool defined and offered to nobody is a tool that cannot be called.
-
-    `registered` guards the names a door **asks** for; nothing guards the
-    other direction, and a tool added to `tools.TOOLS` without a door is
-    exactly as invisible as one that was never written. `trainer mcp` would
-    still serve it, which is what makes the gap survivable long enough to
-    forget about.
-    """
-    offered = set(agent.PLANNER.tools) | set(agent.LOGGER.tools)
-
-    assert {tool.__name__ for tool in tools.TOOLS} == offered
 
 
 def test_a_door_asking_for_a_tool_nobody_defined_is_a_state() -> None:
@@ -1416,14 +1103,12 @@ def test_a_door_asking_for_a_tool_nobody_defined_is_a_state() -> None:
         agent.surface(door)
 
 
-def test_the_logger_cannot_call_a_tool_from_the_other_door(
+def test_the_logger_cannot_call_a_tool_the_planner_has(
     connection: sqlite3.Connection,
 ) -> None:
     """A tool that exists is not a tool this agent was offered. It comes back
     as a result it can recover from, listing what it does have."""
-    result = executed(
-        call("admissible_set", equipment=["barbell"], budget_min=45), agent.LOGGER
-    )
+    result = executed(call("admissible_set", equipment=["barbell"], budget_min=45))
 
     assert result.failed is True
     assert "no tool called 'admissible_set'" in result.content
@@ -1433,17 +1118,16 @@ def test_the_logger_cannot_call_a_tool_from_the_other_door(
 def test_the_logger_is_shown_the_exercise_names_the_user_says_out_loud(
     connection: sqlite3.Connection,
 ) -> None:
-    """The planner's door drops `name`, because a plan is written in ids and a
-    model shown both copied the readable one into `exercise_id`. This door has
-    the opposite job: resolving *"the bench"* against the prescribed workout is
+    """The planner drops `name`, because a plan is written in ids and a model
+    shown both copied the readable one into `exercise_id`. This door has the
+    opposite job: resolving *"the bench"* against the prescribed workout is
     not possible when everything in it is an id nobody says out loud."""
     identifier = prescribe(connection)
 
-    result = executed(call("prescribed_workout", workout_id=identifier), agent.LOGGER)
-    planned = executed(call("search_exercises", text="squat"))
+    result = executed(call("prescribed_workout", workout_id=identifier))
 
     assert "Barbell Squat" in result.content
-    assert "Barbell Squat" not in planned.content, "the planner still hides it"
+    assert "name" in json.loads(result.content)["blocks"][0]["items"][0]
 
 
 def test_a_windowed_read_with_no_configuration_is_a_failed_result(
@@ -1455,7 +1139,7 @@ def test_a_windowed_read_with_no_configuration_is_a_failed_result(
     history, which would read as *nobody has trained this*."""
     monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
 
-    result = executed(call("pattern_history", pattern="squat", cycles=1), agent.LOGGER)
+    result = executed(call("pattern_history", pattern="squat", cycles=1))
 
     assert result.failed is True
     assert "no training configuration yet" in result.content
@@ -1741,19 +1425,6 @@ def test_a_turn_with_nothing_in_it_ends_the_loop_rather_than_asking_a_blank(
     agent.log_workout(connection, "fatto", TODAY, ask=ask, model=model)
 
     assert asked == []
-
-
-def test_the_planner_never_asks_even_when_it_talks(
-    connection: sqlite3.Connection,
-) -> None:
-    """Prose with no tool calls is the planner finished. It has no user in
-    front of it -- the plan is the answer, and there is no way back in."""
-    model = Scripted(turns=["QUESTION: Shall I use dumbbells?"])
-
-    record = agent.plan_workout(connection, BARBELL_45, model=model)
-
-    assert record.spent == 0
-    assert model.emissions == 1
 
 
 # -- the exclusion it may propose ----------------------------------------------

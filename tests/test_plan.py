@@ -533,6 +533,29 @@ def test_a_preference_prescribed_silently_is_refused(
     assert "rather not" in refused.says
 
 
+def test_the_refusal_names_the_field_the_reason_goes_in(
+    connection: sqlite3.Connection,
+) -> None:
+    """`PlanBlock.reason` and `Acknowledgement.why` are adjacent ideas under
+    different names, and this refusal is what a model reads before trying
+    again. It used to say *put the reason in the item's `despite`*, which
+    invites the very field it then rejects.
+
+    Measured on `gpt-oss:20b`: a run converged over two attempts, wrote
+    `despite: [{exercise_id, reason}]` on the third, and was refused on shape
+    with its attempts gone -- a whole run lost to a field name.
+    """
+    parsed = plans.parse(
+        document(block({"exercise_id": "Barbell_Squat",
+                        "prescription": {"unit": "reps", "amount": 8}}))
+    )
+
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), LEG_DAY, parsed)
+
+    assert '"why"' in refused.says, "it has to name the field that is accepted"
+    assert "`reason`" in refused.says, "and the one that is not"
+
+
 def test_a_preference_prescribed_with_a_reason_is_allowed(
     connection: sqlite3.Connection,
 ) -> None:

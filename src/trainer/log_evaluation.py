@@ -665,7 +665,9 @@ def _once(
     except agent.AgentError as error:
         return evaluation.Outcome(row.name, attempt, error=str(error))
 
-    written = evaluation.write(records, f"{row.name}-{attempt}", record)
+    written = evaluation.write(
+        records, f"{row.name}-{attempt}", record.model_dump_json(indent=1)
+    )
     failures, weight = score(where, row, record)
     return evaluation.Outcome(
         row.name, attempt, failures, record, written, weight=weight

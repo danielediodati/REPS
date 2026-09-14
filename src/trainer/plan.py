@@ -413,7 +413,9 @@ def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> Violation 
             "do, without saying why:\n"
             + "\n".join(f"  {exercise_id}" for exercise_id in unspoken)
             + "\nA preference is not an exclusion -- propose it again if there "
-            "is a reason, and put the reason in the item's `despite`.",
+            "is a reason, and add a row to the plan's `despite` for it: "
+            '{"exercise_id": "...", "why": "..."}. The field is `why`; '
+            "`reason` belongs to a block and is not accepted here.",
         )
     return None
 

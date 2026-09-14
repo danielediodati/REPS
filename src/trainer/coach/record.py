@@ -39,8 +39,13 @@ def of(state: Mapping[str, Any], model: str, provider: str) -> dict[str, Any]:
 
 
 def written(state: Mapping[str, Any], model: str, provider: str) -> str:
-    """The record as a document, indented the way today's `--record` writes one."""
-    return json.dumps(of(state, model, provider), indent=1)
+    """The record of one run, as a document."""
+    return document(of(state, model, provider))
+
+
+def document(record: Mapping[str, Any]) -> str:
+    """One record written down. The one definition of how, so that `--record` and the eval's files read alike."""
+    return json.dumps(record, indent=1)
 
 
 def summary(state: Mapping[str, Any], model: str, provider: str, budget: int) -> list[str]:

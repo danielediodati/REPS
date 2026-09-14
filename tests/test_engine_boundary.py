@@ -121,7 +121,7 @@ def test_importing_the_engine_does_not_pull_in_the_cli() -> None:
         "from pydantic import BaseModel",
         "from trainer.plan import WorkoutPlan",
         "from trainer.log import PerformedWorkout",
-        "from trainer.agent import plan_workout",
+        "from trainer.agent import log_workout",
         "from trainer.mcp_server import server",
         "from anthropic import Anthropic",
         "import groq",

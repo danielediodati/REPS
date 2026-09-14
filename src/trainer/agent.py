@@ -1,4 +1,4 @@
-"""The planner and logger tool loops on Groq, which ADR-0004's graph replaces."""
+"""The logger's tool loop on Groq, which ADR-0004's graph replaces in session 8."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from typing import Any, Generic, Protocol, TypeVar, get_type_hints
 from pydantic import BaseModel, TypeAdapter
 
 from trainer import log as logs
-from trainer import plan as plans
 from trainer import tools
 from trainer.engine import catalog
 
@@ -169,9 +168,9 @@ class Exchange:
 
 
 Document = TypeVar("Document", bound=BaseModel)
-"""What a given agent emits. `plan.WorkoutPlan` for the planner,
-`log.PerformedWorkout` for the logger -- and the loop below never names
-either, which is what lets both run through one seam."""
+"""What a given agent emits -- `log.PerformedWorkout` here. The loop below
+never names it, which is what let the planner run through this same seam
+before the graph took it over."""
 
 
 @dataclass(frozen=True)
@@ -251,9 +250,9 @@ class RecordedQuestion(BaseModel):
 class Run(BaseModel):
     """What the model called, what it cost, and how it left the loop.
 
-    Shared by both agents because every field of it is about the *loop*, and
-    there is one loop. What differs is the document that came out, and that is
-    what each subclass adds.
+    Every field of it is about the *loop* rather than about what came out,
+    which is what `LogRecord` adds. The planner's own record is derived from
+    the graph's state instead (`coach.record`).
     """
 
     model: str
@@ -267,12 +266,6 @@ class Run(BaseModel):
     """What refused the document, or `None` when it passed. A document that is
     refused is still recorded whole: the point of the record is to be able to
     go and read what the model actually emitted."""
-
-
-class RunRecord(Run):
-    """One planning run, and the plan it emitted."""
-
-    plan: plans.WorkoutPlan
 
 
 class LogRecord(Run):
@@ -337,17 +330,16 @@ def schema(tool: Callable[..., Any]) -> dict[str, Any]:
 class Door:
     """Which agent is asking, and everything that answer changes.
 
-    Four things vary between the planner and the logger and they vary
-    together: the tools it may call, the fields its results keep on the way
-    into the context, the prompt it works under, and the sentence that asks
-    it to emit. Held as one object because a run is one of these end to end
-    -- four parallel constants would let a caller build a logger offered the
-    planner's tools, which is exactly the mistake nothing downstream would
-    catch.
+    Four things vary together: the tools it may call, the fields its results
+    keep on the way into the context, the prompt it works under, and the
+    sentence that asks it to emit. Held as one object because a run is one of
+    these end to end -- four parallel constants would let a caller build a
+    logger offered somebody else's tools, which is exactly the mistake nothing
+    downstream would catch.
 
-    What may exist at all is `tools.TOOLS`'s decision. This says which of it
-    a given agent sees, from the one definition per tool: a copy diverges at
-    the first tool added to one door and not the other.
+    One door is left, the logger's, until session 8 moves it onto the graph.
+    What may exist at all is `tools.TOOLS`'s decision; this says which of it
+    this agent sees, from the one definition per tool.
     """
 
     name: str
@@ -357,28 +349,31 @@ class Door:
     emit: str
 
 
-def registered(door: Door) -> tuple[Callable[..., Any], ...]:
-    """The tool functions one door offers, out of the shared surface.
+def registered(asked_by: str, names: Sequence[str]) -> tuple[Callable[..., Any], ...]:
+    """The tool functions one agent asks for, out of the shared surface.
 
-    A name this door asks for that `tools.TOOLS` does not have is an
-    `AgentError` rather than a silently shorter surface: the door constants
-    are the one place a tool can be misspelled, and a logger quietly missing
-    the tool it resolves substitutions with would look like a model that
-    chose not to search.
+    A name that `tools.TOOLS` does not have is an `AgentError` rather than a
+    silently shorter surface: these lists are the one place a tool can be
+    misspelled, and a logger quietly missing the tool it resolves
+    substitutions with would look like a model that chose not to search.
+
+    Names rather than a `Door`, because the planner no longer has one: its
+    list lives in `coach.planner` beside the graph that offers it, and this
+    guard is the half that must not be copied.
     """
     defined = {tool.__name__: tool for tool in tools.TOOLS}
-    missing = [name for name in door.tools if name not in defined]
+    missing = [name for name in names if name not in defined]
     if missing:
         raise AgentError(
-            f"the {door.name} door asks for {', '.join(missing)}, and the "
+            f"the {asked_by} asks for {', '.join(missing)}, and the "
             f"tools defined are {', '.join(defined)}"
         )
-    return tuple(defined[name] for name in door.tools)
+    return tuple(defined[name] for name in names)
 
 
 def surface(door: Door) -> list[dict[str, Any]]:
     """The tool definitions one door puts on the table."""
-    return [schema(tool) for tool in registered(door)]
+    return [schema(tool) for tool in registered(door.name, door.tools)]
 
 
 def execute(
@@ -441,11 +436,10 @@ def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str,
 EXERCISE_FIELDS = frozenset(declared.name for declared in fields(catalog.Exercise))
 """Every field of a catalog record, read from the dataclass rather than listed a second time."""
 
-FOR_PLANNING = ("id", "equipment", "primary_muscles")
-"""What a plan is written from: the id it names, whether today's equipment reaches it, and the muscles its time is divided over."""
-
 FOR_THE_LOG = ("id", "name", "equipment", "mechanic", "primary_muscles")
-"""What reading a report needs. `name` is here and not above, because a report says *"the bench"* and a plan is written in ids."""
+"""What reading a report needs. `name` is here and not on the planner's list
+(`coach.planner.KEEPS`), because a report says *"the bench"* and a plan is
+written in ids."""
 
 
 def _serialised(answer: Any, keeps: Sequence[str]) -> str:
@@ -462,9 +456,9 @@ def _serialised(answer: Any, keeps: Sequence[str]) -> str:
 def _trimmed(answer: Any, keeps: Sequence[str]) -> Any:
     """Every exercise record, cut to the fields this door reads; every envelope around one, left whole.
 
-    A catalog field the door does not keep -- `name` above all, which a model
-    shown both strings copied into `exercise_id` -- reaches it under no key at
-    all. A key that is not a catalog field is nobody's to drop.
+    A catalog field the caller does not keep -- `name` above all, which a
+    model shown both strings copied into `exercise_id` -- reaches it under no
+    key at all. A key that is not a catalog field is nobody's to drop.
     """
     return _cut(answer, tuple(keeps), EXERCISE_FIELDS - set(keeps))
 
@@ -489,90 +483,6 @@ def _an_exercise(answer: Mapping[str, Any]) -> bool:
 
 
 # -- the prompts -------------------------------------------------------------
-
-PLANNING = f"""\
-You plan one strength workout, for one person, today.
-
-{tools.INSTRUCTIONS}
-The rules you are working inside, none of which you can talk your way around:
-
-- Every exercise you prescribe must be in what `admissible_set` returns for
-  today's request, written as the `id` that came back, character for
-  character. Anything else is rejected by a deterministic check after you
-  emit.
-- The plan must fit the time declared. It is never trimmed to fit: a plan that
-  runs over is rejected whole, so ask `remaining_budget` before you commit to
-  a block rather than after.
-- An exercise appears at most once in the whole plan. One line per exercise,
-  with the rounds and reps it needs.
-- Each exercise is prescribed in reps or in seconds: its `prescription` gives
-  the `unit` and the `amount`. A plank is seconds; a push-up is reps.
-- Rest is yours to prescribe and travels with the block. There are reference
-  bands -- around 3 min for heavy low-rep work, 90-120 s for hypertrophy, 60 s
-  for isolation -- and they are a reference, not a rule.
-- Every block carries the reason it is there, in one short sentence. That is
-  the part of the plan only you can supply.
-
-You have a budget of tool calls. When it runs out you will be asked for the
-plan with whatever you know at that point, so spend the calls on what you
-actually need and do not explore for its own sake.
-"""
-
-
-def brief(request: plans.Request) -> str:
-    """Today's request, in words, for the model to plan against."""
-    lines = [
-        f"Equipment available today: {', '.join(request.equipment)}.",
-        f"Time available: {request.budget_min} minutes.",
-    ]
-    if request.groups:
-        lines.append(
-            f"This workout trains: {', '.join(request.groups)}. Ask "
-            "`admissible_set` for those groups; anything else is not today's "
-            "workout."
-        )
-    if request.allocation:
-        divided = ", ".join(
-            f"{group} {minutes} min" for group, minutes in request.allocation
-        )
-        lines.append(
-            f"The time divides over them as {divided}. That is a starting "
-            "point and not an instruction: `allocate` will divide it on any "
-            "proportions you think are better."
-        )
-    if request.exclusions:
-        lines.append(
-            "Excluded, and already filtered out of the admissible set: "
-            + ", ".join(f"{e.granularity} {e.value}" for e in request.exclusions)
-            + "."
-        )
-    if request.preferences:
-        lines.append(
-            "The user has said they would rather not do: "
-            + ", ".join(request.preferences)
-            + ". These are preferences, not exclusions, so they are still in "
-            "the admissible set. Leave them out, or propose one and add a row "
-            "to the plan's `despite` saying why -- proposing one silently is "
-            "rejected."
-        )
-    if request.refused is not None:
-        lines.append(
-            "You proposed this workout and the user turned it down:\n"
-            + request.refused.model_dump_json(indent=1)
-        )
-        if request.because:
-            lines.append(f"They said: {request.because}")
-        lines.append(
-            "Propose a different one. Do not argue it, do not hand back the "
-            "same plan, and do not give up and offer something token: they "
-            "still want to train today."
-        )
-    lines.append("Plan the workout.")
-    return "\n".join(lines)
-
-
-EMIT_PLAN = "Emit the plan now, in the required shape."
-
 
 QUESTION_MARKER = "QUESTION:"
 """How the logging agent says that a turn is a question for the user.
@@ -689,39 +599,6 @@ document with whatever you know at that point.
 EMIT_LOG = "Emit the performed workout now, in the required shape."
 
 
-PLANNER = Door(
-    name="planner",
-    tools=(
-        "admissible_set",
-        "remaining_budget",
-        "allocate",
-        "pattern_history",
-        "last_performed_load",
-        "search_exercises",
-        "adherence_history",
-        "volume_deficit",
-        "unreported_workouts",
-        "compare_variants",
-    ),
-    keeps=FOR_PLANNING,
-    system=PLANNING,
-    emit=EMIT_PLAN,
-)
-"""Everything on the shared surface except the one tool that reads a
-prescription back.
-
-`prescribed_workout` answers *what did workout 12 ask for*, and a planner has
-no workout 12: it is writing one. What it wants to know about the past is
-volume and adherence, and those it already has.
-
-**Named, not derived by subtracting one name from `tools.TOOLS`.** Written that
-way this door was the one place a tool could arrive without anybody deciding
-it should: rename the excluded tool and the planner silently gains it, with
-`registered`'s guard -- which only checks the names a door *asks* for -- unable
-to say a word. A door is a decision about which tools an agent gets, and a
-decision is written down.
-"""
-
 LOGGER = Door(
     name="logger",
     tools=(
@@ -782,31 +659,7 @@ def log_brief(
     return "\n".join(lines)
 
 
-# -- the two agents -----------------------------------------------------------
-
-
-def plan_workout(
-    connection: sqlite3.Connection,
-    request: plans.Request,
-    *,
-    model: Model | None = None,
-    budget: int = CALL_BUDGET,
-) -> RunRecord:
-    """Ask a model for a workout, and record everything it did to get there.
-
-    Returns the record whether the plan passed or was refused. Refusal is an
-    outcome of the run, not an exception: the plan eval counts refusals across
-    many runs, and a function that raised on one would make the count the
-    caller's job to reassemble.
-    """
-    ran = _ran(PLANNER, model, brief(request), budget)
-    emission = ran.model.emit(ran.written, ran.exchanges, plans.WorkoutPlan)
-
-    return RunRecord(
-        **ran.fields(emission),
-        plan=emission.document,
-        refused=_refusal(connection, emission.document, request),
-    )
+# -- the logging agent --------------------------------------------------------
 
 
 def log_workout(
@@ -835,7 +688,9 @@ def log_workout(
     reached for stdin could not be measured at all.
 
     Returns the record whether the document passed `log.validate` or was
-    refused, for `plan_workout`'s reason.
+    refused. Refusal is an outcome of the run, not an exception: the log eval
+    counts refusals across many runs, and a function that raised on one would
+    make the count the caller's job to reassemble.
     """
     ran = _ran(
         LOGGER,
@@ -908,17 +763,17 @@ def _ran(
 ) -> _Ran:
     """Loop over one door's tools until the model stops asking for them.
 
-    One loop for both agents. What a door changes is which tools are on the
-    table, what its results carry into the context, and whether a turn with no
-    tool calls in it is the end (`ask is None`, the planner: a model that has
-    stopped asking is a model that is ready) or possibly a question.
+    `ask` is what makes a turn with no tool calls in it a question rather than
+    the end. Without one -- which is how the planner ran through this same
+    loop before the graph took it over -- a model that has stopped asking is a
+    model that is ready.
     """
     if budget < 1:
         raise AgentError(f"a call budget is at least one call, got {budget}")
     if model is None:
         model = groq(door)
 
-    offered = registered(door)
+    offered = registered(door.name, door.tools)
     definitions = [schema(tool) for tool in offered]
     ran = _Ran(model=model, written=written, budget=budget)
 
@@ -995,17 +850,6 @@ def _question(reply: Reply, ask: Ask | None, asked: int) -> str | None:
             if marked:
                 return marked
     return None
-
-
-def _refusal(
-    connection: sqlite3.Connection, emitted: plans.WorkoutPlan, request: plans.Request
-) -> str | None:
-    """Why the validator refused the emitted plan, or `None` when it passed."""
-    try:
-        violations = plans.validate(connection, plans.to_blocks(emitted), request, emitted)
-    except plans.PlanError as error:
-        return str(error)
-    return plans.refusal(violations) if violations else None
 
 
 def _log_refusal(
@@ -1274,15 +1118,14 @@ def _reported(call: Callable[[], Any]) -> Any:
 def summary(record: Run) -> list[str]:
     """The run in a few lines, for the terminal. ASCII.
 
-    One function for both agents because every line of it is about the loop.
-    The questions are the one thing only a logging run has, and they are said
-    out loud: *it asked instead of guessing* is the behaviour the log eval
-    measures, and it is the behaviour a user should be able to see happening.
+    The questions are said out loud: *it asked instead of guessing* is the
+    behaviour the log eval measures, and it is the behaviour a user should be
+    able to see happening. The planner graph's own summary is
+    `coach.record.summary`, which reads a graph state rather than a loop.
     """
-    emitted = "the plan" if isinstance(record, RunRecord) else "the report"
     used = f"{record.spent} of {record.budget} tool calls"
     if record.emitted_on_exhaustion:
-        used += f" (budget spent; {emitted} was emitted with what it had)"
+        used += " (budget spent; the report was emitted with what it had)"
     failed = sum(1 for call in record.calls if call.failed)
     lines = [f"{record.model} -- {used}"]
     if failed:
