@@ -133,7 +133,7 @@ class Coach:
         """Answer `/start`, if the owner sent it."""
         if not self._answers(user_id):
             return
-        await say(STARTED)
+        await self._tell(thread_for(chat_id), say, STARTED)
 
     async def arriving(self, user_id: int, chat_id: int, text: str, say: Say) -> None:
         """One message, run now or queued behind the run already in flight.
@@ -148,8 +148,10 @@ class Coach:
         thread = thread_for(chat_id)
         conversation = self._threads.setdefault(thread, _Conversation())
         if conversation.busy:
+            # Queued before the acknowledgement is attempted, not after: a chat
+            # that cannot be written to must not also cost the message.
             conversation.waiting.append(text)
-            await say(QUEUED)
+            await self._tell(thread, say, QUEUED)
             return
 
         conversation.busy = True
@@ -186,7 +188,23 @@ class Coach:
             await self._run(thread, text, say)
         except Exception:
             logger.exception("the run on %s failed", thread)
-            await say(FAILED)
+            await self._tell(thread, say, FAILED)
+
+    async def _tell(self, thread: str, say: Say, line: str) -> None:
+        """One line into the chat, whose failure is never the caller's problem.
+
+        The first failure this met outside the tests was a timeout reaching
+        Telegram from inside `say` itself. Telling the user *it went wrong*
+        then goes down the channel that has just gone wrong, raises again, and
+        leaves `arriving` -- taking the queue with it, which is the one thing
+        catching per message exists to prevent. There is no answering a chat
+        that cannot be written to; there is only staying alive for the next
+        message, and leaving a line in the log for whoever reads it.
+        """
+        try:
+            await say(line)
+        except Exception:
+            logger.exception("could not write to %s", thread)
 
     def _answers(self, user_id: int) -> bool:
         """Whether this is the owner, checked before anything looks at the message."""

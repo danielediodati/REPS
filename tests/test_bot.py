@@ -244,6 +244,52 @@ def test_a_message_queued_behind_a_run_that_fails_is_still_answered() -> None:
     assert asyncio.run(scenario()) == [bot.QUEUED, bot.FAILED, "fatto: due"]
 
 
+def test_a_chat_that_cannot_be_written_to_does_not_take_the_queue_with_it() -> None:
+    """Measured in the field, on the first real run: the send timed out inside
+    `say`, so saying *it went wrong* went down the channel that had just gone
+    wrong and raised again -- out of `arriving`, dropping what was queued.
+
+    Nothing reaches the user here, because nothing can. What is under test is
+    that the bot is still running and still working through its queue.
+    """
+
+    async def scenario() -> list[str]:
+        attempted: list[str] = []
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def unreachable(line: str) -> None:
+            raise RuntimeError("Timed out")
+
+        async def run(thread: str, text: str, say: bot.Say) -> None:
+            attempted.append(text)
+            if text == "uno":
+                started.set()
+                await release.wait()
+            await say(f"fatto: {text}")
+
+        coach = bot.Coach(owner_id=OWNER, run=run)
+        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", unreachable))
+        await started.wait()
+        await coach.arriving(OWNER, CHAT, "due", unreachable)
+
+        release.set()
+        await first
+        return attempted
+
+    assert asyncio.run(scenario()) == ["uno", "due"]
+
+
+def test_start_survives_a_chat_that_cannot_be_written_to() -> None:
+    async def scenario() -> None:
+        async def unreachable(line: str) -> None:
+            raise RuntimeError("Timed out")
+
+        coach = bot.Coach(owner_id=OWNER, run=never)
+        await coach.started(OWNER, CHAT, unreachable)
+
+    asyncio.run(scenario())
+
+
 def test_two_chats_do_not_wait_for_each_other() -> None:
     """The queue is per thread. One chat is one conversation, and a bot that
     serialised every chat would be a queue nobody asked for -- there is one
