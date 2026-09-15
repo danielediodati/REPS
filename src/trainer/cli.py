@@ -805,24 +805,34 @@ def bot_command() -> None:
     Only `TELEGRAM_OWNER_ID` is answered, and anything arriving from anybody
     else is ignored. Both settings are read from the environment, never from
     `training.toml`, which holds what you declare about your training.
+
+    Everything the bot needs is checked before it starts, and only for the
+    provider `LLM_BACKEND` selects: on Ollama the server, the model and
+    `OLLAMA_CONTEXT_LENGTH`; on Groq the key; and the token, with Telegram.
     """
     with reported():
         declared = bot.settings()
         on = models.chat()
+        models.ready(on)
+        context = models.context_length(on)
+        name = bot.identified(declared)
 
-        # Opened before the block is printed, not after: the checkpointer is
-        # the one line in it that can be refused -- pointed at the training
-        # database it is a `CheckpointError` -- and a block that says where the
-        # checkpoints go and that the bot is polling, immediately before saying
-        # neither was true, is worse than no block at all.
+        # Opened before the block is printed, not after: a block that says
+        # where the checkpoints go, immediately before saying they cannot go
+        # there, is worse than no block at all.
         with checkpoints.saver() as saver:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.name}")
+            click.echo(
+                f"context:     {context} tokens"
+                if context is not None
+                else f"context:     {on.provider}'s own"
+            )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
+            click.echo(f"bot:         {name}")
             # The owner's chat id is their user id, a private chat being
             # between the two of them, so the thread is knowable before
-            # anybody has written anything. Ticket 05 turns this into a real
-            # check of the provider.
+            # anybody has written anything.
             click.echo(
                 f"owner:       {declared.owner_id} -> "
                 f"thread {bot.thread_for(declared.owner_id)}"

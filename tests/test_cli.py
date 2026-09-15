@@ -3296,29 +3296,146 @@ def test_bot_reports_a_username_where_the_owner_id_goes_as_a_state(
     assert "@userinfobot" in result.output
 
 
-def test_bot_says_what_it_runs_on_before_it_polls(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The startup block, which ticket 05 turns into a real check of the
-    provider. Nothing polls: long polling needs a network the suite does not
-    have, and what is under test is the block above it."""
+@pytest.fixture()
+def healthy_bot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> list[object]:
+    """Every check `trainer bot` makes, passing; returns what `serve` was handed."""
+    import ollama
+    from telegram import Bot, User
+
     from trainer.coach import bot
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
     monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
     monkeypatch.setenv("LLM_BACKEND", "ollama")
     monkeypatch.setenv("OLLAMA_MODEL", "gpt-oss:20b")
+    monkeypatch.setenv("OLLAMA_CONTEXT_LENGTH", "8192")
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
-    polled: list[bot.Settings] = []
-    monkeypatch.setattr(
-        bot, "serve", lambda declared, on, saver: polled.append(declared)
-    )
 
+    class Listed:
+        model = "gpt-oss:20b"
+
+    class Listing:
+        models = [Listed()]
+
+    monkeypatch.setattr(ollama.Client, "list", lambda self: Listing())
+
+    async def known(self: Any, *args: Any, **kwargs: Any) -> User:
+        return User(id=1, is_bot=True, first_name="REPS", username="reps_coach_bot")
+
+    monkeypatch.setattr(Bot, "get_me", known)
+    polled: list[object] = []
+    monkeypatch.setattr(bot, "serve", lambda declared, on, saver: polled.append(declared))
+    return polled
+
+
+def test_bot_says_what_it_runs_on_before_it_polls(
+    runner: CliRunner, healthy_bot: list[object]
+) -> None:
+    """Nothing polls: long polling needs a network the suite does not have."""
     result = runner.invoke(main, ["bot"])
 
     assert result.exit_code == 0, result.output
     assert "provider:    ollama" in result.output
     assert "model:       gpt-oss:20b" in result.output
+    assert "context:     8192 tokens" in result.output
+    assert "bot:         @reps_coach_bot" in result.output
     assert "thread chat:6421" in result.output
     assert result.output.isascii()
-    assert [declared.owner_id for declared in polled] == [6421]
+    assert [getattr(declared, "owner_id") for declared in healthy_bot] == [6421]
+
+
+def test_bot_with_ollama_down_stops_with_the_fix(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    import ollama
+
+    def unreachable(self: Any) -> Any:
+        raise ConnectionError("Failed to connect to Ollama.")
+
+    monkeypatch.setattr(ollama.Client, "list", unreachable)
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "start Ollama" in result.output
+    assert "provider:" not in result.output
+    assert healthy_bot == []
+
+
+def test_bot_with_the_model_not_pulled_names_the_pull(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:9b")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "ollama pull qwen3.5:9b" in result.output
+    assert healthy_bot == []
+
+
+def test_bot_with_no_context_length_says_what_a_short_context_does(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    monkeypatch.delenv("OLLAMA_CONTEXT_LENGTH")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "OLLAMA_CONTEXT_LENGTH" in result.output
+    assert "truncated" in result.output
+    assert healthy_bot == []
+
+
+def test_bot_on_groq_with_no_key_stops_with_the_groq_state(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "GROQ_API_KEY" in result.output
+    assert healthy_bot == []
+
+
+def test_bot_on_groq_with_a_key_never_asks_ollama(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    import ollama
+
+    def refuse(self: Any) -> Any:
+        raise AssertionError("Groq must not be checked against a local server")
+
+    monkeypatch.setattr(ollama.Client, "list", refuse)
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "a-stand-in")
+    monkeypatch.delenv("OLLAMA_CONTEXT_LENGTH")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert "provider:    groq" in result.output
+    assert len(healthy_bot) == 1
+
+
+def test_bot_with_a_token_telegram_refuses_names_botfather(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    from telegram import Bot
+    from telegram.error import InvalidToken
+
+    async def refused(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise InvalidToken("The token `123:a-stand-in` was rejected by the server.")
+
+    monkeypatch.setattr(Bot, "get_me", refused)
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "@BotFather" in result.output
+    assert "Traceback" not in result.output
+    assert "a-stand-in" not in result.output
+    assert healthy_bot == []

@@ -166,6 +166,49 @@ def test_a_model_that_is_pulled_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     models.ready(models.chat())
 
 
+def test_an_unset_context_length_is_a_state_saying_what_it_does_to_planning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.delenv(models.CONTEXT_ENV, raising=False)
+
+    with pytest.raises(models.ModelError) as raised:
+        models.context_length(models.chat())
+
+    said = str(raised.value)
+    assert models.CONTEXT_ENV in said
+    assert str(models.MEASURED_CONTEXT) in said
+    assert "truncated" in said
+    assert said.isascii()
+
+
+def test_a_context_length_under_the_measured_one_is_refused_the_same_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.CONTEXT_ENV, "4096")
+
+    with pytest.raises(models.ModelError, match="truncated"):
+        models.context_length(models.chat())
+
+
+def test_a_context_length_at_the_measured_one_is_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.CONTEXT_ENV, str(models.MEASURED_CONTEXT))
+
+    assert models.context_length(models.chat()) == models.MEASURED_CONTEXT
+
+
+def test_groq_needs_no_context_length(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.setenv(agent_key(), "a-stand-in")
+    monkeypatch.delenv(models.CONTEXT_ENV, raising=False)
+
+    assert models.context_length(models.chat()) is None
+
+
 def test_groq_is_not_asked_whether_ollama_is_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

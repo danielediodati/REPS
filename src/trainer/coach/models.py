@@ -120,6 +120,27 @@ def ready(on: Chat) -> None:
         raise ModelError(f"Ollama does not have {on.name}; run `ollama pull {on.name}`")
 
 
+MEASURED_CONTEXT = 8192
+"""The context length session 6 measured the planner at, 6 valid plans of 6."""
+
+SHORT_CONTEXT = (
+    f"set it to {MEASURED_CONTEXT} in .env -- below that the "
+    "admissible set is truncated and plans are refused for no visible reason"
+)
+
+
+def context_length(on: Chat) -> int | None:
+    """The context the local model plans with, refused when unset or short; `None` off Ollama."""
+    if on.provider != OLLAMA:
+        return None
+    declared = _context_length()
+    if declared is None:
+        raise ModelError(f"{CONTEXT_ENV} is not set; {SHORT_CONTEXT}")
+    if declared < MEASURED_CONTEXT:
+        raise ModelError(f"{CONTEXT_ENV} is {declared}; {SHORT_CONTEXT}")
+    return declared
+
+
 def _tagged(name: str) -> str:
     """A model name with its tag, the way `ollama list` always reports one.
 

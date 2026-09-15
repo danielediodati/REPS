@@ -7,12 +7,13 @@ is driven here is the part that decides, with the updates constructed by hand.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from telegram import Chat, Message, Update, User
+from telegram import Bot, Chat, Message, Update, User
+from telegram.error import InvalidToken, RetryAfter, TimedOut
 
 from test_planner import Scripted
 from trainer.coach import bot, checkpoints, planner
@@ -91,6 +92,86 @@ def test_the_settings_that_are_there_are_read(monkeypatch: pytest.MonkeyPatch) -
 
     assert declared.token == "123:a-stand-in"
     assert declared.owner_id == OWNER
+
+
+# -- the token, as Telegram sees it --------------------------------------------
+
+
+def test_a_token_telegram_refuses_is_a_state_naming_botfather(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PTB's own message quotes the token, so the state must not carry it."""
+
+    async def refused(self: Any, *args: Any, **kwargs: Any) -> User:
+        raise InvalidToken("The token `123:a-stand-in` was rejected by the server.")
+
+    monkeypatch.setattr(Bot, "get_me", refused)
+
+    with pytest.raises(bot.BotError) as raised:
+        bot.identified(bot.Settings(token="123:a-stand-in", owner_id=OWNER))
+
+    assert "@BotFather" in str(raised.value)
+    assert "a-stand-in" not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+def test_telegram_out_of_reach_is_a_state_and_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def unreachable(self: Any, *args: Any, **kwargs: Any) -> User:
+        raise TimedOut("Timed out")
+
+    monkeypatch.setattr(Bot, "get_me", unreachable)
+
+    with pytest.raises(bot.BotError, match="cannot be reached"):
+        bot.identified(bot.Settings(token="123:a-stand-in", owner_id=OWNER))
+
+
+def test_flood_control_on_the_check_is_a_state_and_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`RetryAfter` is neither a refused token nor a network error."""
+    # The library warns about its own `retry_after` type unless opted in.
+    monkeypatch.setenv("PTB_TIMEDELTA", "1")
+
+    async def flooded(self: Any, *args: Any, **kwargs: Any) -> User:
+        raise RetryAfter(timedelta(seconds=30))
+
+    monkeypatch.setattr(Bot, "get_me", flooded)
+
+    with pytest.raises(bot.BotError, match="start it again later"):
+        bot.identified(bot.Settings(token="123:a-stand-in", owner_id=OWNER))
+
+
+def test_the_check_closes_the_connection_it_opened(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Bot.shutdown` is a no-op on a bot that was never initialized."""
+    checked: list[Bot] = []
+
+    async def known(self: Bot, *args: Any, **kwargs: Any) -> User:
+        checked.append(self)
+        return User(id=1, is_bot=True, first_name="REPS", username="reps_coach_bot")
+
+    monkeypatch.setattr(Bot, "get_me", known)
+
+    bot.identified(bot.Settings(token="123:a-stand-in", owner_id=OWNER))
+
+    assert checked
+    assert all(request._client.is_closed for request in checked[0]._request)  # type: ignore[attr-defined]
+
+
+def test_a_token_telegram_knows_is_answered_with_the_bots_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def known(self: Any, *args: Any, **kwargs: Any) -> User:
+        return User(id=1, is_bot=True, first_name="REPS", username="reps_coach_bot")
+
+    monkeypatch.setattr(Bot, "get_me", known)
+
+    assert bot.identified(bot.Settings(token="123:a-stand-in", owner_id=OWNER)) == (
+        "@reps_coach_bot"
+    )
 
 
 # -- one chat is one thread ----------------------------------------------------

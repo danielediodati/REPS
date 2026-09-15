@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import Awaitable, Callable, Coroutine
@@ -91,6 +92,40 @@ def _owner() -> int:
             f"{OWNER_ENV} is {declared!r}, which is not a user id: it is the "
             f"number @userinfobot replies with, not a username. See {EXAMPLE}"
         ) from None
+
+
+REFUSED_TOKEN = (
+    f"the {TOKEN_ENV} in .env is not one Telegram knows; @BotFather issued it "
+    "and can show it again (send it /mybots)"
+)
+
+
+def identified(declared: Settings) -> str:
+    """The bot's @name, as Telegram answers for the token, or the state that stops it."""
+    return asyncio.run(_identified(declared.token))
+
+
+async def _identified(token: str) -> str:
+    from telegram import Bot
+    from telegram.error import InvalidToken, NetworkError, TelegramError
+
+    try:
+        # `async with`, because `shutdown` closes the client only after `initialize`.
+        async with Bot(token) as telegram:
+            me = await telegram.get_me()
+    except InvalidToken:
+        # `from None`: the library's own message quotes the token.
+        raise BotError(REFUSED_TOKEN) from None
+    except NetworkError as error:
+        raise BotError(
+            f"Telegram cannot be reached ({error}); check the connection and "
+            "start the bot again"
+        ) from None
+    except TelegramError as error:
+        raise BotError(
+            f"Telegram would not answer for the bot ({error}); start it again later"
+        ) from None
+    return f"@{me.username}"
 
 
 def thread_for(chat_id: int) -> str:
