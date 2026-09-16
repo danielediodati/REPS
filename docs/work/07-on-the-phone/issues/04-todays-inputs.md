@@ -9,7 +9,9 @@ The bot has to answer *"what am I doing today?"* with no arguments. Everything n
 - **The rotation moves into the engine.** `cli._rotated` reads which workout of the split today is from the performed workouts. A bot cannot call a private function of the CLI module, and a second copy is the thing this project has been bitten by. It belongs next to `constraints.constraining_today`: it is a fact about training, derived from workouts performed, not an interface concern.
 - **One function assembles `plan.Request`**, and both the CLI and the bot call it. `Request`'s own docstring carries why: assembled at each call site, the two drift and a plan is checked against a request nobody made.
 - **What is not derivable is asked in the chat**, as an `interrupt()` like ticket 03's: equipment when it is not the declared default, minutes when the user wants something other than the cap, groups when there is no `training.toml` to take them from. What *is* derivable is never asked.
-- **`trainer plan` becomes invoke-then-resume.** With the write living after the resume (ADR-0005), the CLI resumes immediately and implicitly: it has no buttons, and printing a plan has always meant keeping it. It therefore needs a checkpointer even with no bot in sight — the same machine on both doors, which is the point.
+- **The bot plans.** Ticket 03 left `serve` handing messages to `recording`, which writes the turn into the thread and answers; the run that a message causes becomes the planner graph, and `bot.told` already puts the plan in the chat with its buttons.
+
+Ticket 03 did the rest of what this ticket used to carry: `trainer plan` is already invoke-then-resume over a checkpointer, and the write already lives in the graph node after the resume.
 
 ## Acceptance criteria
 
@@ -17,5 +19,5 @@ The bot has to answer *"what am I doing today?"* with no arguments. Everything n
 - [ ] One function builds `plan.Request`; a test shows the CLI and the bot produce an identical request from the same state.
 - [ ] *"cosa faccio oggi?"* with no other words reaches a plan: groups from the rotation, minutes from the cap, equipment from the declaration.
 - [ ] A missing `training.toml` is reported as the state it already is (`config.NoTrainingConfig`), naming the example file, and the chat asks for what it needs rather than failing.
-- [ ] `trainer plan` still prints and still records exactly one workout, through the resume.
+- [ ] *«cosa faccio oggi?»* in the chat reaches a plan with buttons, and tapping accept writes the workout (ticket 03 built the resume; this is the first door that reaches it).
 - [ ] The full test suite and mypy are green.

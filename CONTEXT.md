@@ -4,7 +4,7 @@ The only glossary. Every load-bearing term is defined here, once, and the other 
 
 ## The unit of training
 
-**Workout**: one training session. It is **prescribed** when a plan is emitted for it and **performed** once it is reported. A performed workout need not have been prescribed.
+**Workout**: one training session. It is **prescribed** when the user accepts the plan emitted for it (ADR-0005) and **performed** once it is reported. A plan that is turned down is not a workout and reaches no table. A performed workout need not have been prescribed.
 _Avoid_: session, which in ROADMAP.md means a unit of development work.
 
 **Unreported**: a prescribed workout with no report after a later workout has been performed. It contributes no volume and is never assumed done. Whether to ask about it is the agent's call.

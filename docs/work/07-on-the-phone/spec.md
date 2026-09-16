@@ -25,7 +25,8 @@
 - `coach/planner.py`: `build(model, checkpointer=...)` returns the compiled graph; `PlannerState` holds `request`, `messages`, `spent`, `attempts`, `violations`, `refusals`, `timings`, `plan`. `ATTEMPTS` is 3.
 - `coach/checkpoints.py`: `saver()` yields a `SqliteSaver` over its own file, `TRAINER_CHECKPOINTS`, refusing to share the training database.
 - langgraph 1.2.11 is installed; `interrupt` and `Command` come from `langgraph.types`.
-- Nothing in the graph calls `interrupt()` yet, and nothing in it writes to SQLite.
+- The graph stops at `propose`, which calls `interrupt()` with the plan, and the `record` node after the resume is the only thing in it that writes to SQLite (ADR-0005, ticket 03). `planner.accepted()` and `planner.refused(because, minutes)` are what a resume carries.
+- `trainer plan` and `trainer eval` therefore both build the graph with a checkpointer: the command resumes immediately and the eval never resumes.
 
 **Today's request.** `cli.py`'s plan command assembles it, and every part already exists:
 - `_minutes` (the asked minutes or the declared cap), `_rotated` (which workout of the split today is, from the performed workouts), `_divided` (minutes per group), `_preferred`;

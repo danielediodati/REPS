@@ -17,13 +17,15 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from conftest import enrich, make_exercise
 from trainer import agent, tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, planner, record
-from trainer.engine import catalog, database, exclusions, migrations
+from trainer.engine import catalog, database, exclusions, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -39,7 +41,7 @@ CATALOG = (
     ),
 )
 
-_PATTERNS = {
+PATTERNS = {
     "Barbell_Squat": ("squat", "hip, knee, ankle", "yes", "high", 3),
     "Dumbbell_Bench_Press": ("horizontal push", "shoulder, elbow", "no", "medium", 1),
     "Standing_Military_Press": ("vertical push", "shoulder, elbow", "yes", "medium", 3),
@@ -53,7 +55,7 @@ def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
     with closing(database.connect(database_file)) as opened:
         migrations.migrate(opened, migrations.discover())
         catalog.import_exercises(opened, CATALOG)
-        enrich(opened, _PATTERNS)
+        enrich(opened, PATTERNS)
         yield opened
 
 
@@ -830,3 +832,164 @@ def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
 
     assert "turned it down" not in written
     assert "rather not" not in written
+
+
+# -- the plan that waits to be accepted (ADR-0005) -----------------------------
+
+
+def waiting(model: BaseChatModel) -> tuple[planner.Planner, RunnableConfig]:
+    """A graph that can pause, and the thread it pauses on."""
+    return planner.build(model, checkpointer=InMemorySaver()), {
+        "configurable": {"thread_id": "one"}
+    }
+
+
+def prescribed(connection: sqlite3.Connection) -> list[tuple[Any, ...]]:
+    return [tuple(row) for row in connection.execute("SELECT id, state FROM workouts")]
+
+
+def test_a_valid_plan_stops_at_the_interrupt_with_nothing_written(
+    connection: sqlite3.Connection,
+) -> None:
+    """The run is waiting, not finished, and the database has not been touched."""
+    graph, thread = waiting(Scripted(documents=[plan_of("Barbell_Squat")]))
+
+    final = graph.invoke({"request": BARBELL_45}, thread)
+
+    assert final["plan"] == plan_of("Barbell_Squat")
+    (waited,) = final["__interrupt__"]
+    assert waited.value["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
+    assert graph.get_state(thread).next == ("propose",)
+    assert prescribed(connection) == []
+
+
+def test_accepting_the_plan_writes_exactly_one_prescribed_workout(
+    connection: sqlite3.Connection,
+) -> None:
+    graph, thread = waiting(Scripted(documents=[plan_of("Barbell_Squat")]))
+    graph.invoke({"request": BARBELL_45}, thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    assert prescribed(connection) == [(final["workout"], "prescribed")]
+    written = workouts.prescribed(connection, final["workout"])
+    assert [item.exercise_id for block in written for item in block.block.items] == [
+        "Barbell_Squat"
+    ]
+    assert graph.get_state(thread).next == ()
+
+
+def test_refusing_the_plan_writes_nothing_and_proposes_another(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread = waiting(model)
+    graph.invoke({"request": BARBELL_45}, thread)
+
+    final = graph.invoke(
+        Command(resume=planner.refused("non mi va, sempre squat")), thread
+    )
+
+    assert final["plan"] == plan_of("Standing_Military_Press")
+    assert graph.get_state(thread).next == ("propose",)
+    assert prescribed(connection) == []
+
+
+def test_what_the_user_said_reaches_the_planner(connection: sqlite3.Connection) -> None:
+    """It is the one thing only they can supply, and no rule checks it."""
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread = waiting(model)
+    graph.invoke({"request": BARBELL_45}, thread)
+
+    graph.invoke(Command(resume=planner.refused("non mi va, sempre squat")), thread)
+
+    planned = "\n".join(message.text for message in model.seen[-1])
+    assert "non mi va, sempre squat" in planned
+    assert "Barbell_Squat" in planned, "the plan they turned down goes with it"
+
+
+def test_only_30_minutes_plans_again_against_the_shorter_budget(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread = waiting(model)
+    graph.invoke({"request": BARBELL_45}, thread)
+
+    final = graph.invoke(Command(resume=planner.refused("", minutes=30)), thread)
+
+    assert final["request"].budget_min == 30
+    assert final["request"].allocation == (), "divided for a budget nobody asked for"
+    assert "30 minutes" in "\n".join(message.text for message in model.seen[-1])
+
+
+def test_a_refused_plan_is_never_the_one_that_is_written(
+    connection: sqlite3.Connection,
+) -> None:
+    """Refuse, then accept: exactly one workout, and it is the second plan."""
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread = waiting(model)
+    graph.invoke({"request": BARBELL_45}, thread)
+    graph.invoke(Command(resume=planner.refused("non mi va")), thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    assert prescribed(connection) == [(final["workout"], "prescribed")]
+    written = workouts.prescribed(connection, final["workout"])
+    assert [item.exercise_id for block in written for item in block.block.items] == [
+        "Standing_Military_Press"
+    ]
+
+
+def test_what_the_user_said_turning_a_plan_down_is_in_no_table(
+    connection: sqlite3.Connection,
+) -> None:
+    """A *"non mi va, sempre panca"* said on a bad Tuesday must not settle into
+    a preference, an exclusion or a workout. Asserted over every value of every
+    table, because the guarantee is about the database and not about the tables
+    somebody remembered to check."""
+    said = "non mi va, sempre panca e mi fa male la spalla"
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread = waiting(model)
+    graph.invoke({"request": BARBELL_45}, thread)
+    graph.invoke(Command(resume=planner.refused(said)), thread)
+    graph.invoke(Command(resume=planner.accepted()), thread)
+
+    tables = [
+        name
+        for (name,) in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    ]
+    assert "workouts" in tables, "the tables were read from the database"
+    for table in tables:
+        for row in connection.execute(f"SELECT * FROM {table}"):
+            for value in row:
+                assert said not in str(value), table
+
+
+def test_a_run_the_validator_refuses_to_the_end_never_offers_a_plan(
+    connection: sqlite3.Connection,
+) -> None:
+    """There is nothing to accept, so the run ends instead of waiting."""
+    graph, thread = waiting(Scripted(documents=[plan_of("Dumbbell_Bench_Press")] * 4))
+
+    final = graph.invoke({"request": BARBELL_45}, thread)
+
+    assert "__interrupt__" not in final
+    assert graph.get_state(thread).next == ()
+    assert prescribed(connection) == []

@@ -7,16 +7,27 @@ is driven here is the part that decides, with the updates constructed by hand.
 from __future__ import annotations
 
 import asyncio
+import sqlite3
+import threading
+from collections.abc import Iterator
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from telegram import Bot, Chat, Message, Update, User
+from langchain_core.messages import AIMessage
+from telegram import Bot, CallbackQuery, Chat, Message, Update, User
 from telegram.error import InvalidToken, RetryAfter, TimedOut
 
-from test_planner import Scripted
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Interrupt
+
+from conftest import enrich
+from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, plan_of
 from trainer.coach import bot, checkpoints, planner
+from trainer.engine import catalog, database, migrations, workouts
 
 OWNER = 6421
 STRANGER = 99
@@ -472,14 +483,29 @@ def update_of(
 
 
 class Sent:
-    """The context a handler is passed, collecting what would have been sent."""
+    """The context a handler is passed, collecting what would have been sent.
+
+    It stands in for the bot as well, because a tap is answered on the bot the
+    query carries rather than through the context.
+    """
 
     def __init__(self) -> None:
         self.lines: list[tuple[int, str]] = []
+        self.offers: list[tuple[int, str, Any]] = []
+        self.answered: list[str] = []
         self.bot: Any = self
 
-    async def send_message(self, chat_id: int, text: str) -> None:
-        self.lines.append((chat_id, text))
+    async def send_message(
+        self, chat_id: int, text: str, reply_markup: Any = None
+    ) -> None:
+        if reply_markup is None:
+            self.lines.append((chat_id, text))
+        else:
+            self.offers.append((chat_id, text, reply_markup))
+
+    async def answer_callback_query(self, callback_query_id: str, **kwargs: Any) -> bool:
+        self.answered.append(callback_query_id)
+        return True
 
 
 def test_a_constructed_update_reaches_the_coach_and_is_answered() -> None:
@@ -539,3 +565,347 @@ def test_an_edited_message_is_not_a_new_message() -> None:
     nor a word. Excluded by the filter, leaving an edit alone is a decision."""
     assert bot.messages_only().check_update(update_of("cosa faccio oggi?"))
     assert not bot.messages_only().check_update(update_of("corretto", edited=True))
+
+
+# -- the plan, its buttons, and the tap that answers it (ADR-0005) --------------
+
+
+@pytest.fixture()
+def catalogued(database_file: Path) -> Iterator[sqlite3.Connection]:
+    """The planner's catalog, so a plan can be rendered and written."""
+    with closing(database.connect(database_file)) as opened:
+        migrations.migrate(opened, migrations.discover())
+        catalog.import_exercises(opened, CATALOG)
+        enrich(opened, PATTERNS)
+        yield opened
+
+
+def offered() -> tuple[list[tuple[str, list[tuple[str, str]]]], bot.Offer]:
+    """A chat that remembers the plans and the buttons put in it."""
+    sent: list[tuple[str, list[tuple[str, str]]]] = []
+
+    async def offer(text: str, buttons: Any) -> None:
+        sent.append((text, list(buttons)))
+
+    return sent, offer
+
+
+def waiting_on_a_plan(model: Any) -> tuple[planner.Planner, str, dict[str, Any]]:
+    """A graph stopped at a proposed plan, on the owner's thread."""
+    graph = planner.build(model, checkpointer=InMemorySaver())
+    thread = bot.thread_for(CHAT)
+    final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": thread}})
+    return graph, thread, final
+
+
+def tap_on(final: dict[str, Any], thread: str, action: str) -> str:
+    return bot.carried(bot.Tap(action, thread, final["__interrupt__"][0].id))
+
+
+def workout_rows(connection: sqlite3.Connection) -> list[tuple[Any, ...]]:
+    return [tuple(row) for row in connection.execute("SELECT id, state FROM workouts")]
+
+
+def still_waiting(graph: planner.Planner, thread: str) -> tuple[str, ...]:
+    return graph.get_state({"configurable": {"thread_id": thread}}).next
+
+
+def test_a_valid_plan_reaches_the_chat_with_three_buttons(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """And the run is waiting on it, not finished."""
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    said, say = spoken()
+    sent, offer = offered()
+
+    asyncio.run(bot.told(final, thread, say, offer))
+
+    (text, buttons) = sent[0]
+    assert "Barbell Squat" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert said == []
+    assert still_waiting(graph, thread) == ("propose",)
+    assert workout_rows(catalogued) == []
+
+
+def test_every_button_fits_what_telegram_carries(catalogued: sqlite3.Connection) -> None:
+    """64 bytes, and the thread and the proposal both have to travel in them."""
+    _, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    sent, offer = offered()
+    asyncio.run(bot.told(final, thread, spoken()[1], offer))
+
+    taps = []
+    for data, _ in sent[0][1]:
+        assert len(data.encode("utf-8")) <= 64, data
+        read = bot.tap_of(data)
+        assert read is not None
+        assert read.thread == thread
+        taps.append(read.action)
+    assert taps == [action for action, _ in bot.BUTTONS]
+
+
+def test_tapping_accept_writes_exactly_one_prescribed_workout(
+    catalogued: sqlite3.Connection,
+) -> None:
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+
+    asyncio.run(coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.KEPT), say, offer))
+
+    assert said == [bot.WRITTEN]
+    (written,) = workout_rows(catalogued)
+    assert written[1] == "prescribed"
+    (block,) = workouts.prescribed(catalogued, int(written[0]))
+    assert [item.exercise_id for item in block.block.items] == ["Barbell_Squat"]
+
+
+def test_tapping_no_proposes_another_plan_and_writes_nothing(
+    catalogued: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread, final = waiting_on_a_plan(model)
+    said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+
+    asyncio.run(
+        coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.TURNED_DOWN), say, offer)
+    )
+
+    (text, buttons) = sent[0]
+    assert "Standing Military Press" in text
+    assert len(buttons) == len(bot.BUTTONS)
+    assert said == []
+    assert workout_rows(catalogued) == []
+    assert still_waiting(graph, thread) == ("propose",)
+
+
+def test_tapping_thirty_minutes_plans_against_thirty(
+    catalogued: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+    )
+    graph, thread, final = waiting_on_a_plan(model)
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+
+    asyncio.run(
+        coach.tapped(
+            OWNER, CHAT, tap_on(final, thread, bot.SHORTER), spoken()[1], offer
+        )
+    )
+
+    asked = graph.get_state({"configurable": {"thread_id": thread}}).values["request"]
+    assert asked.budget_min == bot.SHORTER_MINUTES
+    assert "of 30" in sent[0][0], "rendered against the time it was asked for"
+
+
+def test_a_tap_on_a_plan_that_has_been_superseded_says_what_happens_next(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """The thread has moved on, or this plan was already answered. Not an error,
+    and never a silent no-op."""
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    stale = bot.carried(bot.Tap(bot.KEPT, thread, "a-proposal-from-three-days-ago"))
+
+    asyncio.run(coach.tapped(OWNER, CHAT, stale, say, offer))
+
+    assert said == [bot.SUPERSEDED]
+    assert sent == []
+    assert workout_rows(catalogued) == []
+    assert still_waiting(graph, thread) == ("propose",)
+
+
+def test_the_same_plan_cannot_be_accepted_twice(catalogued: sqlite3.Connection) -> None:
+    """The second tap answers a plan that has been answered: one workout and not
+    two, and `record_prescribed` has no upsert that would hide the difference."""
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    data = tap_on(final, thread, bot.KEPT)
+
+    asyncio.run(coach.tapped(OWNER, CHAT, data, say, offer))
+    asyncio.run(coach.tapped(OWNER, CHAT, data, say, offer))
+
+    assert said == [bot.WRITTEN, bot.SUPERSEDED]
+    assert len(workout_rows(catalogued)) == 1
+
+
+def test_a_tap_from_anybody_else_resumes_nothing(catalogued: sqlite3.Connection) -> None:
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+
+    asyncio.run(coach.tapped(STRANGER, CHAT, tap_on(final, thread, bot.KEPT), say, offer))
+
+    assert said == []
+    assert workout_rows(catalogued) == []
+    assert still_waiting(graph, thread) == ("propose",)
+
+
+def test_a_callback_that_is_not_one_of_ours_is_left_alone() -> None:
+    """Whatever it is, it is not an answer to a plan, and guessing which button
+    it meant would resume a thread on something nobody chose."""
+    assert bot.tap_of("ok") is None
+    assert bot.tap_of("something|chat:1|proposal") is None
+    assert bot.tap_of("ok|chat:1|") is None
+
+
+def test_a_tap_arriving_during_a_run_is_queued_and_then_answered(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """A tap is work like any other: a refusal plans the whole workout again."""
+
+    async def scenario() -> list[str]:
+        graph, thread, final = waiting_on_a_plan(
+            Scripted(documents=[plan_of("Barbell_Squat")])
+        )
+        said, say = spoken()
+        sent, offer = offered()
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def slow(thread: str, text: str, say: bot.Say) -> None:
+            started.set()
+            await release.wait()
+            await say("fatto: " + text)
+
+        coach = bot.Coach(owner_id=OWNER, run=slow, resume=bot.answering(graph))
+        running = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say))
+        await started.wait()
+        await coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.KEPT), say, offer)
+
+        release.set()
+        await running
+        return said
+
+    assert asyncio.run(scenario()) == [bot.QUEUED, "fatto: uno", bot.WRITTEN]
+    assert len(workout_rows(catalogued)) == 1
+
+
+def callback_of(data: str, user_id: int = OWNER, chat_id: int = CHAT) -> Update:
+    """One tap, built here. No client exists and nothing is sent."""
+    query = CallbackQuery(
+        id="tap-1",
+        from_user=User(id=user_id, is_bot=False, first_name="Daniele"),
+        chat_instance="whatever",
+        data=data,
+        message=Message(
+            message_id=2,
+            date=datetime(2026, 9, 15, 20, 0, tzinfo=timezone.utc),
+            chat=Chat(id=chat_id, type=Chat.PRIVATE),
+        ),
+    )
+    return Update(update_id=2, callback_query=query)
+
+
+def test_a_constructed_tap_reaches_the_coach_and_resumes_its_thread(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """The handler layer: which button, on which thread, and the spinner on the
+    user's phone stopped before a run that takes minutes begins."""
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    sent = Sent()
+    update = callback_of(tap_on(final, thread, bot.KEPT))
+    update.callback_query.set_bot(cast(Any, sent))  # type: ignore[union-attr]
+
+    asyncio.run(bot._on_tap(coach)(update, cast(Any, sent)))
+
+    assert sent.answered == ["tap-1"], "the button was left spinning"
+    assert sent.lines == [(CHAT, bot.WRITTEN)]
+    assert len(workout_rows(catalogued)) == 1
+
+
+def test_a_constructed_tap_from_a_stranger_resumes_nothing(
+    catalogued: sqlite3.Connection,
+) -> None:
+    graph, thread, final = waiting_on_a_plan(Scripted(documents=[plan_of("Barbell_Squat")]))
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    sent = Sent()
+    update = callback_of(tap_on(final, thread, bot.KEPT), user_id=STRANGER)
+    update.callback_query.set_bot(cast(Any, sent))  # type: ignore[union-attr]
+
+    asyncio.run(bot._on_tap(coach)(update, cast(Any, sent)))
+
+    assert sent.lines == []
+    assert workout_rows(catalogued) == []
+    assert still_waiting(graph, thread) == ("propose",)
+
+
+def test_the_buttons_reach_telegram_as_a_keyboard() -> None:
+    """One row per answer, and the callback data survives the round trip."""
+    sent = Sent()
+
+    offer = bot._offering(cast(Any, sent), CHAT)
+    asyncio.run(offer("il piano", [("ok|chat:1|abc", "Va bene")]))
+
+    (chat_id, text, markup) = sent.offers[0]
+    assert (chat_id, text) == (CHAT, "il piano")
+    ((button,),) = markup.inline_keyboard
+    assert (button.text, button.callback_data) == ("Va bene", "ok|chat:1|abc")
+
+
+def test_the_button_says_the_time_it_actually_asks_for() -> None:
+    """The label and the sentence the planner is given are one number.
+
+    Copied into the label, they drift the day the number changes: the plan is
+    built for twenty minutes and the button the user tapped still said thirty.
+    """
+    assert str(bot.SHORTER_MINUTES) in dict(bot.BUTTONS)[bot.SHORTER]
+    assert str(bot.SHORTER_MINUTES) in bot.SAID[bot.SHORTER]
+
+
+def test_a_resume_does_not_block_the_bot_while_the_model_thinks() -> None:
+    """`graph.invoke` is a synchronous round trip to the model -- minutes of it
+    on Ollama. Run on the event loop, it blocks the process that long-polls
+    Telegram: no second tap, no message queued, and not even the QUEUED that
+    promises one, until the plan comes back.
+
+    The graph here is a stand-in that blocks until the loop has run something
+    else. On the loop, the two wait for each other and nothing arrives.
+    """
+
+    async def scenario() -> list[str]:
+        went_on = threading.Event()
+        worked: list[str] = []
+
+        class Blocking:
+            """A graph whose invoke does not return until the loop has moved."""
+
+            def get_state(self, config: Any) -> Any:
+                return SimpleNamespace(interrupts=(Interrupt(value={}, id="proposal"),))
+
+            def invoke(self, command: Any, config: Any) -> dict[str, Any]:
+                assert went_on.wait(5), "the loop never ran while the graph worked"
+                worked.append("planned")
+                return {"workout": 1}
+
+        resume = bot.answering(cast(Any, Blocking()))
+        said, say = spoken()
+        _, offer = offered()
+        thread = bot.thread_for(CHAT)
+
+        async def answering() -> None:
+            await resume(thread, bot.Tap(bot.KEPT, thread, "proposal"), say, offer)
+
+        tapped = asyncio.create_task(answering())
+        # Long enough for the loop to have run the task and reached the
+        # graph: with the call on the loop, this sleep is what never returns.
+        await asyncio.sleep(0.05)
+        went_on.set()
+        await tapped
+        return worked + said
+
+    assert asyncio.run(scenario()) == ["planned", bot.WRITTEN]

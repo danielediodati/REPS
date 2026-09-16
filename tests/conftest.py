@@ -53,14 +53,33 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     def refuse(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("the test suite must not touch the network")
 
+    class Refusing(type):
+        """`isinstance` still answers about real sockets, whatever stands in for the class.
+
+        Windows' event loop wakes itself from another thread through a socket
+        pair, and reads it with `isinstance(conn, socket.socket)`. With a
+        function in that name the check raises TypeError, the wake-up is lost,
+        and a test that waits on a thread -- `asyncio.to_thread`, which is how
+        the bot keeps a run off the loop -- hangs until it is killed. It cost a
+        pytest run that never finished and a log full of *Error on reading from
+        the event loop self pipe*.
+        """
+
+        def __instancecheck__(cls, instance: Any) -> bool:
+            return isinstance(instance, _REAL_SOCKET)
+
+    class Refused(metaclass=Refusing):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            refuse()
+
     def paired(*args: Any, **kwargs: Any) -> Any:
         setattr(socket, "socket", _REAL_SOCKET)
         try:
             return _REAL_SOCKETPAIR(*args, **kwargs)
         finally:
-            setattr(socket, "socket", refuse)
+            setattr(socket, "socket", Refused)
 
-    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(socket, "socket", Refused)
     monkeypatch.setattr(socket, "create_connection", refuse)
     monkeypatch.setattr(socket, "socketpair", paired)
 
@@ -177,4 +196,24 @@ def declared_training(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = directory / "training.toml"
     path.write_text(DECLARED_CONFIG, encoding="utf-8")
     monkeypatch.setenv("TRAINER_CONFIG", str(path))
+    return path
+
+
+@pytest.fixture(autouse=True)
+def checkpointed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A throwaway checkpointer file, for every test that does not bring its own.
+
+    Autouse for the reason `declared_training` is: `checkpoints_path()` falls
+    back to `checkpoints.sqlite` in the working directory, and `trainer plan`
+    opens a checkpointer as of session 7. Left alone, the suite would write
+    threads into the developer's own file -- and a run of `pytest` would leave
+    the project's checkpoints holding conversations nobody had.
+
+    Its own directory, so the tests that point `TRAINER_CHECKPOINTS` at
+    `tmp_path` themselves still mean what they say.
+    """
+    directory = tmp_path / "checkpointed"
+    directory.mkdir(exist_ok=True)
+    path = directory / "checkpoints.sqlite"
+    monkeypatch.setenv("TRAINER_CHECKPOINTS", str(path))
     return path

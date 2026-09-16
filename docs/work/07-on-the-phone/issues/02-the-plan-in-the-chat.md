@@ -8,7 +8,7 @@ The plan is rendered for Telegram, and what happens while it is being built is s
 
 ## What to build
 
-- **A Telegram rendering of the plan**, built from the same data `plan.render` renders for the terminal. Markdown the client will accept; the terminal's ASCII folding is a console constraint and does not apply here.
+- **A Telegram rendering of the plan**, built from the same data `plan.render` renders for the terminal. It replaces `bot.proposal`, which ticket 03 left joining the terminal's lines so the buttons had something to hang off. Markdown the client will accept; the terminal's ASCII folding is a console constraint and does not apply here.
 - **Progress lines from the graph's own stream**, one per step, in the user's language:
 
   ```

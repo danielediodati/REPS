@@ -16,9 +16,12 @@ from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
 from typing import TypeVar
+from uuid import uuid4
 
 import click
 from click.core import ParameterSource
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 
 from trainer import (
     __version__,
@@ -1138,13 +1141,13 @@ def plan_command(
             for line in lines:
                 click.echo(_ascii(line))
 
-            # The workout is written **here**, in the command, and nowhere
-            # else. Not in `plan.py` and not in `agent.py`: `trainer eval`
-            # runs eighteen agent loops against the project database, and a
-            # plan that persisted from inside the agent would leave eighteen
-            # phantom prescribed workouts in the very state the measurement is
-            # taken from. ROADMAP.md § Session 5.
-            _recorded(connection, accepted, today)
+            # Only the hand-written path writes here. A plan the graph made
+            # was written by the node after the resume (ADR-0005), and writing
+            # it again would make one workout two -- `record_prescribed` has no
+            # upsert, deliberately. `--from` asks no model and has no graph to
+            # resume, so the command is still the writer for it.
+            if parsed is not None:
+                _recorded(connection, accepted, today)
 
 
 def _declared() -> config.TrainingConfig | None:
@@ -1341,23 +1344,33 @@ def _asked(
     open to find out why the model emitted what it did, and a run refused on
     its last attempt is exactly the case you want it for.
 
-    No checkpointer. Nothing here pauses, and a thread nobody can resume is a
-    file written for no reader; session 7's interrupts are what give the graph
-    something to come back to.
+    **Invoked, then resumed** (ADR-0005). The graph stops at the plan and the
+    workout is written by the node after the resume, so this command resumes
+    immediately: it has no buttons, and printing a plan has always meant
+    keeping it. That is why it needs a checkpointer with no bot in sight.
+
+    A thread of its own per run, because a thread is a conversation: reusing
+    one would plan today's workout against what was said the last time the
+    command was run.
     """
     on = models.chat()
     models.ready(on)
-    final = planner.build(on.model, budget=call_budget).invoke({"request": request})
+    with checkpoints.saver() as saver:
+        graph = planner.build(on.model, budget=call_budget, checkpointer=saver)
+        thread: RunnableConfig = {"configurable": {"thread_id": f"plan:{uuid4()}"}}
+        final = graph.invoke({"request": request}, thread)
 
-    if record_path is not None:
-        record_path.write_text(
-            run_record.written(final, on.name, on.provider), encoding="utf-8"
-        )
-    if final["violations"]:
-        raise click.ClickException(plan.refusal(final["violations"]))
+        if record_path is not None:
+            record_path.write_text(
+                run_record.written(final, on.name, on.provider), encoding="utf-8"
+            )
+        if final["violations"]:
+            raise click.ClickException(plan.refusal(final["violations"]))
 
-    emitted = final["plan"]
-    assert emitted is not None, "a run with no violations emitted a plan"
+        emitted = final["plan"]
+        assert emitted is not None, "a run with no violations emitted a plan"
+        final = graph.invoke(Command(resume=planner.accepted()), thread)
+
     blocks = plan.to_blocks(emitted)
     return emitted, [
         *plan.render(connection, emitted, blocks, request.budget_min),

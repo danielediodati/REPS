@@ -5,14 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.types import Command
 
+from trainer import plan as plans
+from trainer import tools
 from trainer.coach import models, planner
 
 if TYPE_CHECKING:
@@ -138,6 +141,68 @@ def thread_for(chat_id: int) -> str:
     return f"chat:{chat_id}"
 
 
+KEPT = "ok"
+TURNED_DOWN = "no"
+SHORTER = "30"
+
+SHORTER_MINUTES = 30
+
+BUTTONS = (
+    (KEPT, "Va bene"),
+    (TURNED_DOWN, "Non mi va"),
+    (SHORTER, f"Solo {SHORTER_MINUTES} minuti"),
+)
+"""The three answers a proposed plan takes, as (action, label)."""
+
+SAID = {
+    TURNED_DOWN: "Non mi va questo allenamento.",
+    SHORTER: f"Ho solo {SHORTER_MINUTES} minuti.",
+}
+"""What a tap means in words, because the planner is told why and not which button."""
+
+WRITTEN = "Fatto. È il tuo allenamento di oggi."
+
+SUPERSEDED = (
+    "Quel piano non è più quello in corso: scrivimi di nuovo e te ne preparo un altro."
+)
+"""A tap on a plan the thread has moved past. Not an error, and never silence."""
+
+NO_PLAN = (
+    "Non sono riuscito a farti un piano che stia dentro i vincoli. Riprova a scrivermi."
+)
+
+SEPARATOR = "|"
+
+
+@dataclass(frozen=True)
+class Tap:
+    """One button pressed: which answer, on which thread, to which proposal."""
+
+    action: str
+    thread: str
+    proposal: str
+
+
+def carried(tap: Tap) -> str:
+    """What a button carries back, inside Telegram's 64 bytes.
+
+    The thread goes in it so a tap always finds its run, and the proposal is
+    the id of the interrupt it answers -- which is what makes a tap on a plan
+    the thread has moved past recognisable as one.
+    """
+    return SEPARATOR.join((tap.action, tap.thread, tap.proposal))
+
+
+def tap_of(data: str) -> Tap | None:
+    """The tap a callback carries, or nothing when it is not one of ours."""
+    action, _, rest = data.partition(SEPARATOR)
+    thread, _, proposal = rest.partition(SEPARATOR)
+    if action not in dict(BUTTONS) or not thread or not proposal:
+        logger.info("ignored a callback carrying %r", data)
+        return None
+    return Tap(action=action, thread=thread, proposal=proposal)
+
+
 Say = Callable[[str], Awaitable[None]]
 """One line into the chat. The bot's side of a conversation, as a function, so
 what decides can be driven by a test that collects the lines instead of sending
@@ -147,21 +212,41 @@ Run = Callable[[str, str, Say], Awaitable[None]]
 """The work one message causes, on one thread. Ticket 01's is `recording`;
 ticket 02 replaces it with the planner graph streaming its progress."""
 
+Offer = Callable[[str, Sequence[tuple[str, str]]], Awaitable[None]]
+"""A plan with its buttons: the text, and (callback data, label) pairs.
+Telegram's own objects are built in `_offering`, so what decides stays as
+testable as the rest."""
+
+Resume = Callable[[str, "Tap", Say, Offer], Awaitable[None]]
+"""The work one tap causes: it answers the interrupt the plan is waiting on."""
+
+Turn = str | Tap
+"""One piece of work on a thread: something the user wrote, or a button they tapped."""
+
+Waiting = tuple[Turn, "Say", "Offer | None"]
+"""A turn queued behind a run, with the channel it arrived on.
+
+The channel travels with the turn rather than belonging to the run draining
+the queue: a tap is answered with a plan and its buttons, and drained down the
+channel a plain message arrived on it would have nowhere to put them.
+"""
+
 
 @dataclass
 class _Conversation:
     """One chat's turn-taking: whether a run is in flight, and what arrived during it."""
 
     busy: bool = False
-    waiting: list[str] = field(default_factory=list)
+    waiting: list[Waiting] = field(default_factory=list)
 
 
 class Coach:
     """One run at a time per thread, for the owner and nobody else."""
 
-    def __init__(self, owner_id: int, run: Run) -> None:
+    def __init__(self, owner_id: int, run: Run, resume: Resume | None = None) -> None:
         self._owner_id = owner_id
         self._run = run
+        self._resume = resume
         self._threads: dict[str, _Conversation] = {}
 
     async def started(self, user_id: int, chat_id: int, say: Say) -> None:
@@ -180,20 +265,41 @@ class Coach:
         """
         if not self._answers(user_id):
             return
-        thread = thread_for(chat_id)
+        await self._turn(thread_for(chat_id), text, say, None)
+
+    async def tapped(
+        self, user_id: int, chat_id: int, data: str, say: Say, offer: Offer
+    ) -> None:
+        """One button, on the thread it names rather than on the chat it came from.
+
+        A tap is work like any other -- a refusal plans the whole workout again
+        -- so it goes through the same queue, and the thread it resumes is the
+        one the button carried. The two are the same today, and a plan sent on
+        to somebody else is what would make them differ.
+        """
+        if not self._answers(user_id):
+            return
+        tap = tap_of(data)
+        if tap is None:
+            return
+        await self._turn(tap.thread, tap, say, offer)
+
+    async def _turn(
+        self, thread: str, turn: Turn, say: Say, offer: Offer | None
+    ) -> None:
         conversation = self._threads.setdefault(thread, _Conversation())
         if conversation.busy:
             # Queued before the acknowledgement is attempted, not after: a chat
             # that cannot be written to must not also cost the message.
-            conversation.waiting.append(text)
+            conversation.waiting.append((turn, say, offer))
             await self._tell(thread, say, QUEUED)
             return
 
         conversation.busy = True
         try:
-            queued: str | None = text
+            queued: Waiting | None = (turn, say, offer)
             while queued is not None:
-                await self._attempt(thread, queued, say)
+                await self._attempt(thread, *queued)
                 queued = conversation.waiting.pop(0) if conversation.waiting else None
         finally:
             # A run that raised must not leave the thread busy, or every later
@@ -213,14 +319,21 @@ class Coach:
                 )
                 conversation.waiting.clear()
 
-    async def _attempt(self, thread: str, text: str, say: Say) -> None:
+    async def _attempt(
+        self, thread: str, turn: Turn, say: Say, offer: Offer | None
+    ) -> None:
         """One run, with its failure said out loud instead of left as silence.
 
         Caught per message rather than around the queue: one run that fell over
         must not cancel the messages behind it, which were promised an answer.
         """
         try:
-            await self._run(thread, text, say)
+            if isinstance(turn, Tap):
+                assert self._resume is not None, "a tap reached a coach with no graph"
+                assert offer is not None, "a tap is answered with a plan and its buttons"
+                await self._resume(thread, turn, say, offer)
+            else:
+                await self._run(thread, turn, say)
         except Exception:
             logger.exception("the run on %s failed", thread)
             await self._tell(thread, say, FAILED)
@@ -265,6 +378,85 @@ def recording(graph: planner.Planner) -> Run:
     return record
 
 
+def answering(graph: planner.Planner) -> Resume:
+    """The tap, answered: the thread resumes and the run goes on from there (ADR-0005).
+
+    The write is the graph's, in the node after the resume. Nothing here
+    touches the database, which is what keeps the interface out of the
+    training facts.
+    """
+
+    async def resume(thread: str, tap: Tap, say: Say, offer: Offer) -> None:
+        pending = graph.get_state(_on(thread)).interrupts
+        if not pending or pending[0].id != tap.proposal:
+            # The thread has moved on, or this plan was already answered. A
+            # tap on it is a question about a plan that is no longer the one
+            # in hand, and silence would read as a bot that is down.
+            await say(SUPERSEDED)
+            return
+        # Off the loop, because `invoke` is a synchronous round trip to the
+        # model -- minutes of it on Ollama. Run here, it would block the
+        # process that is long-polling Telegram: no second tap, no message
+        # queued, not even the acknowledgement promising one, until the plan
+        # came back. The queue exists precisely so that a run in flight does
+        # not cost the bot its answers.
+        final = await asyncio.to_thread(
+            graph.invoke, Command(resume=_answer(tap)), _on(thread)
+        )
+        await told(final, thread, say, offer)
+
+    return resume
+
+
+def _answer(tap: Tap) -> planner.Answer:
+    """The button, as the planner reads it: kept, or turned down in words.
+
+    A button is not a sentence, and the planner is told *why* rather than
+    which of three things was pressed -- the same field the user's own words
+    reach it through when ticket 04 lets them type one.
+    """
+    if tap.action == KEPT:
+        return planner.accepted()
+    if tap.action == SHORTER:
+        return planner.refused(SAID[SHORTER], minutes=SHORTER_MINUTES)
+    return planner.refused(SAID[TURNED_DOWN])
+
+
+async def told(
+    final: dict[str, Any], thread: str, say: Say, offer: Offer
+) -> None:
+    """What the chat is told when a run stops: a plan to answer, the workout, or neither."""
+    waiting = final.get("__interrupt__")
+    if waiting:
+        proposed = final["plan"]
+        await offer(
+            proposal(proposed, final["request"].budget_min),
+            [
+                (carried(Tap(action, thread, waiting[0].id)), label)
+                for action, label in BUTTONS
+            ],
+        )
+    elif final.get("workout") is not None:
+        await say(WRITTEN)
+    else:
+        # Every attempt refused by the validator. There is no plan to offer,
+        # and saying nothing would leave the user waiting on a run that ended.
+        await say(NO_PLAN)
+
+
+def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
+    """The plan as the chat shows it.
+
+    The terminal's lines, for now: ticket 02 owns how a plan reads in
+    Telegram, and a second rendering written here is the one that would be
+    left behind when it lands.
+    """
+    with tools.reported(), tools.opened() as connection:
+        return "\n".join(
+            plans.render(connection, plan, plans.to_blocks(plan), budget_min)
+        )
+
+
 def _on(thread: str) -> RunnableConfig:
     return {"configurable": {"thread_id": thread}}
 
@@ -285,13 +477,19 @@ def application(declared: Settings, coach: Coach) -> Application[Any, Any, Any, 
     # Imported here rather than at the top: `trainer --help` should not pay for
     # an HTTP stack nobody asked to start, which is why `trainer mcp` imports
     # its server the same way.
-    from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler
+    from telegram.ext import (
+        ApplicationBuilder,
+        CallbackQueryHandler,
+        CommandHandler,
+        MessageHandler,
+    )
 
     built = (
         ApplicationBuilder().token(declared.token).concurrent_updates(True).build()
     )
     built.add_handler(CommandHandler("start", _on_start(coach)))
     built.add_handler(MessageHandler(messages_only(), _on_message(coach)))
+    built.add_handler(CallbackQueryHandler(_on_tap(coach)))
     return built
 
 
@@ -343,6 +541,26 @@ def _on_message(coach: Coach) -> Handler:
     return handle
 
 
+def _on_tap(coach: Coach) -> Handler:
+    async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        tap = update.callback_query
+        who = _who(update)
+        if tap is None or who is None:
+            return
+        # Answered first, whatever the tap turns out to be: until this call
+        # returns, the button is still spinning on the user's phone -- and a
+        # refusal is a whole plan away from its next word.
+        await tap.answer()
+        if not isinstance(tap.data, str):
+            return
+        user_id, chat_id = who
+        await coach.tapped(
+            user_id, chat_id, tap.data, _saying(context, chat_id), _offering(context, chat_id)
+        )
+
+    return handle
+
+
 def _who(update: Update) -> tuple[int, int] | None:
     """Who sent it and where, or nothing at all.
 
@@ -362,6 +580,25 @@ def _saying(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Say:
     return say
 
 
+def _offering(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Offer:
+    """A plan with its buttons, in one row per answer."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    async def offer(text: str, buttons: Sequence[tuple[str, str]]) -> None:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton(label, callback_data=data)]
+                    for data, label in buttons
+                ]
+            ),
+        )
+
+    return offer
+
+
 def serve(
     declared: Settings, on: models.Chat, saver: BaseCheckpointSaver[Any]
 ) -> None:
@@ -377,5 +614,7 @@ def serve(
     telling the user the process is healthy immediately before it is not.
     """
     graph = planner.build(on.model, checkpointer=saver)
-    coach = Coach(owner_id=declared.owner_id, run=recording(graph))
+    coach = Coach(
+        owner_id=declared.owner_id, run=recording(graph), resume=answering(graph)
+    )
     application(declared, coach).run_polling()

@@ -46,6 +46,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
 
 from trainer import agent
 from trainer import plan as plans
@@ -668,10 +672,14 @@ def run(
     everything it knows in its own state, so a second compilation per run
     would buy nothing.
 
-    No checkpointer: nothing here pauses, and a thread nobody can resume is a
-    file written for no reader.
+    **A checkpointer in memory, and no resume.** The graph stops at the plan
+    and waits for somebody to accept it (ADR-0005), which needs somewhere to
+    wait; nothing here answers, so no run reaches the node that writes. That is
+    what keeps a measurement of eighteen runs from leaving eighteen phantom
+    prescribed workouts in the state it is measuring. In memory because these
+    threads are of no interest once the run is scored.
     """
-    graph = planner.build(on.model, budget=budget)
+    graph = planner.build(on.model, budget=budget, checkpointer=InMemorySaver())
     outcomes = []
     for situation in chosen:
         for attempt in range(1, repetitions + 1):
@@ -753,7 +761,8 @@ def _invoked(graph: planner.Planner, request: plans.Request, on: models.Chat) ->
     gaps between nodes are part of that wait.
     """
     started = time.monotonic()
-    final = graph.invoke({"request": request})
+    thread: RunnableConfig = {"configurable": {"thread_id": f"eval:{uuid4()}"}}
+    final = graph.invoke({"request": request}, thread)
     return Ran(
         record=run_record.of(final, on.name, on.provider),
         request=final["request"],

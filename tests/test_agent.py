@@ -885,6 +885,9 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
     """
     assert _importers_of("trainer.engine.workouts") == {
         "cli.py",
+        # Session 7: a plan becomes a prescribed workout when the user accepts
+        # it (ADR-0005), and the node after the resume is what writes it.
+        "coach/planner.py",
         "log.py",
         "log_evaluation.py",
         "log_set.py",
@@ -930,7 +933,7 @@ def _callers_of(
     return found
 
 
-def test_only_the_cli_calls_a_writer() -> None:
+def test_only_the_cli_and_an_accepted_plan_call_a_writer() -> None:
     """The runtime assertions above say the writer was not called on these
     paths. This says it cannot be, from anywhere but the command -- which is
     the claim that has to survive somebody adding a tool next session.
@@ -953,8 +956,17 @@ def test_only_the_cli_calls_a_writer() -> None:
     The database the user trains against is opened once, read, and never
     written. `test_log_evaluation.py` holds the runtime guard on that claim,
     and it is what keeps this line from being a hole.
+
+    **The graph joined the list in session 7, and the rule is not weaker for
+    it.** A plan becomes a prescribed workout when the user accepts it
+    (ADR-0005): the run stops at the plan, and only the node *after* the
+    resume writes. `trainer eval` invokes eighteen runs and resumes none of
+    them, so it cannot reach that node -- the guarantee the command used to
+    hold by keeping the write to itself, held now by the shape of the graph.
+    What the agent emits is still a document, and a document is not a workout
+    until somebody says yes to it.
     """
-    assert _callers_of() == {"cli.py", "log_evaluation.py"}
+    assert _callers_of() == {"cli.py", "coach/planner.py", "log_evaluation.py"}
 
 
 @pytest.mark.parametrize(

@@ -14,20 +14,22 @@ from langchain_core.messages import (
     AIMessage,
     AnyMessage,
     HumanMessage,
+    RemoveMessage,
     SystemMessage,
     ToolMessage,
 )
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import interrupt
 from pydantic import TypeAdapter
 
 from trainer import agent, tools
 from trainer import plan as plans
 from trainer.coach import models
 from trainer.coach.calls import answered
-from trainer.engine import admissible, constraints
+from trainer.engine import admissible, constraints, workouts
 
 ATTEMPTS = 3
 """Plans one run may emit before a refusal ends it."""
@@ -161,6 +163,27 @@ def brief(request: plans.Request) -> str:
     return "\n".join(lines)
 
 
+class Answer(TypedDict, total=False):
+    """What resumes a thread waiting on a plan: kept, or turned down and why."""
+
+    accepted: bool
+    because: str
+    minutes: int
+
+
+def accepted() -> Answer:
+    """The plan is the user's workout, and the run goes on to write it."""
+    return {"accepted": True}
+
+
+def refused(because: str = "", minutes: int | None = None) -> Answer:
+    """The plan is turned down, with what the user said and any shorter time they asked for."""
+    answer: Answer = {"accepted": False, "because": because}
+    if minutes is not None:
+        answer["minutes"] = minutes
+    return answer
+
+
 class Node(Protocol):
     """One step of the graph. The parameter is named, which is what LangGraph asks of a node."""
 
@@ -205,6 +228,8 @@ class PlannerState(TypedDict, total=False):
     refusals: Annotated[list[tuple[plans.Violation, ...]], operator.add]
     timings: Annotated[list[tuple[str, float]], operator.add]
     plan: plans.WorkoutPlan | None
+    accepted: bool
+    workout: int | None
 
 
 Planner = CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]
@@ -310,6 +335,57 @@ def build(
             ]
         return decided
 
+    def propose(state: PlannerState) -> dict[str, Any]:
+        """The plan, offered; the run stops here until somebody answers (ADR-0005).
+
+        Nothing before the `interrupt` touches anything outside the state: a
+        resumed node runs again from the top.
+        """
+        offered = state["plan"]
+        assert offered is not None, "a plan is proposed only after it validated"
+        answer: Answer = interrupt(offered.model_dump())
+        if answer.get("accepted"):
+            return {"accepted": True}
+        request = state["request"]
+        shorter = answer.get("minutes")
+        return {
+            "accepted": False,
+            "request": dataclasses.replace(
+                request,
+                refused=offered,
+                because=answer.get("because", ""),
+                budget_min=shorter if shorter is not None else request.budget_min,
+                # An allocation divides the minutes that were asked for, so a
+                # shorter workout carries none: `turn` divides the new budget.
+                allocation=() if shorter is not None else request.allocation,
+            ),
+            # The turn that follows is a fresh proposal and not an argument
+            # with the one before it, so the messages go and the brief is
+            # written again -- this time carrying what the user said.
+            "messages": [RemoveMessage(REMOVE_ALL_MESSAGES)],
+            "attempts": 0,
+            "spent": 0,
+            "violations": (),
+            "plan": None,
+        }
+
+    def record(state: PlannerState) -> dict[str, Any]:
+        """The accepted plan, written as the prescribed workout it now is."""
+        accepted_plan = state["plan"]
+        assert accepted_plan is not None, "nothing is written without a plan"
+        with tools.reported(), tools.opened() as connection:
+            written = workouts.record_prescribed(
+                connection,
+                tuple(
+                    workouts.PrescribedBlock(block=costed, reason=shape.reason)
+                    for shape, costed in zip(
+                        accepted_plan.blocks, plans.to_blocks(accepted_plan), strict=True
+                    )
+                ),
+                on=date.today().isoformat(),
+            )
+        return {"workout": written}
+
     def after_planner(state: PlannerState) -> Literal["tools", "emit"]:
         reply = state["messages"][-1]
         if isinstance(reply, AIMessage) and reply.tool_calls:
@@ -319,10 +395,17 @@ def build(
     def after_tools(state: PlannerState) -> Literal["planner", "emit"]:
         return "emit" if state.get("spent", 0) >= budget else "planner"
 
-    def after_validate(state: PlannerState) -> Literal["planner", "done"]:
-        if not state["violations"] or state["attempts"] >= ATTEMPTS:
+    def after_validate(state: PlannerState) -> Literal["planner", "propose", "done"]:
+        if not state["violations"]:
+            return "propose"
+        # Nothing to offer: a run the validator refused to the end ends here,
+        # which is also why `trainer eval` never reaches an interrupt.
+        if state["attempts"] >= ATTEMPTS:
             return "done"
         return "planner"
+
+    def after_propose(state: PlannerState) -> Literal["planner", "record"]:
+        return "record" if state.get("accepted") else "planner"
 
     def timed(node: str, run: Node) -> Node:
         """Every node says what it cost: the minutes are the thing being measured."""
@@ -338,13 +421,21 @@ def build(
     graph.add_node("tools", timed("tools", run_tools))
     graph.add_node("emit", timed("emit", emit))
     graph.add_node("validate", timed("validate", validate))
+    graph.add_node("propose", timed("propose", propose))
+    graph.add_node("record", timed("record", record))
     graph.add_edge(START, "planner")
     graph.add_conditional_edges("planner", after_planner)
     graph.add_conditional_edges("tools", after_tools)
     graph.add_edge("emit", "validate")
     graph.add_conditional_edges(
-        "validate", after_validate, {"planner": "planner", "done": END}
+        "validate",
+        after_validate,
+        {"planner": "planner", "propose": "propose", "done": END},
     )
+    graph.add_conditional_edges(
+        "propose", after_propose, {"planner": "planner", "record": "record"}
+    )
+    graph.add_edge("record", END)
     return graph.compile(checkpointer=checkpointer)
 
 

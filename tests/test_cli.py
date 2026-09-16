@@ -1502,6 +1502,49 @@ def test_plan_leaves_the_workout_it_prescribed(
     assert [item.exercise_id for item in block.block.items] == ["Barbell_Squat"]
 
 
+def test_plan_from_the_graph_writes_one_workout_through_the_resume(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The graph stops at the plan and the node after the resume writes it
+    (ADR-0005). The command has no buttons, so it resumes immediately -- and
+    what must not happen is the workout being written twice, once by the node
+    and once by the command that used to own the write."""
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")])
+
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
+    )
+
+    assert result.exit_code == 0, result.output
+    (row,) = workout_rows(enriched)
+    assert row["state"] == "prescribed"
+    with closing(database.connect(enriched)) as connection:
+        (block,) = workouts.prescribed(connection, int(row["id"]))
+    assert [item.exercise_id for item in block.block.items] == ["Barbell_Squat"]
+
+
+def test_plan_the_validator_refuses_to_the_end_writes_nothing(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """There is nothing to accept, so there is nothing to write."""
+    from trainer.coach import planner
+
+    from test_planner import plan_of
+
+    scripted_graph(
+        monkeypatch, documents=[plan_of("Dumbbell_Bench_Press")] * planner.ATTEMPTS
+    )
+
+    result = runner.invoke(
+        main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"]
+    )
+
+    assert result.exit_code != 0
+    assert workout_rows(enriched) == []
+
+
 def test_plan_still_renders_exactly_as_before(
     runner: CliRunner, enriched: Path, tmp_path: Path
 ) -> None:
