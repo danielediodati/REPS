@@ -1,0 +1,35 @@
+# The training configuration, hand-written.
+#
+# ADR-0003 is why it is a file and not a table: these five values are declared
+# by the user and read back by the user, and `git diff` on them is training
+# history. Nothing in the engine writes this file.
+
+# How many workouts one complete rotation holds. Not days of the week: the
+# rotation advances when a workout is performed, never when a date passes.
+cycle_length = 5
+
+# The most a single workout may run.
+duration_cap_min = 45
+
+# What volume is counted over: a rotation, never a week.
+volume_denominator = "cycle"
+
+# Which muscle groups each workout of the cycle trains, in order -- one entry
+# per workout, so this list is exactly `cycle_length` long. The six group names
+# are the ones in `src/trainer/data/muscle-groups.md`.
+#
+# `lower back` belongs to `core` there, not to `back`, so the abs-and-lumbar
+# workout is `core` on its own.
+split = [
+    ["chest", "arms"],      # chest and triceps
+    ["core"],               # abs and lower back
+    ["back", "arms"],       # back and biceps
+    ["legs"],               # legs
+    ["shoulders", "core"],  # shoulders and abs
+]
+
+# What you have to train with, spelled the way the catalog spells it: run
+# `trainer catalog --values equipment` for the list. This is the default a plan
+# is made against when nobody says what today's equipment is, which is what
+# lets the bot answer "what am I doing today?" with no other words.
+equipment = ["body only", "bands"]
