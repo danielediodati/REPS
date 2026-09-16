@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from trainer.engine import config
+from trainer.engine import config, state
 from trainer.engine import exclusions as exclusion_state
 from trainer.engine.exclusions import Exclusion
 
@@ -62,3 +62,39 @@ def within_the_cap(budget_min: int) -> int:
             f"most that, or raise the cap there"
         )
     return budget_min
+
+
+@dataclass(frozen=True)
+class Rotated:
+    """Today's groups, and the position in the rotation they came from.
+
+    `where` is `None` when nothing was derived -- somebody named the groups, or
+    there is no declared split to take them from -- which is what lets a door
+    say *rotation: workout 2 of 4* only when that is actually where the groups
+    came from.
+    """
+
+    groups: tuple[str, ...]
+    where: state.Rotation | None
+
+
+def rotated(
+    connection: sqlite3.Connection,
+    declared: config.TrainingConfig | None,
+    groups: Sequence[str] = (),
+) -> Rotated:
+    """The groups nobody named, taken from where the rotation actually is.
+
+    A cycle advances when a workout is **performed**, so the position is
+    counted from the performed workouts rather than declared: asking for a plan
+    without naming a workout or its groups plans the next workout of the
+    declared split, not the whole admissible space.
+
+    Nothing is derived without a declared split -- planning with a time alone
+    and no `training.toml` gets the whole space -- and nothing is derived over
+    groups a caller has already named.
+    """
+    if groups or declared is None:
+        return Rotated(groups=tuple(groups), where=None)
+    where = state.rotation(connection)
+    return Rotated(groups=declared.groups_for(where.position), where=where)

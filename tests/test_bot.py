@@ -11,7 +11,7 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -25,6 +25,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Interrupt
 
 from conftest import enrich
+from trainer import plan as plans
 from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, plan_of
 from trainer.coach import bot, checkpoints, planner
 from trainer.engine import catalog, database, migrations, workouts
@@ -32,6 +33,29 @@ from trainer.engine import catalog, database, migrations, workouts
 OWNER = 6421
 STRANGER = 99
 CHAT = 6421
+
+FIXTURE_SPLIT = """\
+cycle_length = 2
+duration_cap_min = 45
+volume_denominator = "cycle"
+split = [["legs"], ["shoulders"]]
+equipment = ["barbell"]
+"""
+"""A declaration `CATALOG` can answer.
+
+It holds one barbell squat (legs) and one barbell press (shoulders), so a
+rotation over those two groups with barbell declared is one the admissible set
+is not empty for -- which is what lets a run here reach a plan instead of a
+refusal about a group nothing covers. The suite's own `DECLARED_CONFIG` trains
+chest and arms, which this catalog has nothing barbell for.
+"""
+
+
+@pytest.fixture()
+def declared(declared_training: Path) -> Path:
+    """The suite's configuration, rewritten to what this catalog can train."""
+    declared_training.write_text(FIXTURE_SPLIT, encoding="utf-8")
+    return declared_training
 
 
 def spoken() -> tuple[list[str], bot.Say]:
@@ -44,9 +68,14 @@ def spoken() -> tuple[list[str], bot.Say]:
     return said, say
 
 
-async def never(thread: str, text: str, say: bot.Say) -> None:
+async def never(thread: str, text: str, offer: bot.Offer, say: bot.Say) -> None:
     """A run that must not happen. Whatever refused it should have refused it first."""
     raise AssertionError(f"a run started on {thread} for {text!r}")
+
+
+async def nowhere(text: str, buttons: Any) -> None:
+    """The offer channel, where a test is not looking at what goes down it."""
+    raise AssertionError(f"a plan was offered: {text!r}")
 
 
 # -- the settings --------------------------------------------------------------
@@ -203,7 +232,7 @@ def test_a_message_from_anybody_else_is_answered_with_nothing() -> None:
     said, say = spoken()
     coach = bot.Coach(owner_id=OWNER, run=never)
 
-    asyncio.run(coach.arriving(STRANGER, CHAT, "ciao", say))
+    asyncio.run(coach.arriving(STRANGER, CHAT, "ciao", say, nowhere))
 
     assert said == []
 
@@ -236,9 +265,9 @@ def test_a_stranger_leaves_nothing_in_the_thread(
     said, say = spoken()
     with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
         graph = planner.build(Scripted(), checkpointer=saver)
-        coach = bot.Coach(owner_id=OWNER, run=bot.recording(graph))
+        coach = bot.Coach(owner_id=OWNER, run=bot.planning(graph))
 
-        asyncio.run(coach.arriving(STRANGER, CHAT, "pianifica per me", say))
+        asyncio.run(coach.arriving(STRANGER, CHAT, "pianifica per me", say, nowhere))
 
         assert said == []
         assert bot.turns(graph, bot.thread_for(CHAT)) == []
@@ -256,7 +285,9 @@ def test_a_second_message_during_a_run_is_queued_and_then_answered() -> None:
         started, release = asyncio.Event(), asyncio.Event()
         inside = 0
 
-        async def slow(thread: str, text: str, say: bot.Say) -> None:
+        async def slow(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             nonlocal inside
             inside += 1
             assert inside == 1, "two runs at once on one thread"
@@ -266,10 +297,10 @@ def test_a_second_message_during_a_run_is_queued_and_then_answered() -> None:
             inside -= 1
 
         coach = bot.Coach(owner_id=OWNER, run=slow)
-        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say))
+        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say, nowhere))
         await started.wait()
 
-        await coach.arriving(OWNER, CHAT, "due", say)
+        await coach.arriving(OWNER, CHAT, "due", say, nowhere)
         assert said == [bot.QUEUED], "the second message was dropped"
 
         release.set()
@@ -287,7 +318,9 @@ def test_a_run_that_fails_does_not_wedge_the_thread() -> None:
         said, say = spoken()
         runs = 0
 
-        async def sometimes(thread: str, text: str, say: bot.Say) -> None:
+        async def sometimes(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             """The same coach, so the flag the first run left is the one the
             second message meets."""
             nonlocal runs
@@ -297,8 +330,8 @@ def test_a_run_that_fails_does_not_wedge_the_thread() -> None:
             await say(f"fatto: {text}")
 
         coach = bot.Coach(owner_id=OWNER, run=sometimes)
-        await coach.arriving(OWNER, CHAT, "uno", say)
-        await coach.arriving(OWNER, CHAT, "due", say)
+        await coach.arriving(OWNER, CHAT, "uno", say, nowhere)
+        await coach.arriving(OWNER, CHAT, "due", say, nowhere)
         return said
 
     assert asyncio.run(scenario()) == [bot.FAILED, "fatto: due"]
@@ -317,7 +350,9 @@ def test_a_message_queued_behind_a_run_that_fails_is_still_answered() -> None:
         said, say = spoken()
         started, release = asyncio.Event(), asyncio.Event()
 
-        async def falls_over(thread: str, text: str, say: bot.Say) -> None:
+        async def falls_over(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             if text == "uno":
                 started.set()
                 await release.wait()
@@ -325,9 +360,9 @@ def test_a_message_queued_behind_a_run_that_fails_is_still_answered() -> None:
             await say(f"fatto: {text}")
 
         coach = bot.Coach(owner_id=OWNER, run=falls_over)
-        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say))
+        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say, nowhere))
         await started.wait()
-        await coach.arriving(OWNER, CHAT, "due", say)
+        await coach.arriving(OWNER, CHAT, "due", say, nowhere)
 
         release.set()
         await first
@@ -352,7 +387,9 @@ def test_a_chat_that_cannot_be_written_to_does_not_take_the_queue_with_it() -> N
         async def unreachable(line: str) -> None:
             raise RuntimeError("Timed out")
 
-        async def run(thread: str, text: str, say: bot.Say) -> None:
+        async def run(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             attempted.append(text)
             if text == "uno":
                 started.set()
@@ -360,9 +397,11 @@ def test_a_chat_that_cannot_be_written_to_does_not_take_the_queue_with_it() -> N
             await say(f"fatto: {text}")
 
         coach = bot.Coach(owner_id=OWNER, run=run)
-        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", unreachable))
+        first = asyncio.create_task(
+            coach.arriving(OWNER, CHAT, "uno", unreachable, nowhere)
+        )
         await started.wait()
-        await coach.arriving(OWNER, CHAT, "due", unreachable)
+        await coach.arriving(OWNER, CHAT, "due", unreachable, nowhere)
 
         release.set()
         await first
@@ -391,19 +430,21 @@ def test_two_chats_do_not_wait_for_each_other() -> None:
         said, say = spoken()
         started, release = asyncio.Event(), asyncio.Event()
 
-        async def slow(thread: str, text: str, say: bot.Say) -> None:
+        async def slow(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             if text == "uno":
                 started.set()
                 await release.wait()
             await say(f"fatto: {text}")
 
         coach = bot.Coach(owner_id=OWNER, run=slow)
-        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say))
+        first = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say, nowhere))
         # Waited for rather than yielded to once: ticket 02 puts a graph run
         # behind this, and the first `await` it adds ahead of `release` would
         # make the order below flaky instead of red.
         await started.wait()
-        await coach.arriving(OWNER, CHAT + 1, "due", say)
+        await coach.arriving(OWNER, CHAT + 1, "due", say, nowhere)
         release.set()
         await first
         return said
@@ -414,22 +455,28 @@ def test_two_chats_do_not_wait_for_each_other() -> None:
 # -- across a restart ----------------------------------------------------------
 
 
-def test_the_thread_survives_a_restart(tmp_path: Path, database_file: Path) -> None:
+def test_the_thread_survives_a_restart(
+    tmp_path: Path, catalogued: sqlite3.Connection, declared: Path
+) -> None:
     """Two compiled graphs over one checkpoint file, the way two runs of
     `trainer bot` are. The conversation is the checkpointer's (ADR-0004, item
     5), so the second process finds what the first was told."""
-    said, say = spoken()
     path = tmp_path / "checkpoints.sqlite"
+    written = [plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]
 
     with checkpoints.saver(path) as saver:
-        graph = planner.build(Scripted(), checkpointer=saver)
-        coach = bot.Coach(owner_id=OWNER, run=bot.recording(graph))
-        asyncio.run(coach.arriving(OWNER, CHAT, "cosa faccio oggi?", say))
+        graph = planner.build(Scripted(documents=written[:1]), checkpointer=saver)
+        coach = bot.Coach(owner_id=OWNER, run=bot.planning(graph))
+        asyncio.run(
+            coach.arriving(OWNER, CHAT, "cosa faccio oggi?", spoken()[1], offered()[1])
+        )
 
     with checkpoints.saver(path) as saver:
-        graph = planner.build(Scripted(), checkpointer=saver)
-        coach = bot.Coach(owner_id=OWNER, run=bot.recording(graph))
-        asyncio.run(coach.arriving(OWNER, CHAT, "e domani?", say))
+        graph = planner.build(Scripted(documents=written[1:]), checkpointer=saver)
+        coach = bot.Coach(owner_id=OWNER, run=bot.planning(graph))
+        asyncio.run(
+            coach.arriving(OWNER, CHAT, "e domani?", spoken()[1], offered()[1])
+        )
 
         assert bot.turns(graph, bot.thread_for(CHAT)) == [
             "cosa faccio oggi?",
@@ -437,30 +484,217 @@ def test_the_thread_survives_a_restart(tmp_path: Path, database_file: Path) -> N
         ]
 
 
-def test_two_chats_are_two_threads(tmp_path: Path, database_file: Path) -> None:
-    said, say = spoken()
-
+def test_two_chats_are_two_threads(
+    tmp_path: Path, catalogued: sqlite3.Connection, declared: Path
+) -> None:
     with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
-        graph = planner.build(Scripted(), checkpointer=saver)
-        coach = bot.Coach(owner_id=OWNER, run=bot.recording(graph))
-        asyncio.run(coach.arriving(OWNER, CHAT, "la mia", say))
-        asyncio.run(coach.arriving(OWNER, CHAT + 1, "l'altra", say))
+        graph = planner.build(
+            Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]),
+            checkpointer=saver,
+        )
+        coach = bot.Coach(owner_id=OWNER, run=bot.planning(graph))
+        asyncio.run(coach.arriving(OWNER, CHAT, "la mia", spoken()[1], offered()[1]))
+        asyncio.run(
+            coach.arriving(OWNER, CHAT + 1, "l'altra", spoken()[1], offered()[1])
+        )
 
         assert bot.turns(graph, bot.thread_for(CHAT)) == ["la mia"]
         assert bot.turns(graph, bot.thread_for(CHAT + 1)) == ["l'altra"]
 
 
-def test_the_owners_message_is_answered(tmp_path: Path, database_file: Path) -> None:
-    """Ticket 01 has no plan to give back yet -- 02 puts it in the chat -- so
-    what it owes is an answer that is true."""
+# -- what am I doing today? ----------------------------------------------------
+
+
+def asking(
+    graph: planner.Planner, text: str = "cosa faccio oggi?"
+) -> tuple[list[str], list[tuple[str, list[tuple[str, str]]]]]:
+    """The owner asks, on their own chat. What was said, and what was offered."""
     said, say = spoken()
+    sent, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=bot.planning(graph))
+    asyncio.run(coach.arriving(OWNER, CHAT, text, say, offer))
+    return said, sent
 
-    with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
-        graph = planner.build(Scripted(), checkpointer=saver)
-        coach = bot.Coach(owner_id=OWNER, run=bot.recording(graph))
-        asyncio.run(coach.arriving(OWNER, CHAT, "cosa faccio oggi?", say))
 
-    assert said == [bot.RECEIVED]
+def test_asking_what_today_is_reaches_a_plan_with_buttons(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """The message names nothing. The groups come from where the rotation is,
+    the minutes from the declared cap, and the equipment from the
+    declaration."""
+    graph = planner.build(
+        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+    )
+
+    said, sent = asking(graph)
+
+    assert said == [bot.WORKING]
+    (text, buttons) = sent[0]
+    assert "Barbell Squat" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+
+
+def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """Nothing in the message says barbell, 45 minutes or legs."""
+    graph = planner.build(
+        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+    )
+
+    asking(graph)
+
+    # Read back through the checkpointer, which is where the tuples the
+    # request is built out of arrive as lists: msgpack has one sequence.
+    planned = graph.get_state(
+        {"configurable": {"thread_id": bot.thread_for(CHAT)}}
+    ).values["request"]
+    assert list(planned.equipment) == ["barbell"]
+    assert planned.budget_min == 45
+    assert list(planned.groups) == ["legs"]
+    assert [tuple(share) for share in planned.allocation] == [("legs", 45)]
+
+
+def test_the_chat_and_the_terminal_plan_against_one_request(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """The chat passes an empty `Asked` and the terminal passes what its flags
+    collected; against the same state the two are one request. Compared field
+    by field because the chat's comes back through the checkpointer, where
+    every tuple arrives as a list.
+    """
+    graph = planner.build(
+        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+    )
+
+    asking(graph)
+
+    from_the_chat = graph.get_state(
+        {"configurable": {"thread_id": bot.thread_for(CHAT)}}
+    ).values["request"]
+    from_the_terminal = plans.requested(
+        catalogued, date.today().isoformat(), plans.Asked()
+    ).request
+    assert list(from_the_chat.equipment) == list(from_the_terminal.equipment)
+    assert from_the_chat.budget_min == from_the_terminal.budget_min
+    assert list(from_the_chat.groups) == list(from_the_terminal.groups)
+    assert [tuple(share) for share in from_the_chat.allocation] == list(
+        from_the_terminal.allocation
+    )
+    assert list(from_the_chat.preferences) == list(from_the_terminal.preferences)
+
+
+def test_tapping_accept_on_what_the_chat_offered_writes_the_workout(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """The first door that reaches ticket 03's resume: asked for, offered,
+    accepted, written -- and written by the graph, never by the bot."""
+    graph = planner.build(
+        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+    )
+    thread = bot.thread_for(CHAT)
+    _, sent = asking(graph)
+    assert workout_rows(catalogued) == []
+
+    said, say = spoken()
+    _, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    asyncio.run(coach.tapped(OWNER, CHAT, sent[0][1][0][0], say, offer))
+
+    assert said == [bot.WRITTEN]
+    (written,) = workout_rows(catalogued)
+    assert written[1] == "prescribed"
+    assert bot.turns(graph, thread) == ["cosa faccio oggi?"]
+
+
+def test_asking_again_supersedes_the_plan_still_waiting(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """A second question is a second plan, and the buttons under the first one
+    stop answering anything -- which is what `SUPERSEDED` is for."""
+    graph = planner.build(
+        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]),
+        checkpointer=InMemorySaver(),
+    )
+    _, first = asking(graph)
+    _, second = asking(graph, "e adesso?")
+
+    assert first[0][1][0][0] != second[0][1][0][0], "the same proposal id twice"
+    said, say = spoken()
+    _, offer = offered()
+    coach = bot.Coach(owner_id=OWNER, run=never, resume=bot.answering(graph))
+    asyncio.run(coach.tapped(OWNER, CHAT, first[0][1][0][0], say, offer))
+
+    assert said == [bot.SUPERSEDED]
+    assert workout_rows(catalogued) == []
+
+
+def test_a_second_question_is_planned_against_its_own_brief(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """The thread keeps the messages of the run before it, and `turn` writes
+    the brief only when it finds none. Left there, the second plan is asked
+    for as a follow-up to a conversation about the first."""
+    model = Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")])
+    graph = planner.build(model, checkpointer=InMemorySaver())
+
+    asking(graph)
+    briefs = sum("Plan the workout." in m.text for m in model.seen[-1])
+    asking(graph, "e adesso?")
+
+    assert sum("Plan the workout." in m.text for m in model.seen[-1]) == briefs
+
+
+def test_no_training_configuration_is_said_in_the_chat_with_its_own_fix(
+    catalogued: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the file there is nothing to derive the equipment, the minutes
+    or the groups from. A state, in the words that name the way out of it --
+    not a run that fell over."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    graph = planner.build(Scripted(), checkpointer=InMemorySaver())
+
+    said, sent = asking(graph)
+
+    assert sent == []
+    (answer,) = said
+    assert "training.example.toml" in answer
+    assert "no training configuration yet" in answer
+    assert bot.WORKING not in answer
+
+
+def test_a_catalog_nobody_enriched_is_said_in_the_chat_before_the_run(
+    database_file: Path, declared: Path
+) -> None:
+    """The gap `/code-review` found: `trainer plan` had checked this itself
+    since ticket 3.2 and the bot had no equivalent, so a machine that had
+    imported but not enriched was promised minutes of planning and then given
+    a run that fell over inside a tool call."""
+    with closing(database.connect(database_file)) as opened:
+        migrations.migrate(opened, migrations.discover())
+        catalog.import_exercises(opened, CATALOG)
+    graph = planner.build(Scripted(), checkpointer=InMemorySaver())
+
+    said, sent = asking(graph)
+
+    assert sent == []
+    (answer,) = said
+    assert "trainer enrich derive" in answer
+    assert bot.WORKING not in answer
+
+
+def test_a_database_nobody_imported_is_said_in_the_chat_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same path, on the other precondition a plan needs. `trainer bot`
+    can start against a machine that has no catalog yet."""
+    monkeypatch.setenv("TRAINER_DB", str(tmp_path / "absent.sqlite"))
+    graph = planner.build(Scripted(), checkpointer=InMemorySaver())
+
+    said, sent = asking(graph)
+
+    assert sent == []
+    assert "trainer db init" in said[0]
 
 
 # -- the handlers, driven with updates constructed by hand ---------------------
@@ -513,7 +747,9 @@ def test_a_constructed_update_reaches_the_coach_and_is_answered() -> None:
     sent it, which chat it is, and the text out of the message."""
     seen: list[tuple[str, str]] = []
 
-    async def run(thread: str, text: str, say: bot.Say) -> None:
+    async def run(
+        thread: str, text: str, offer: bot.Offer, say: bot.Say
+    ) -> None:
         seen.append((thread, text))
         await say("fatto")
 
@@ -776,13 +1012,15 @@ def test_a_tap_arriving_during_a_run_is_queued_and_then_answered(
         sent, offer = offered()
         started, release = asyncio.Event(), asyncio.Event()
 
-        async def slow(thread: str, text: str, say: bot.Say) -> None:
+        async def slow(
+            thread: str, text: str, offer: bot.Offer, say: bot.Say
+        ) -> None:
             started.set()
             await release.wait()
             await say("fatto: " + text)
 
         coach = bot.Coach(owner_id=OWNER, run=slow, resume=bot.answering(graph))
-        running = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say))
+        running = asyncio.create_task(coach.arriving(OWNER, CHAT, "uno", say, nowhere))
         await started.wait()
         await coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.KEPT), say, offer)
 

@@ -97,7 +97,7 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | engine SQLite | catalog; workouts (prescribed or performed, provenance per field); exclusions; volume views | engine |
 | LangGraph checkpointer | conversations, paused threads | graph |
 | LangGraph store | preferences, conclusions, hypotheses, observations, each with a source | agent, gated by the supervisor |
-| `training.toml` | cycle length, duration cap, split | user (ADR-0003) |
+| `training.toml` | cycle length, duration cap, split, volume denominator, equipment | user (ADR-0003) |
 | methodology document | curated literature with sources | human |
 
 No store writes another's facts.

@@ -7,7 +7,7 @@ import operator
 import sqlite3
 import time
 from datetime import date
-from typing import Annotated, Any, Literal, Protocol, TypedDict
+from typing import Annotated, Any, Literal, Protocol, TypedDict, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
@@ -221,6 +221,15 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
 
 class PlannerState(TypedDict, total=False):
     request: plans.Request
+    said: Annotated[list[str], operator.add]
+    """What the user has written on this thread, in the order they wrote it.
+
+    Beside `messages` and not in it. `messages` is the planner's own working
+    history and a fresh proposal clears it, so a sentence left there would be
+    destroyed by the next refusal; and a turn appended to it before the run
+    starts makes `turn` read a non-empty history and skip the brief entirely.
+    """
+
     messages: Annotated[list[AnyMessage], add_messages]
     spent: int
     attempts: int
@@ -230,6 +239,31 @@ class PlannerState(TypedDict, total=False):
     plan: plans.WorkoutPlan | None
     accepted: bool
     workout: int | None
+
+
+def starting(request: plans.Request) -> PlannerState:
+    """The input that starts a run, with whatever a previous one left cleared.
+
+    One chat is one thread for as long as the chat lives (ADR-0004, item 6),
+    so the second plan a thread is asked for starts on top of the first. Left
+    there, the old messages make `turn` read a non-empty history and never
+    write the brief -- the new request planned against the old one's words --
+    and an old `workout` makes a refused run look like one that wrote a
+    workout.
+    """
+    return {
+        "request": request,
+        "accepted": False,
+        "workout": None,
+        # Cast because the annotation on `messages` is the list `add_messages`
+        # reduces to, and a removal is an instruction to that reducer rather
+        # than a message the state ever holds.
+        "messages": [cast(AnyMessage, RemoveMessage(REMOVE_ALL_MESSAGES))],
+        "attempts": 0,
+        "spent": 0,
+        "violations": (),
+        "plan": None,
+    }
 
 
 Planner = CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]
@@ -348,26 +382,21 @@ def build(
             return {"accepted": True}
         request = state["request"]
         shorter = answer.get("minutes")
-        return {
-            "accepted": False,
-            "request": dataclasses.replace(
-                request,
-                refused=offered,
-                because=answer.get("because", ""),
-                budget_min=shorter if shorter is not None else request.budget_min,
-                # An allocation divides the minutes that were asked for, so a
-                # shorter workout carries none: `turn` divides the new budget.
-                allocation=() if shorter is not None else request.allocation,
-            ),
-            # The turn that follows is a fresh proposal and not an argument
-            # with the one before it, so the messages go and the brief is
-            # written again -- this time carrying what the user said.
-            "messages": [RemoveMessage(REMOVE_ALL_MESSAGES)],
-            "attempts": 0,
-            "spent": 0,
-            "violations": (),
-            "plan": None,
-        }
+        # The turn that follows is a fresh proposal and not an argument with
+        # the one before it, so the messages go and the brief is written again
+        # -- this time carrying what the user said.
+        again = dataclasses.replace(
+            request,
+            refused=offered,
+            because=answer.get("because", ""),
+            budget_min=shorter if shorter is not None else request.budget_min,
+            # An allocation divides the minutes that were asked for, so a
+            # shorter workout carries none: `turn` divides the new budget.
+            allocation=() if shorter is not None else request.allocation,
+        )
+        # `dict(...)` because a node contributes a plain mapping, while
+        # `starting` is typed as the state so it can also be a run's input.
+        return dict(starting(again))
 
     def record(state: PlannerState) -> dict[str, Any]:
         """The accepted plan, written as the prescribed workout it now is."""

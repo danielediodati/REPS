@@ -8,6 +8,7 @@ needed SQLite to validate them would have given the argument away.
 from __future__ import annotations
 
 import ast
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ VALID = """\
 cycle_length = 3
 duration_cap_min = 45
 volume_denominator = "cycle"
+equipment = ["dumbbell", "bands"]
 split = [
     ["chest", "shoulders", "arms"],
     ["back", "arms"],
@@ -38,6 +40,7 @@ def test_a_valid_configuration_reads_back_as_a_typed_shape(tmp_path: Path) -> No
     assert parsed.cycle_length == 3
     assert parsed.duration_cap_min == 45
     assert parsed.volume_denominator == "cycle"
+    assert parsed.equipment == ("dumbbell", "bands")
     assert parsed.split == (
         ("chest", "shoulders", "arms"),
         ("back", "arms"),
@@ -134,6 +137,7 @@ def test_the_valid_groups_come_from_the_mapping_and_not_from_a_copy() -> None:
         "duration_cap_min": 30,
         "volume_denominator": "cycle",
         "split": [["fins"]],
+        "equipment": ["dumbbell"],
     }
 
     assert config.parse(raw, valid_groups=("fins",)).split == (("fins",),)
@@ -153,7 +157,10 @@ def test_a_duration_cap_that_is_not_a_workout_is_refused(
 
 
 def test_a_cycle_of_zero_workouts_is_refused(tmp_path: Path) -> None:
-    text = "cycle_length = 0\nduration_cap_min = 45\nvolume_denominator = 'cycle'\nsplit = []\n"
+    text = (
+        "cycle_length = 0\nduration_cap_min = 45\n"
+        "volume_denominator = 'cycle'\nsplit = []\nequipment = ['bands']\n"
+    )
 
     with pytest.raises(config.ConfigError, match="cycle_length"):
         config.load(written(tmp_path, text))
@@ -214,7 +221,10 @@ def test_a_missing_setting_names_it(tmp_path: Path) -> None:
 
 
 def test_a_split_that_is_not_a_list_of_lists_is_refused(tmp_path: Path) -> None:
-    text = "cycle_length = 1\nduration_cap_min = 45\nvolume_denominator = 'cycle'\nsplit = ['chest']\n"
+    text = (
+        "cycle_length = 1\nduration_cap_min = 45\n"
+        "volume_denominator = 'cycle'\nsplit = ['chest']\nequipment = ['bands']\n"
+    )
 
     with pytest.raises(config.ConfigError, match="list of one group list"):
         config.load(written(tmp_path, text))
@@ -364,3 +374,51 @@ def test_a_byte_order_mark_does_not_break_the_file(tmp_path: Path) -> None:
     path.write_text(VALID, encoding="utf-8-sig")
 
     assert config.load(path).cycle_length == 3
+
+# -- the equipment, the fifth declaration -------------------------------------
+
+
+def test_equipment_that_is_not_a_list_of_names_is_refused(tmp_path: Path) -> None:
+    text = VALID.replace('equipment = ["dumbbell", "bands"]', 'equipment = "dumbbell"')
+
+    with pytest.raises(config.ConfigError, match="list of the values"):
+        config.load(written(tmp_path, text))
+
+
+def test_declaring_nothing_to_train_with_is_refused_naming_body_only(
+    tmp_path: Path,
+) -> None:
+    """An empty list is a declaration no plan can be made against, and having
+    no equipment is a value the catalog has a word for."""
+    text = VALID.replace('equipment = ["dumbbell", "bands"]', "equipment = []")
+
+    with pytest.raises(config.ConfigError, match="body only"):
+        config.load(written(tmp_path, text))
+
+
+def test_a_blank_equipment_name_is_refused(tmp_path: Path) -> None:
+    text = VALID.replace('equipment = ["dumbbell", "bands"]', 'equipment = ["  "]')
+
+    with pytest.raises(config.ConfigError, match="body only"):
+        config.load(written(tmp_path, text))
+
+
+def test_equipment_named_twice_is_refused(tmp_path: Path) -> None:
+    text = VALID.replace(
+        'equipment = ["dumbbell", "bands"]', 'equipment = ["dumbbell", "dumbbell"]'
+    )
+
+    with pytest.raises(config.ConfigError, match="more than once"):
+        config.load(written(tmp_path, text))
+
+
+def test_the_equipment_vocabulary_is_not_spelled_out_in_this_module() -> None:
+    """The standing rule: the values live in the imported catalog, and this
+    module reads no database by design (ADR-0003). A value it does not know is
+    refused where the catalog is open, by `admissible_set`, which names the
+    ones that exist -- so a declaration naming one is read, not rejected."""
+    text = VALID.replace(
+        'equipment = ["dumbbell", "bands"]', 'equipment = ["a trapeze"]'
+    )
+
+    assert config.parse(tomllib.loads(text)).equipment == ("a trapeze",)

@@ -1220,7 +1220,7 @@ def test_config_shows_what_was_declared(
     declared = tmp_path / "training.toml"
     declared.write_text(
         'cycle_length = 2\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest", "arms"], ["legs", "core"]]\n',
+        'split = [["chest", "arms"], ["legs", "core"]]\nequipment = ["barbell"]\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("TRAINER_CONFIG", str(declared))
@@ -1231,6 +1231,7 @@ def test_config_shows_what_was_declared(
     assert "cycle length: 2 workouts" in result.output
     assert "duration cap: 45 min" in result.output
     assert "volume counted per: cycle" in result.output
+    assert "equipment: barbell" in result.output
     assert "1. chest, arms" in result.output
     assert "2. legs, core" in result.output
 
@@ -1254,7 +1255,7 @@ def test_config_reports_a_broken_file_as_a_broken_file(
     declared = tmp_path / "training.toml"
     declared.write_text(
         'cycle_length = 3\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest"]]\n',
+        'split = [["chest"]]\nequipment = ["barbell"]\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("TRAINER_CONFIG", str(declared))
@@ -1951,6 +1952,7 @@ SPLIT = """\
 cycle_length = 4
 duration_cap_min = 60
 volume_denominator = "cycle"
+equipment = ["barbell"]
 split = [
     ["chest", "shoulders", "arms"],
     ["back", "arms"],
@@ -3291,6 +3293,57 @@ def test_nothing_is_derived_without_a_declared_split(
 
     assert result.exit_code == 0, result.output
     assert "rotation:" not in result.output
+
+
+# --- today's equipment, declared ---------------------------------------------
+
+
+def test_plan_takes_its_equipment_from_the_declaration(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """`--equipment` is no longer required: what you own is declared once, and
+    the suite's declaration says barbell. The plan is a barbell squat, so a
+    run that had no equipment at all would refuse it."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--time", "45", "--group", "legs"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Barbell Squat" in result.output
+
+
+def test_the_equipment_named_today_wins_over_the_declaration(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    """A hotel room with nothing in it is the case the override exists for: the
+    declared barbell is not there, and the barbell squat is not admissible."""
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--equipment", "body only", "--time", "45", "--group", "legs"],
+    )
+
+    assert result.exit_code != 0
+    assert "Barbell_Squat" in result.output
+
+
+def test_plan_with_no_equipment_and_no_declaration_is_that_state(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing to derive it from, reported as the state it is."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    result = runner.invoke(
+        main,
+        ["plan", "--from", write_plan(tmp_path, squat_block()),
+         "--time", "45", "--group", "legs"],
+    )
+
+    assert result.exit_code != 0
+    assert "no training configuration yet" in result.output
+    assert "training.example.toml" in result.output
 
 
 # -- the bot -------------------------------------------------------------------

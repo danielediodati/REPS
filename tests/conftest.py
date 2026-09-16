@@ -164,12 +164,15 @@ cycle_length = 4
 duration_cap_min = 60
 volume_denominator = "cycle"
 split = [["chest", "arms"], ["back", "core"], ["legs"], ["shoulders", "arms"]]
+equipment = ["barbell"]
 """
 """What a test reads when it asks what the user declared.
 
 A four-workout rotation, because `state.window` multiplies the cycle length by
 the cycles asked for and a length of 1 would make every window test pass for
-the wrong reason.
+the wrong reason. One piece of equipment, and `barbell`, because it is what
+the fixture catalogs are built out of: the declaration is what a door plans
+against when nobody names equipment for today.
 """
 
 

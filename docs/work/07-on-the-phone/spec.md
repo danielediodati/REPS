@@ -22,17 +22,18 @@
 ## Facts the tickets rely on
 
 **The graph.**
-- `coach/planner.py`: `build(model, checkpointer=...)` returns the compiled graph; `PlannerState` holds `request`, `messages`, `spent`, `attempts`, `violations`, `refusals`, `timings`, `plan`. `ATTEMPTS` is 3.
+- `coach/planner.py`: `build(model, checkpointer=...)` returns the compiled graph; `PlannerState` holds `request`, `said`, `messages`, `spent`, `attempts`, `violations`, `refusals`, `timings`, `plan`. `ATTEMPTS` is 3, and `planner.starting(request)` is the input that begins a run on a thread another run has already used.
 - `coach/checkpoints.py`: `saver()` yields a `SqliteSaver` over its own file, `TRAINER_CHECKPOINTS`, refusing to share the training database.
 - langgraph 1.2.11 is installed; `interrupt` and `Command` come from `langgraph.types`.
 - The graph stops at `propose`, which calls `interrupt()` with the plan, and the `record` node after the resume is the only thing in it that writes to SQLite (ADR-0005, ticket 03). `planner.accepted()` and `planner.refused(because, minutes)` are what a resume carries.
 - `trainer plan` and `trainer eval` therefore both build the graph with a checkpointer: the command resumes immediately and the eval never resumes.
 
-**Today's request.** `cli.py`'s plan command assembles it, and every part already exists:
-- `_minutes` (the asked minutes or the declared cap), `_rotated` (which workout of the split today is, from the performed workouts), `_divided` (minutes per group), `_preferred`;
-- `constraints.constraining_today` gathers standing exclusions, the budget and the groups;
-- `config.TrainingConfig.groups_for(workout)`;
-- `plan.Request` is the one object the validator checks against — its docstring carries why it is assembled once and not per call site.
+**Today's request.** `plan.requested(connection, today, plan.Asked(...))` assembles it, and both doors call it (ticket 04):
+- `plan.Asked` is what a door was *told*; everything it does not name is derived. *«Cosa faccio oggi?»* is an empty `Asked`.
+- equipment falls back to `training.toml`'s fifth declaration, the minutes to its cap, the groups to `constraints.rotated` — which reads the position off the performed workouts.
+- `constraints.constraining_today` gathers standing exclusions, the budget and the groups; `config.TrainingConfig.groups_for(workout)` still serves a named workout.
+- `plan.Request` is the one object the validator checks against, and `requested` is the only place it is built — a test fails the build if a second place appears.
+- the unenriched catalog and the missing `training.toml` are reported from there, so neither door has its own copy of either state.
 
 **The plan.** `plan.render(connection, plan, blocks, budget_min)` produces the lines the CLI prints. `plan.validate` returns `plan.Violation`s by name. `workouts.record_prescribed` writes one workout per call and says so.
 

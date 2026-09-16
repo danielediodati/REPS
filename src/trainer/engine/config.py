@@ -1,12 +1,13 @@
 """What the user declares: the training configuration file.
 
-Cycle length, the cap on a workout's duration, the split being trained, and the
-denominator volume is counted on. ADR-0003 carries why these four live in a
-committed file and not in SQLite: **the line is who writes the value.** SQLite
-keeps what the system writes -- performed workouts, accumulated volume,
-exclusions and their re-test dates. These four are declared by the user,
-changed by hand, and read back by the user, and in a file `git diff` says when
-the user changed their mind about the cycle, which is itself training history.
+Cycle length, the cap on a workout's duration, the split being trained, the
+denominator volume is counted on, and the equipment the user has. ADR-0003
+carries why these five live in a committed file and not in SQLite: **the line
+is who writes the value.** SQLite keeps what the system writes -- performed
+workouts, accumulated volume, exclusions and their re-test dates. These five
+are declared by the user, changed by hand, and read back by the user, and in a
+file `git diff` says when the user changed their mind about the cycle, which is
+itself training history.
 
 **This module reads. Nothing in `engine/` writes it.** Onboarding is what will
 fill the file by talking to the user; until then it is hand-written, and
@@ -53,7 +54,13 @@ written down rather than assumed because it is the user's call, and the day a
 second denominator is actually implemented it joins this tuple.
 """
 
-_KEYS = ("cycle_length", "duration_cap_min", "split", "volume_denominator")
+_KEYS = (
+    "cycle_length",
+    "duration_cap_min",
+    "split",
+    "volume_denominator",
+    "equipment",
+)
 """Everything the file holds, and nothing more. An unrecognised key is refused
 rather than ignored: a misspelled `cycle_lenght` that is silently skipped is a
 setting the user believes they changed and did not."""
@@ -76,15 +83,15 @@ class NoTrainingConfig(ConfigError):
         super().__init__(
             f"no training configuration yet -- there is no {path}. "
             f"Copy {EXAMPLE_CONFIG_PATH} there and edit it: it declares the "
-            "cycle length, the duration cap, the split and the volume "
-            "denominator."
+            "cycle length, the duration cap, the split, the volume "
+            "denominator and the equipment you have."
         )
         self.path = path
 
 
 @dataclass(frozen=True)
 class TrainingConfig:
-    """The four declarations, typed.
+    """The five declarations, typed.
 
     `split` is as long as `cycle_length` by construction -- the reader refuses a
     file where it is not -- so a caller indexing the split by position in the
@@ -95,6 +102,17 @@ class TrainingConfig:
     duration_cap_min: int
     split: tuple[tuple[str, ...], ...]
     volume_denominator: str
+    equipment: tuple[str, ...]
+    """What the user has to train with, and the default a door plans against
+    when nobody names equipment for today.
+
+    Not checked against the catalog here, and that is the standing rule kept
+    rather than broken: the vocabulary lives in the imported exercises, this
+    module reads no database by design (ADR-0003), and a hand-copied list of
+    equipment values is the thing the rule exists to forbid. An unknown value
+    is refused where the catalog is open, by `admissible_set`, which names the
+    ones that exist.
+    """
 
     def groups_for(self, workout: int) -> tuple[str, ...]:
         """The groups the `workout`-th workout of the cycle trains, counted
@@ -167,7 +185,7 @@ def parse(
     if missing:
         raise ConfigError(
             f"the configuration is missing {', '.join(missing)}; "
-            f"all four of {', '.join(_KEYS)} have to be declared"
+            f"all {len(_KEYS)} of {', '.join(_KEYS)} have to be declared"
         )
 
     cycle_length = _positive("cycle_length", raw["cycle_length"], "workouts")
@@ -185,6 +203,7 @@ def parse(
         duration_cap_min=duration_cap_min,
         split=_split(raw["split"], cycle_length, groups),
         volume_denominator=str(denominator),
+        equipment=_equipment(raw["equipment"]),
     )
 
 
@@ -197,6 +216,30 @@ def _positive(key: str, value: object, unit: str) -> int:
     if value <= 0:
         raise ConfigError(f"{key} has to be at least 1, got {value}")
     return value
+
+
+def _equipment(value: object) -> tuple[str, ...]:
+    """The equipment the user has, as the catalog spells it.
+
+    At least one entry, because a file declaring nothing to train with is a
+    declaration no plan can be made against -- and "body only" is what the
+    catalog calls having none.
+    """
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ConfigError(
+            "equipment is a list of the values the catalog uses, "
+            'e.g. ["body only", "dumbbell"]'
+        )
+    names = tuple(str(item).strip() for item in value)
+    if not names or any(not name for name in names):
+        raise ConfigError(
+            "equipment declares nothing to train with; name at least one "
+            'value, and "body only" is what the catalog calls having none'
+        )
+    if len(set(names)) != len(names):
+        twice = sorted({name for name in names if names.count(name) > 1})
+        raise ConfigError(f"equipment names {', '.join(twice)} more than once")
+    return names
 
 
 def _split(

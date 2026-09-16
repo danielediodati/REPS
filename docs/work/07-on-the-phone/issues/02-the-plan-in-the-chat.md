@@ -24,6 +24,13 @@ The plan is rendered for Telegram, and what happens while it is being built is s
 - **`sendMessageDraft` with one stable non-zero `draft_id` per run**, re-sent as the lines accumulate so the draft updates in place. The draft is ephemeral, about 30 seconds, so it is re-sent while the run continues and never relied on to persist.
 - **The finished plan is an ordinary message**, sent once, and it is the only thing that stays in the chat.
 
+## What ticket 04 left for this one
+
+- **`bot.planning` is the run to stream**, and it says `bot.WORKING` — one line, *«ci penso»* — before invoking the graph. That line exists only because a local run is minutes of silence, which is this ticket's job: the draft replaces it.
+- **`bot.BLOCKED` is not it.** A precondition the machine gets wrong (no `training.toml`, no database, an unenriched catalog) is answered before the run starts and has no progress to stream.
+- **The plan goes out through `Offer`, and a run now takes one.** `Run` is `(thread, text, offer, say)`, so a streaming run already has both channels: the draft goes down `say`'s chat and the finished plan down `offer`.
+- **What the user wrote is in the graph state as `said`**, beside `messages` rather than in it — `planner.starting` clears `messages` on every run, so a progress line must not be appended there either.
+
 ## Acceptance criteria
 
 - [ ] A run in the owner's chat shows progress updating in place, then the plan as one message.

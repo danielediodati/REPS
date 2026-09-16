@@ -10,7 +10,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from trainer.engine import admissible, catalog, duration
+from trainer.engine import admissible, budget, catalog, config, constraints, duration
+from trainer.engine import exclusions as exclusion_state
+from trainer.engine import state
 from trainer.engine.exclusions import Exclusion
 
 
@@ -210,6 +212,227 @@ class Request:
 
     because: str = ""
     """What the user said when they turned it down; it reaches the model and no rule checks it."""
+
+
+@dataclass(frozen=True)
+class Asked:
+    """What a door was told, before anything was derived from it.
+
+    The terminal's flags and the chat's words both arrive as this, and
+    `requested` turns it into a `Request`. Every field is optional because
+    every field has somewhere to come from when nobody names it: `training.toml`
+    declares the equipment and the cap, and the performed workouts say where
+    the rotation is. The chat names almost none of them, which is the point --
+    *"what am I doing today?"* is an empty `Asked`.
+    """
+
+    equipment: tuple[str, ...] = ()
+    minutes: int | None = None
+    workout: int | None = None
+    """Which workout of the declared cycle to plan, overriding the rotation."""
+
+    groups: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    """Movement patterns or loaded joints to keep out of this one plan, in the
+    catalog's own vocabulary. Not persisted, and never an exercise id."""
+
+    avoid: tuple[str, ...] = ()
+    """Exercise ids the user would rather not do."""
+
+
+@dataclass(frozen=True)
+class Assembled:
+    """The request, and the rotation position it was derived from if it was."""
+
+    request: Request
+    rotation: state.Rotation | None
+
+
+def requested(
+    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
+) -> Assembled:
+    """Today's request, out of what a door was told and what the project knows.
+
+    The one place a `Request` is built, called by the terminal and by the chat.
+    `Request`'s own docstring carries why it is one object; this is why it is
+    one *function*: assembled at each door, the two drift and a plan comes back
+    checked against a request nobody made.
+
+    What can be derived is never asked for. Equipment falls back to what
+    `training.toml` declares, the minutes to the cap it declares, and the
+    groups to the workout the performed workouts put the rotation at. With no
+    `training.toml` there is nothing to fall back to, and that is reported as
+    the state it is -- `config.NoTrainingConfig`, naming the example file --
+    rather than as a complaint about a flag nobody typed.
+    """
+    # First, and before anything is read off the catalog. Every part of a
+    # request is classified against the enriched vocabulary sooner or later --
+    # `classify` reads the movement patterns, `admissible_set` refuses outright
+    # -- and against an unenriched catalog the honest answer is *nobody has
+    # enriched it yet*, not a correct value reported as a typo. The chat is why
+    # it is here rather than at each door: `trainer plan` checked this itself
+    # since ticket 3.2, and the bot had no equivalent, so a machine that had
+    # imported but not enriched was promised minutes of planning and then given
+    # a run that fell over inside a tool call.
+    if not catalog.values(connection, "movement_pattern"):
+        raise admissible.AdmissibleError(admissible.UNENRICHED_MESSAGE)
+
+    declared = _declared()
+    if asked.workout is not None and asked.groups:
+        raise PlanRejected(
+            "a named workout takes its groups from the declared split, so "
+            "naming groups as well asks for two different workouts; give one "
+            "or the other"
+        )
+
+    equipment = _equipment(connection, asked.equipment, declared)
+    minutes = _minutes(asked.minutes, declared)
+    turn = constraints.rotated(
+        connection, declared, _named(asked.workout, declared, asked.groups)
+    )
+
+    todays = constraints.constraining_today(
+        connection,
+        today,
+        budget_min=minutes,
+        groups=turn.groups,
+        given=[exclusion_state.classify(connection, value) for value in asked.exclude],
+    )
+    return Assembled(
+        request=Request(
+            equipment=equipment,
+            budget_min=todays.budget_min,
+            exclusions=todays.exclusions,
+            groups=todays.groups,
+            allocation=_divided(todays.budget_min, todays.groups),
+            preferences=_preferred(connection, asked.avoid),
+        ),
+        rotation=turn.where,
+    )
+
+
+def _declared() -> config.TrainingConfig | None:
+    """The training configuration, or `None` when there is not one yet.
+
+    Absent is a state rather than a failure *here*: a door that names the
+    equipment, the time and the groups has said everything a plan needs, so
+    somebody who has declared no rotation can still ask for a workout. It
+    becomes a failure the moment something is asked for that only the file can
+    answer, and then it is reported in the file's own wording rather than in a
+    second phrasing of it.
+
+    Only `NoTrainingConfig` is caught. A file that exists and is wrong is a
+    different thing entirely and must not be read as one that is not there.
+    """
+    try:
+        return config.load()
+    except config.NoTrainingConfig:
+        return None
+
+
+def _equipment(
+    connection: sqlite3.Connection,
+    asked: tuple[str, ...],
+    declared: config.TrainingConfig | None,
+) -> tuple[str, ...]:
+    """Today's equipment: what was named, or what the user declared having.
+
+    Named wins, because the declaration is what you own and today is where you
+    are -- a hotel room with nothing in it is the case that distinction exists
+    for.
+
+    Checked against the catalog **here**, where the catalog is open, and not
+    left to the admissible set further in. A typo in `training.toml` would
+    otherwise surface from inside the graph run, where the chat can only say
+    *something went wrong* -- and a declaration nobody can plan against is a
+    state with a fix, in the vocabulary the data actually holds.
+    """
+    chosen = tuple(dict.fromkeys(asked)) if asked else None
+    if chosen is None:
+        if declared is None:
+            raise config.NoTrainingConfig(config.config_path())
+        chosen = declared.equipment
+    for value in chosen:
+        catalog.check_value(connection, "equipment", value)
+    return chosen
+
+
+def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
+    """Today's budget: what was asked for, or the cap that was declared.
+
+    The cap is a ceiling and not a suggestion -- it is the one number in
+    `training.toml` that says *a workout never runs longer than this* -- so a
+    larger time is refused rather than honoured, **whether or not a workout
+    was named**. Refused and not clamped: quietly planning 60 minutes for
+    somebody who asked for 90 is the engine deciding how long they train.
+    """
+    if declared is None:
+        if asked is None:
+            raise config.NoTrainingConfig(config.config_path())
+        return asked
+    if asked is None:
+        return declared.duration_cap_min
+    # One refusal in one wording: the tool surface raises this same one when a
+    # model asks for a workout longer than the declaration allows.
+    return constraints.within_the_cap(asked)
+
+
+def _named(
+    workout: int | None,
+    declared: config.TrainingConfig | None,
+    given: tuple[str, ...],
+) -> tuple[str, ...]:
+    """The groups a door named: off the declared split by position, or by hand.
+
+    A named workout is the override. Where the rotation is gets derived from
+    the performed workouts, so naming a workout is for saying *no, plan the
+    leg day again* -- not for telling the engine something it can count.
+
+    Repeats are dropped rather than refused. Asking for legs twice is a slip
+    with one obvious reading, and left in it makes the even division sum to
+    half a workout: arithmetic nobody wrote, blamed on whoever said it twice.
+    """
+    if workout is None:
+        return tuple(dict.fromkeys(given))
+    if declared is None:
+        raise config.NoTrainingConfig(config.config_path())
+    try:
+        return declared.groups_for(workout)
+    except IndexError as error:
+        raise PlanRejected(str(error)) from error
+
+
+def _divided(minutes: int, groups: tuple[str, ...]) -> tuple[tuple[str, int], ...]:
+    """The minutes over the groups, evenly.
+
+    Offered rather than imposed, the way the rest bands are (ADR-0001): the
+    agent has `allocate` and may divide the time on any proportions it can
+    argue for. Even shares because this layer has no grounds for any other
+    split -- *60-40 on two groups* is what one workout might look like, not a
+    law, and it means nothing the moment a workout trains three.
+    """
+    if not groups:
+        return ()
+    share = 1 / len(groups)
+    allocated = budget.allocate(minutes, {group: share for group in groups})
+    return tuple((group, allocated[group]) for group in groups)
+
+
+def _preferred(connection: sqlite3.Connection, avoid: tuple[str, ...]) -> tuple[str, ...]:
+    """The exercises the user would rather not do, checked against the catalog.
+
+    A mistyped id is the worst possible outcome here: the preference is
+    silently unenforced, the plan comes back with the thing in it, and the typo
+    also travels to the model as something it must not prescribe. Read from the
+    data, the way every other vocabulary in this project is.
+    """
+    for exercise_id in avoid:
+        if catalog.exercise(connection, exercise_id) is None:
+            raise PlanRejected(
+                f"no such exercise: {exercise_id!r}. A preference names an "
+                "exercise by id, the way a plan does"
+            )
+    return tuple(dict.fromkeys(avoid))
 
 
 def parse(text: str) -> WorkoutPlan:

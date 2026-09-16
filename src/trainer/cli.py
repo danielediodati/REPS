@@ -854,7 +854,7 @@ def bot_command() -> None:
     "primary muscles and the group each is allocated under.",
 )
 def config_command(show_groups: bool) -> None:
-    """Show what the user has declared: cycle, duration cap, split, denominator.
+    """Show what the user has declared: cycle, cap, split, denominator, equipment.
 
     Read-only. Nothing in trainer writes this file; it is hand-edited until
     onboarding fills it by talking to you (ADR-0003).
@@ -871,6 +871,7 @@ def config_command(show_groups: bool) -> None:
     click.echo(f"cycle length: {declared.cycle_length} workouts")
     click.echo(f"duration cap: {declared.duration_cap_min} min")
     click.echo(f"volume counted per: {declared.volume_denominator}")
+    click.echo(f"equipment: {', '.join(declared.equipment)}")
     click.echo("split:")
     for position, groups in enumerate(declared.split, start=1):
         click.echo(f"  {position}. {', '.join(groups)}")
@@ -982,8 +983,9 @@ def admissible_command(
     "equipment",
     metavar="VALUE",
     multiple=True,
-    required=True,
-    help="Today's equipment; repeat for more than one.",
+    help="Today's equipment; repeat for more than one. Defaults to what you "
+    "declared in training.toml, which is what you own -- name it here for "
+    "where you actually are today.",
 )
 @click.option(
     "--time",
@@ -1013,8 +1015,9 @@ def admissible_command(
     "groups",
     metavar="GROUP",
     multiple=True,
-    help="A muscle group this workout trains; repeat for more than one. Use "
-    "--workout to take them from the split instead.",
+    help="A muscle group this workout trains; repeat for more than one. Left "
+    "out, the groups come from where the rotation is; --workout names a "
+    "position in the split instead.",
 )
 @click.option(
     "--avoid",
@@ -1055,6 +1058,11 @@ def plan_command(
 ) -> None:
     """Plan a workout, and print it.
 
+    With no options at all it plans the next workout of the rotation: the
+    groups off the declared split at the position the performed workouts put
+    it, the minutes off the declared cap, and the equipment off what you
+    declared you have. Every option below overrides one of those for today.
+
     The planner graph is asked for the plan, on the provider `LLM_BACKEND`
     names, using the same tools `trainer mcp` serves and inside a budget of
     tool calls; when the budget runs out it is asked to emit with what it has.
@@ -1080,45 +1088,40 @@ def plan_command(
         # written is worth finding out about while the run is still free.
         _writable(record_path)
 
-    # The request first, and the plan after it. The plan is checked *against*
-    # the request, so a workout outside the cycle or a time over the cap is
-    # the more basic thing to be told about -- reported the other way round,
-    # a mistyped file hides a mistyped rotation.
-    with reported():
-        declared = _declared()
-        budget = _minutes(budget, declared)
-        groups = _groups(workout, declared, groups)
-
-    parsed: plan.WorkoutPlan | None = None
-    if source is not None:
-        with reported():
-            parsed = plan.parse(source.read_text(encoding="utf-8"))
-            plan.to_blocks(parsed)
-
     today = date.today().isoformat()
     with _opened() as connection:
-        _require_enrichment(connection)
         with reported():
-            groups = _rotated(connection, declared, groups)
-            classified = [exclusions.classify(connection, value) for value in exclude]
-            todays = constraints.constraining_today(
+            # The request first, and the plan after it. The plan is checked
+            # *against* the request, so a workout outside the cycle or a time
+            # over the cap is the more basic thing to be told about --
+            # reported the other way round, a mistyped file hides a mistyped
+            # rotation.
+            assembled = plan.requested(
                 connection,
                 today,
-                budget_min=budget,
-                groups=groups,
-                given=classified,
+                plan.Asked(
+                    equipment=equipment,
+                    minutes=budget,
+                    workout=workout,
+                    groups=groups,
+                    exclude=exclude,
+                    avoid=avoid,
+                ),
             )
-            request = plan.Request(
-                equipment=equipment,
-                budget_min=todays.budget_min,
-                exclusions=todays.exclusions,
-                groups=todays.groups,
-                allocation=_divided(todays.budget_min, todays.groups),
-                preferences=_preferred(connection, avoid),
-            )
+            request = assembled.request
+            if assembled.rotation is not None:
+                click.echo(_rotation(assembled.rotation, request.groups))
+
+            parsed: plan.WorkoutPlan | None = None
+            if source is not None:
+                parsed = plan.parse(source.read_text(encoding="utf-8"))
+                plan.to_blocks(parsed)
+
             try:
                 if parsed is not None:
-                    accepted, lines = _checked(connection, parsed, request, budget)
+                    accepted, lines = _checked(
+                        connection, parsed, request, request.budget_min
+                    )
                 else:
                     accepted, lines = _asked(
                         connection, request, call_budget, record_path
@@ -1150,138 +1153,18 @@ def plan_command(
                 _recorded(connection, accepted, today)
 
 
-def _declared() -> config.TrainingConfig | None:
-    """The training configuration, or `None` when there is not one yet.
+def _rotation(where: state.Rotation, groups: tuple[str, ...]) -> str:
+    """Where the groups came from, said out loud.
 
-    Absent is a state rather than a failure *here*: `--time` and `--group`
-    name everything a plan needs, so somebody who has not declared a rotation
-    can still ask for a workout. It becomes a failure the moment something is
-    asked for that only the file can answer, and then it is reported with the
-    file's own wording rather than a second phrasing of it.
-
-    Only `NoTrainingConfig` is caught. A file that exists and is wrong is a
-    different thing entirely and must not be read as one that is not there.
+    Printed only when they were derived: told *rotation: workout 3 of 4* about
+    a workout they named themselves, the reader learns nothing and cannot tell
+    the two cases apart.
     """
-    try:
-        return config.load()
-    except config.NoTrainingConfig:
-        return None
-
-
-def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
-    """Today's budget: what was asked for, or the cap that was declared.
-
-    The cap is a ceiling and not a suggestion -- it is the one number in
-    `training.toml` that says *a workout never runs longer than this* -- so a
-    larger `--time` is refused rather than honoured, **whether or not
-    `--workout` was given**. Refused and not clamped: quietly planning 60
-    minutes for somebody who asked for 90 is the engine deciding how long they
-    train.
-    """
-    if declared is None:
-        if asked is None:
-            raise config.NoTrainingConfig(config.config_path())
-        return asked
-    if asked is None:
-        return declared.duration_cap_min
-    # One refusal in one wording: the tool surface raises this same one when a
-    # model asks for a workout longer than the declaration allows.
-    return constraints.within_the_cap(asked)
-
-
-def _groups(
-    workout: int | None,
-    declared: config.TrainingConfig | None,
-    given: tuple[str, ...],
-) -> tuple[str, ...]:
-    """The groups this workout trains: off the declared split, or named by hand.
-
-    `--workout` is the override. Where in the rotation you are is derived from
-    the performed workouts as of session 5 -- `_rotated` below -- so the flag
-    is for saying *no, plan the leg day again*, not for telling the engine
-    something it can count.
-
-    Repeats are dropped rather than refused. `--group legs --group legs` is a
-    slip with one obvious reading, and left in it makes the even division sum
-    to half a workout -- arithmetic nobody wrote, blamed on the person who
-    typed the flag twice.
-    """
-    if workout is None:
-        return tuple(dict.fromkeys(given))
-    if given:
-        raise click.UsageError(
-            "--workout takes its groups from the split; --group names them by "
-            "hand. Use one or the other"
-        )
-    if declared is None:
-        raise config.NoTrainingConfig(config.config_path())
-    try:
-        return declared.groups_for(workout)
-    except IndexError as error:
-        raise click.ClickException(str(error)) from error
-
-
-def _rotated(
-    connection: sqlite3.Connection,
-    declared: config.TrainingConfig | None,
-    groups: tuple[str, ...],
-) -> tuple[str, ...]:
-    """The groups nobody named, taken from where the rotation actually is.
-
-    `--workout N` was a flag nobody computed because nothing tracked the
-    position: a cycle advances when a workout is **performed**, and until
-    session 5 nothing recorded that one had been. It is counted now, so asking
-    for a plan with neither `--workout` nor `--group` plans the next workout of
-    the declared split rather than the whole admissible space.
-
-    Nothing is derived without a declared split -- somebody planning with
-    `--time` alone and no `training.toml` gets what they always got. And
-    nothing is derived over a flag: both `--workout` and `--group` have already
-    filled `groups` by the time this runs.
-    """
-    if groups or declared is None:
-        return groups
-    where = state.rotation(connection)
-    chosen = declared.groups_for(where.position)
-    click.echo(
+    return (
         f"rotation: workout {where.position} of {where.cycle_length}, "
         f"cycle {where.cycle} ({where.performed} performed) -- "
-        f"{', '.join(chosen)}"
+        f"{', '.join(groups)}"
     )
-    return chosen
-
-
-def _divided(minutes: int, groups: tuple[str, ...]) -> tuple[tuple[str, int], ...]:
-    """The minutes over the groups, evenly.
-
-    Offered rather than imposed, the way the rest bands are (ADR-0001): the
-    agent has `allocate` and may divide the time on any proportions it can
-    argue for. Even shares because this layer has no grounds for any other
-    split -- *60-40 on two groups* is what one workout might look like, not a
-    law, and it means nothing the moment a workout trains three.
-    """
-    if not groups:
-        return ()
-    share = 1 / len(groups)
-    allocated = budget.allocate(minutes, {group: share for group in groups})
-    return tuple((group, allocated[group]) for group in groups)
-
-
-def _preferred(connection: sqlite3.Connection, avoid: tuple[str, ...]) -> tuple[str, ...]:
-    """The exercises the user would rather not do, checked against the catalog.
-
-    A mistyped id is the worst possible outcome here: the preference is
-    silently unenforced, the plan comes back with the thing in it, and the
-    typo also travels to the model as something it must not prescribe. Read
-    from the data, the way every other vocabulary in this project is.
-    """
-    for exercise_id in avoid:
-        if catalog.exercise(connection, exercise_id) is None:
-            raise click.ClickException(
-                f"no such exercise: {exercise_id!r}. A preference names an "
-                "exercise by id, the way a plan does"
-            )
-    return tuple(dict.fromkeys(avoid))
 
 
 def _only_with_a_model(context: click.Context, *options: tuple[str, str]) -> None:

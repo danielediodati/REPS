@@ -7,9 +7,9 @@ import logging
 import os
 from collections.abc import Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
@@ -32,12 +32,26 @@ logger = logging.getLogger(__name__)
 
 STARTED = "Sono il tuo allenatore. Scrivimi quando vuoi."
 
-RECEIVED = "Ricevuto. Ancora non so pianificare: per ora tengo il filo del discorso."
-"""What ticket 01 can honestly answer.
+WORKING = "Ci penso. Su questo portatile ci vuole qualche minuto."
+"""Said before the run starts, because the run is minutes long.
 
-The plan arrives in the chat in ticket 02, against the request ticket 04
-assembles. Until then the bot says what is true rather than staying silent,
-which reads as a bot that is down.
+Ticket 02 replaces this with the graph's progress streamed into a draft.
+Until then one line is what stands between a plan being written and a bot
+that looks like it has stopped answering.
+"""
+
+BLOCKED = "Non posso pianificare finché non sistemi questo:\n\n{state}"
+"""A precondition the machine gets wrong, in the engine's own words.
+
+No `training.toml`, so there is nothing to derive today's equipment, minutes
+or groups from; no database; a catalog nobody enriched. Each already names
+itself and the command that fixes it, and each is a **state** rather than a
+run that fell over -- answered with `FAILED` it would read as the provider
+having dropped the plan.
+
+Quoted rather than re-phrased. `config.NoTrainingConfig` names the example
+file to copy and the five things it declares, and a second wording of the same
+state kept here is the one that goes stale.
 """
 
 QUEUED = "Sto ancora lavorando a quello di prima. Questo lo faccio subito dopo."
@@ -47,7 +61,7 @@ FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova."
 
 A provider that falls over mid-run is the ordinary case on a laptop, and the
 user is looking at a phone. An exception that reaches only the log is a bot
-that has stopped answering, which is the thing `RECEIVED` exists to avoid.
+that has stopped answering, which is the thing `WORKING` exists to avoid.
 """
 
 
@@ -66,8 +80,8 @@ class Settings:
 def settings() -> Settings:
     """The bot's settings, from the environment.
 
-    Never from `training.toml`, which holds the four things the user declares
-    about their training (ADR-0003). A token is a credential and an owner id is
+    Never from `training.toml`, which holds what the user declares about
+    their training (ADR-0003). A token is a credential and an owner id is
     about this installation, and neither is a training requirement.
     """
     return Settings(token=_required(TOKEN_ENV), owner_id=_owner())
@@ -208,9 +222,12 @@ Say = Callable[[str], Awaitable[None]]
 what decides can be driven by a test that collects the lines instead of sending
 them."""
 
-Run = Callable[[str, str, Say], Awaitable[None]]
-"""The work one message causes, on one thread. Ticket 01's is `recording`;
-ticket 02 replaces it with the planner graph streaming its progress."""
+Run = Callable[[str, str, "Offer", Say], Awaitable[None]]
+"""The work one message causes, on one thread: `planning` below.
+
+It takes the `Offer` as well as the `Say`, because what a run produces is a
+plan with buttons under it -- the same thing a resumed run produces, for the
+same reason."""
 
 Offer = Callable[[str, Sequence[tuple[str, str]]], Awaitable[None]]
 """A plan with its buttons: the text, and (callback data, label) pairs.
@@ -223,12 +240,12 @@ Resume = Callable[[str, "Tap", Say, Offer], Awaitable[None]]
 Turn = str | Tap
 """One piece of work on a thread: something the user wrote, or a button they tapped."""
 
-Waiting = tuple[Turn, "Say", "Offer | None"]
-"""A turn queued behind a run, with the channel it arrived on.
+Waiting = tuple[Turn, "Say", "Offer"]
+"""A turn queued behind a run, with the channels it arrived on.
 
-The channel travels with the turn rather than belonging to the run draining
-the queue: a tap is answered with a plan and its buttons, and drained down the
-channel a plain message arrived on it would have nowhere to put them.
+They travel with the turn rather than belonging to the run draining the queue:
+a chat the plan is sent to is the chat the turn came from, and a queue drained
+down somebody else's channel answers the wrong conversation.
 """
 
 
@@ -255,17 +272,19 @@ class Coach:
             return
         await self._tell(thread_for(chat_id), say, STARTED)
 
-    async def arriving(self, user_id: int, chat_id: int, text: str, say: Say) -> None:
+    async def arriving(
+        self, user_id: int, chat_id: int, text: str, say: Say, offer: Offer
+    ) -> None:
         """One message, run now or queued behind the run already in flight.
 
         Queued rather than dropped, and never a second run on the same thread:
         on Ollama a run is minutes, and cancelling one to start another throws
-        all of them away. *"Actually, 30 minutes"* is not this -- it is the
-        interrupt ticket 03 builds, which resumes the run instead of racing it.
+        all of them away. *"Actually, 30 minutes"* is not this -- it is ticket
+        03's interrupt, which resumes the run instead of racing it.
         """
         if not self._answers(user_id):
             return
-        await self._turn(thread_for(chat_id), text, say, None)
+        await self._turn(thread_for(chat_id), text, say, offer)
 
     async def tapped(
         self, user_id: int, chat_id: int, data: str, say: Say, offer: Offer
@@ -284,9 +303,7 @@ class Coach:
             return
         await self._turn(tap.thread, tap, say, offer)
 
-    async def _turn(
-        self, thread: str, turn: Turn, say: Say, offer: Offer | None
-    ) -> None:
+    async def _turn(self, thread: str, turn: Turn, say: Say, offer: Offer) -> None:
         conversation = self._threads.setdefault(thread, _Conversation())
         if conversation.busy:
             # Queued before the acknowledgement is attempted, not after: a chat
@@ -319,9 +336,7 @@ class Coach:
                 )
                 conversation.waiting.clear()
 
-    async def _attempt(
-        self, thread: str, turn: Turn, say: Say, offer: Offer | None
-    ) -> None:
+    async def _attempt(self, thread: str, turn: Turn, say: Say, offer: Offer) -> None:
         """One run, with its failure said out loud instead of left as silence.
 
         Caught per message rather than around the queue: one run that fell over
@@ -330,10 +345,9 @@ class Coach:
         try:
             if isinstance(turn, Tap):
                 assert self._resume is not None, "a tap reached a coach with no graph"
-                assert offer is not None, "a tap is answered with a plan and its buttons"
                 await self._resume(thread, turn, say, offer)
             else:
-                await self._run(thread, turn, say)
+                await self._run(thread, turn, offer, say)
         except Exception:
             logger.exception("the run on %s failed", thread)
             await self._tell(thread, say, FAILED)
@@ -362,20 +376,51 @@ class Coach:
         return False
 
 
-def recording(graph: planner.Planner) -> Run:
-    """Ticket 01's run: the turn goes into the thread, and the user gets an answer.
+def planning(graph: planner.Planner) -> Run:
+    """One message, planned: today's request assembled, the graph run, the plan offered.
 
-    The graph is held and its state is written, but no node runs. Planning
-    needs a `plan.Request`, and assembling one is ticket 04's -- built here as
-    well it would be the second copy of a thing this project has already been
-    bitten by. What ticket 01 owes is the process, the thread and the queue.
+    The request comes from `plan.requested`, which the terminal calls too --
+    the chat names almost nothing, and everything it does not name is derived
+    from the declaration and from the performed workouts rather than asked
+    for. What the user wrote goes into the thread as `said` and nothing reads
+    it: this ticket plans today's workout whatever the words were, and reading
+    them is the router's job in session 8.
+
+    A run started here supersedes any plan the thread was still waiting on.
+    Invoking with fresh input drops the pending proposal, and a tap on it
+    afterwards finds an interrupt id that no longer matches, which is what
+    `SUPERSEDED` answers.
+
+    Assembling the request is a synchronous read of SQLite and of the
+    declaration, and it is the half that can be refused -- so it happens
+    before `WORKING` is said. Promising minutes of work and then answering
+    with a state is worse than answering with the state.
     """
 
-    async def record(thread: str, text: str, say: Say) -> None:
-        graph.update_state(_on(thread), {"messages": [HumanMessage(text)]})
-        await say(RECEIVED)
+    async def run(thread: str, text: str, offer: Offer, say: Say) -> None:
+        graph.update_state(_on(thread), {"said": [text]})
+        try:
+            request = await asyncio.to_thread(_todays_request)
+        except tools.ToolFailure as state:
+            await say(BLOCKED.format(state=state))
+            return
+        await say(WORKING)
+        # Off the loop, for the reason `answering` runs its resume off it:
+        # `invoke` is a synchronous round trip to the model, minutes of it on
+        # Ollama, and run here it would block the process that is long-polling
+        # Telegram.
+        final = await asyncio.to_thread(
+            graph.invoke, planner.starting(request), _on(thread)
+        )
+        await told(final, thread, say, offer)
 
-    return record
+    return run
+
+
+def _todays_request() -> plans.Request:
+    """Today's request, off the same function the terminal assembles it with."""
+    with tools.reported(), tools.opened() as connection:
+        return plans.requested(connection, date.today().isoformat()).request
 
 
 def answering(graph: planner.Planner) -> Resume:
@@ -413,7 +458,7 @@ def _answer(tap: Tap) -> planner.Answer:
 
     A button is not a sentence, and the planner is told *why* rather than
     which of three things was pressed -- the same field the user's own words
-    reach it through when ticket 04 lets them type one.
+    will reach it through when session 8's router reads what they typed.
     """
     if tap.action == KEPT:
         return planner.accepted()
@@ -462,9 +507,9 @@ def _on(thread: str) -> RunnableConfig:
 
 
 def turns(graph: planner.Planner, thread: str) -> list[str]:
-    """What has been said on this thread, in the order it was said."""
-    kept: list[AnyMessage] = graph.get_state(_on(thread)).values.get("messages", [])
-    return [message.text for message in kept]
+    """What the user has written on this thread, in the order they wrote it."""
+    said: list[str] = graph.get_state(_on(thread)).values.get("said", [])
+    return list(said)
 
 
 def application(declared: Settings, coach: Coach) -> Application[Any, Any, Any, Any, Any, Any]:
@@ -536,7 +581,13 @@ def _on_message(coach: Coach) -> Handler:
         if who is None or message is None or not message.text:
             return
         user_id, chat_id = who
-        await coach.arriving(user_id, chat_id, message.text, _saying(context, chat_id))
+        await coach.arriving(
+            user_id,
+            chat_id,
+            message.text,
+            _saying(context, chat_id),
+            _offering(context, chat_id),
+        )
 
     return handle
 
@@ -615,6 +666,6 @@ def serve(
     """
     graph = planner.build(on.model, checkpointer=saver)
     coach = Coach(
-        owner_id=declared.owner_id, run=recording(graph), resume=answering(graph)
+        owner_id=declared.owner_id, run=planning(graph), resume=answering(graph)
     )
     application(declared, coach).run_polling()

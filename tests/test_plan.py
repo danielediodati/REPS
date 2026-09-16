@@ -18,7 +18,14 @@ import pytest
 
 from conftest import enrich, make_exercise
 from trainer import plan as plans
-from trainer.engine import admissible, catalog, database, migrations
+from trainer.engine import (
+    admissible,
+    catalog,
+    config,
+    constraints,
+    database,
+    migrations,
+)
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -676,3 +683,231 @@ def test_an_acknowledgement_of_something_nobody_refused_is_rejected(
 
     assert refused.rule == plans.PREFERENCES
     assert "did not" in refused.says
+
+# -- the request, assembled once for every door -------------------------------
+#
+# `plan.requested` is what both the terminal and the chat call. What is checked
+# here is that nothing derivable is asked for, and that a state the declaration
+# cannot answer arrives as a state.
+
+TODAY = "2026-09-16"
+
+DECLARING_LEGS = """\
+cycle_length = 2
+duration_cap_min = 45
+volume_denominator = "cycle"
+split = [["legs"], ["shoulders"]]
+equipment = ["barbell", "body only"]
+"""
+
+
+@pytest.fixture()
+def declaring_legs(declared_training: Path) -> Path:
+    """A declaration this catalog can train, so a derived request is answerable."""
+    declared_training.write_text(DECLARING_LEGS, encoding="utf-8")
+    return declared_training
+
+
+def test_a_request_nobody_filled_in_is_derived_whole(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """*"What am I doing today?"* names nothing at all: the equipment comes off
+    the declaration, the minutes off the cap, and the groups off the workout
+    the rotation is at."""
+    assembled = plans.requested(connection, TODAY)
+
+    assert assembled.request.equipment == ("barbell", "body only")
+    assert assembled.request.budget_min == 45
+    assert assembled.request.groups == ("legs",)
+    assert assembled.request.allocation == (("legs", 45),)
+    assert assembled.rotation is not None
+    assert assembled.rotation.position == 1
+
+
+def test_what_a_door_names_wins_over_what_was_declared(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """The declaration is what you own; today is where you are."""
+    assembled = plans.requested(
+        connection,
+        TODAY,
+        plans.Asked(equipment=("dumbbell",), minutes=30, groups=("chest",)),
+    )
+
+    assert assembled.request.equipment == ("dumbbell",)
+    assert assembled.request.budget_min == 30
+    assert assembled.request.groups == ("chest",)
+    assert assembled.rotation is None, "a named group was derived from nothing"
+
+
+def test_the_terminal_and_the_chat_assemble_the_same_request(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """The terminal passes what its flags collected and the chat passes an
+    empty `Asked`. Given the same state, the two have to be one request --
+    which is the whole reason this is a function and not code at each door."""
+    from_the_chat = plans.requested(connection, TODAY)
+    from_the_terminal = plans.requested(
+        connection,
+        TODAY,
+        plans.Asked(equipment=(), minutes=None, workout=None, groups=(), avoid=()),
+    )
+
+    assert from_the_terminal == from_the_chat
+
+
+def test_a_named_workout_takes_its_groups_off_the_split(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    assembled = plans.requested(connection, TODAY, plans.Asked(workout=2))
+
+    assert assembled.request.groups == ("shoulders",)
+    assert assembled.rotation is None
+
+
+def test_a_named_workout_and_named_groups_ask_for_two_workouts(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    with pytest.raises(plans.PlanRejected, match="one or the other"):
+        plans.requested(
+            connection, TODAY, plans.Asked(workout=2, groups=("legs",))
+        )
+
+
+def test_a_time_over_the_declared_cap_is_refused_and_never_clamped(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    with pytest.raises(constraints.ConstraintError, match="over the 45"):
+        plans.requested(connection, TODAY, plans.Asked(minutes=90))
+
+
+def test_a_repeated_group_is_dropped_rather_than_halving_the_workout(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """Left in, the even division gives each copy half the time."""
+    assembled = plans.requested(
+        connection, TODAY, plans.Asked(groups=("legs", "legs"))
+    )
+
+    assert assembled.request.groups == ("legs",)
+    assert assembled.request.allocation == (("legs", 45),)
+
+
+def test_a_preference_that_names_no_exercise_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """Silently unenforced is the worst outcome: the plan comes back with the
+    thing in it, and the typo travels to the model as a rule."""
+    with pytest.raises(plans.PlanRejected, match="no such exercise: 'Barbel_Squat'"):
+        plans.requested(
+            connection, TODAY, plans.Asked(avoid=("Barbel_Squat",))
+        )
+
+
+def test_equipment_the_catalog_does_not_have_is_refused_where_it_is_read(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    """A typo in the declaration, caught while the request is assembled rather
+    than from inside the graph run -- where a chat could only say *something
+    went wrong*. The vocabulary comes off the imported rows, and the refusal
+    carries it."""
+    declared_training.write_text(
+        DECLARING_LEGS.replace(
+            'equipment = ["barbell", "body only"]', 'equipment = ["a trapeze"]'
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(catalog.UnknownFilterValue) as raised:
+        plans.requested(connection, TODAY)
+
+    assert raised.value.field == "equipment"
+    assert "barbell" in raised.value.valid
+
+
+def test_equipment_named_today_is_checked_the_same_way(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    with pytest.raises(catalog.UnknownFilterValue, match="no such equipment"):
+        plans.requested(
+            connection, TODAY, plans.Asked(equipment=("dumbell",))
+        )
+
+
+def test_an_exclusion_is_classified_against_the_catalogs_vocabulary(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    assembled = plans.requested(connection, TODAY, plans.Asked(exclude=("squat",)))
+
+    assert assembled.request.exclusions == (Exclusion("pattern", "squat"),)
+
+
+def test_an_unenriched_catalog_is_that_state_and_not_a_typo(
+    database_file: Path, declared_training: Path
+) -> None:
+    """Imported but not enriched. Every part of a request is classified
+    against the enriched vocabulary sooner or later, so the honest answer is
+    *nobody has enriched it yet* -- and it is given before a door promises a
+    plan it cannot make."""
+    declared_training.write_text(DECLARING_LEGS, encoding="utf-8")
+    with closing(database.connect(database_file)) as opened:
+        migrations.migrate(opened, migrations.discover())
+        catalog.import_exercises(opened, CATALOG)
+
+        with pytest.raises(admissible.AdmissibleError) as raised:
+            plans.requested(opened, TODAY)
+
+    assert "trainer enrich derive" in str(raised.value)
+
+
+def test_with_no_declaration_a_door_that_names_everything_still_plans(
+    connection: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is derived without a `training.toml`, and nothing has to be:
+    a door naming the equipment, the time and the groups has said everything a
+    plan needs."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    assembled = plans.requested(
+        connection,
+        TODAY,
+        plans.Asked(equipment=("barbell",), minutes=45, groups=("legs",)),
+    )
+
+    assert assembled.request.budget_min == 45
+    assert assembled.rotation is None
+
+
+def test_with_no_declaration_a_request_nobody_filled_in_is_that_state(
+    connection: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reported as the state it is, naming the example file to copy -- not as
+    a complaint about a field nobody filled in."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+
+    with pytest.raises(config.NoTrainingConfig) as raised:
+        plans.requested(connection, TODAY)
+
+    assert "training.example.toml" in str(raised.value)
+
+def test_only_one_place_in_the_code_assembles_a_request() -> None:
+    """`Request`'s docstring says it is assembled once, and `requested` is
+    where. A second `Request(...)` at a door is how the two drift, and this is
+    the check that would have caught it -- a convention would be forgotten in
+    a month.
+
+    `evaluation.py` is named as the exception rather than excluded quietly:
+    its six adverse situations are hand-written requests on purpose, and a
+    suite that derived them would measure the rotation instead of the planner.
+    """
+    source_root = Path(__file__).resolve().parents[1] / "src" / "trainer"
+    allowed = {source_root / "plan.py", source_root / "evaluation.py"}
+
+    building = {
+        module
+        for module in source_root.rglob("*.py")
+        if "Request(" in module.read_text(encoding="utf-8")
+    }
+
+    assert building <= allowed, sorted(str(m) for m in building - allowed)
+
