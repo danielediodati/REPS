@@ -684,59 +684,129 @@ def _inside_the_budget(
 # character. The documents keep their typography; output does not.
 
 
+@dataclass(frozen=True)
+class ShownItem:
+    """One prescribed exercise, under the catalog's own name, with whatever the user had said about it."""
+
+    name: str
+    prescription: str
+    said: str | None = None
+
+
+@dataclass(frozen=True)
+class ShownBlock:
+    """One block, costed: what it asks for and what it takes."""
+
+    position: int
+    rounds: int
+    rest: int
+    seconds: int
+    reason: str
+    items: tuple[ShownItem, ...]
+
+
+@dataclass(frozen=True)
+class Shown:
+    """A plan with the catalog's names and the engine's costs filled in.
+
+    What every rendering of a plan is built from. The terminal folds it into
+    aligned ASCII and the chat into markup Telegram accepts, and neither of
+    them names an exercise or costs a block a second time -- two renderings
+    that each ask the engine would be two chances to disagree about what the
+    workout is.
+    """
+
+    blocks: tuple[ShownBlock, ...]
+    total_min: int
+    budget_min: int
+
+
+def shown(
+    connection: sqlite3.Connection,
+    plan: WorkoutPlan,
+    blocks: duration.Plan,
+    budget_min: int,
+) -> Shown:
+    """The plan a reader is shown: names off the catalog, seconds off the engine.
+
+    Block costs are exact seconds and the total is whole minutes rounded up:
+    the two units differ on purpose. Rounding each block up would make the
+    parts sum past a total the engine computed once from the exact seconds,
+    and a reader who checks the arithmetic would find it wrong.
+    """
+    blocks = tuple(blocks)
+    # Every name first, before anything is costed: both refuse an id the
+    # catalog does not have, and `_name` is the one that says so as a plan
+    # naming an exercise nobody has rather than as arithmetic that fell over.
+    names = {
+        item.exercise_id: _name(connection, item.exercise_id)
+        for block in plan.blocks
+        for item in block.items
+    }
+    acknowledged = {said.exercise_id: said.why for said in plan.despite}
+    return Shown(
+        blocks=tuple(
+            ShownBlock(
+                position=position,
+                rounds=costed.rounds,
+                rest=costed.rest,
+                seconds=duration.plan_seconds(connection, [costed]),
+                reason=shape.reason,
+                items=tuple(
+                    ShownItem(
+                        name=names[item.exercise_id],
+                        prescription=_prescription(item),
+                        said=acknowledged.get(item.exercise_id),
+                    )
+                    for item in shape.items
+                ),
+            )
+            for position, (shape, costed) in enumerate(
+                # `strict`, because these are two representations of one plan
+                # and nothing in the types says so. Handed a mismatched pair,
+                # `zip` would render the shorter of the two and show a partial
+                # workout as if it were whole -- the failure the validator
+                # exists to catch, arriving through the renderer instead.
+                zip(plan.blocks, blocks, strict=True),
+                start=1,
+            )
+        ),
+        total_min=duration.plan_duration(connection, blocks),
+        budget_min=budget_min,
+    )
+
+
 def render(
     connection: sqlite3.Connection,
     plan: WorkoutPlan,
     blocks: duration.Plan,
     budget_min: int,
 ) -> list[str]:
-    """The workout, as a person reads it.
-
-    Block costs are exact, in `M:SS`, and the total is whole minutes rounded
-    up: the two units differ on purpose. Rounding each block up would make the
-    parts sum past a total the engine computed once from the exact seconds,
-    and a reader who checks the arithmetic would find it wrong.
-    """
-    blocks = tuple(blocks)
-    names = {
-        item.exercise_id: _name(connection, item.exercise_id)
-        for block in plan.blocks
-        for item in block.items
-    }
+    """The workout, as the terminal prints it."""
+    reading = shown(connection, plan, blocks, budget_min)
     # Widened to the longest name in this plan rather than fixed: the catalog
     # holds names past fifty characters, and a fixed column either wraps those
     # or pushes every prescription to the right of a page of blanks. The
     # catalog listing aligns its own columns the same way.
-    column = max(len(name) for name in names.values()) + 2
-    acknowledged = {said.exercise_id: said.why for said in plan.despite}
+    column = max(len(item.name) for block in reading.blocks for item in block.items) + 2
 
     lines: list[str] = []
-    for position, (shape, costed) in enumerate(
-        # `strict`, because these are two representations of one plan and
-        # nothing in the types says so. Handed a mismatched pair, `zip` would
-        # render the shorter of the two and print a partial workout as if it
-        # were whole -- the failure this ticket forbids, arriving through the
-        # renderer instead of through the validator.
-        zip(plan.blocks, blocks, strict=True),
-        start=1,
-    ):
-        seconds = duration.plan_seconds(connection, [costed])
+    for block in reading.blocks:
         lines.append(
-            f"block {position} -- {costed.rounds} rounds, {costed.rest}s rest "
-            f"-- {seconds // 60}:{seconds % 60:02d}"
+            f"block {block.position} -- {block.rounds} rounds, {block.rest}s rest "
+            f"-- {block.seconds // 60}:{block.seconds % 60:02d}"
         )
-        for item in shape.items:
-            lines.append(f"  {names[item.exercise_id]:<{column}}{_prescription(item)}")
-            said = acknowledged.get(item.exercise_id)
-            if said is not None:
+        for item in block.items:
+            lines.append(f"  {item.name:<{column}}{item.prescription}")
+            if item.said is not None:
                 # On its own line and marked, not folded into the block's
                 # reason: this is the agent proposing something the user said
                 # no to, and it has to be the thing they notice.
-                lines.append(f"    ! you said no to this: {said}")
-        lines.append(f"  why: {shape.reason}")
+                lines.append(f"    ! you said no to this: {item.said}")
+        lines.append(f"  why: {block.reason}")
         lines.append("")
 
-    lines.append(f"total {duration.plan_duration(connection, blocks)} min of {budget_min}")
+    lines.append(f"total {reading.total_min} min of {reading.budget_min}")
     return lines
 
 

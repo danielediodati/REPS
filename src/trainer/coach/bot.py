@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+import random
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -16,7 +19,7 @@ from langgraph.types import Command
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import models, planner
+from trainer.coach import models, planner, progress
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -32,26 +35,37 @@ logger = logging.getLogger(__name__)
 
 STARTED = "Sono il tuo allenatore. Scrivimi quando vuoi."
 
-WORKING = "Ci penso. Su questo portatile ci vuole qualche minuto."
-"""Said before the run starts, because the run is minutes long.
-
-Ticket 02 replaces this with the graph's progress streamed into a draft.
-Until then one line is what stands between a plan being written and a bot
-that looks like it has stopped answering.
-"""
-
-BLOCKED = "Non posso pianificare finché non sistemi questo:\n\n{state}"
-"""A precondition the machine gets wrong, in the engine's own words.
+BLOCKED = (
+    "Non posso pianificare: c'è qualcosa da sistemare sul PC. "
+    "Il motivo è scritto dove gira il bot."
+)
+"""A precondition the machine gets wrong, said without saying which.
 
 No `training.toml`, so there is nothing to derive today's equipment, minutes
-or groups from; no database; a catalog nobody enriched. Each already names
-itself and the command that fixes it, and each is a **state** rather than a
-run that fell over -- answered with `FAILED` it would read as the provider
-having dropped the plan.
+or groups from; no database; a catalog nobody enriched. Each is a **state**
+rather than a run that fell over -- answered with `FAILED` it would read as
+the provider having dropped the plan -- and each already names itself and the
+command that fixes it.
 
-Quoted rather than re-phrased. `config.NoTrainingConfig` names the example
-file to copy and the five things it declares, and a second wording of the same
-state kept here is the one that goes stale.
+**It names itself to the machine and not to the chat.** The engine's states
+carry absolute paths: the file to copy, the directory to copy it into, the
+database that is not there. Quoted into Telegram they would leave this
+installation's account name and the shape of its disk on a third party's
+servers, permanently and for no gain -- nobody copies a file from a phone, so
+the path is not something a reader there can act on anyway. The state goes to
+the log, where the person who can act on it is already sitting.
+
+This is the rule and not an exception to it: **nothing raised leaves this
+machine.** `FAILED` says the same thing about a run that fell over.
+"""
+
+WORKING = "Ci penso."
+"""The draft's first frame, before the graph has done anything worth saying.
+
+An empty draft is Telegram's *Thinking...* placeholder, which is Bot API 10.0
+and is drawn by the clients that know it. A line of our own is drawn wherever
+a draft is drawn at all, and the first minute of a local run is exactly when
+the user most needs to see something.
 """
 
 QUEUED = "Sto ancora lavorando a quello di prima. Questo lo faccio subito dopo."
@@ -61,7 +75,8 @@ FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova."
 
 A provider that falls over mid-run is the ordinary case on a laptop, and the
 user is looking at a phone. An exception that reaches only the log is a bot
-that has stopped answering, which is the thing `WORKING` exists to avoid.
+that has stopped answering, and the draft the run was writing into is gone
+thirty seconds later with nothing left behind to say what happened.
 """
 
 
@@ -222,31 +237,51 @@ Say = Callable[[str], Awaitable[None]]
 what decides can be driven by a test that collects the lines instead of sending
 them."""
 
-Run = Callable[[str, str, "Offer", Say], Awaitable[None]]
-"""The work one message causes, on one thread: `planning` below.
-
-It takes the `Offer` as well as the `Say`, because what a run produces is a
-plan with buttons under it -- the same thing a resumed run produces, for the
-same reason."""
-
 Offer = Callable[[str, Sequence[tuple[str, str]]], Awaitable[None]]
 """A plan with its buttons: the text, and (callback data, label) pairs.
 Telegram's own objects are built in `_offering`, so what decides stays as
 testable as the rest."""
 
-Resume = Callable[[str, "Tap", Say, Offer], Awaitable[None]]
+Draft = Callable[[str], Awaitable[None]]
+"""The run's progress, re-sent in place while it works.
+
+Ephemeral, about thirty seconds, so what goes down it is the whole progress so
+far and never the newest line alone: a draft is not a transcript and nothing
+that has to survive the run may go this way.
+"""
+
+
+@dataclass(frozen=True)
+class Chat:
+    """The three channels one conversation is answered on.
+
+    One object rather than three parameters, because they belong to the same
+    chat and are always passed together -- a queued turn carries them, and a
+    queue drained down somebody else's channels answers the wrong
+    conversation.
+
+    `draft` is separate from `say` although both write to the same chat: a
+    line said stays, and a draft is a thirty-second preview of a run that has
+    not finished. Telling them apart is what stops progress from being what
+    the chat is left holding.
+    """
+
+    say: Say
+    offer: Offer
+    draft: Draft
+
+
+Run = Callable[[str, str, Chat], Awaitable[None]]
+"""The work one message causes, on one thread: `planning` below."""
+
+Resume = Callable[[str, "Tap", Chat], Awaitable[None]]
 """The work one tap causes: it answers the interrupt the plan is waiting on."""
 
 Turn = str | Tap
 """One piece of work on a thread: something the user wrote, or a button they tapped."""
 
-Waiting = tuple[Turn, "Say", "Offer"]
-"""A turn queued behind a run, with the channels it arrived on.
-
-They travel with the turn rather than belonging to the run draining the queue:
-a chat the plan is sent to is the chat the turn came from, and a queue drained
-down somebody else's channel answers the wrong conversation.
-"""
+Waiting = tuple[Turn, Chat]
+"""A turn queued behind a run, with the chat it arrived on."""
 
 
 @dataclass
@@ -266,14 +301,14 @@ class Coach:
         self._resume = resume
         self._threads: dict[str, _Conversation] = {}
 
-    async def started(self, user_id: int, chat_id: int, say: Say) -> None:
+    async def started(self, user_id: int, chat_id: int, chat: Chat) -> None:
         """Answer `/start`, if the owner sent it."""
         if not self._answers(user_id):
             return
-        await self._tell(thread_for(chat_id), say, STARTED)
+        await self._tell(thread_for(chat_id), chat, STARTED)
 
     async def arriving(
-        self, user_id: int, chat_id: int, text: str, say: Say, offer: Offer
+        self, user_id: int, chat_id: int, text: str, chat: Chat
     ) -> None:
         """One message, run now or queued behind the run already in flight.
 
@@ -284,10 +319,10 @@ class Coach:
         """
         if not self._answers(user_id):
             return
-        await self._turn(thread_for(chat_id), text, say, offer)
+        await self._turn(thread_for(chat_id), text, chat)
 
     async def tapped(
-        self, user_id: int, chat_id: int, data: str, say: Say, offer: Offer
+        self, user_id: int, chat_id: int, data: str, chat: Chat
     ) -> None:
         """One button, on the thread it names rather than on the chat it came from.
 
@@ -301,20 +336,20 @@ class Coach:
         tap = tap_of(data)
         if tap is None:
             return
-        await self._turn(tap.thread, tap, say, offer)
+        await self._turn(tap.thread, tap, chat)
 
-    async def _turn(self, thread: str, turn: Turn, say: Say, offer: Offer) -> None:
+    async def _turn(self, thread: str, turn: Turn, chat: Chat) -> None:
         conversation = self._threads.setdefault(thread, _Conversation())
         if conversation.busy:
             # Queued before the acknowledgement is attempted, not after: a chat
             # that cannot be written to must not also cost the message.
-            conversation.waiting.append((turn, say, offer))
-            await self._tell(thread, say, QUEUED)
+            conversation.waiting.append((turn, chat))
+            await self._tell(thread, chat, QUEUED)
             return
 
         conversation.busy = True
         try:
-            queued: Waiting | None = (turn, say, offer)
+            queued: Waiting | None = (turn, chat)
             while queued is not None:
                 await self._attempt(thread, *queued)
                 queued = conversation.waiting.pop(0) if conversation.waiting else None
@@ -336,7 +371,7 @@ class Coach:
                 )
                 conversation.waiting.clear()
 
-    async def _attempt(self, thread: str, turn: Turn, say: Say, offer: Offer) -> None:
+    async def _attempt(self, thread: str, turn: Turn, chat: Chat) -> None:
         """One run, with its failure said out loud instead of left as silence.
 
         Caught per message rather than around the queue: one run that fell over
@@ -345,14 +380,14 @@ class Coach:
         try:
             if isinstance(turn, Tap):
                 assert self._resume is not None, "a tap reached a coach with no graph"
-                await self._resume(thread, turn, say, offer)
+                await self._resume(thread, turn, chat)
             else:
-                await self._run(thread, turn, offer, say)
+                await self._run(thread, turn, chat)
         except Exception:
             logger.exception("the run on %s failed", thread)
-            await self._tell(thread, say, FAILED)
+            await self._tell(thread, chat, FAILED)
 
-    async def _tell(self, thread: str, say: Say, line: str) -> None:
+    async def _tell(self, thread: str, chat: Chat, line: str) -> None:
         """One line into the chat, whose failure is never the caller's problem.
 
         The first failure this met outside the tests was a timeout reaching
@@ -364,7 +399,7 @@ class Coach:
         message, and leaving a line in the log for whoever reads it.
         """
         try:
-            await say(line)
+            await chat.say(line)
         except Exception:
             logger.exception("could not write to %s", thread)
 
@@ -393,28 +428,156 @@ def planning(graph: planner.Planner) -> Run:
 
     Assembling the request is a synchronous read of SQLite and of the
     declaration, and it is the half that can be refused -- so it happens
-    before `WORKING` is said. Promising minutes of work and then answering
-    with a state is worse than answering with the state.
+    before the draft opens. Promising minutes of work and then answering with
+    a state is worse than answering with the state.
     """
 
-    async def run(thread: str, text: str, offer: Offer, say: Say) -> None:
+    async def run(thread: str, text: str, chat: Chat) -> None:
         graph.update_state(_on(thread), {"said": [text]})
         try:
             request = await asyncio.to_thread(_todays_request)
         except tools.ToolFailure as state:
-            await say(BLOCKED.format(state=state))
+            # Logged here rather than left to the caller: `_attempt` catches
+            # what escapes a run, and this is a state the run never reached.
+            logger.warning("%s cannot plan: %s", thread, state)
+            await chat.say(BLOCKED)
             return
-        await say(WORKING)
-        # Off the loop, for the reason `answering` runs its resume off it:
-        # `invoke` is a synchronous round trip to the model, minutes of it on
-        # Ollama, and run here it would block the process that is long-polling
-        # Telegram.
-        final = await asyncio.to_thread(
-            graph.invoke, planner.starting(request), _on(thread)
-        )
-        await told(final, thread, say, offer)
+        final = await streamed(graph, planner.starting(request), _on(thread), chat)
+        await told(final, thread, chat)
 
     return run
+
+
+DRAFT_SECONDS = 20.0
+"""How often the draft is re-sent when the run has produced nothing new.
+
+Under Telegram's thirty, because a draft nobody refreshes disappears and a
+planner turn on Ollama is minutes long: between two lines the screen would go
+back to being empty, which is the state this ticket exists to end.
+"""
+
+
+async def streamed(
+    graph: planner.Planner,
+    given: Any,
+    on: RunnableConfig,
+    chat: Chat,
+) -> dict[str, Any]:
+    """One run, with its progress in the chat while it happens.
+
+    The stream is the point: the tools the planner calls and the violations it
+    is sent back are the refusal loop of ADR-0004, and without them on screen
+    that loop is a property of the code that nobody can see.
+
+    **On a thread, and not `astream`.** The graph is checkpointed by
+    `checkpoints.saver()`, a `SqliteSaver`, which has no async methods at all
+    -- the first thing `astream` does is ask it for `aget_tuple`, and it
+    refuses. The async saver is not a swap either: it has no *sync* methods,
+    and `trainer plan` invokes this same graph synchronously against the same
+    file. One checkpointer serves both doors, so the door that is async is the
+    one that adapts.
+
+    Which is what the call it replaced already did. `asyncio.to_thread` around
+    `invoke` was there because a round trip to the model is minutes on Ollama
+    and would otherwise stop the process long-polling Telegram; the thread is
+    the same, and what is new is that it reports as it goes instead of only at
+    the end.
+
+    The last `values` chunk carries what `invoke` would have returned, the
+    pending interrupt included, so `told` reads the same shape either way.
+    """
+    lines = progress.Progress()
+    final: dict[str, Any] = {}
+    loop = asyncio.get_running_loop()
+    arriving: asyncio.Queue[Any] = asyncio.Queue()
+    done = object()
+
+    def pump() -> None:
+        """The graph, run off the loop, posting each chunk back to it.
+
+        `call_soon_threadsafe` rather than touching the queue directly: this
+        runs on a worker thread, and an asyncio queue is not safe to put to
+        from one. What the run raises is posted like any other item, so it is
+        raised again on the loop where the caller can see it, instead of dying
+        inside a thread nobody is waiting on.
+        """
+        try:
+            for emitted in graph.stream(given, on, stream_mode=["updates", "values"]):
+                loop.call_soon_threadsafe(arriving.put_nowait, emitted)
+        except BaseException as error:  # noqa: BLE001 -- re-raised on the loop
+            loop.call_soon_threadsafe(arriving.put_nowait, error)
+        else:
+            loop.call_soon_threadsafe(arriving.put_nowait, done)
+
+    async with drafting(chat.draft, lines) as update:
+        pumping = asyncio.create_task(asyncio.to_thread(pump))
+        try:
+            while True:
+                item = await arriving.get()
+                if item is done:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                mode, chunk = cast(tuple[str, dict[str, Any]], item)
+                if mode == "values":
+                    final = chunk
+                elif lines.reading(chunk):
+                    await update()
+        finally:
+            # The thread has already posted its last item by the time either
+            # exit is reached, so this collects it rather than waiting on it.
+            await pumping
+    return final
+
+
+@asynccontextmanager
+async def drafting(
+    draft: Draft, lines: progress.Progress
+) -> AsyncIterator[Callable[[], Awaitable[None]]]:
+    """The draft, for as long as the run lasts: sent on every new line, kept alive between them.
+
+    Two reasons to write to it, and they are not the same reason. A line is
+    new and the user should see it now, which is the run's own call; and
+    nothing has been new for long enough that the preview is about to expire,
+    which is the task's.
+
+    One lock over both, so the two never overlap. Each sends the whole
+    progress as it stands when its turn comes, and the draft the user is
+    looking at is therefore never an older one that finished last.
+
+    It opens on `WORKING` rather than on nothing, because the first line the
+    graph produces is a minute away and an empty draft asks the client to draw
+    a placeholder it may not know. A send that fails is logged and nothing
+    more: progress is not the answer, and a run must not be lost because the
+    preview of it could not be delivered.
+    """
+    fresh = asyncio.Event()
+    sending = asyncio.Lock()
+
+    async def update() -> None:
+        fresh.set()
+        async with sending:
+            try:
+                await draft(lines.text() or WORKING)
+            except Exception:
+                logger.exception("could not update the draft")
+
+    async def alive() -> None:
+        while True:
+            try:
+                await asyncio.wait_for(fresh.wait(), DRAFT_SECONDS)
+            except TimeoutError:
+                await update()
+            fresh.clear()
+
+    await update()
+    task = asyncio.create_task(alive())
+    try:
+        yield update
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def _todays_request() -> plans.Request:
@@ -431,24 +594,18 @@ def answering(graph: planner.Planner) -> Resume:
     training facts.
     """
 
-    async def resume(thread: str, tap: Tap, say: Say, offer: Offer) -> None:
+    async def resume(thread: str, tap: Tap, chat: Chat) -> None:
         pending = graph.get_state(_on(thread)).interrupts
         if not pending or pending[0].id != tap.proposal:
             # The thread has moved on, or this plan was already answered. A
             # tap on it is a question about a plan that is no longer the one
             # in hand, and silence would read as a bot that is down.
-            await say(SUPERSEDED)
+            await chat.say(SUPERSEDED)
             return
-        # Off the loop, because `invoke` is a synchronous round trip to the
-        # model -- minutes of it on Ollama. Run here, it would block the
-        # process that is long-polling Telegram: no second tap, no message
-        # queued, not even the acknowledgement promising one, until the plan
-        # came back. The queue exists precisely so that a run in flight does
-        # not cost the bot its answers.
-        final = await asyncio.to_thread(
-            graph.invoke, Command(resume=_answer(tap)), _on(thread)
-        )
-        await told(final, thread, say, offer)
+        # Streamed like any other run: a refusal plans the whole workout
+        # again, which is the same minutes of silence a question costs.
+        final = await streamed(graph, Command(resume=_answer(tap)), _on(thread), chat)
+        await told(final, thread, chat)
 
     return resume
 
@@ -467,14 +624,17 @@ def _answer(tap: Tap) -> planner.Answer:
     return planner.refused(SAID[TURNED_DOWN])
 
 
-async def told(
-    final: dict[str, Any], thread: str, say: Say, offer: Offer
-) -> None:
-    """What the chat is told when a run stops: a plan to answer, the workout, or neither."""
+async def told(final: dict[str, Any], thread: str, chat: Chat) -> None:
+    """What the chat is left holding when a run stops: a plan, the workout, or neither.
+
+    An ordinary message in every case. The draft the run was writing into is a
+    thirty-second preview and is gone by the time the user reads this, which is
+    the difference between watching a run and being told what it decided.
+    """
     waiting = final.get("__interrupt__")
     if waiting:
         proposed = final["plan"]
-        await offer(
+        await chat.offer(
             proposal(proposed, final["request"].budget_min),
             [
                 (carried(Tap(action, thread, waiting[0].id)), label)
@@ -482,24 +642,69 @@ async def told(
             ],
         )
     elif final.get("workout") is not None:
-        await say(WRITTEN)
+        await chat.say(WRITTEN)
     else:
         # Every attempt refused by the validator. There is no plan to offer,
         # and saying nothing would leave the user waiting on a run that ended.
-        await say(NO_PLAN)
+        await chat.say(NO_PLAN)
+
+
+HEADING = "*Blocco {position}* · {rounds} giri · {rest}s di recupero · {minutes}:{seconds:02d}"
+ITEM = "• {name} · {prescription}"
+SAID_NO = "  ⚠️ avevi detto di no: {why}"
+WHY = "_{reason}_"
+TOTAL = "*Totale* {total} min su {budget}"
+
+PARSE_MODE = "MarkdownV2"
+"""The dialect `proposal` writes and `_offering` sends a plan as."""
 
 
 def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
-    """The plan as the chat shows it.
+    """The plan as the chat shows it, in the markup Telegram renders.
 
-    The terminal's lines, for now: ticket 02 owns how a plan reads in
-    Telegram, and a second rendering written here is the one that would be
-    left behind when it lands.
+    Off `plans.shown`, which is also what the terminal's lines are folded
+    from. Only the markup differs: the terminal aligns a column of ASCII
+    because a console has one font and no bold, and neither constraint reaches
+    a phone.
+
+    Everything the catalog or the model wrote is escaped. MarkdownV2 makes a
+    dot and a hyphen syntax, and an exercise named *Push-Up* is enough for
+    Telegram to refuse the message -- which loses the plan, not the formatting.
     """
+    from telegram.helpers import escape_markdown
+
+    def marked(said: str) -> str:
+        return escape_markdown(said, version=2)
+
     with tools.reported(), tools.opened() as connection:
-        return "\n".join(
-            plans.render(connection, plan, plans.to_blocks(plan), budget_min)
+        reading = plans.shown(connection, plan, plans.to_blocks(plan), budget_min)
+
+    lines: list[str] = []
+    for block in reading.blocks:
+        lines.append(
+            HEADING.format(
+                position=block.position,
+                rounds=block.rounds,
+                rest=block.rest,
+                minutes=block.seconds // 60,
+                seconds=block.seconds % 60,
+            )
         )
+        for item in block.items:
+            lines.append(
+                ITEM.format(
+                    name=marked(item.name), prescription=marked(item.prescription)
+                )
+            )
+            if item.said is not None:
+                # Its own line and marked, not folded into the block's reason:
+                # this is the agent proposing something the user said no to,
+                # and it has to be the thing they notice.
+                lines.append(SAID_NO.format(why=marked(item.said)))
+        lines.append(WHY.format(reason=marked(block.reason)))
+        lines.append("")
+    lines.append(TOTAL.format(total=reading.total_min, budget=reading.budget_min))
+    return "\n".join(lines)
 
 
 def _on(thread: str) -> RunnableConfig:
@@ -566,7 +771,7 @@ def _on_start(coach: Coach) -> Handler:
         if who is None:
             return
         user_id, chat_id = who
-        await coach.started(user_id, chat_id, _saying(context, chat_id))
+        await coach.started(user_id, chat_id, chatting(context, chat_id))
 
     return handle
 
@@ -581,13 +786,7 @@ def _on_message(coach: Coach) -> Handler:
         if who is None or message is None or not message.text:
             return
         user_id, chat_id = who
-        await coach.arriving(
-            user_id,
-            chat_id,
-            message.text,
-            _saying(context, chat_id),
-            _offering(context, chat_id),
-        )
+        await coach.arriving(user_id, chat_id, message.text, chatting(context, chat_id))
 
     return handle
 
@@ -605,9 +804,7 @@ def _on_tap(coach: Coach) -> Handler:
         if not isinstance(tap.data, str):
             return
         user_id, chat_id = who
-        await coach.tapped(
-            user_id, chat_id, tap.data, _saying(context, chat_id), _offering(context, chat_id)
-        )
+        await coach.tapped(user_id, chat_id, tap.data, chatting(context, chat_id))
 
     return handle
 
@@ -622,6 +819,20 @@ def _who(update: Update) -> tuple[int, int] | None:
     if update.effective_user is None or update.effective_chat is None:
         return None
     return update.effective_user.id, update.effective_chat.id
+
+
+def chatting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Chat:
+    """One chat's three channels, built once per update.
+
+    The draft id is minted here, so it is one per turn and therefore one per
+    run: a queued turn arrives with a chat of its own, and two runs sharing an
+    id would animate each other's progress into one preview.
+    """
+    return Chat(
+        say=_saying(context, chat_id),
+        offer=_offering(context, chat_id),
+        draft=_drafting(context, chat_id),
+    )
 
 
 def _saying(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Say:
@@ -639,6 +850,7 @@ def _offering(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Offer:
         await context.bot.send_message(
             chat_id=chat_id,
             text=text,
+            parse_mode=PARSE_MODE,
             reply_markup=InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton(label, callback_data=data)]
@@ -648,6 +860,28 @@ def _offering(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Offer:
         )
 
     return offer
+
+
+DRAFT_IDS = 2**31 - 1
+"""The range a draft id is drawn from. Telegram asks only that it be non-zero."""
+
+
+def _drafting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Draft:
+    """The progress channel: one draft, re-sent under the same id so it updates in place.
+
+    Plain text and no parse mode. Progress is the words of a run in flight,
+    and a stray asterisk in something the model called a tool with would be a
+    send Telegram refuses -- silently losing the one thing that says the bot
+    is still working.
+    """
+    draft_id = random.randrange(1, DRAFT_IDS)
+
+    async def draft(text: str) -> None:
+        await context.bot.send_message_draft(
+            chat_id=chat_id, draft_id=draft_id, text=text
+        )
+
+    return draft
 
 
 def serve(
