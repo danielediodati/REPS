@@ -15,7 +15,7 @@
 
 **Out of scope**:
 - the logger, the router, the asynchronous next plan: session 8;
-- memory, onboarding, triage: session 9;
+- memory, onboarding, triage: session 10;
 - anything running on the phone (ADR-0004, item 9);
 - `trainer log` stays on the hand-written Groq adapter whatever `LLM_BACKEND` names, until session 8. It already reports a missing key as a state before the user types their report (`agent.NO_CREDENTIALS`), so nothing here touches it.
 

@@ -54,10 +54,12 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 **Portfolio-ready.** This session closes only when the README is rewritten around the working system and shows a GIF of the demo. If the project stopped here, it would stand on its own.
 
 1. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts.
-2. **The router.** A message is a report, a plan request, or a question.
+2. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay.
 3. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat.
 4. **The log eval suite runs against the graph.**
 5. **The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted.** Groq stays, as a provider of the graph.
+6. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 minutes of 45 and every rule passed it.
+7. **What a workout is, written down.** The brief is a list of prohibitions and never says what good looks like, so the model reaches for the shape that costs least: a circuit pays three rests where straight sets pay fifteen. Needs the user's methodology, and needs the Groq measurement that separates an empty brief from a small model.
 
 ## Later sessions
 
@@ -65,9 +67,12 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 9 | `0.9.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
-| 10 | `0.10.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
-| 11 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
+| 9 | `0.9.0` | you pull the plug mid-run, restart, and read back what the bot was doing and why it stopped | logging to a file the bot owns, rotated; every state and every exception recorded where the person who can act on it is sitting; the token and the owner id never in it; `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»* |
+| 10 | `0.10.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 11 | `0.11.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
+| 12 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
+
+**Nothing raised leaves the machine.** Session 7 made the chat's two failure lines generic on purpose: the engine states carry absolute paths, and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers for nothing -- a path is not something a reader on a phone can act on. Until this session lands, the only record is the bot's own stderr, which is why both lines point at the terminal.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle scheme, ramp-in by dates, the methodology document);
@@ -77,6 +82,6 @@ Their issues are cut when each session opens.
 
 ## Risks
 
-- **Memory.** A 12 GB model plus its context is at the edge of a 32 GB laptop in use, and the OS killed the first probe. The fallbacks are `qwen3.5:9b`, to measure, and `LLM_BACKEND=groq`.
+- **The local model has no GPU on this machine.** Measured in session 7, and it is not memory: `gpt-oss:20b` crashes the Vulkan backend of the Radeon 860M at *any* offload, four layers and 2.4 GB included, while `llama3.1` runs on the same device. It is the model, not the size. So it runs on the CPU at **10.3 tok/s generated and 52 tok/s read**, which is four to five minutes for one plan and eleven for a run the validator refuses twice. `reasoning="low"` is already set and buys nothing further. The fallbacks are `qwen3.5:9b`, to measure with `trainer eval --suite plan`, and `LLM_BACKEND=groq`.
 - **Local tool use.** If `gpt-oss:20b` with feedback cannot hold the invariants at 100%, that is a finding about the model, not a reason to lower the bar.
 - **Telegram's 24-hour window.** Messages sent while the PC is off for longer than that are lost.
