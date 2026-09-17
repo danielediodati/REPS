@@ -993,3 +993,121 @@ def test_a_run_the_validator_refuses_to_the_end_never_offers_a_plan(
     assert "__interrupt__" not in final
     assert graph.get_state(thread).next == ()
     assert prescribed(connection) == []
+
+
+# -- what the provider refuses -------------------------------------------------
+
+
+REFUSED_CALL = (
+    "error parsing tool call: "
+    "raw='{\"minutes\":45,\"proportions\":{\"chest\":22/45,\"arms\":23/45}}', "
+    "err=invalid character '/' after object key:value pair"
+)
+"""Verbatim from a run on Ollama. The model divided the minutes the brief had
+just given it, and JSON has no arithmetic."""
+
+
+class Refusing(Scripted):
+    """A provider that refuses turns: the first `times`, or the ones `at` names."""
+
+    times: int = 1
+    at: list[int] = []
+    """Turn numbers to refuse, counted from zero. Takes the place of `times`,
+    for the scattered refusals a run recovers from one at a time."""
+
+    asked: int = 0
+    refused: int = 0
+
+    def _generate(self, messages: Any, *args: Any, **kwargs: Any) -> Any:
+        turn = self.asked
+        self.asked += 1
+        if turn in self.at if self.at else self.refused < self.times:
+            self.refused += 1
+            raise RuntimeError(REFUSED_CALL)
+        return super()._generate(messages, *args, **kwargs)
+
+
+def test_a_turn_the_provider_refuses_goes_back_to_the_model(
+    connection: sqlite3.Connection,
+) -> None:
+    """The case `agent.execute` was built for, arriving where it cannot help.
+
+    A tool call with a fraction in it is the model getting it wrong, and every
+    other way of getting it wrong comes back as a result it can recover from.
+    This one the provider rejects before any call reaches us, so without this
+    the whole run -- minutes of it on Ollama -- is thrown away over a slash.
+    """
+    model = Refusing(documents=[plan_of("Barbell_Squat")])
+    graph = planner.build(model, checkpointer=InMemorySaver())
+
+    final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
+
+    assert model.refused == 1
+    assert final["rejections"] == 0, "cleared by the turn that landed"
+    assert final["__interrupt__"], "the run reached a plan anyway"
+    told = [m for m in final["messages"] if getattr(m, "name", None) == "provider"]
+    assert len(told) == 1
+    assert "22/45" in told[0].text, "the model is shown what it wrote"
+    assert "strict JSON" in told[0].text
+
+
+def test_a_provider_that_keeps_refusing_ends_the_run(
+    connection: sqlite3.Connection,
+) -> None:
+    """Bounded, like the validator's attempts. A model that cannot produce an
+    acceptable turn twice running will not on the third, and the minutes spent
+    finding out are minutes the user is waiting."""
+    model = Refusing(times=planner.REJECTIONS + 1, documents=[plan_of("Barbell_Squat")])
+    graph = planner.build(model, checkpointer=InMemorySaver())
+
+    with pytest.raises(RuntimeError, match="error parsing tool call"):
+        graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
+
+
+def test_the_brief_is_written_once_across_a_refusal(
+    connection: sqlite3.Connection,
+) -> None:
+    """The retry is the same turn attempted again, not a second conversation.
+
+    `turn` writes the system prompt and the brief only when it finds no
+    history, and the refused turn leaves one behind -- so a second copy here
+    would mean the model planning against two briefs at once.
+    """
+    model = Refusing(documents=[plan_of("Barbell_Squat")])
+    graph = planner.build(model, checkpointer=InMemorySaver())
+
+    final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
+
+    assert sum("Plan the workout." in m.text for m in final["messages"]) == 1
+
+
+def test_the_refusal_budget_is_consecutive_and_not_a_run_total(
+    connection: sqlite3.Connection,
+) -> None:
+    """`REJECTIONS` bounds refusals *in a row*, which is what the comment on it
+    says and what the failure it describes looks like.
+
+    Counted over the whole run instead, this is what happens: the provider
+    hiccups once, the turn is retried and succeeds, the validator refuses the
+    plan for its own unrelated reasons and the graph loops back -- and three
+    laps later the third isolated hiccup trips a budget meant for a model that
+    cannot write a turn at all. Minutes of recovered work, thrown away because
+    nothing ever reset the count.
+    """
+    model = Refusing(
+        at=[0, 2, 4],
+        turns=[AIMessage(content="Planned.")] * 3,
+        documents=[
+            plan_of("Dumbbell_Bench_Press"),  # refused: not today's equipment
+            plan_of("Dumbbell_Bench_Press"),  # refused again
+            plan_of("Barbell_Squat"),         # the one that stands
+        ],
+    )
+    graph = planner.build(model, checkpointer=InMemorySaver())
+
+    final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
+
+    assert model.refused == 3, "the provider refused three separate turns"
+    assert final["attempts"] == 3, "and the validator refused two plans of its own"
+    assert final["__interrupt__"], "the run still reached a plan"
+    assert final["rejections"] == 0, "the count is cleared by a turn that lands"

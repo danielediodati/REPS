@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import operator
 import sqlite3
 import time
@@ -31,8 +32,29 @@ from trainer.coach import models
 from trainer.coach.calls import answered
 from trainer.engine import admissible, constraints, workouts
 
+logger = logging.getLogger(__name__)
+
 ATTEMPTS = 3
 """Plans one run may emit before a refusal ends it."""
+
+REJECTIONS = 2
+"""Turns the provider may refuse before the run gives up on the model."""
+
+REFUSED_TURN = """\
+The provider would not accept that turn:
+{why}
+That is a statement about what you wrote, not about the tools. Write it
+again, in strict JSON. Numbers are literals there: 0.49, never an expression
+like 22/45, which JSON has no way to represent."""
+"""What a provider's refusal is turned into, on its way back to the model.
+
+Observed twice on Ollama in one evening, from different causes: a tool call
+carrying `{"chest": 22/45}`, which JSON has no arithmetic for, and a tool call
+truncated by a context too small to finish it. Both are the model getting it
+wrong, which is the case `agent.execute` exists for -- but the provider
+refuses them before any of our code sees a call, so the recovery it offers
+never comes into play and a run of several minutes is simply lost.
+"""
 
 FEEDBACK = """\
 The validator refused that plan:
@@ -233,6 +255,9 @@ class PlannerState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     spent: int
     attempts: int
+    rejections: int
+    """Turns the provider has refused *in a row*, reset by the first it accepts."""
+
     violations: tuple[plans.Violation, ...]
     refusals: Annotated[list[tuple[plans.Violation, ...]], operator.add]
     timings: Annotated[list[tuple[str, float]], operator.add]
@@ -260,6 +285,7 @@ def starting(request: plans.Request) -> PlannerState:
         # than a message the state ever holds.
         "messages": [cast(AnyMessage, RemoveMessage(REMOVE_ALL_MESSAGES))],
         "attempts": 0,
+        "rejections": 0,
         "spent": 0,
         "violations": (),
         "plan": None,
@@ -307,8 +333,35 @@ def build(
             )
             opening = [SystemMessage(PLANNING), HumanMessage(brief(request))]
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model
-        reply = bound.invoke([*state.get("messages", []), *opening])
-        return {"request": request, "messages": [*opening, reply]}
+        try:
+            reply = bound.invoke([*state.get("messages", []), *opening])
+        except Exception as error:
+            # Everything inside `invoke` belongs to the provider and its
+            # transport, so what comes out of it is a statement about the
+            # model or the link and never about this graph -- which is why it
+            # is caught this broadly and bounded rather than named. Past the
+            # bound it is raised: a model that cannot produce an acceptable
+            # turn twice running is not going to on the third, and the bot
+            # says so rather than spending more minutes finding out.
+            #
+            # Twice *running*, which is why the count resets below on the
+            # first turn the provider accepts. Counted over the whole run
+            # instead, three isolated hiccups spread across the validator's
+            # own retries would end a run that was recovering from every one
+            # of them.
+            refused = state.get("rejections", 0) + 1
+            if refused > REJECTIONS:
+                raise
+            logger.warning("the provider refused a turn (%d): %s", refused, error)
+            return {
+                "request": request,
+                "rejections": refused,
+                "messages": [
+                    *opening,
+                    HumanMessage(REFUSED_TURN.format(why=error), name="provider"),
+                ],
+            }
+        return {"request": request, "rejections": 0, "messages": [*opening, reply]}
 
     def run_tools(state: PlannerState) -> dict[str, Any]:
         reply = state["messages"][-1]
@@ -415,10 +468,15 @@ def build(
             )
         return {"workout": written}
 
-    def after_planner(state: PlannerState) -> Literal["tools", "emit"]:
+    def after_planner(state: PlannerState) -> Literal["tools", "emit", "planner"]:
         reply = state["messages"][-1]
         if isinstance(reply, AIMessage) and reply.tool_calls:
             return "tools"
+        # Not an AIMessage at all: `turn` caught a provider refusing the turn
+        # and left what it said in its place. There is nothing to emit from,
+        # and the model has been told what to write instead.
+        if not isinstance(reply, AIMessage):
+            return "planner"
         return "emit"
 
     def after_tools(state: PlannerState) -> Literal["planner", "emit"]:

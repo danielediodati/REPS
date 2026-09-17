@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from conftest import enrich, make_exercise
-from trainer import tools
+from trainer import agent, tools
 from trainer.engine import (
     catalog,
     database,
@@ -427,3 +427,23 @@ def test_the_tool_with_nothing_to_wrap_is_not_here() -> None:
 
     assert "active_conclusions" not in named
     assert "adherence_history" in named
+
+
+def test_allocate_says_what_a_share_looks_like() -> None:
+    """The unit, where the model reads it rather than where we know it.
+
+    An observed run called `allocate` with `{"chest": 22/45, "arms": 23/45}`:
+    the minutes the brief had just given it, over the budget. JSON has no
+    arithmetic, so Ollama refused the call before it reached the tool and the
+    whole run went with it -- a failure `agent.execute` could not turn into a
+    result to recover from, because the provider rejected it first.
+
+    The docstring is the schema's description, so this is what is actually
+    sent. The same mistake with the same shape is `rest: 60000` on
+    `PlanBlock`, and it is guarded the same way.
+    """
+    described = agent.schema(tools.allocate)["description"]
+
+    assert "decimal" in described
+    assert "0.49" in described, "a share with no example is a share the model guesses"
+    assert "fraction" in described

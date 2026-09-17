@@ -248,10 +248,18 @@ def remaining_budget(partial_plan: list[dict[str, Any]], budget_min: int) -> int
 def allocate(minutes: int, proportions: dict[str, float]) -> dict[str, int]:
     """Divide a workout's minutes among the muscle groups it trains.
 
-    `proportions` maps a muscle group to its share and has to sum to 1: they
-    are refused rather than normalised, because scaling a typo produces a
-    different plan that runs the full time and trains something else. The
-    group names are the six in the committed mapping.
+    `proportions` maps a muscle group to its share of the whole, **as a
+    decimal number**: `{"chest": 0.49, "arms": 0.51}`. Never as a fraction. An
+    observed run wrote `{"chest": 22/45, "arms": 23/45}` -- the minutes this
+    brief had just handed it, over the budget -- and JSON has no arithmetic,
+    so the provider refused the call before it reached this tool and the whole
+    run was lost with it. The two units meeting here is what invites it: the
+    brief speaks minutes and this asks for shares.
+
+    They have to sum to 1, and are refused rather than normalised, because
+    scaling a typo produces a different plan that runs the full time and
+    trains something else. The group names are the six in the committed
+    mapping.
     """
     with reported():
         return budget.allocate(minutes, proportions)
