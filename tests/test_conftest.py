@@ -49,3 +49,14 @@ def test_a_thread_can_still_wake_the_loop() -> None:
         return await running
 
     assert asyncio.run(scenario()) == "worked"
+
+
+def test_the_suite_never_writes_to_the_real_installation() -> None:
+    """The home is pointed somewhere disposable for every test, this one included."""
+    import os
+    from pathlib import Path
+
+    from trainer.engine import home
+
+    assert os.environ.get(home.HOME_ENV_VAR)
+    assert home.home() != Path.home() / home.DEFAULT_HOME_NAME

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from trainer.engine import database
+from trainer.engine import database, home
 
 
 class CheckpointError(RuntimeError):
@@ -20,13 +20,13 @@ class CheckpointError(RuntimeError):
 CHECKPOINTS_ENV = "TRAINER_CHECKPOINTS"
 """Overrides the checkpointer's location, the way `TRAINER_DB` does for the database."""
 
-DEFAULT_PATH = Path("checkpoints.sqlite")
+DEFAULT_NAME = "checkpoints.sqlite"
 
 
 def checkpoints_path() -> Path:
-    """Where the checkpointer writes, from the environment or the working directory."""
+    """Where the checkpointer writes, from the environment or `TRAINER_HOME`."""
     override = os.environ.get(CHECKPOINTS_ENV)
-    return Path(override).expanduser() if override else DEFAULT_PATH
+    return Path(override).expanduser() if override else home.inside(DEFAULT_NAME)
 
 
 @contextmanager

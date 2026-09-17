@@ -49,7 +49,7 @@ Requires [uv](https://docs.astral.sh/uv/).
 uv sync
 uv run trainer db init && uv run trainer db import
 uv run trainer enrich derive && uv run trainer enrich curated
-cp src/trainer/data/training.example.toml training.toml     # cycle, cap, split, denominator, equipment
+cp src/trainer/data/training.example.toml ~/.reps/training.toml   # cycle, cap, split, denominator, equipment
 
 uv run trainer catalog --equipment dumbbell
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
@@ -72,7 +72,7 @@ An unreachable server, a model nobody pulled and a missing key are each reported
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks the provider and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
-`TRAINER_DB` overrides the database path, which defaults to `trainer.sqlite` in the working directory. `TRAINER_CHECKPOINTS` does the same for the graph's own state, which defaults to `checkpoints.sqlite` and is never the training database.
+**Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records.
 
 ## Development
 

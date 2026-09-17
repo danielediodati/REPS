@@ -94,6 +94,21 @@ def no_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def machine_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Everything the machine writes, pointed somewhere disposable.
+
+    Autouse for the reason `no_network` is: the home defaults to `~/.reps`, so
+    a test that resolves a path without an override of its own would reach the
+    developer's real installation -- and `pytest` would write into the database
+    the bot is running on.
+    """
+    directory = tmp_path / "home"
+    directory.mkdir(exist_ok=True)
+    monkeypatch.setenv("TRAINER_HOME", str(directory))
+    return directory
+
+
 @pytest.fixture()
 def database_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """A throwaway database, pointed at by the documented environment variable."""

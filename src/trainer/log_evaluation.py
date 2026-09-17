@@ -626,7 +626,7 @@ def run(
     *,
     build: Callable[[], agent.Model],
     repetitions: int = evaluation.REPETITIONS,
-    records: Path = evaluation.RECORDS,
+    records: Path | None = None,
     budget: int = agent.CALL_BUDGET,
 ) -> evaluation.Report:
     """Every row, every repetition, against the real agent.
@@ -635,10 +635,11 @@ def run(
     situations run three times: a model is a distribution, and one green run
     measures nothing for a labelled row either.
     """
+    into = records if records is not None else evaluation.records_path()
     outcomes = []
     for row in chosen:
         for attempt in range(1, repetitions + 1):
-            outcomes.append(_once(where, row, attempt, build, records, budget))
+            outcomes.append(_once(where, row, attempt, build, into, budget))
     return evaluation.Report(tuple(outcomes))
 
 

@@ -624,9 +624,9 @@ somebody's notes does.
     "records",
     metavar="DIR",
     type=click.Path(file_okay=False, path_type=Path),
-    default=evaluation.RECORDS,
-    show_default=True,
-    help="Where each run's record is written. A failure names the file.",
+    default=None,
+    help="Where each run's record is written. A failure names the file. "
+    "Defaults to eval-runs/ in TRAINER_HOME.",
 )
 @click.option(
     "--call-budget",

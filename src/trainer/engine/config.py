@@ -2,12 +2,14 @@
 
 Cycle length, the cap on a workout's duration, the split being trained, the
 denominator volume is counted on, and the equipment the user has. ADR-0003
-carries why these five live in a committed file and not in SQLite: **the line
-is who writes the value.** SQLite keeps what the system writes -- performed
-workouts, accumulated volume, exclusions and their re-test dates. These five
-are declared by the user, changed by hand, and read back by the user, and in a
-file `git diff` says when the user changed their mind about the cycle, which is
-itself training history.
+carries why these five live in a file and not in SQLite: **a file you read and
+edit by hand, against rows you query.** SQLite keeps what the system measures
+-- performed workouts, accumulated volume, exclusions and their re-test dates
+-- and a declaration sitting beside them would have nothing to tell the two
+apart.
+
+The file lives in `TRAINER_HOME` with everything else this machine writes, and
+not in the repository: it carries one user's own cap, split and equipment.
 
 **This module reads. Nothing in `engine/` writes it.** Onboarding is what will
 fill the file by talking to the user; until then it is hand-written, and
@@ -25,7 +27,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from trainer.engine import muscle_groups
+from trainer.engine import home, muscle_groups
 
 CONFIG_ENV_VAR = "TRAINER_CONFIG"
 """Overrides the configuration's location, the way `TRAINER_DB` does for the
@@ -136,7 +138,7 @@ def config_path() -> Path:
     override = os.environ.get(CONFIG_ENV_VAR)
     if override:
         return Path(override).expanduser()
-    return Path.cwd() / DEFAULT_CONFIG_NAME
+    return home.inside(DEFAULT_CONFIG_NAME)
 
 
 def load(path: Path | None = None) -> TrainingConfig:

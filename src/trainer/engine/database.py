@@ -10,11 +10,13 @@ import os
 import sqlite3
 from pathlib import Path
 
+from trainer.engine import home
+
 DATABASE_ENV_VAR = "TRAINER_DB"
 """Environment variable that overrides the default database location."""
 
 DEFAULT_DATABASE_NAME = "trainer.sqlite"
-"""Default file name, resolved against the current working directory.
+"""Default file name, resolved against `TRAINER_HOME`.
 
 Covered by the `*.sqlite` rule in .gitignore: the database is never committed.
 The readable history is the markdown snapshot beside it, not the file itself.
@@ -30,7 +32,7 @@ def database_path() -> Path:
     override = os.environ.get(DATABASE_ENV_VAR)
     if override:
         return Path(override).expanduser()
-    return Path.cwd() / DEFAULT_DATABASE_NAME
+    return home.inside(DEFAULT_DATABASE_NAME)
 
 
 def connect(path: Path) -> sqlite3.Connection:

@@ -55,7 +55,7 @@ from trainer import agent
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
-from trainer.engine import admissible, catalog, database, duration, muscle_groups
+from trainer.engine import admissible, catalog, database, duration, home, muscle_groups
 
 REPETITIONS = 3
 """How many times each situation runs, unless told otherwise.
@@ -77,10 +77,20 @@ NOT_RUN = "not run"
 nothing and they count against the metric, but they are not a failure of any
 invariant either."""
 
-RECORDS = Path("eval-runs")
-"""Where each run's record is written. A failure names the file, because
-*invariant 3 failed* is a fact and the record is the only thing that says
-why."""
+RECORDS_ENV_VAR = "TRAINER_EVAL_RUNS"
+"""Overrides where the records are written, the way `TRAINER_DB` does for the database."""
+
+DEFAULT_RECORDS_NAME = "eval-runs"
+
+
+def records_path() -> Path:
+    """Where each run's record is written. A failure names the file, because
+    *invariant 3 failed* is a fact and the record is the only thing that says
+    why."""
+    override = os.environ.get(RECORDS_ENV_VAR)
+    if override:
+        return Path(override).expanduser()
+    return home.inside(DEFAULT_RECORDS_NAME)
 
 TURNED_DOWN_BECAUSE = "I don't feel like it"
 """What the user says when they turn down the first plan of the after-a-refusal situation."""
@@ -633,7 +643,7 @@ def pointed_at_the_database() -> Iterator[Path]:
 
     The tools open their own connection from that variable, so the database
     the *model* reads is the one the environment names. Left to the default
-    the two are the same file by coincidence of the working directory, and a
+    the two are the same file only because both fell back to the home, and a
     coincidence is not what CLAUDE.md's standing rule asks for -- a fixture
     nothing points at is invisible to the agent, and the pass measures a model
     answering *there is no such workout* thirty times.
@@ -659,7 +669,7 @@ def run(
     *,
     on: models.Chat,
     repetitions: int = REPETITIONS,
-    records: Path = RECORDS,
+    records: Path | None = None,
     budget: int = agent.CALL_BUDGET,
 ) -> Report:
     """Every situation, every repetition, against the planner graph.
@@ -679,11 +689,12 @@ def run(
     prescribed workouts in the state it is measuring. In memory because these
     threads are of no interest once the run is scored.
     """
+    where = records if records is not None else records_path()
     graph = planner.build(on.model, budget=budget, checkpointer=InMemorySaver())
     outcomes = []
     for situation in chosen:
         for attempt in range(1, repetitions + 1):
-            outcomes.append(_once(connection, situation, attempt, graph, on, records))
+            outcomes.append(_once(connection, situation, attempt, graph, on, where))
     return Report(tuple(outcomes))
 
 

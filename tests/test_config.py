@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from trainer.engine import config, muscle_groups
+from trainer.engine import config, home, muscle_groups
 
 VALID = """\
 cycle_length = 3
@@ -248,13 +248,15 @@ def test_the_environment_variable_wins(
     assert config.load().cycle_length == 3
 
 
-def test_without_the_variable_it_is_the_working_directory(
+def test_without_the_variable_it_is_in_the_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """And the directory the command was launched from does not reach it."""
     monkeypatch.delenv(config.CONFIG_ENV_VAR, raising=False)
+    monkeypatch.setenv(home.HOME_ENV_VAR, str(tmp_path / "home"))
     monkeypatch.chdir(tmp_path)
 
-    assert config.config_path() == tmp_path / config.DEFAULT_CONFIG_NAME
+    assert config.config_path() == tmp_path / "home" / config.DEFAULT_CONFIG_NAME
 
 
 # -- the engine reads it and nothing else -------------------------------------
