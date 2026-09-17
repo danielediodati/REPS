@@ -55,7 +55,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
    **Nothing raised leaves the machine**, and this is where it goes instead. Session 7 made those two lines generic on purpose: the engine's states carry absolute paths — the file to copy, the directory to copy it into — and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers, for a path nobody can act on from a phone. Until this lands, the only record is the bot's own stderr.
 2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 11, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
-3. **The checkpoint's types are registered.** `plan.Request`, `plan.Violation` and `plan.WorkoutPlan` are written into checkpoints by a serializer that now warns it will stop reading them back. Today a warning; on the LangGraph upgrade, every conversation on disk is unreadable.
+3. **The checkpoint's types are registered.** `plan.Request`, `plan.Violation` and `plan.WorkoutPlan` are written into checkpoints by a serializer that now warns it will stop reading them back. Today a warning; on the LangGraph upgrade, every conversation on disk is unreadable. — **done** `be457c6`
 4. **The run record can be read back.** Session 6 item 3 already puts it in the graph state — attempts, tool calls, tokens, wall time per node — and nothing has ever read it. Without this, *control* means only *I have logs*.
 
 ## Session 9 — `0.9.0` — The report in the chat
