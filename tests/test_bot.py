@@ -27,7 +27,7 @@ from conftest import enrich
 from trainer import plan as plans
 from trainer import tools
 from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, plan_of
-from trainer.coach import bot, checkpoints, planner, progress
+from trainer.coach import bot, checkpoints, logfile, planner, progress
 from trainer.engine import catalog, database, migrations, workouts
 
 OWNER = 6421
@@ -761,6 +761,58 @@ def test_the_blocked_line_has_nothing_to_substitute_into() -> None:
     gets this and only this.
     """
     assert "{" not in bot.BLOCKED
+
+
+def test_both_lines_name_the_log_and_neither_carries_a_path() -> None:
+    """*«dove gira il bot»* named no file. These name one, the same way, and
+    still without saying where it is: an absolute path is what ticket 07/02
+    kept out of the chat in the first place."""
+    for line in (bot.BLOCKED, bot.FAILED):
+        assert logfile.LOG_NAME in line
+        assert str(logfile.log_path()) not in line
+        assert "\\" not in line and "/" not in line
+
+
+def test_a_state_that_stops_a_run_is_written_to_the_log_file(
+    catalogued: sqlite3.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other half of `BLOCKED`: the chat is told there is something to fix,
+    and the file the chat named holds which thing, with the path and the
+    command that fixes it."""
+    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    logfile.start((bot.TOKEN_ENV, bot.OWNER_ENV))
+    graph = planner.build(Scripted(), checkpointer=InMemorySaver())
+
+    watched = asking(graph)
+
+    written = logfile.log_path().read_text(encoding="utf-8")
+    assert watched.said == [bot.BLOCKED]
+    assert "no training configuration yet" in written
+    assert str(tmp_path / "absent.toml") in written
+    assert "Traceback" in written
+
+
+def test_a_run_that_falls_over_is_written_to_the_log_file(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """And the other half of `FAILED`. Without this the user is told to look
+    at a file that says nothing about the evening they lost."""
+
+    class Falling(Scripted):
+        def _generate(self, messages: Any, *args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("the provider fell over")
+
+    logfile.start((bot.TOKEN_ENV, bot.OWNER_ENV))
+    graph = planner.build(Falling(), checkpointer=InMemorySaver())
+
+    watched = asking(graph)
+
+    written = logfile.log_path().read_text(encoding="utf-8")
+    assert watched.said == [bot.FAILED]
+    assert "RuntimeError: the provider fell over" in written
+    assert "Traceback" in written
 
 
 # -- the handlers, driven with updates constructed by hand ---------------------

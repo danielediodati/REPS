@@ -19,7 +19,7 @@ from langgraph.types import Command
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import models, planner, progress
+from trainer.coach import logfile, models, planner, progress
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -35,9 +35,17 @@ logger = logging.getLogger(__name__)
 
 STARTED = "Sono il tuo allenatore. Scrivimi quando vuoi."
 
+IN_THE_LOG = f"Il motivo è scritto in {logfile.LOG_NAME}."
+"""Where the detail is, said the same way by both lines that have one.
+
+The file name and not its path. The user reading this is on a phone and the
+person who can open it is at the machine -- the same person, at another moment
+-- and an absolute path would put this installation's account name and disk
+layout on a third party's servers for no gain.
+"""
+
 BLOCKED = (
-    "Non posso pianificare: c'è qualcosa da sistemare sul PC. "
-    "Il motivo è scritto dove gira il bot."
+    "Non posso pianificare: c'è qualcosa da sistemare sul PC. " + IN_THE_LOG
 )
 """A precondition the machine gets wrong, said without saying which.
 
@@ -53,7 +61,8 @@ database that is not there. Quoted into Telegram they would leave this
 installation's account name and the shape of its disk on a third party's
 servers, permanently and for no gain -- nobody copies a file from a phone, so
 the path is not something a reader there can act on anyway. The state goes to
-the log, where the person who can act on it is already sitting.
+the log, where the person who can act on it is already sitting, and this names
+the file it is in.
 
 This is the rule and not an exception to it: **nothing raised leaves this
 machine.** `FAILED` says the same thing about a run that fell over.
@@ -70,7 +79,7 @@ the user most needs to see something.
 
 QUEUED = "Sto ancora lavorando a quello di prima. Questo lo faccio subito dopo."
 
-FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova."
+FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova. " + IN_THE_LOG
 """Said when a run raises.
 
 A provider that falls over mid-run is the ordinary case on a laptop, and the
@@ -439,7 +448,9 @@ def planning(graph: planner.Planner) -> Run:
         except tools.ToolFailure as state:
             # Logged here rather than left to the caller: `_attempt` catches
             # what escapes a run, and this is a state the run never reached.
-            logger.warning("%s cannot plan: %s", thread, state)
+            # With the traceback, which is not noise on a state: it says which
+            # of the preconditions the run stopped on.
+            logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
             await chat.say(BLOCKED)
             return
         final = await streamed(graph, planner.starting(request), _on(thread), chat)

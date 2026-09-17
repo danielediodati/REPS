@@ -32,7 +32,7 @@ from trainer import (
     log_set,
     plan,
 )
-from trainer.coach import bot, checkpoints, memory, models, planner
+from trainer.coach import bot, checkpoints, logfile, memory, models, planner
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -812,8 +812,15 @@ def bot_command() -> None:
     Everything the bot needs is checked before it starts, and only for the
     provider `LLM_BACKEND` selects: on Ollama the server, the model and
     `OLLAMA_CONTEXT_LENGTH`; on Groq the key; and the token, with Telegram.
+
+    What happens then goes to a rotating log in the home, never to the token or
+    the owner id, and it is the file the chat names when a run cannot start or
+    falls over.
     """
     with reported():
+        # First, so that everything the rest of this block decides is in the
+        # file rather than in whatever terminal happened to be attached.
+        log_file = logfile.start((bot.TOKEN_ENV, bot.OWNER_ENV))
         declared = bot.settings()
         on = models.chat()
         models.ready(on)
@@ -832,6 +839,7 @@ def bot_command() -> None:
                 else f"context:     {on.provider}'s own"
             )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
+            click.echo(f"log:         {log_file}")
             click.echo(f"bot:         {name}")
             # The owner's chat id is their user id, a private chat being
             # between the two of them, so the thread is knowable before

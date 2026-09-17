@@ -3442,6 +3442,18 @@ def test_bot_says_what_it_runs_on_before_it_polls(
     assert [getattr(declared, "owner_id") for declared in healthy_bot] == [6421]
 
 
+def test_bot_opens_its_log_in_the_home_and_says_where(
+    runner: CliRunner, healthy_bot: list[object], machine_home: Path
+) -> None:
+    """The block names the file, because the terminal is where an absolute
+    path belongs: the person reading it is at the machine."""
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert f"log:         {machine_home / 'trainer.log'}" in result.output
+    assert (machine_home / "trainer.log").exists()
+
+
 def test_bot_with_ollama_down_stops_with_the_fix(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
 ) -> None:

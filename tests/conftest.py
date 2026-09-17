@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from trainer.coach import logfile
 from trainer.engine.catalog import Exercise
 
 _CREDENTIAL_HINTS = ("API_KEY", "_TOKEN", "SECRET")
@@ -107,6 +108,18 @@ def machine_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory.mkdir(exist_ok=True)
     monkeypatch.setenv("TRAINER_HOME", str(directory))
     return directory
+
+
+@pytest.fixture(autouse=True)
+def bot_log() -> Iterator[None]:
+    """No test leaves the bot's log attached to the root logger.
+
+    Autouse, because the handler is process-wide and holds its file open: left
+    behind, every later test writes into a `tmp_path` that has been deleted,
+    and on Windows the open handle stops it being deleted at all.
+    """
+    yield
+    logfile.stop()
 
 
 @pytest.fixture()
