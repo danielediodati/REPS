@@ -26,8 +26,8 @@ Two circuits, nine exercises, four push-up variants for chest. It passes every r
 
 **The user's own methodology**, which is not the agent's to invent and not the engine's to hold: how many exercises a group gets, what a working set is, which rest goes with which intent, and when a superset or a circuit is the right answer rather than the cheap one. ROADMAP has *the methodology document* under **After 1.0.0**; this plan is what that deferral looks like from the outside.
 
-**The measurement that separates the causes.** One identical request on Groq, on a large model at full reasoning. If the plan is sound, the cause is the local model and the machine. If it is the same shape, the cause is the empty brief — which is the likelier of the two and the only one a document fixes. Blocked today: the configured Groq model answers 404.
+**The measurement that separates the causes**, which is issue 01. One identical request on Groq, on a large model at full reasoning. If the plan is sound, the cause is the local model and the machine. If it is the same shape, the cause is the empty brief — which is the likelier of the two and the only one a document fixes. Blocked today: the configured Groq model answers 404.
 
 ## Comments
 
-Issue 06 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
+Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.

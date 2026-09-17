@@ -31,4 +31,4 @@ This widens the ceiling as well as adding a floor, and that is deliberate. It al
 
 Found by running the bot for real: two circuits, nine exercises, 25 minutes of 45, and nothing anywhere objected.
 
-**A floor alone will not buy a good workout.** The same run showed why the plan was cheap: the five triceps exercises cost 14 minutes as one circuit and 32 as straight sets, because a circuit pays three rests instead of fifteen. Given a floor and no methodology, a model that wants to fill time can add exercises to a circuit rather than prescribe sets. That half is issue 07, and this ticket does not close it.
+**A floor alone will not buy a good workout.** The same run showed why the plan was cheap: the five triceps exercises cost 14 minutes as one circuit and 32 as straight sets, because a circuit pays three rests instead of fifteen. Given a floor and no methodology, a model that wants to fill time can add exercises to a circuit rather than prescribe sets. That half is issue 02, and this ticket does not close it.

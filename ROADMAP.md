@@ -47,19 +47,36 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 4. **Today's inputs.** Equipment, time and the groups are taken from `training.toml` and the rotation, and both doors assemble the request through one function. The rotation moved out of `cli._rotated` into the engine, and `training.toml` gained `equipment` as a fifth declaration. — **done** `c7aee6d`
 5. **The provider's state is checked when the bot starts.** Ollama is reachable, the model is present and the context length is set; Groq has its key; Telegram has its token and its owner id. Only the selected provider is checked, and each failure is reported as a state, with its fix. — **done** `11653e0`
 
-## Session 8 — `0.8.0` — The report in the chat
+## Session 8 — `0.8.0` — You can see what it is doing
+
+**Demo**: pull the plug mid-run, restart, and read back what the bot was doing and why it stopped. Everything the machine writes is in one directory you copy in one move.
+
+1. **Logging to a file the bot owns**, rotated. Every state and every exception, recorded where the person who can act on it is sitting; the token and the owner id never in it. `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»*.
+
+   **Nothing raised leaves the machine**, and this is where it goes instead. Session 7 made those two lines generic on purpose: the engine's states carry absolute paths — the file to copy, the directory to copy it into — and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers, for a path nobody can act on from a phone. Until this lands, the only record is the bot's own stderr.
+2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` is the exception and stays in the repository — ADR-0003 makes the diff on it training history, and a tidy-up that moved it would kill that silently. The two databases that exist are **moved, not recreated**.
+3. **The checkpoint's types are registered.** `plan.Request`, `plan.Violation` and `plan.WorkoutPlan` are written into checkpoints by a serializer that now warns it will stop reading them back. Today a warning; on the LangGraph upgrade, every conversation on disk is unreadable.
+4. **The run record can be read back.** Session 6 item 3 already puts it in the graph state — attempts, tool calls, tokens, wall time per node — and nothing has ever read it. Without this, *control* means only *I have logs*.
+
+## Session 9 — `0.9.0` — The report in the chat
 
 **Demo**: after training you write the report in Telegram. The bot asks one question and you answer with a button. The next plan arrives without being asked for.
 
-**Portfolio-ready.** This session closes only when the README is rewritten around the working system and shows a GIF of the demo. If the project stopped here, it would stand on its own.
-
 1. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts.
-2. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay.
+2. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay. It carries the per-node model with it, and with it the Groq path, which today dies on a 404 for a model that does not exist. `bot.Coach` is renamed here: it is the turn-taking, and the word is needed for the node that coaches.
 3. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat.
 4. **The log eval suite runs against the graph.**
 5. **The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted.** Groq stays, as a provider of the graph.
-6. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 minutes of 45 and every rule passed it.
-7. **What a workout is, written down.** The brief is a list of prohibitions and never says what good looks like, so the model reaches for the shape that costs least: a circuit pays three rests where straight sets pay fifteen. Needs the user's methodology, and needs the Groq measurement that separates an empty brief from a small model.
+
+## Session 10 — `0.10.0` — A plan worth doing
+
+**Demo**: the same request twice — the 25-minute circuit the bot proposed in session 7 beside what comes out now.
+
+In this order. Measuring first is what stops the methodology being written against a cause nobody confirmed, and the floor is last because on its own it buys nothing: given a floor and no methodology, the cheapest way to fill the time is a tenth exercise in the circuit.
+
+1. **The measurement that separates the causes.** The same request on Groq, on a large model at full reasoning. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
+2. **What a workout is, written down.** Needs the user's methodology: how many exercises a group gets, what a working set is, which rest goes with which intent, and when a superset or a circuit is the right answer rather than the cheap one.
+3. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 of 45 minutes and every rule passed it.
 
 ## Later sessions
 
@@ -67,12 +84,11 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 9 | `0.9.0` | you pull the plug mid-run, restart, and read back what the bot was doing and why it stopped | logging to a file the bot owns, rotated; every state and every exception recorded where the person who can act on it is sitting; the token and the owner id never in it; `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»* |
-| 10 | `0.10.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
-| 11 | `0.11.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
-| 12 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
+| 11 | `0.11.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 12 | `0.12.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
+| 13 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 
-**Nothing raised leaves the machine.** Session 7 made the chat's two failure lines generic on purpose: the engine states carry absolute paths, and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers for nothing -- a path is not something a reader on a phone can act on. Until this session lands, the only record is the bot's own stderr, which is why both lines point at the terminal.
+**Portfolio-ready** is session 13. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle scheme, ramp-in by dates, the methodology document);

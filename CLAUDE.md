@@ -75,3 +75,4 @@ A session closes when every issue under its heading in ROADMAP.md is **done**. A
 1. **Set `pyproject.toml` to the version the roadmap gives the session**, then run `uv sync`: `trainer --version` reads the installed metadata. Commit it on its own as `Release X.Y.Z`.
 2. **Tag that commit**, annotated, as `vX.Y.Z`. The subject is the session's demo line from the roadmap. The body says what shipped, in two or three lines.
 3. **Point README's Status** at the new version and at what the next session opens with.
+4. **Make the README describe the system as it is now**, not only its Status line. Every sentence in it is a claim about a running program, and a release that changed what the program does and left the README alone has published a false one. This is not the portfolio rewrite — that is its own session, with the GIF — it is the minimum that keeps the file from lying between here and there.
