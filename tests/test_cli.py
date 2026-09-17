@@ -3547,3 +3547,113 @@ def test_bot_with_a_token_telegram_refuses_names_botfather(
     assert "Traceback" not in result.output
     assert "a-stand-in" not in result.output
     assert healthy_bot == []
+
+
+def test_runs_list_names_the_conversation_a_plan_left_behind(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")])
+    runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
+
+    result = runner.invoke(main, ["runs", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "plan:" in result.output
+    assert "valid" in result.output
+    assert "a-stand-in on scripted" in result.output
+    assert result.output.isascii()
+
+
+def test_runs_show_prints_the_record_trainer_plan_wrote_for_the_same_run(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One definition of how a record is written: `--record` and the read-back
+    are the same document or one of them is drifting."""
+    from test_planner import calling, plan_of
+
+    scripted_graph(
+        monkeypatch,
+        turns=[calling("allocate", minutes=45, proportions={"legs": 1.0})],
+        documents=[plan_of("Barbell_Squat")],
+    )
+    record = tmp_path / "run.json"
+    runner.invoke(
+        main,
+        ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
+             "--record", str(record)],
+    )
+    thread = runner.invoke(main, ["runs", "list"]).output.split()[0]
+
+    result = runner.invoke(main, ["runs", "show", thread, "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == json.loads(record.read_text(encoding="utf-8"))
+
+
+def test_runs_show_summarises_the_run_for_the_terminal(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_planner import calling, plan_of
+
+    scripted_graph(
+        monkeypatch,
+        turns=[calling("allocate", minutes=45, proportions={"legs": 1.0})],
+        documents=[plan_of("Barbell_Squat")],
+    )
+    runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
+    thread = runner.invoke(main, ["runs", "list"]).output.split()[0]
+
+    result = runner.invoke(main, ["runs", "show", thread])
+
+    assert result.exit_code == 0, result.output
+    assert "1 of 12 tool calls" in result.output
+    assert "tokens in" in result.output
+    assert "emit" in result.output, "the per-node seconds are not there"
+    assert result.output.isascii()
+
+
+def test_runs_show_names_the_listing_when_the_thread_is_unknown(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")])
+    runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
+
+    result = runner.invoke(main, ["runs", "show", "chat:404"])
+
+    assert result.exit_code != 0
+    assert "trainer runs list" in result.output
+
+
+def test_runs_report_an_empty_history_as_a_state_and_write_no_file(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """A missing precondition is a state with a fix, and a reader must not
+    leave a checkpointer behind where it found none."""
+    from trainer.coach import checkpoints
+
+    result = runner.invoke(main, ["runs", "list"])
+
+    assert result.exit_code != 0
+    assert "trainer plan" in result.output
+    assert not checkpoints.checkpoints_path().exists()
+
+
+def test_runs_list_says_so_when_the_checkpointer_is_there_but_empty(
+    runner: CliRunner, enriched: Path
+) -> None:
+    """`trainer bot` opens the checkpointer before it answers anything, so a
+    file with no conversation in it is a state that happens."""
+    from trainer.coach import checkpoints
+
+    with checkpoints.saver():
+        pass
+
+    result = runner.invoke(main, ["runs", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "no conversation yet" in result.output
+    assert "trainer plan" in result.output

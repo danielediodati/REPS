@@ -59,6 +59,8 @@ uv run trainer state
 uv run trainer eval --suite plan                              # or --suite log
 uv run trainer mcp                                            # the engine's tools over MCP
 uv run trainer bot                                            # answer Telegram, the owner only
+uv run trainer runs list                                      # the conversations the checkpointer holds
+uv run trainer runs show chat:123456                          # what that run called, spent and reached
 ```
 
 **Choosing the provider.** `trainer plan` and `trainer eval --suite plan` run the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
@@ -73,6 +75,8 @@ An unreachable server, a model nobody pulled and a missing key are each reported
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks the provider and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
 **Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records. `trainer bot` also writes `trainer.log` there, rotated at a megabyte and four files deep, holding every state and every exception and never the token or the owner id. It has no override, because the chat names it by name when a run cannot start or falls over.
+
+**A run that stopped can be read back.** The log says why it stopped; `trainer runs` says what it was doing. `trainer runs list` names every conversation in the checkpointer with when it last moved and whether it ended with a plan, a refusal or nothing; `trainer runs show THREAD` prints that run's record — the tools it called, the attempts the validator refused, the tokens, the seconds each node cost — and `--json` gives the whole thing, the same document `trainer plan --record` writes. A run cut mid-flight reads back at the last checkpoint it reached, with no outcome invented for it.
 
 ## Development
 

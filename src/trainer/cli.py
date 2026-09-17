@@ -21,6 +21,7 @@ from uuid import uuid4
 import click
 from click.core import ParameterSource
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from trainer import (
@@ -32,7 +33,7 @@ from trainer import (
     log_set,
     plan,
 )
-from trainer.coach import bot, checkpoints, logfile, memory, models, planner
+from trainer.coach import bot, checkpoints, logfile, memory, models, planner, runs
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -853,6 +854,90 @@ def bot_command() -> None:
             bot.serve(declared, on, saver)
 
 
+@main.group("runs")
+def runs_group() -> None:
+    """Read back what the planner did, off the checkpointer.
+
+    Every run leaves its whole state on disk, so a run that stopped -- because
+    the machine did, or because the validator refused it to the end -- can be
+    asked afterwards what it had reached. The log says why a run stopped; this
+    says what it was doing.
+    """
+
+
+@runs_group.command("list")
+def runs_list() -> None:
+    """List the conversations the checkpointer holds, most recently moved first."""
+    with reported(), _checkpointed() as saver:
+        held = runs.conversations(saver)
+    if not held:
+        click.echo(
+            f"{checkpoints.checkpoints_path()} holds no conversation yet; "
+            "run `trainer plan` or `trainer bot` first"
+        )
+        return
+    width = max(len(conversation.thread) for conversation in held)
+    for conversation in held:
+        click.echo(runs.line(conversation, width))
+
+
+@runs_group.command("show")
+@click.argument("thread")
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print the whole record instead of the summary: every call with its "
+    "arguments, every violation, the plan.",
+)
+def runs_show(thread: str, as_json: bool) -> None:
+    """Print one conversation's run record, as `trainer plan --record` writes it.
+
+    At the last checkpoint the thread reached, which for a run cut mid-flight
+    is where it was cut: the calls it had made, the attempts it had spent and
+    the nodes that finished.
+    """
+    with reported(), _checkpointed() as saver:
+        found = runs.read(saver, thread)
+    if found is None:
+        raise click.ClickException(
+            f"{checkpoints.checkpoints_path()} holds no conversation {thread}; "
+            "`trainer runs list` names the ones it has"
+        )
+    conversation, values = found
+    if as_json:
+        click.echo(
+            run_record.document(
+                run_record.of(values, conversation.on.model, conversation.on.provider)
+            )
+        )
+        return
+    click.echo(runs.line(conversation))
+    for line in run_record.summary(
+        values, conversation.on.model, conversation.on.provider, conversation.on.budget
+    ):
+        click.echo(line)
+
+
+@contextmanager
+def _checkpointed() -> Iterator[SqliteSaver]:
+    """The checkpointer, opened to be read, and a state when nothing has written one.
+
+    Checked rather than opened blindly: `saver` creates the file, so a reader
+    pointed at the wrong home would make an empty one there and report it as a
+    history with nothing in it.
+    """
+    path = checkpoints.checkpoints_path()
+    if not path.exists():
+        raise click.ClickException(
+            f"there is no checkpointer at {path}; run `trainer plan` or "
+            "`trainer bot` first, or point "
+            f"{checkpoints.CHECKPOINTS_ENV} at the file you mean"
+        )
+    with checkpoints.saver() as saver:
+        yield saver
+
+
 @main.command("config")
 @click.option(
     "--muscle-groups",
@@ -1233,7 +1318,12 @@ def _asked(
 
     Written *before* a refusal is raised, on purpose: the record is what you
     open to find out why the model emitted what it did, and a run refused on
-    its last attempt is exactly the case you want it for.
+    its last attempt is exactly the case you want it for. Written *after* the
+    resume when there is one, so that the file holds the whole run -- the same
+    thing `trainer runs show` reads back off the last checkpoint, which it
+    could not be if the two stopped at different points. In a `finally`, so
+    that a resume that falls over still leaves the record of what came before
+    it.
 
     **Invoked, then resumed** (ADR-0005). The graph stops at the plan and the
     workout is written by the node after the resume, so this command resumes
@@ -1248,19 +1338,24 @@ def _asked(
     models.ready(on)
     with checkpoints.saver() as saver:
         graph = planner.build(on.model, budget=call_budget, checkpointer=saver)
-        thread: RunnableConfig = {"configurable": {"thread_id": f"plan:{uuid4()}"}}
+        thread: RunnableConfig = run_record.on(
+            f"plan:{uuid4()}", run_record.Run(on.name, on.provider, call_budget)
+        )
         final = graph.invoke({"request": request}, thread)
 
-        if record_path is not None:
-            record_path.write_text(
-                run_record.written(final, on.name, on.provider), encoding="utf-8"
-            )
-        if final["violations"]:
-            raise click.ClickException(plan.refusal(final["violations"]))
-
+        refused = final["violations"]
         emitted = final["plan"]
+        try:
+            if not refused:
+                final = graph.invoke(Command(resume=planner.accepted()), thread)
+        finally:
+            if record_path is not None:
+                record_path.write_text(
+                    run_record.written(final, on.name, on.provider), encoding="utf-8"
+                )
+        if refused:
+            raise click.ClickException(plan.refusal(refused))
         assert emitted is not None, "a run with no violations emitted a plan"
-        final = graph.invoke(Command(resume=planner.accepted()), thread)
 
     blocks = plan.to_blocks(emitted)
     return emitted, [

@@ -17,9 +17,11 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 
+from trainer import agent
 from trainer import plan as plans
 from trainer import tools
 from trainer.coach import logfile, models, planner, progress
+from trainer.coach import record as run_record
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -420,7 +422,7 @@ class Coach:
         return False
 
 
-def planning(graph: planner.Planner) -> Run:
+def planning(graph: planner.Planner, on: run_record.Run) -> Run:
     """One message, planned: today's request assembled, the graph run, the plan offered.
 
     The request comes from `plan.requested`, which the terminal calls too --
@@ -442,7 +444,7 @@ def planning(graph: planner.Planner) -> Run:
     """
 
     async def run(thread: str, text: str, chat: Chat) -> None:
-        graph.update_state(_on(thread), {"said": [text]})
+        graph.update_state(run_record.on(thread, on), {"said": [text]})
         try:
             request = await asyncio.to_thread(_todays_request)
         except tools.ToolFailure as state:
@@ -453,7 +455,9 @@ def planning(graph: planner.Planner) -> Run:
             logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
             await chat.say(BLOCKED)
             return
-        final = await streamed(graph, planner.starting(request), _on(thread), chat)
+        final = await streamed(
+            graph, planner.starting(request), run_record.on(thread, on), chat
+        )
         await told(final, thread, chat)
 
     return run
@@ -597,7 +601,7 @@ def _todays_request() -> plans.Request:
         return plans.requested(connection, date.today().isoformat()).request
 
 
-def answering(graph: planner.Planner) -> Resume:
+def answering(graph: planner.Planner, on: run_record.Run) -> Resume:
     """The tap, answered: the thread resumes and the run goes on from there (ADR-0005).
 
     The write is the graph's, in the node after the resume. Nothing here
@@ -606,7 +610,7 @@ def answering(graph: planner.Planner) -> Resume:
     """
 
     async def resume(thread: str, tap: Tap, chat: Chat) -> None:
-        pending = graph.get_state(_on(thread)).interrupts
+        pending = graph.get_state(_reading(thread)).interrupts
         if not pending or pending[0].id != tap.proposal:
             # The thread has moved on, or this plan was already answered. A
             # tap on it is a question about a plan that is no longer the one
@@ -615,7 +619,9 @@ def answering(graph: planner.Planner) -> Resume:
             return
         # Streamed like any other run: a refusal plans the whole workout
         # again, which is the same minutes of silence a question costs.
-        final = await streamed(graph, Command(resume=_answer(tap)), _on(thread), chat)
+        final = await streamed(
+            graph, Command(resume=_answer(tap)), run_record.on(thread, on), chat
+        )
         await told(final, thread, chat)
 
     return resume
@@ -718,13 +724,14 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
     return "\n".join(lines)
 
 
-def _on(thread: str) -> RunnableConfig:
+def _reading(thread: str) -> RunnableConfig:
+    """A thread, for a call that only reads: it writes no checkpoint to stamp."""
     return {"configurable": {"thread_id": thread}}
 
 
 def turns(graph: planner.Planner, thread: str) -> list[str]:
     """What the user has written on this thread, in the order they wrote it."""
-    said: list[str] = graph.get_state(_on(thread)).values.get("said", [])
+    said: list[str] = graph.get_state(_reading(thread)).values.get("said", [])
     return list(said)
 
 
@@ -910,7 +917,8 @@ def serve(
     telling the user the process is healthy immediately before it is not.
     """
     graph = planner.build(on.model, checkpointer=saver)
+    ran = run_record.Run(on.name, on.provider, agent.CALL_BUDGET)
     coach = Coach(
-        owner_id=declared.owner_id, run=planning(graph), resume=answering(graph)
+        owner_id=declared.owner_id, run=planning(graph, ran), resume=answering(graph, ran)
     )
     application(declared, coach).run_polling()

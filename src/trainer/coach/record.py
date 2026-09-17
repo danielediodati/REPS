@@ -4,11 +4,89 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 
+from trainer import agent
 from trainer.coach.calls import answered
+
+MODEL = "model"
+PROVIDER = "provider"
+BUDGET = "budget"
+
+UNKNOWN = "unknown"
+"""What a run that was checkpointed before `on` carried its identity is named by."""
+
+REFUSED = "refused"
+VALID = "valid"
+
+UNFINISHED = "unfinished"
+"""A run that never reached the validator: nothing refused it and it has no plan.
+
+The third outcome, and the one this vocabulary was missing. Without it a run
+cut mid-flight reads as `valid`, which is a plan claimed for a run that never
+emitted one.
+"""
+
+
+@dataclass(frozen=True)
+class Run:
+    """Who answered a run, and inside what budget.
+
+    The three things the record needs that the graph's state does not hold.
+    They travel in the run's config, which is how `on` below puts them where a
+    later reader can find them.
+    """
+
+    model: str
+    provider: str
+    budget: int
+
+
+def on(thread: str, run: Run) -> RunnableConfig:
+    """The config a run travels on: its thread, and who is answering it.
+
+    LangGraph keeps every extra `configurable` key in each checkpoint's
+    metadata, so the model, the provider and the budget are on disk beside the
+    state without being part of it. That is what lets `trainer runs` report a
+    run it did not start -- asked of the model afterwards, the name and the
+    provider are two attributes on two classes, and the environment may have
+    named a different one since.
+    """
+    return {
+        "configurable": {
+            "thread_id": thread,
+            MODEL: run.model,
+            PROVIDER: run.provider,
+            BUDGET: run.budget,
+        }
+    }
+
+
+def ran(metadata: Mapping[str, Any]) -> Run:
+    """A run's identity, as a checkpoint's metadata kept it.
+
+    Forgiving of a checkpoint written before this was carried: those exist on
+    disk, and refusing to read them would take the whole history with them.
+    """
+    declared = metadata.get(BUDGET)
+    return Run(
+        model=str(metadata.get(MODEL, UNKNOWN)),
+        provider=str(metadata.get(PROVIDER, UNKNOWN)),
+        budget=int(declared) if isinstance(declared, int) else agent.CALL_BUDGET,
+    )
+
+
+def outcome(state: Mapping[str, Any]) -> str:
+    """Where a run got to: refused by the validator, holding a valid plan, or neither yet."""
+    if state.get("violations"):
+        return REFUSED
+    if not state.get("attempts"):
+        return UNFINISHED
+    return VALID
 
 
 def of(state: Mapping[str, Any], model: str, provider: str) -> dict[str, Any]:
@@ -18,7 +96,7 @@ def of(state: Mapping[str, Any], model: str, provider: str) -> dict[str, Any]:
     return {
         "provider": provider,
         "model": model,
-        "outcome": "refused" if state.get("violations") else "valid",
+        "outcome": outcome(state),
         "attempts": [
             {
                 "violations": [
@@ -69,7 +147,18 @@ def summary(state: Mapping[str, Any], model: str, provider: str, budget: int) ->
         lines.append(f"  {attempts} attempts; the validator refused the earlier ones")
     counted = _tokens(messages)
     lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
+    spent_on = _seconds(state)
+    if spent_on:
+        lines.append(f"  {spent_on}")
     return lines
+
+
+def _seconds(state: Mapping[str, Any]) -> str:
+    """What each node cost, summed over the times it ran. ASCII, one line."""
+    totals: dict[str, float] = {}
+    for node, seconds in state.get("timings", ()):
+        totals[node] = totals.get(node, 0.0) + seconds
+    return ", ".join(f"{node} {seconds:.1f}s" for node, seconds in totals.items())
 
 
 def _calls(messages: Sequence[AnyMessage]) -> list[dict[str, Any]]:
