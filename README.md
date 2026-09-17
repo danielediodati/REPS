@@ -10,16 +10,15 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.7.0` puts the planner on the phone.** On top of `0.6.0`'s planner graph (a LangGraph planner on Ollama or Groq, an emit schema that holds `exercise_id` to today's admissible ids, refusals sent back with every rule they broke, `trainer eval --suite plan` over six invariants), it has:
-- `trainer bot`, which long-polls Telegram from the graph's process, answers only the owner and keeps one thread per chat;
-- the graph's progress streamed into the chat: the tools it calls and the violations it is sent back;
-- a plan with three buttons: *Va bene* writes it as today's prescribed workout (ADR-0005), while *Non mi va* and *Solo 30 minuti* are interrupts that resume the thread with a different plan;
-- today's equipment, time and groups taken from `training.toml` and the rotation, the same way for `trainer plan` and the bot;
-- a startup check of the selected provider and of Telegram, each failure reported with its fix.
+**`0.8.0` makes a run something you can look at afterwards.** On top of `0.7.0`'s bot (the planner graph on the phone, the graph's progress streamed into the chat, a plan with three buttons, today's inputs off `training.toml` and the rotation), it has:
+- one directory for everything the machine writes, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation;
+- a rotating log the bot owns, holding every state and every exception and never the token or the owner id, named by the two chat lines that point at it;
+- a checkpointer that declares the types it writes, so the threads on disk survive the LangGraph version that stops constructing undeclared ones;
+- `trainer runs list` and `trainer runs show`, which read a run back off the checkpointer: what it called, what the validator refused, what it cost, and for one cut mid-flight what it had reached.
 
 Every message still asks for today's workout: the entrance that talks is session 9 (ADR-0006).
 
-**Session 8** makes it observable: a log file the bot owns, one directory for everything the machine writes, and the run record read back.
+**Session 9** puts the report in the chat: the logger as a subgraph on the same tools, an entrance that holds the conversation, and the next plan prepared before it is asked for.
 
 ## Architecture (target)
 
@@ -93,7 +92,7 @@ In Studio the planner's input is the request as JSON: `{"request": {"equipment":
 ```
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
-  coach/      the LangGraph agent: the planner graph, its models and run records
+  coach/      the LangGraph agent: the planner graph, the Telegram bot, the checkpointer and the run records
   data/       vendored catalog, muscle-group mapping, config example
   tools.py    the tool surface, shared by the agent and the MCP server
   plan.py     the plan's shape, validator and renderer
