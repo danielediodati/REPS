@@ -84,7 +84,7 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 11 | `0.11.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 11 | `0.11.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
 | 12 | `0.12.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
 | 13 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 
