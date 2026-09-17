@@ -51,7 +51,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: pull the plug mid-run, restart, and read back what the bot was doing and why it stopped. Everything the machine writes is in one directory you copy in one move.
 
-1. **Logging to a file the bot owns**, rotated. Every state and every exception, recorded where the person who can act on it is sitting; the token and the owner id never in it. `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»*.
+1. **Logging to a file the bot owns**, rotated. Every state and every exception, recorded where the person who can act on it is sitting; the token and the owner id never in it. `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»*. — **done** `35340d2`
 
    **Nothing raised leaves the machine**, and this is where it goes instead. Session 7 made those two lines generic on purpose: the engine's states carry absolute paths — the file to copy, the directory to copy it into — and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers, for a path nobody can act on from a phone. Until this lands, the only record is the bot's own stderr.
 2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 11, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
