@@ -14,7 +14,7 @@ The order things get built in. [TRAINER.md](TRAINER.md) is the design; [ADR-0004
 | 4 | `0.4.0` | plan shape and validator, a tool-loop planner on Groq, six invariants over six adverse situations |
 | 5 | `0.5.0` | prescribed and performed workouts with per-field provenance, volume views on two axes, a logging agent, a 30-report eval set |
 
-The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their agent layer is what sessions 6-8 replace.
+The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their agent layer is what sessions 6-9 replace.
 
 ## Session 6 — `0.6.0` — The planner is a graph
 

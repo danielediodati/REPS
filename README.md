@@ -10,24 +10,25 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.6.0` makes the planner a graph.** On top of the engine-first phase — `0.5.0`: an enriched catalog and the admissible set, plan duration, logging with provenance, volume on two axes — it has:
-- a LangGraph planner over the engine's tool surface, on Ollama or Groq as `LLM_BACKEND` says;
-- an emit schema that holds `exercise_id` to today's admissible ids, so an invented id cannot be decoded;
-- a validator whose refusals go back to the planner with every rule they broke, for a bounded number of attempts;
-- `trainer eval --suite plan` measured against that graph: six situations, six invariants, and what the planner spent getting there.
+**`0.7.0` puts the planner on the phone.** On top of `0.6.0`'s planner graph (a LangGraph planner on Ollama or Groq, an emit schema that holds `exercise_id` to today's admissible ids, refusals sent back with every rule they broke, `trainer eval --suite plan` over six invariants), it has:
+- `trainer bot`, which long-polls Telegram from the graph's process, answers only the owner and keeps one thread per chat;
+- the graph's progress streamed into the chat: the tools it calls and the violations it is sent back;
+- a plan with three buttons: *Va bene* writes it as today's prescribed workout (ADR-0005), while *Non mi va* and *Solo 30 minuti* are interrupts that resume the thread with a different plan;
+- today's equipment, time and groups taken from `training.toml` and the rotation, the same way for `trainer plan` and the bot;
+- a startup check of the selected provider and of Telegram, each failure reported with its fix.
 
-Measured on `gpt-oss:20b` at context 8192, one repetition: **6 of 6 held every invariant**.
+Every message still asks for today's workout: the entrance that talks is session 9 (ADR-0006).
 
-**Session 7** puts it on the phone: `trainer bot` long-polls from the graph's process, the plan arrives in Telegram as it is written, and turning it down is an `interrupt()` you answer with a button.
+**Session 8** makes it observable: a log file the bot owns, one directory for everything the machine writes, and the run record read back.
 
 ## Architecture (target)
 
 ```mermaid
 flowchart LR
   tg([Telegram]) <--> bot[bot on the PC]
-  bot --> router{router}
-  router --> planner
-  router --> logger
+  bot --> entrance[entrance: a chat model]
+  entrance --> planner
+  entrance --> logger
   planner <--> tools[(engine tools)]
   logger <--> tools
   planner --> validate
@@ -67,7 +68,7 @@ uv run trainer bot                                            # answer Telegram,
 | `ollama` (default) | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
 
-An unreachable server, a model nobody pulled and a missing key are each reported as a state with the command that fixes it. `trainer log` stays on Groq until session 8 whatever `LLM_BACKEND` names, so it needs `GROQ_API_KEY` either way.
+An unreachable server, a model nobody pulled and a missing key are each reported as a state with the command that fixes it. `trainer log` stays on Groq until session 9 whatever `LLM_BACKEND` names, so it needs `GROQ_API_KEY` either way.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks the provider and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
@@ -93,7 +94,7 @@ src/trainer/
   tools.py    the tool surface, shared by the agent and the MCP server
   plan.py     the plan's shape, validator and renderer
   log.py      the report's shape and validator
-  agent.py    the old tool loop, kept for `trainer log` until session 8
+  agent.py    the old tool loop, kept for `trainer log` until session 9
 docs/
   adr/        decisions
   enrichment/ vocabulary definitions and hand-decided rows, read by the code
