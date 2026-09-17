@@ -22,3 +22,13 @@ This is the other half of the demo: pull the plug mid-run, restart, and read bac
 - [ ] The listing names the conversation well enough to pick one without guessing.
 - [ ] The record printed matches the one `trainer plan --record` writes for the same state.
 - [ ] The full test suite and mypy are green.
+
+## Comments
+
+**A resumed state is not equal to the one that was written**, found closing 8.3.
+msgpack has one sequence, so every tuple field of a dataclass comes back a
+list: a `Request` read out of a checkpoint holds `['barbell']` where it was
+written `('barbell',)`, which makes it unequal to the original and no longer
+hashable. Nothing compares or hashes one today. It matters here because this
+ticket reads state back and reports on it: the record must not claim two runs
+differ because one of them came off disk.
