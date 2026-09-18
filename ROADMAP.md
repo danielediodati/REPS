@@ -62,11 +62,11 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: after training you write the report in Telegram. The bot asks one question and you answer with a button. The next plan arrives without being asked for.
 
-1. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts.
-2. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay. It carries the per-node model with it, and with it the Groq path, which today dies on a 404 for a model that does not exist. The per-node model is also what `record.Run` stops being able to say: a run carries one model and one provider into its config, and a graph whose nodes run on different models needs the record to name them per node or it will report the entrance's model for work the planner did. `bot.Coach` is renamed here: it is the turn-taking, and the word is needed for the node that coaches.
-3. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat.
-4. **The log eval suite runs against the graph.**
-5. **The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted.** Groq stays, as a provider of the graph.
+1. **What a run is, and where it goes when it ends** (ADR-0007). `trainer runs` was built in session 8 over a state machine that overwrites its own history: a plan turned down already ends a run, and the record of the run that offered it is destroyed at that moment -- which is the measurement session 10 is built on. A run ends, the ending is written, the closed run is a document in the home, and a negotiation holds the runs of one ask. The reader depends on nothing that can break. `record.Run` and `unfinished` go with it.
+2. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts. The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted with it -- a deletion is the second half of the work that makes it possible, not an issue of its own -- and the Groq settings move into `coach/models.py`, including the default model name that answers with a 404 today.
+3. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay. It carries the per-node model with it, which issue 1 has already moved into the record's nodes. `bot.Coach` is renamed here: it is the turn-taking, and the word is needed for the node that coaches.
+4. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat. A negotiation nobody asked for is still a negotiation.
+5. **The log eval suite runs against the graph.**
 
 ## Session 10 — `0.10.0` — A plan worth doing
 

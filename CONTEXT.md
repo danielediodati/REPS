@@ -98,3 +98,20 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 **Conclusion**: a fact about this person that has a source: something they said, or a trial outcome. It has a state and can be retired.
 
 **Observation**: a fact about the agent, written by the supervisor from the trajectory. It points at a measure.
+
+## What the machine writes about itself
+
+**Thread**: one chat's conversation, kept on disk and alive across restarts. One chat is one thread for as long as the chat lives.
+_Avoid_: conversation, which says the same thing loosely.
+
+**Run**: one proposal pursued — from the request being assembled to the user's answer. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
+_Avoid_: calling one invocation of the graph a run, or one message in the queue.
+
+**Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for today's workout*. What a refusal leaves behind belongs to it, never to the run that was refused.
+_Avoid_: request, which is what a single run is given.
+
+**Ending**: how a run finished, written when it happens — accepted, turned down, refused by the validator to the end, or fallen over. A run that is waiting on an answer has no ending, and neither has one that was cut.
+
+**Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
+
+**Home**: the one directory the machine writes in. Everything it owns is in it, so a new machine is one directory to copy.

@@ -27,6 +27,6 @@ This ADR replaces the router. It does not touch the engine, the planner graph or
 - **Supersedes** session 8 item 2 of ROADMAP.md, *the router*.
 - **`STARTED`, `QUEUED`, `WRITTEN`, `SUPERSEDED` and `NO_PLAN` stop being constants** and become things the entrance says. `BLOCKED` and `FAILED` do not.
 - **`bot.Coach` is renamed.** It is the turn-taking — one run at a time per thread, and the queue behind it — and the domain word is needed for the node that does the coaching.
-- **A second provider setting**, because two nodes now name two models. The run record already carries the model per node.
+- **A second provider setting**, because two nodes now name two models. The run record carries the model per node from ADR-0007, which is where that becomes true.
 - **Both eval suites are unaffected.** They enter at the subgraphs, which do not change.
 - **`said` stops being write-only.** It is the conversation the entrance reads, and `planner.starting` must keep leaving it alone.
