@@ -130,6 +130,20 @@ def database_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     yield path
 
 
+def serving(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
+    """What Groq answers when it is asked for its models, without a network.
+
+    `models.ready` checks the name against what Groq actually serves, so every
+    test that takes the Groq path has to say what that is -- and the suite has
+    no sockets, which is the point. Stood in for at this project's own seam
+    rather than at the SDK's, so nothing here has to know the shape of
+    somebody else's client.
+    """
+    from trainer.coach import models
+
+    monkeypatch.setattr(models, "groq_models", lambda key: set(names))
+
+
 def make_exercise(**overrides: Any) -> Exercise:
     """A catalog row, with only the fields a test cares about spelled out.
 

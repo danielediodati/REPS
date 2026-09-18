@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import ollama
 import pytest
+from langchain_core.language_models import BaseChatModel
 
+from conftest import serving
 from trainer.coach import models
 
 
@@ -69,19 +71,13 @@ def test_the_groq_chat_says_which_provider_and_model_it_is(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(models.BACKEND_ENV, "groq")
-    monkeypatch.setenv(agent_key(), "a-stand-in")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
     monkeypatch.setenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
     chat = models.chat()
 
     assert chat.provider == models.GROQ
     assert chat.name == "openai/gpt-oss-20b"
-
-
-def agent_key() -> str:
-    from trainer import agent
-
-    return agent.API_KEY_ENV
 
 
 def test_groq_with_no_key_is_a_state_with_the_way_out(
@@ -95,7 +91,7 @@ def test_groq_with_no_key_is_a_state_with_the_way_out(
     with pytest.raises(models.ModelError) as raised:
         models.chat()
 
-    assert agent_key() in str(raised.value)
+    assert models.API_KEY_ENV in str(raised.value)
     assert ".env" in str(raised.value)
 
 
@@ -203,7 +199,7 @@ def test_a_context_length_at_the_measured_one_is_read(
 
 def test_groq_needs_no_context_length(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(models.BACKEND_ENV, "groq")
-    monkeypatch.setenv(agent_key(), "a-stand-in")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
     monkeypatch.delenv(models.CONTEXT_ENV, raising=False)
 
     assert models.context_length(models.chat()) is None
@@ -212,14 +208,90 @@ def test_groq_needs_no_context_length(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_groq_is_not_asked_whether_ollama_is_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The key was already checked when the model was built; a provider in the
-    cloud has no local state to report."""
+    """Each provider is checked against itself. Groq is asked what it serves,
+    and no local server is consulted to answer that."""
 
     def refuse(self: ollama.Client, *args: Any, **kwargs: Any) -> Any:
         raise AssertionError("Groq must not be checked against a local server")
 
     monkeypatch.setattr(ollama.Client, "list", refuse)
     monkeypatch.setenv(models.BACKEND_ENV, "groq")
-    monkeypatch.setenv(agent_key(), "a-stand-in")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
 
-    models.ready(models.chat())
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(models.chat())
+
+    assert "Groq cannot be reached" in str(raised.value), "the suite has no network"
+
+
+def groq_chat(name: str) -> models.Chat:
+    """A `Chat` on Groq without building one, so a stubbed SDK is only ever
+    asked the question under test."""
+    return models.Chat(cast(BaseChatModel, object()), models.GROQ, name)
+
+
+def test_a_model_groq_does_not_serve_is_a_state_with_its_fix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retired model arrives mid-run as a 404, which reads as the run being
+    broken rather than as one name being gone."""
+    serving(monkeypatch, "openai/gpt-oss-120b")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(groq_chat("a/model-nobody-serves"))
+
+    said = str(raised.value)
+    assert "a/model-nobody-serves" in said
+    assert models.GROQ_MODEL_ENV in said
+    assert "openai/gpt-oss-120b" in said, "it names one that would work"
+
+
+def test_a_model_groq_serves_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    serving(monkeypatch, models.DEFAULT_GROQ_MODEL)
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+
+    models.ready(groq_chat(models.DEFAULT_GROQ_MODEL))
+
+
+def test_groq_with_no_key_is_not_asked_what_it_serves(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The credentials state comes first: without a key there is no request to
+    make, and *Groq cannot be reached* would name the wrong thing."""
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.delenv(models.API_KEY_ENV, raising=False)
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(groq_chat("a-model"))
+
+    assert models.API_KEY_ENV in str(raised.value)
+
+
+# -- values a person can get wrong in .env -----------------------------------
+
+
+def test_a_max_tokens_that_is_not_a_number_is_a_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It is interpolated into the rate-limit message, so left unchecked it
+    raises *while handling* the 429 it was meant to explain."""
+    monkeypatch.setenv(models.MAX_TOKENS_ENV, "2k")
+
+    with pytest.raises(models.ModelError, match="whole number"):
+        models.max_tokens()
+
+
+def test_a_max_tokens_of_zero_is_a_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(models.MAX_TOKENS_ENV, "0")
+
+    with pytest.raises(models.ModelError, match="at least one"):
+        models.max_tokens()
+
+
+def test_max_tokens_is_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.MAX_TOKENS_ENV, "4096")
+
+    assert models.max_tokens() == 4096

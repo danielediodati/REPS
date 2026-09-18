@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import inspect
+import json
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from datetime import date
-from typing import Any
+from typing import Any, get_type_hints
+
+from pydantic import BaseModel, TypeAdapter
 
 from trainer.engine import (
     admissible,
@@ -81,6 +85,7 @@ engine invented."""
 
 
 @contextmanager
+
 def opened() -> Iterator[sqlite3.Connection]:
     """The connection every tool reads through, with its preconditions named.
 
@@ -111,6 +116,7 @@ def opened() -> Iterator[sqlite3.Connection]:
 
 
 @contextmanager
+
 def reported() -> Iterator[None]:
     """Turn a stated library failure into a tool failure.
 
@@ -492,8 +498,228 @@ Every door registers exactly this. A test asserting the same names a second
 time would be a second place to forget them, so what the doors are checked
 against is this tuple rather than a copy of it.
 
-Not every agent is offered all of them -- session 5's logging agent reads what
-was trained and never plans, so it has no use for `allocate`. Which subset a
-given agent sees is an `agent.Door`'s to decide; what may exist at all is
-decided here.
+Not every graph is offered all of them -- the logger reads what was trained
+and never plans, so it has no use for `allocate`. Which subset a given graph
+sees is that graph's to decide; what may exist at all is decided here.
 """
+
+
+# -- how a model calls them ---------------------------------------------------
+#
+# The surface above is a set of Python functions. What follows is everything
+# between a model and one of them: the definition it is offered as, the
+# arguments it comes back with checked against the types that definition was
+# derived from, and the answer trimmed to what this door reads. It lives here
+# rather than beside any one graph because both subgraphs and `trainer mcp`
+# reach the same functions, and a second copy of the derivation would be the
+# one that drifts.
+
+
+CALL_BUDGET = 12
+"""Tool calls one run may make before its graph stops offering tools; `--call-budget` overrides it."""
+
+
+class SurfaceError(RuntimeError):
+    """A door asked for a tool that does not exist. About the code, never about the user."""
+
+
+@dataclass(frozen=True)
+class Call:
+    """One tool call the model asked for."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Result:
+    """What one tool answered, on its way back to the model."""
+
+    call_id: str
+    name: str
+    content: str
+    failed: bool = False
+
+
+def schema(tool: Callable[..., Any]) -> dict[str, Any]:
+    """One tool definition, derived from the function rather than restated.
+
+    `mcp_server.py` gets its schemas from the SDK reading the same signatures;
+    this is the same derivation for the other door. Hand-written schemas here
+    would be a second definition -- and the one
+    that drifts, because nothing would fail when it did.
+
+    Provider-neutral: name, description, parameters. The envelope a given API
+    wants around that is the adapter's business.
+    """
+    hints = get_type_hints(tool)
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    definitions: dict[str, Any] = {}
+    for name, parameter in inspect.signature(tool).parameters.items():
+        built = TypeAdapter(hints[name]).json_schema()
+        # A `$ref` resolves from the root of the schema document, and the root
+        # here is `parameters`. Left where pydantic puts them -- inside the
+        # property -- the definitions an enum or a model-typed parameter needs
+        # sit one level too deep and every reference to them dangles. No
+        # parameter is typed that way today; the day one is, the provider
+        # rejects the definition with nothing in this file to explain it.
+        definitions.update(built.pop("$defs", {}))
+        properties[name] = built
+        if parameter.default is inspect.Parameter.empty:
+            required.append(name)
+
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+    }
+    if definitions:
+        parameters["$defs"] = definitions
+    return {
+        "name": tool.__name__,
+        "description": inspect.getdoc(tool) or "",
+        "parameters": parameters,
+    }
+
+
+def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """A pydantic model's schema as strict mode accepts it: every property required, no extras."""
+    built = model.model_json_schema()
+
+    def require_everything(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "object" and "properties" in node:
+                node["required"] = list(node["properties"])
+                node.setdefault("additionalProperties", False)
+            for value in node.values():
+                require_everything(value)
+        elif isinstance(node, list):
+            for item in node:
+                require_everything(item)
+
+    require_everything(built)
+    return built
+
+
+def registered(asked_by: str, names: Sequence[str]) -> tuple[Callable[..., Any], ...]:
+    """The tool functions one agent asks for, out of the shared surface.
+
+    A name that `TOOLS` does not have is a `SurfaceError` rather than a
+    silently shorter surface: these lists are the one place a tool can be
+    misspelled, and a logger quietly missing the tool it resolves
+    substitutions with would look like a model that chose not to search.
+
+    Each graph names its own list beside the nodes that offer it -- this is
+    the guard on all of them, and it is the half that must not be copied.
+    """
+    defined = {tool.__name__: tool for tool in TOOLS}
+    missing = [name for name in names if name not in defined]
+    if missing:
+        raise SurfaceError(
+            f"the {asked_by} asks for {', '.join(missing)}, and the "
+            f"tools defined are {', '.join(defined)}"
+        )
+    return tuple(defined[name] for name in names)
+
+
+def execute(
+    call: Call, offered: Sequence[Callable[..., Any]], keeps: Sequence[str]
+) -> Result:
+    """Run one call: what the model got wrong comes back as a failed result, anything else propagates."""
+    import pydantic
+
+    def failed(sentence: str) -> Result:
+        return Result(call_id=call.id, name=call.name, content=sentence, failed=True)
+
+    found = next((tool for tool in offered if tool.__name__ == call.name), None)
+    if found is None:
+        # The model asked for a tool nobody offered *it* -- which includes a
+        # tool that exists on the other door. Its mistake, not ours, so it goes
+        # back as a result it can recover from.
+        named = ", ".join(tool.__name__ for tool in offered)
+        return failed(f"there is no tool called {call.name!r}; the tools are {named}")
+
+    try:
+        arguments = _fitted(found, call.arguments)
+    except pydantic.ValidationError as error:
+        return failed(f"{call.name} was given arguments that do not fit: {error}")
+    except KeyError as error:
+        return failed(f"{call.name} takes no argument called {error}")
+
+    try:
+        answer = found(**arguments)
+    except ToolFailure as error:
+        return failed(str(error))
+    except TypeError as error:
+        # An argument left out, or given twice. The shapes are checked above,
+        # so what is left is the call itself not fitting the signature.
+        return failed(f"{call.name} cannot be called that way: {error}")
+    return Result(call_id=call.id, name=call.name, content=_serialised(answer, keeps))
+
+
+def _fitted(tool: Callable[..., Any], arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """The model's arguments, against the types the schema was derived from.
+
+    Reached by exactly the mistake a model makes: `exclusions` given as a list
+    of strings rather than of `{granularity, value}` objects satisfies the
+    signature and reaches the tool body, where it comes apart as an
+    `AttributeError` on a string -- a traceback, no record, and a paid-for run
+    thrown away over something the model could have corrected next turn.
+
+    Checked against `get_type_hints`, which is what `schema()` derives the
+    definitions from, so what is enforced here and what the model was told are
+    the same declaration read twice rather than two declarations.
+    """
+    hints = get_type_hints(tool)
+    fitted: dict[str, Any] = {}
+    for name, value in arguments.items():
+        if name not in hints:
+            raise KeyError(name)
+        fitted[name] = TypeAdapter(hints[name]).validate_python(value)
+    return fitted
+
+
+EXERCISE_FIELDS = frozenset(declared.name for declared in fields(catalog.Exercise))
+"""Every field of a catalog record, read from the dataclass rather than listed a second time."""
+
+
+def _serialised(answer: Any, keeps: Sequence[str]) -> str:
+    """The engine's answer, in the dialect the tool definitions promised.
+
+    JSON rather than `repr`: the docstrings the model reads describe
+    `known: false` and `{"granularity": "pattern"}`, and Python would hand
+    back `'known': False`. A model translating between two dialects mid-loop
+    is one more thing that can go wrong for no reason at all.
+    """
+    return json.dumps(_trimmed(answer, keeps), default=str)
+
+
+def _trimmed(answer: Any, keeps: Sequence[str]) -> Any:
+    """Every exercise record, cut to the fields this door reads; every envelope around one, left whole.
+
+    A catalog field the caller does not keep -- `name` above all, which a
+    model shown both strings copied into `exercise_id` -- reaches it under no
+    key at all. A key that is not a catalog field is nobody's to drop.
+    """
+    return _cut(answer, tuple(keeps), EXERCISE_FIELDS - set(keeps))
+
+
+def _cut(answer: Any, keeps: tuple[str, ...], hidden: frozenset[str]) -> Any:
+    if isinstance(answer, list):
+        return [_cut(item, keeps, hidden) for item in answer]
+    if isinstance(answer, dict):
+        if _an_exercise(answer):
+            return {key: value for key, value in answer.items() if key in keeps}
+        return {
+            key: _cut(value, keeps, hidden)
+            for key, value in answer.items()
+            if key not in hidden
+        }
+    return answer
+
+
+def _an_exercise(answer: Mapping[str, Any]) -> bool:
+    """A catalog record, and not an envelope that happens to share a field name with one."""
+    return "id" in answer and set(answer) <= EXERCISE_FIELDS

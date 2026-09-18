@@ -11,12 +11,14 @@ from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 from pydantic import SecretStr
 
-from trainer import agent
-
 BACKEND_ENV = "LLM_BACKEND"
 MODEL_ENV = "OLLAMA_MODEL"
 CONTEXT_ENV = "OLLAMA_CONTEXT_LENGTH"
 BASE_URL_ENV = "OLLAMA_BASE_URL"
+
+GROQ_MODEL_ENV = "GROQ_MODEL"
+API_KEY_ENV = "GROQ_API_KEY"
+MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
 
 OLLAMA = "ollama"
 GROQ = "groq"
@@ -24,6 +26,54 @@ BACKENDS = (OLLAMA, GROQ)
 """What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
 
 DEFAULT_MODEL = "gpt-oss:20b"
+
+DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+"""The Groq model, when `GROQ_MODEL` does not name one.
+
+Its structured output runs in **strict** mode, where constrained decoding
+makes the emitted document conform to the schema by construction rather than
+by luck -- a document that comes back malformed is a whole run thrown away.
+
+**This name was believed retired, and it is not.** Asked on 2026-09-18, Groq
+serves it and a run of `trainer plan` on it emitted a plan in 1090 output
+tokens. What is retired is `qwen/qwen3.6-27b`, one minor version below, which
+is what an installation's `.env` may still name -- and that is the 404 nobody
+could see coming, because nothing checked.
+
+`openai/gpt-oss-20b` was tried in its place, for holding the model fixed
+across the two providers. It does not fit the free tier: it reasons before it
+answers, `max_tokens` caps the completion with the reasoning inside it, and at
+1000 the whole budget went to thinking and the emission came back empty. Above
+about 5600 the request is refused whole -- 8000 tokens per minute, input
+included. A default that only works on a paid tier is not a default.
+"""
+
+DEFAULT_MAX_TOKENS = 1000
+"""How much the model may write in one turn, by default.
+
+One thousand because that is Groq's free-tier ceiling on output tokens per
+minute, and a request whose declared `max_tokens` exceeds it is refused before
+any of it runs -- a 429 about a limit nobody has reached yet.
+
+**It is shared with reasoning.** The default model reasons before it answers
+and `max_tokens` caps the completion, thinking included, so the document is
+written out of whatever is left. An observed run emitted a six-block plan in
+676 tokens all in, so this fits -- but not by much, and a run that reasons
+harder loses the document to truncation rather than to a rule. That is why the
+truncation state names `GROQ_MAX_TOKENS`: on a paid tier it is the number to
+raise first.
+"""
+
+NO_CREDENTIALS = (
+    f"no Groq credentials: set {API_KEY_ENV} in .env (copy .env.example) or in "
+    "the environment"
+)
+"""A state with the way out, checked before any request goes out.
+
+Left to the SDK this arrives as a 401 after a network round-trip, or as a
+connection error on a machine that is offline -- neither of which names the
+thing that is actually missing.
+"""
 
 REASONING = "low"
 """How hard `gpt-oss` reasons before it answers."""
@@ -62,13 +112,41 @@ def backend() -> str:
 def chat() -> Chat:
     """The chat model the environment names, on either provider."""
     if backend() == GROQ:
-        return Chat(groq_model(), GROQ, agent.model_name())
+        return Chat(groq_model(), GROQ, groq_model_name())
     return Chat(ollama_model(), OLLAMA, model_name())
 
 
 def model_name() -> str:
     """The local model the environment names."""
     return os.environ.get(MODEL_ENV) or DEFAULT_MODEL
+
+
+def groq_model_name() -> str:
+    """The Groq model the environment names."""
+    return os.environ.get(GROQ_MODEL_ENV) or DEFAULT_GROQ_MODEL
+
+
+def max_tokens() -> int:
+    """How much the model may write, from the environment or the default.
+
+    Checked rather than trusted, because this value is interpolated into the
+    rate-limit and truncation messages: `GROQ_MAX_TOKENS=2k` would raise a
+    `ValueError` *while handling* the 429 it was meant to explain, and the
+    user would get a traceback about a codec-shaped mistake instead of the
+    state with its way out.
+    """
+    declared = os.environ.get(MAX_TOKENS_ENV)
+    if not declared:
+        return DEFAULT_MAX_TOKENS
+    try:
+        asked = int(declared)
+    except ValueError:
+        raise ModelError(
+            f"{MAX_TOKENS_ENV} is {declared!r}; it is a whole number of tokens"
+        ) from None
+    if asked < 1:
+        raise ModelError(f"{MAX_TOKENS_ENV} is {asked}; it is at least one token")
+    return asked
 
 
 def ollama_model() -> ChatOllama:
@@ -82,20 +160,15 @@ def ollama_model() -> ChatOllama:
 
 
 def groq_model() -> ChatGroq:
-    """The Groq chat model, on the settings the old loop already reads."""
-    key = os.environ.get(agent.API_KEY_ENV)
+    """The Groq chat model the environment names."""
+    key = os.environ.get(API_KEY_ENV)
     if not key:
-        raise ModelError(agent.NO_CREDENTIALS)
-    try:
-        return ChatGroq(
-            model=agent.model_name(),
-            api_key=SecretStr(key),
-            max_tokens=agent.max_tokens(),
-        )
-    except agent.AgentError as error:
-        # `GROQ_MAX_TOKENS` states its own failure. Re-raised as this module's
-        # error so a caller has one exception type to report the provider with.
-        raise ModelError(str(error)) from error
+        raise ModelError(NO_CREDENTIALS)
+    return ChatGroq(
+        model=groq_model_name(),
+        api_key=SecretStr(key),
+        max_tokens=max_tokens(),
+    )
 
 
 def ready(on: Chat) -> None:
@@ -103,9 +176,17 @@ def ready(on: Chat) -> None:
 
     Checked before the graph runs rather than left to the first call. An
     unreachable server arrives mid-run as a connection error and a model
-    nobody pulled as a 404, and neither names the command that fixes it.
+    nobody pulled as a 404, and neither names the command that fixes it --
+    and on Groq the 404 is a model that was retired between releases, which
+    reads as *the run is broken* rather than *this name is gone*.
     """
+    if on.provider == GROQ:
+        _groq_ready(on)
+        return
     if on.provider != OLLAMA:
+        # A provider nobody built has no state of its own to be in. Written as
+        # *anything that is not Groq is local*, a stand-in would be checked
+        # against a server it has nothing to do with.
         return
     client = ollama.Client(host=os.environ.get(BASE_URL_ENV) or None)
     try:
@@ -118,6 +199,41 @@ def ready(on: Chat) -> None:
     pulled = {_tagged(model.model) for model in listed if model.model}
     if _tagged(on.name) not in pulled:
         raise ModelError(f"Ollama does not have {on.name}; run `ollama pull {on.name}`")
+
+
+def groq_models(key: str) -> set[str]:
+    """Every model Groq serves this key, as it names them.
+
+    Its own function because it is the one thing in this module that reaches
+    the network, and because that makes it the seam the suite stands in for --
+    the alternative is a test that knows the shape of somebody's SDK.
+    """
+    import groq
+
+    return {model.id for model in groq.Groq(api_key=key).models.list().data}
+
+
+def _groq_ready(on: Chat) -> None:
+    """The model Groq serves under that name, or the state that says it does not."""
+    key = os.environ.get(API_KEY_ENV)
+    if not key:
+        raise ModelError(NO_CREDENTIALS)
+    try:
+        served = groq_models(key)
+    except Exception as error:
+        # Every way the check itself can fail -- offline, a key Groq refuses,
+        # the endpoint moved -- and none of them is a statement about the
+        # model name. Reported as reaching Groq, which is what went wrong.
+        raise ModelError(f"Groq cannot be reached ({error})") from error
+    if on.name not in served:
+        # The fix names the default rather than three of the list, which is
+        # sorted alphabetically and opens on a text-to-speech model: a state
+        # whose way out does not work is worse than the 404 it replaced.
+        raise ModelError(
+            f"Groq does not serve {on.name}; set {GROQ_MODEL_ENV} to "
+            f"{DEFAULT_GROQ_MODEL}, or leave it empty for the same, or pick "
+            f"another of: {', '.join(sorted(served))}"
+        )
 
 
 MEASURED_CONTEXT = 8192

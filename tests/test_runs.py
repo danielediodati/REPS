@@ -35,7 +35,7 @@ from test_planner import (
     graph_of,
     plan_of,
 )
-from trainer import agent
+from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, planner, runs
 from trainer.coach import record as run_record
@@ -197,7 +197,7 @@ def test_a_run_that_fell_over_is_ended_by_whoever_caught_it(
         graph = graph_of(model, checkpointer=saver, archive=archive)
         with pytest.raises(KeyboardInterrupt):
             graph.invoke(planner.starting(BARBELL_45), THREAD)
-        planner.failed(graph, THREAD, agent.CALL_BUDGET, archive)
+        run_record.failed(graph, THREAD, tools.CALL_BUDGET, archive)
 
     (kept,) = runs.kept(archive)
 
@@ -220,7 +220,7 @@ def test_a_run_that_ended_is_not_ended_a_second_time(
         )
         graph.invoke(planner.starting(BARBELL_45), THREAD)
         graph.invoke(Command(resume=planner.accepted()), THREAD)
-        planner.failed(graph, THREAD, agent.CALL_BUDGET, archive)
+        run_record.failed(graph, THREAD, tools.CALL_BUDGET, archive)
 
     (kept,) = runs.kept(archive)
 
@@ -285,7 +285,7 @@ def test_a_run_cut_mid_flight_is_reported_as_cut(
 
     with checkpoints.saver(path) as saver:
         (negotiation,) = runs.negotiations(runs.kept(archive), runs.live(saver))
-        written = runs.of(negotiation.live, agent.CALL_BUDGET) if negotiation.live else {}
+        written = runs.of(negotiation.live, tools.CALL_BUDGET) if negotiation.live else {}
 
     assert negotiation.outcome == runs.CUT
     assert [call["name"] for call in written["calls"]] == ["allocate"]
@@ -413,7 +413,7 @@ def test_a_state_written_before_a_run_had_a_name_still_reads_back() -> None:
     """Sessions 6 to 8 wrote timings as a node and its seconds, with nobody
     named, and those checkpoints are on the user's disk."""
     written = run_record.of(
-        {"timings": [("planner", 1.25)], "spent": 2}, agent.CALL_BUDGET
+        {"timings": [("planner", 1.25)], "spent": 2}, tools.CALL_BUDGET
     )
 
     assert written["nodes"] == [
@@ -425,7 +425,7 @@ def test_a_state_written_before_a_run_had_a_name_still_reads_back() -> None:
 
 
 def test_a_state_with_nothing_in_it_invents_no_ending() -> None:
-    assert run_record.of({}, agent.CALL_BUDGET)["ending"] == ""
+    assert run_record.of({}, tools.CALL_BUDGET)["ending"] == ""
 
 
 def test_a_timestamp_is_shown_to_the_minute_in_ascii() -> None:
@@ -460,7 +460,7 @@ def test_a_checkpoint_written_before_this_ticket_still_lists(
 
     with checkpoints.saver(path) as saver:
         (negotiation,) = runs.negotiations(runs.kept(archive), runs.live(saver))
-        written = runs.of(negotiation.live, agent.CALL_BUDGET) if negotiation.live else {}
+        written = runs.of(negotiation.live, tools.CALL_BUDGET) if negotiation.live else {}
 
     assert negotiation.negotiation == "chat:6421"
     assert negotiation.outcome == runs.CUT
@@ -488,7 +488,7 @@ def test_a_run_cut_mid_flight_is_read_back_against_the_budget_it_had(
     with checkpoints.saver(path) as saver:
         (negotiation,) = runs.negotiations(runs.kept(archive), runs.live(saver))
         assert negotiation.live is not None
-        written = runs.of(negotiation.live, agent.CALL_BUDGET)
+        written = runs.of(negotiation.live, tools.CALL_BUDGET)
 
     assert written["budget"] == 2
     assert "1 of 2 tool calls" in run_record.summary(written)[0]

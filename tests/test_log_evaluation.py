@@ -14,12 +14,17 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from langchain_core.messages import AIMessage
+
 from conftest import enrich, make_exercise
-from test_agent import Scripted
-from trainer import agent, evaluation, log, log_evaluation, log_set, tools
+from test_logger import scripted
+from trainer import evaluation, log, log_evaluation, log_set, tools
+from trainer.coach import logger, models
+from trainer.coach import record as run_record
 from trainer.engine import catalog, database, duration, migrations, state, workouts
 
 CATALOG = (
@@ -305,26 +310,47 @@ def test_against_an_empty_catalog_the_state_is_named_and_not_the_ids(
     )
 
 
+def stand_in(model: Any) -> models.Chat:
+    """The scripted model, named the way a real one is."""
+    return models.Chat(model, "scripted", "a-stand-in")
+
+
+def _asking(question: str) -> AIMessage:
+    """A turn that calls `ask_user`, which is how the graph is asked to ask."""
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": logger.ask_user.__name__,
+                "args": {"question": question},
+                "id": "call_ask",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+
 # -- scoring a run ------------------------------------------------------------
 
 
 def record(
     document: log.PerformedWorkout,
     *,
-    questions: list[agent.RecordedQuestion] | None = None,
+    questions: tuple[tuple[str, str], ...] = (),
     refused: str | None = None,
-) -> agent.LogRecord:
-    return agent.LogRecord(
-        model="a-stand-in",
-        budget=12,
-        spent=1,
-        emitted_on_exhaustion=False,
-        calls=[],
-        input_tokens=100,
-        output_tokens=20,
-        refused=refused,
-        questions=questions or [],
+) -> log_evaluation.Read:
+    """One run of the logger, as this suite scores it, with nothing run.
+
+    The record is the document ADR-0007 defines, derived from a state written
+    here: the scoring reads the emitted document and the questions, and the
+    rest of the run is what it cost.
+    """
+    return log_evaluation.Read(
+        record=run_record.of({"spent": 1}, tools.CALL_BUDGET),
         document=document,
+        questions=questions,
+        refused=refused,
+        seconds=1.0,
     )
 
 
@@ -478,7 +504,7 @@ def test_a_question_is_the_whole_answer(
 ) -> None:
     """What it emitted afterwards is not scored: the row has no answer to
     score it against, which is why it is in this half."""
-    asked = [agent.RecordedQuestion(asked="quante serie?", answered="non lo so")]
+    asked = (("quante serie?", "non lo so"),)
     document = log.PerformedWorkout(workout_id=1, blocks=[], report="in panca ho tolto qualche serie")
 
     failures, weight = log_evaluation.score(
@@ -657,7 +683,7 @@ def test_questions_asked_where_the_report_determined_the_answer_are_counted(
     would hold the must-ask half for the wrong reason."""
     asked = record(
         log.PerformedWorkout(workout_id=1, blocks=[], report="tutto liscio"),
-        questions=[agent.RecordedQuestion(asked="quante?", answered="non lo so")],
+        questions=(("quante?", "non lo so"),),
     )
     report = evaluation.Report((evaluation.Outcome("U1", 1, record=asked),))
 
@@ -669,27 +695,28 @@ def test_questions_asked_where_the_report_determined_the_answer_are_counted(
 def test_a_run_of_a_row_scores_it_and_writes_the_record(
     where: log_evaluation.Fixture, holds: log_set.LogSet, tmp_path: Path
 ) -> None:
-    """The loop, end to end, against a model whose turns were written here.
+    """The graph, end to end, against a model whose turns were written here.
 
-    What is covered is this module's own: that the report reaches the agent,
+    What is covered is this module's own: that the report reaches the graph,
     that the record is written where a failure can name it, and that what came
     back is scored by the row it was run for.
     """
     expected = row(holds, "U2")
     assert expected.expects is not None
-    scripted = Scripted(turns=[], emitted=expected.expects)
+    model = scripted(AIMessage(content="chiaro"), emits=expected.expects, times=2)
 
     report = log_evaluation.run(
         where,
         [expected],
-        build=lambda: scripted,
+        on=stand_in(model),
         repetitions=2,
         records=tmp_path / "runs",
     )
 
     assert report.passed and report.total == 2
     assert (tmp_path / "runs" / "U2-1.json").exists()
-    assert scripted.briefs[0].count("di militari solo 2 serie che ero cotto") == 1
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert briefed.count("di militari solo 2 serie che ero cotto") == 1
 
 
 def test_the_answerer_says_the_same_thing_to_every_question(
@@ -699,18 +726,23 @@ def test_the_answerer_says_the_same_thing_to_every_question(
     scripted answer does is end the turn without handing the model a value it
     could fill a field from."""
     expected = row(holds, "A1")
-    scripted = Scripted(
-        turns=[f"{agent.QUESTION_MARKER} quante serie?"],
-        emitted=log.PerformedWorkout(workout_id=1, blocks=[], report=expected.report),
+    model = scripted(
+        _asking("quante serie?"),
+        AIMessage(content="chiaro"),
+        emits=log.PerformedWorkout(workout_id=1, blocks=[], report=expected.report),
     )
 
     report = log_evaluation.run(
-        where, [expected], build=lambda: scripted, repetitions=1, records=tmp_path / "runs"
+        where,
+        [expected],
+        on=stand_in(model),
+        repetitions=1,
+        records=tmp_path / "runs",
     )
 
     (outcome,) = report.outcomes
-    assert isinstance(outcome.record, agent.LogRecord)
-    assert outcome.record.questions[0].answered == log_evaluation.UNANSWERED
+    assert isinstance(outcome.record, log_evaluation.Read)
+    assert outcome.record.questions[0][1] == log_evaluation.UNANSWERED
     assert outcome.held
 
 
@@ -727,7 +759,9 @@ def test_nothing_the_measurement_does_reaches_the_database_it_was_copied_from(
         log_evaluation.run(
             where,
             [expected],
-            build=lambda: Scripted(turns=[], emitted=expected.expects),
+            on=stand_in(
+                scripted(AIMessage(content="chiaro"), emits=expected.expects)
+            ),
             repetitions=1,
             records=tmp_path / "runs",
         )

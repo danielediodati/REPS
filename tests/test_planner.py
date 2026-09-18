@@ -22,9 +22,10 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from conftest import enrich, make_exercise
-from trainer import agent, tools
+from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, models, planner, record
+from trainer.coach import logger as coach_logger
 from trainer.engine import catalog, database, exclusions, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
@@ -105,6 +106,13 @@ class Scripted(BaseChatModel):
 
     schemas: list[dict[str, Any]] = []
     seen: list[list[BaseMessage]] = []
+    bound: list[list[str]] = []
+    """The tools it was offered, per turn, by name.
+
+    A bound is only a bound if the model cannot reach past it, and both
+    budgets are kept by taking a tool off the table. Nothing else here can see
+    that happen: a stand-in answers from its script whatever it was offered.
+    """
 
     @property
     def _llm_type(self) -> str:
@@ -128,6 +136,9 @@ class Scripted(BaseChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, AIMessage]:
+        self.bound.append(
+            [str(one.get("function", {}).get("name", "")) for one in tools]  # type: ignore[union-attr]
+        )
         return self.bind(tools=tools, **kwargs)
 
     def with_structured_output(
@@ -213,14 +224,14 @@ def test_a_run_that_spends_the_whole_default_budget_still_emits(
     model = Scripted(
         turns=[
             calling("allocate", minutes=45, proportions={"legs": 1.0})
-            for _ in range(agent.CALL_BUDGET)
+            for _ in range(tools.CALL_BUDGET)
         ],
         documents=[plan_of("Barbell_Squat")],
     )
 
     final = graph_of(model).invoke({"request": BARBELL_45})
 
-    assert final["spent"] == agent.CALL_BUDGET
+    assert final["spent"] == tools.CALL_BUDGET
     assert final["plan"] == plan_of("Barbell_Squat")
 
 
@@ -230,7 +241,7 @@ def test_a_run_that_spends_the_budget_and_every_attempt_still_ends(
     model = Scripted(
         turns=[
             calling("allocate", minutes=45, proportions={"legs": 1.0})
-            for _ in range(agent.CALL_BUDGET)
+            for _ in range(tools.CALL_BUDGET)
         ],
         documents=[plan_of("Dumbbell_Bench_Press")] * planner.ATTEMPTS,
     )
@@ -315,7 +326,7 @@ def test_the_record_holds_every_attempt_and_what_each_node_cost(
     )
 
     final = graph_of(model).invoke({"request": BARBELL_45})
-    written = record.of(final, agent.CALL_BUDGET)
+    written = record.of(final, tools.CALL_BUDGET)
 
     assert "model" not in written, "the model belongs to the node that answered"
     assert {node["model"] for node in written["nodes"]} == {STAND_IN}
@@ -359,7 +370,7 @@ def test_a_failed_call_the_model_gave_no_id_is_recorded_as_failed(
     )
 
     final = graph_of(model).invoke({"request": BARBELL_45})
-    written = record.of(final, agent.CALL_BUDGET)
+    written = record.of(final, tools.CALL_BUDGET)
 
     assert written["calls"][0]["failed"] is True
 
@@ -458,7 +469,7 @@ def test_an_emission_that_is_not_a_plan_at_all_is_refused_and_recorded_as_none(
 
     assert final["plan"] is None
     assert [violation.rule for violation in final["violations"]] == [plans.SHAPE]
-    assert record.of(final, agent.CALL_BUDGET)["plan"] is None
+    assert record.of(final, tools.CALL_BUDGET)["plan"] is None
 
 
 def test_a_plan_the_block_vocabulary_cannot_express_is_refused_on_shape(
@@ -495,26 +506,26 @@ def test_a_plan_the_block_vocabulary_cannot_express_is_refused_on_shape(
 #
 # The planner's surface, its field allow-list, its prompt and its brief moved
 # here from `agent.py` in ticket 05, with the Groq planner loop that used to
-# hold them. What `agent.py` still owns is the machinery they are read through
+# hold them. What `tools.py` owns is the machinery they are read through
 # -- `registered`, `schema` and `execute` -- which the logger shares.
 
 
-def executed(one: agent.Call) -> agent.Result:
+def executed(one: tools.Call) -> tools.Result:
     """One call through the planner's surface, which is what decides both
     whether the tool exists and what its answer carries back."""
-    return agent.execute(
-        one, agent.registered("planner", planner.TOOLS), planner.KEEPS
+    return tools.execute(
+        one, tools.registered("planner", planner.TOOLS), planner.KEEPS
     )
 
 
-def calls(name: str, **arguments: Any) -> agent.Call:
-    return agent.Call(id=f"toolu_{name}", name=name, arguments=arguments)
+def calls(name: str, **arguments: Any) -> tools.Call:
+    return tools.Call(id=f"toolu_{name}", name=name, arguments=arguments)
 
 
 def test_the_tools_offered_are_the_shared_surface_and_nothing_else() -> None:
     """No second definition: the planner names tools out of `tools.TOOLS`, the
     same tuple `trainer mcp` registers."""
-    offered = agent.registered("planner", planner.TOOLS)
+    offered = tools.registered("planner", planner.TOOLS)
     defined = [tool.__name__ for tool in tools.TOOLS]
 
     assert [tool.__name__ for tool in offered] == [
@@ -525,8 +536,8 @@ def test_the_tools_offered_are_the_shared_surface_and_nothing_else() -> None:
 def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None:
     """A tool the model cannot fill the arguments in for is a tool it cannot
     call, and a tool with no description is one it cannot choose."""
-    for tool in agent.registered("planner", planner.TOOLS):
-        offered = agent.schema(tool)
+    for tool in tools.registered("planner", planner.TOOLS):
+        offered = tools.schema(tool)
         assert offered["description"], f"{offered['name']} has no description"
         assert offered["parameters"]["type"] == "object"
         if offered["name"] == "unreported_workouts":
@@ -542,8 +553,8 @@ def test_an_argument_with_a_default_is_not_required() -> None:
     """`admissible_set`'s exclusions are optional, and a schema that demanded
     them would make the common call the harder one to write."""
     (admissible,) = [
-        agent.schema(tool)
-        for tool in agent.registered("planner", planner.TOOLS)
+        tools.schema(tool)
+        for tool in tools.registered("planner", planner.TOOLS)
         if tool.__name__ == "admissible_set"
     ]
 
@@ -554,8 +565,8 @@ def test_the_two_agents_offer_different_sets_of_the_same_definitions() -> None:
     """One definition per tool, two agents onto it. A tool both can call is
     the **same function object** for each: a copy diverges at the first fix
     applied to one and not the other, and nothing would fail when it did."""
-    offered = {t.__name__: t for t in agent.registered("planner", planner.TOOLS)}
-    logger = {t.__name__: t for t in agent.registered("logger", agent.LOGGER.tools)}
+    offered = {t.__name__: t for t in tools.registered("planner", planner.TOOLS)}
+    logger = {t.__name__: t for t in tools.registered("logger", coach_logger.TOOLS)}
 
     assert set(offered) != set(logger)
     assert "allocate" in offered and "allocate" not in logger
@@ -573,7 +584,7 @@ def test_every_tool_that_exists_reaches_at_least_one_agent() -> None:
     still serve it, which is what makes the gap survivable long enough to
     forget about.
     """
-    reached = set(planner.TOOLS) | set(agent.LOGGER.tools)
+    reached = set(planner.TOOLS) | set(coach_logger.TOOLS)
 
     assert {tool.__name__ for tool in tools.TOOLS} == reached
 
@@ -635,7 +646,7 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     bound, with nothing failing to say so."""
     answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
 
-    assert agent._trimmed(answer, planner.KEEPS) == {"variants": [{"id": "X"}]}
+    assert tools._trimmed(answer, planner.KEEPS) == {"variants": [{"id": "X"}]}
 
 
 def test_the_planner_is_shown_no_name_even_beside_an_enrichment() -> None:
@@ -645,7 +656,7 @@ def test_the_planner_is_shown_no_name_even_beside_an_enrichment() -> None:
     all is nobody's to drop."""
     answer = {"a": {"exercise_id": "X", "name": "Barbell Squat", "movement_pattern": "squat"}}
 
-    trimmed = agent._trimmed(answer, planner.KEEPS)
+    trimmed = tools._trimmed(answer, planner.KEEPS)
 
     assert trimmed == {"a": {"exercise_id": "X", "movement_pattern": "squat"}}
 
@@ -1069,7 +1080,7 @@ class Refusing(Scripted):
 def test_a_turn_the_provider_refuses_goes_back_to_the_model(
     connection: sqlite3.Connection,
 ) -> None:
-    """The case `agent.execute` was built for, arriving where it cannot help.
+    """The case `tools.execute` was built for, arriving where it cannot help.
 
     A tool call with a fraction in it is the model getting it wrong, and every
     other way of getting it wrong comes back as a result it can recover from.

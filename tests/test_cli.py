@@ -13,8 +13,12 @@ import click
 import pytest
 from click.testing import CliRunner
 
+from conftest import serving
+from langchain_core.messages import AIMessage
+
 from trainer import __version__, cli
 from trainer.cli import main
+from trainer.coach import models
 from trainer.engine import (
     catalog,
     database,
@@ -1640,21 +1644,6 @@ def test_a_plan_the_shape_check_refuses_writes_nothing(
 # from the whole suite, and `trainer eval` is where the real one runs.
 
 
-def scripted(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
-    """Put a scripted model where the old loop builds a real one.
-
-    `trainer log` keeps its Groq door until session 8, whatever `LLM_BACKEND`
-    names, so this is the seam the logging tests still come through.
-    """
-    from trainer import agent
-
-    from test_agent import Scripted
-
-    model = Scripted(**kwargs)  # type: ignore[arg-type]
-    monkeypatch.setattr(agent, "groq", lambda door, client=None: model)
-    return model
-
-
 def scripted_graph(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
     """Put a scripted chat model where the planner graph builds a real one.
 
@@ -2281,17 +2270,22 @@ def log_set_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_the_log_suite_stops_at_the_credentials_state_too(
-    runner: CliRunner, enriched: Path, log_set_file: Path
+    runner: CliRunner,
+    enriched: Path,
+    log_set_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Everything before the provider has to work for this message to be the
     one that comes out: the set parses, the fixture is built, and the rows
-    agree with the catalog. Then it stops, because there are no credentials."""
+    agree with the catalog. Then it stops, because there are no credentials --
+    with the state and its fix, and no matrix of dashes under it."""
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
     result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
 
     assert result.exit_code != 0
     assert "no Groq credentials" in result.output
-    assert "1 the report determines" in result.output
-    assert "1 that must make it ask" in result.output
+    assert "the report determines" not in result.output, "it ran the pass anyway"
 
 
 def test_the_log_suite_names_the_reports_when_one_is_mistyped(
@@ -2715,16 +2709,19 @@ def test_log_needs_a_file_that_exists(
 
 
 def test_log_with_no_file_reaches_for_a_model_rather_than_a_file(
-    runner: CliRunner, enriched: Path
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A bare `trainer log` is the interactive path. The suite has no
-    credentials, so it gets as far as the state that says so -- which is the
-    proof it went looking for a model and not for `--from`.
+    """A bare `trainer log` is the interactive path, and it runs on whichever
+    provider `LLM_BACKEND` names now. The suite has no credentials, so it gets
+    as far as the state that says so -- which is the proof it went looking for
+    a model and not for `--from`.
 
     And it says so **before** asking for the report. Prompting first means the
     user writes out their whole workout and then loses it to an error that was
     already true when they started typing.
     """
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
     result = runner.invoke(main, ["log"], input="panca bene, tutto come scritto\n")
 
     assert "no Groq credentials" in result.output
@@ -2740,10 +2737,45 @@ def test_log_with_no_file_reaches_for_a_model_rather_than_a_file(
 
 
 def logged(
-    monkeypatch: pytest.MonkeyPatch, emitted: object, turns: object = None
-) -> object:
-    """A scripted logging model, holding the document it will emit."""
-    return scripted(monkeypatch, turns=turns or ["tutto chiaro"], emitted=emitted)
+    monkeypatch: pytest.MonkeyPatch, emitted: Any, turns: Any = None
+) -> Any:
+    """A scripted logging model, holding the document it will emit.
+
+    The same seam as the planner's: `trainer log` runs the logger graph on
+    whatever `models.chat` answers, which is what makes both commands one
+    thing with two prompts.
+    """
+    from langchain_core.messages import AIMessage
+
+    return scripted_graph(
+        monkeypatch,
+        turns=list(turns or [AIMessage(content="tutto chiaro")]),
+        raw=[emitted.model_dump_json()],
+    )
+
+
+def asking(question: str) -> Any:
+    """A turn that calls `ask_user`, which is how the graph is asked to ask."""
+    from langchain_core.messages import AIMessage
+
+    from trainer.coach import logger
+
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": logger.ask_user.__name__,
+                "args": {"question": question},
+                "id": "call_ask",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+
+def briefed(model: Any) -> str:
+    """Everything the model was shown on its first turn."""
+    return "\n".join(message.text for message in model.seen[0])
 
 
 def report_of(**fields: object) -> object:
@@ -2824,7 +2856,7 @@ def test_log_opens_with_the_workout_that_is_waiting_for_a_report(
     result = runner.invoke(main, ["log", "--say", "tutto come scritto"])
 
     assert result.exit_code == 0, result.output
-    written = " ".join(model.briefs)  # type: ignore[attr-defined]
+    written = briefed(model)
     assert f"prescribed_workout({identifier})" in written
     assert "tutto come scritto" in written
 
@@ -2839,7 +2871,7 @@ def test_log_asks_what_you_did_when_you_do_not_say(
 
     assert result.exit_code == 0, result.output
     assert "What did you do" in result.output
-    assert "andata bene" in " ".join(model.briefs)  # type: ignore[attr-defined]
+    assert "andata bene" in briefed(model)
 
 
 def test_log_puts_the_clarifying_question_to_you_and_keeps_the_answer(
@@ -2859,7 +2891,7 @@ def test_log_puts_the_clarifying_question_to_you_and_keeps_the_answer(
             ],
             report="squat, 4 su 10",
         ),
-        turns=["QUESTION: Quel 4 e' fatica o fastidio?", "tutto chiaro"],
+        turns=[asking("Quel 4 e' fatica o fastidio?"), AIMessage(content="chiaro")],
     )
 
     result = runner.invoke(main, ["log", "--say", "squat, 4 su 10"], input="fastidio\n")
@@ -2889,7 +2921,10 @@ def test_log_prints_a_question_and_a_report_the_console_can_show(
     logged(
         monkeypatch,
         report_of(workout_id=identifier, report=said),
-        turns=["QUESTION: Quanto pesava \u2014 pi\u00f9 o meno?", "fine"],
+        turns=[
+            asking("Quanto pesava \u2014 pi\u00f9 o meno?"),
+            AIMessage(content="fine"),
+        ],
     )
 
     result = runner.invoke(main, ["log", "--say", said], input="60 kg\n")
@@ -2961,7 +2996,7 @@ def test_log_writes_nothing_when_the_conversation_is_interrupted(
     logged(
         monkeypatch,
         report_of(workout_id=identifier, report="4 su 10"),
-        turns=["QUESTION: Fatica o fastidio?"],
+        turns=[asking("Fatica o fastidio?")],
     )
 
     result = runner.invoke(main, ["log", "--say", "4 su 10"], input="")
@@ -3005,7 +3040,7 @@ def test_log_writes_the_run_record_when_asked(
     logged(
         monkeypatch,
         report_of(workout_id=identifier, report="4 su 10"),
-        turns=["QUESTION: Fatica o fastidio?", "tutto chiaro"],
+        turns=[asking("Fatica o fastidio?"), AIMessage(content="chiaro")],
     )
     record = tmp_path / "run.json"
 
@@ -3015,10 +3050,9 @@ def test_log_writes_the_run_record_when_asked(
 
     assert result.exit_code == 0, result.output
     written = json.loads(record.read_text(encoding="utf-8"))
-    assert written["questions"] == [
-        {"asked": "Fatica o fastidio?", "answered": "fastidio"}
-    ]
-    assert written["document"]["workout_id"] == identifier
+    assert written["questions"] == [["Fatica o fastidio?", "fastidio"]]
+    assert written["performed"]["workout_id"] == identifier
+    assert written["ending"] == "done"
 
 
 def test_log_from_a_file_refuses_the_options_that_ask_a_model(
@@ -3518,6 +3552,7 @@ def test_bot_on_groq_with_a_key_never_asks_ollama(
         raise AssertionError("Groq must not be checked against a local server")
 
     monkeypatch.setattr(ollama.Client, "list", refuse)
+    serving(monkeypatch, models.DEFAULT_GROQ_MODEL)  # noqa: F821 -- see conftest
     monkeypatch.setenv("LLM_BACKEND", "groq")
     monkeypatch.setenv("GROQ_API_KEY", "a-stand-in")
     monkeypatch.delenv("OLLAMA_CONTEXT_LENGTH")

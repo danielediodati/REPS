@@ -2,21 +2,22 @@
 
 Status: ready-for-agent
 
-Blocked by: 02, 03 -- it measures the subgraph, through the door the entrance adds.
+Blocked by: nothing now. 02 pointed the suite at the graph; what is left is a pass against a real provider, and 03 does not change what it measures.
 
-`log_evaluation.py` runs the 30-report set against `agent.py`, which 02 deletes, and reads `agent.QUESTION_MARKER` as a field. The suite is the only thing that says whether the logger got worse, and it must point at the graph before the loop goes.
+**02 did most of this, because it had to**: a module cannot be deleted while something imports it, so `log_evaluation.py` moved onto the graph with the loop. It enters at `logger.build`, answers the `interrupt()` with `UNANSWERED` and declines every proposed exclusion, scores a `Read` whose `questions` are a field rather than a reading of prose, and writes the ADR-0007 document into the eval runs directory. No marker is left anywhere in it.
+
+What is left is the half 02 could not do: **running it**. Thirty reports against a real provider, at the rate the set declares, with the drop reported per row -- and the suite has not been run against the graph even once.
 
 ## What to build
 
-- **The suite enters at the logger subgraph**, the way the plan suite enters at the planner, and the question it used to read off a marked line is the `interrupt()` the subgraph raises.
+- **A pass against a real provider**, on both, and the number it comes to. The set declares its own bar; a drop is reported per row rather than as one figure.
+- **Whatever that pass says about the prompt.** The loop's prompt moved into `coach/logger.py` with one section rewritten -- asking is a tool call now -- and nobody has measured what that did. If the rate moved, the prompt is where to look first.
 - **The invariants are the log set's own rows**, unchanged: the suite measures a different implementation of the same thing, not a different standard. U7 still checks only that nothing is invented.
-- **Each run reports what it cost**, like the plan suite: the model, the attempts, the wall time. It writes the same record document as everything else (01) -- into the eval runs directory and never into the home's archive, which the plan suite arranges by building its graph with no archive at all. A pass is a measurement, not an evening.
-- **It runs against a fixture named in `TRAINER_DB`.** The tools open their own connection, so a fixture nothing points at is invisible to the agent under measurement.
+- **It runs against a fixture named in `TRAINER_DB`.** The tools open their own connection, so a fixture nothing points at is invisible to the graph under measurement.
 
 ## Acceptance criteria
 
-- [ ] `trainer eval --suite log` runs the 30 reports against the subgraph and reports the same invariants.
-- [ ] A report whose expectation is a clarifying question is measured on the `interrupt()`, with no marker anywhere in the suite.
-- [ ] The records it writes are the documents 01 defines, in the eval runs directory.
+- [ ] `trainer eval --suite log` has been **run** against a real provider, and the number is written down here.
 - [ ] The suite passes at the rate the set declares, and a drop is reported per row rather than as one number.
+- [ ] A report whose expectation is a clarifying question is measured on the `interrupt()` -- verified by a pass, not by reading the code (02 wired it).
 - [ ] The full test suite and mypy are green.

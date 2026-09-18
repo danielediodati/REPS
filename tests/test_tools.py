@@ -8,15 +8,18 @@ command that fixes them rather than as a plausible-looking empty answer.
 
 from __future__ import annotations
 
+import enum
+import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from conftest import enrich, make_exercise
-from trainer import agent, tools
+from trainer import plan, tools
 from trainer.engine import (
     catalog,
     database,
@@ -26,6 +29,7 @@ from trainer.engine import (
     migrations,
     workouts,
 )
+from trainer.coach import logger
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -72,6 +76,7 @@ GRAPH = """\
 
 
 @pytest.fixture()
+
 def stocked(database_file: Path) -> Iterator[sqlite3.Connection]:
     """A database the tools will find: `TRAINER_DB` points them at it."""
     with closing(database.connect(database_file)) as opened:
@@ -435,15 +440,145 @@ def test_allocate_says_what_a_share_looks_like() -> None:
     An observed run called `allocate` with `{"chest": 22/45, "arms": 23/45}`:
     the minutes the brief had just given it, over the budget. JSON has no
     arithmetic, so Ollama refused the call before it reached the tool and the
-    whole run went with it -- a failure `agent.execute` could not turn into a
+    whole run went with it -- a failure `tools.execute` could not turn into a
     result to recover from, because the provider rejected it first.
 
     The docstring is the schema's description, so this is what is actually
     sent. The same mistake with the same shape is `rest: 60000` on
     `PlanBlock`, and it is guarded the same way.
     """
-    described = agent.schema(tools.allocate)["description"]
+    described = tools.schema(tools.allocate)["description"]
 
     assert "decimal" in described
     assert "0.49" in described, "a share with no example is a share the model guesses"
     assert "fraction" in described
+
+
+# -- how a model calls them ---------------------------------------------------
+#
+# The definition each tool is offered as, the arguments it comes back with,
+# and the answer trimmed to what the door asking reads. These lived in
+# `test_agent.py` beside the loop that session 9 deleted; the derivation they
+# are about moved here with the code.
+
+
+def call(name: str, **arguments: Any) -> tools.Call:
+    return tools.Call(id=f"call_{name}", name=name, arguments=arguments)
+
+
+def executed(one: tools.Call, offered: Sequence[str] = logger.TOOLS) -> tools.Result:
+    """One call against the surface a door offers, the way a graph runs it."""
+    return tools.execute(one, tools.registered("test", offered), logger.KEEPS)
+
+
+def a_plan() -> plan.WorkoutPlan:
+    """A plan the project calls valid, for the schema the model is held to."""
+    return plan.WorkoutPlan(
+        blocks=[
+            plan.PlanBlock(
+                items=[
+                    plan.PlanItem(
+                        exercise_id="Barbell_Squat",
+                        prescription=plan.Prescription(unit="reps", amount=8),
+                    )
+                ],
+                rounds=3,
+                rest=120,
+                reason="because it is a squat and squats are good",
+            )
+        ]
+    )
+
+
+def test_every_tool_reaches_the_model_with_a_description_and_arguments() -> None:
+    """A tool the model cannot fill the arguments in for is a tool it cannot
+    call, and a tool with no description is one it cannot choose."""
+    for tool in tools.registered("test", logger.TOOLS):
+        offered = tools.schema(tool)
+        assert offered["description"], f"{offered['name']} has no description"
+        assert offered["parameters"]["type"] == "object"
+        if offered["name"] == "unreported_workouts":
+            # The one question with nothing to ask about: *today* is the
+            # door's to supply, never the model's, because nothing in
+            # `engine/` reads the clock.
+            assert offered["parameters"]["properties"] == {}
+            continue
+        assert offered["parameters"]["properties"], f"{offered['name']} takes nothing"
+
+
+def test_a_result_reaches_the_model_as_json(stocked: sqlite3.Connection) -> None:
+    """The tool docstrings describe `known: false`; Python would hand back
+    `'known': False`, and a model translating between two dialects mid-loop is
+    one more thing that can go wrong for nothing."""
+    result = executed(call("pattern_history", pattern="squat", cycles=3))
+
+    assert result.failed is False
+    assert json.loads(result.content)["known"] is False
+
+
+class Grip(enum.Enum):
+    OVERHAND = "overhand"
+    UNDERHAND = "underhand"
+
+
+def a_tool(grips: list[Grip]) -> str:
+    """A tool with a parameter pydantic describes by reference."""
+    return ", ".join(grip.value for grip in grips)
+
+
+def test_a_definition_a_parameter_needs_is_hoisted_where_it_resolves() -> None:
+    """A `$ref` resolves from the root of the schema document, and the root is
+    `parameters`. Left inside the property, the definitions an enum or a
+    model-typed parameter needs sit one level too deep and every reference to
+    them dangles."""
+    built = tools.schema(a_tool)["parameters"]
+
+    assert "$defs" in built, "the definition was left inside the property"
+    assert "$defs" not in built["properties"]["grips"]
+    referenced = built["properties"]["grips"]["items"]["$ref"].removeprefix("#/$defs/")
+    assert referenced in built["$defs"]
+
+
+def test_strict_mode_requires_every_property_including_the_defaulted_ones() -> None:
+    """Strict mode is constrained decoding, and it demands every property be
+    listed in `required`. Pydantic leaves out the ones carrying a default,
+    which is the plan's `despite`. That it must be present is exactly why it
+    is a list and not a field on every item: the empty answer is `[]`, which a
+    model writes without being talked into it."""
+    built = tools.strict_schema(plan.WorkoutPlan)
+    item = built["$defs"]["PlanItem"]
+
+    assert set(item["required"]) == {"exercise_id", "prescription"}
+    assert set(built["$defs"]["Prescription"]["required"]) == {"unit", "amount"}
+    assert item["additionalProperties"] is False
+    assert set(built["required"]) == {"blocks", "despite"}
+
+
+def test_the_strict_shape_still_accepts_a_plan_the_project_calls_valid() -> None:
+    """The transform above rewrites the schema the model is held to. If it
+    drifted from what `WorkoutPlan` actually parses, every run would emit
+    something the validator then refuses on shape."""
+    import jsonschema
+
+    emitted = json.loads(a_plan().model_dump_json())
+
+    jsonschema.validate(emitted, tools.strict_schema(plan.WorkoutPlan))
+
+
+def test_trimming_reaches_a_record_nested_under_a_key() -> None:
+    """`compare_variants` already answers `{"a": {...}, "b": {...}}`. A tool
+    that nests a list of exercises brings back the payload this exists to
+    bound, with nothing failing to say so."""
+    answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
+
+    trimmed = tools._trimmed(answer, logger.KEEPS)
+
+    assert trimmed == {"variants": [{"id": "X"}]}
+
+
+def test_an_answer_envelope_is_not_cut_to_an_exercise_record() -> None:
+    """`known: false` is the difference between *nobody has trained this* and a
+    field that happens to be empty, and it is not a catalog field to drop."""
+    answer = {"about": "squat", "known": False, "value": None}
+
+    assert tools._trimmed(answer, logger.KEEPS) == answer

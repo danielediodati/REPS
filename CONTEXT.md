@@ -104,13 +104,13 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 **Thread**: one chat's conversation, kept on disk and alive across restarts. One chat is one thread for as long as the chat lives.
 _Avoid_: conversation, which says the same thing loosely.
 
-**Run**: one proposal pursued — from the request being assembled to the user's answer. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
+**Run**: one thing a graph was asked for, pursued to an end — a proposal from the request being assembled to the user's answer, or one report read into a document. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
 _Avoid_: calling one invocation of the graph a run, or one message in the queue.
 
 **Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for today's workout*. What a refusal leaves behind belongs to it, never to the run that was refused.
 _Avoid_: request, which is what a single run is given.
 
-**Ending**: how a run finished, written when it happens — accepted, turned down, refused by the validator to the end, or fallen over. A run that is waiting on an answer has no ending, and neither has one that was cut.
+**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, or fallen over. *Done* is a run with nothing to accept or turn down, which is what reading a report is. A run that is waiting on an answer has no ending, and neither has one that was cut.
 
 **Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
 

@@ -1,7 +1,7 @@
 """The measurement session 5 is judged on: thirty reports, scored by code.
 
 `trainer eval --suite log` runs the hand-written set in
-`docs/logging/eval-set.md` against the real logging agent. Two halves, and the
+`docs/logging/eval-set.md` against the real logger graph. Two halves, and the
 second is the one that matters:
 
 - **The reports the sentence determines** are scored by equality on the
@@ -15,8 +15,8 @@ second is the one that matters:
 
 **No model judges another model's output anywhere in this file**, which is
 `evaluation.py`'s standing rule and does not bend for a labelled set. Every
-check below reads `agent.LogRecord` -- the document, and the clarifying turns
-the loop recorded -- and answers yes or no.
+check below reads a `Read` -- the document, and the clarifying questions the
+run recorded -- and answers yes or no.
 
 **The volume is the engine's own.** A scored document is resolved by
 `log.to_performed` -- adherence and all -- and costed by `workouts.volume`,
@@ -29,8 +29,9 @@ the data already answers.
 **Nothing here writes anywhere but into its own fixture.** That fixture is a
 throwaway copy of the project database holding the four prescriptions and the
 one load-history row the set declares, and building it is the only thing in
-this module that calls a writer at all: scoring a run writes nothing, and
-`log_workout` never writes. Thirty rows against the real state would leave
+this module that calls a writer at all: scoring a run writes nothing, and the
+logger graph never writes -- `logger.performed` does, from the door that
+asked, and no door asks here. Thirty rows against the real state would leave
 thirty performed workouts in the state the measurement is taken from -- which
 is the mistake issue 1 moved plan persistence into the CLI to avoid.
 
@@ -52,13 +53,22 @@ import os
 import shutil
 import sqlite3
 import tempfile
-from collections.abc import Callable, Iterator, Sequence
+import time
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
-from trainer import agent, evaluation, log, log_set
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+from trainer import evaluation, log, log_set, tools
+from trainer.coach import logger, models
+from trainer.coach import record as run_record
 from trainer.engine import database, workouts
 
 DOCUMENT = "document"
@@ -71,9 +81,9 @@ which is the fact the rest of the engine reads and the reason a wrong id or a
 wrong round count matters at all."""
 
 ASKED = "asked"
-"""A column of the matrix, for the must-ask half only: `LogRecord.questions`
-is not empty. A question is marked by the agent rather than inferred from its
-prose -- `agent.QUESTION_MARKER` -- so this is a field and not a reading."""
+"""A column of the matrix, for the must-ask half only: the run's `questions`
+are not empty. A question is a tool call the graph answered with an
+`interrupt()`, so this is a field and not a reading of the model's prose."""
 
 CONFIDENT = "false confidence"
 """A column of the matrix: it did not ask, **and** it wrote something anyway.
@@ -394,11 +404,44 @@ def _produced(
     )
 
 
+@dataclass(frozen=True)
+class Read:
+    """One run of the logger graph, as this suite scores it.
+
+    `evaluation.Ran` is the same idea for the planner: what the run produced,
+    and what it cost. Neither suite reads the other's, and `evaluation.Costed`
+    is the little both of them answer to.
+    """
+
+    record: Mapping[str, Any]
+    document: log.PerformedWorkout
+    questions: tuple[tuple[str, str], ...]
+    refused: str | None
+    seconds: float
+
+    @property
+    def written(self) -> str:
+        """The run as it is written down -- ADR-0007's document, unchanged."""
+        return run_record.document(self.record)
+
+    @property
+    def calls(self) -> list[Any]:
+        return list(self.record["calls"])
+
+    @property
+    def input_tokens(self) -> int:
+        return int(self.record["tokens"]["input"])
+
+    @property
+    def output_tokens(self) -> int:
+        return int(self.record["tokens"]["output"])
+
+
 # -- scoring one run ----------------------------------------------------------
 
 
 def score(
-    where: Fixture, row: log_set.Row, record: agent.LogRecord
+    where: Fixture, row: log_set.Row, record: Read
 ) -> tuple[tuple[tuple[str, str], ...], int]:
     """What this run got wrong, and what the metric charges for it.
 
@@ -413,7 +456,7 @@ def score(
 
 
 def _asked(
-    row: log_set.Row, record: agent.LogRecord
+    row: log_set.Row, record: Read
 ) -> tuple[tuple[tuple[str, str], ...], int]:
     """One bit, and the weight that comes with getting it wrong.
 
@@ -484,7 +527,7 @@ def _filled(document: log.PerformedWorkout) -> str:
 
 
 def _wrote(
-    where: Fixture, row: log_set.Row, record: agent.LogRecord
+    where: Fixture, row: log_set.Row, record: Read
 ) -> tuple[tuple[str, str], ...]:
     """The unambiguous half: the document, and the volume it produces."""
     assert row.expects is not None  # `must_ask` is what says so
@@ -624,22 +667,28 @@ def run(
     where: Fixture,
     chosen: Sequence[log_set.Row],
     *,
-    build: Callable[[], agent.Model],
+    on: models.Chat,
     repetitions: int = evaluation.REPETITIONS,
     records: Path | None = None,
-    budget: int = agent.CALL_BUDGET,
+    budget: int = tools.CALL_BUDGET,
 ) -> evaluation.Report:
-    """Every row, every repetition, against the real agent.
+    """Every row, every repetition, against the logger graph.
 
     `repetitions` is `evaluation.REPETITIONS` for the reason the six
     situations run three times: a model is a distribution, and one green run
     measures nothing for a labelled row either.
+
+    **A checkpointer in memory, and no archive.** The graph needs somewhere to
+    hold a run that is waiting on a question; these threads are of no interest
+    once the run is scored, and a pass is a measurement rather than thirty
+    evenings somebody had.
     """
     into = records if records is not None else evaluation.records_path()
+    graph = logger.build(on, budget=budget, checkpointer=InMemorySaver())
     outcomes = []
     for row in chosen:
         for attempt in range(1, repetitions + 1):
-            outcomes.append(_once(where, row, attempt, build, into, budget))
+            outcomes.append(_once(where, row, attempt, graph, into, budget))
     return evaluation.Report(tuple(outcomes))
 
 
@@ -647,32 +696,74 @@ def _once(
     where: Fixture,
     row: log_set.Row,
     attempt: int,
-    build: Callable[[], agent.Model],
+    graph: logger.Logger,
     records: Path,
     budget: int,
 ) -> evaluation.Outcome:
     awaiting, prescribed_on = where.awaiting(row)
     try:
-        record = agent.log_workout(
-            where.connection,
-            row.report,
-            where.today,
-            model=build(),
-            ask=lambda _: UNANSWERED,
-            awaiting=awaiting,
-            prescribed_on=prescribed_on,
-            budget=budget,
-        )
-    except agent.AgentError as error:
+        read = _invoked(graph, where, row, awaiting, prescribed_on, budget)
+    except Exception as error:
+        # Every way a provider can fail in the middle of a pass: no
+        # credentials, a request it refused, a rate limit, a server that went
+        # away. Caught broadly for the reason the plan suite catches broadly
+        # -- the run lands in the *not run* column and counts against the
+        # metric there, and a pass that lost its other twenty-nine rows to one
+        # transport error would measure nothing.
         return evaluation.Outcome(row.name, attempt, error=str(error))
 
-    written = evaluation.write(
-        records, f"{row.name}-{attempt}", record.model_dump_json(indent=1)
+    written = evaluation.write(records, f"{row.name}-{attempt}", read.written)
+    failures, weight = score(where, row, read)
+    return evaluation.Outcome(row.name, attempt, failures, read, written, weight=weight)
+
+
+def _invoked(
+    graph: logger.Logger,
+    where: Fixture,
+    row: log_set.Row,
+    awaiting: int | None,
+    prescribed_on: str | None,
+    budget: int,
+) -> Read:
+    """One run of the graph, answered the way the set answers, and timed.
+
+    The clock is read around the whole invocation rather than summed from the
+    record's per-node seconds: what a person waits for is the run, and the
+    gaps between nodes are part of that wait.
+
+    Every question is answered `UNANSWERED` and every proposed exclusion is
+    declined: the run must reach its document, and the set records no answers
+    to give it.
+    """
+    started = time.monotonic()
+    thread: RunnableConfig = {"configurable": {"thread_id": f"log:{uuid4()}"}}
+    given: Any = logger.starting(row.report, where.today, awaiting, prescribed_on)
+    while True:
+        final = graph.invoke(given, thread)
+        waiting = final.get("__interrupt__")
+        if not waiting:
+            break
+        question = waiting[0].value
+        given = Command(
+            resume=False if question.get("kind") == logger.EXCLUSION else UNANSWERED
+        )
+    document = final["document"]
+    if document is None:
+        # Nothing that parses as a document at all. The row is scored on what
+        # was emitted, and there is nothing to score -- so it is reported the
+        # way an unreachable provider is, under its own name.
+        raise LogEvaluationError(final["refused"] or "it emitted no document")
+    return Read(
+        record=run_record.of(final, budget),
+        document=document,
+        questions=tuple(final.get("questions", ())),
+        refused=final["refused"],
+        seconds=time.monotonic() - started,
     )
-    failures, weight = score(where, row, record)
-    return evaluation.Outcome(
-        row.name, attempt, failures, record, written, weight=weight
-    )
+
+
+class LogEvaluationError(RuntimeError):
+    """A run that produced nothing to score. Not a failed invariant: a run that did not happen."""
 
 
 # -- the matrix ---------------------------------------------------------------
@@ -740,7 +831,7 @@ def _notes(
         1
         for outcome in report.outcomes
         if outcome.case in determined
-        and isinstance(outcome.record, agent.LogRecord)
+        and isinstance(outcome.record, Read)
         and outcome.record.questions
     )
     ran = sum(1 for outcome in report.outcomes if outcome.case in determined)

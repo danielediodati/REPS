@@ -25,7 +25,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
-from trainer import agent, evaluation
+from trainer import evaluation, tools
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
@@ -148,7 +148,7 @@ def ran(
         "timings": [],
     }
     base: dict[str, Any] = {
-        "record": run_record.of(state, agent.CALL_BUDGET),
+        "record": run_record.of(state, tools.CALL_BUDGET),
         "request": request,
         "plan": emitted,
         "spent": 2,

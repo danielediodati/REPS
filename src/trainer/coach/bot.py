@@ -18,7 +18,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 
-from trainer import agent
 from trainer import plan as plans
 from trainer import tools
 from trainer.coach import logfile, models, planner, progress
@@ -640,7 +639,7 @@ async def _ending(
         return await streamed(graph, given, _reading(thread), chat)
     except Exception:
         await asyncio.to_thread(
-            planner.failed, graph, _reading(thread), agent.CALL_BUDGET, archive
+            run_record.failed, graph, _reading(thread), tools.CALL_BUDGET, archive
         )
         raise
 

@@ -45,13 +45,13 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 
-from trainer import agent
+from trainer import tools
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
@@ -512,6 +512,24 @@ def _prescribed(ran: Ran) -> set[str]:
 # -- running them -------------------------------------------------------------
 
 
+class Costed(Protocol):
+    """What the cost lines read off a run, whichever graph made it.
+
+    A protocol and not either suite's class, because this module is what both
+    report through: named as one of them, the other would be a union that
+    grows with every graph.
+    """
+
+    @property
+    def calls(self) -> list[Any]: ...
+
+    @property
+    def input_tokens(self) -> int: ...
+
+    @property
+    def output_tokens(self) -> int: ...
+
+
 @dataclass(frozen=True)
 class Outcome:
     """One run, and what held.
@@ -526,8 +544,8 @@ class Outcome:
     case: str
     attempt: int
     failures: tuple[tuple[str, str], ...] = ()
-    record: agent.Run | Ran | None = None
-    """One run of the graph here, one run of the logger's loop in
+    record: Costed | None = None
+    """One run of the planner graph here, one of the logger graph in
     `log_evaluation`. Both answer what this report reads of them -- the calls
     and the tokens -- and neither suite reads the other's."""
 
@@ -539,7 +557,7 @@ class Outcome:
     *failure* of any of them either, which is why the matrix gives it a column
     of its own rather than blanking the ones it says nothing about."""
 
-    also: tuple[agent.Run | Ran, ...] = ()
+    also: tuple[Costed, ...] = ()
     """Runs made to set this one up and not measured -- the plan that gets
     turned down, on the refusal situation. They hold no invariants and they
     are not counted towards the metric, but they were paid for, so they count
@@ -562,7 +580,7 @@ class Outcome:
         return self.error is None and not self.failures
 
     @property
-    def records(self) -> tuple[agent.Run | Ran, ...]:
+    def records(self) -> tuple[Costed, ...]:
         return (*self.also, *((self.record,) if self.record else ()))
 
 
@@ -670,7 +688,7 @@ def run(
     on: models.Chat,
     repetitions: int = REPETITIONS,
     records: Path | None = None,
-    budget: int = agent.CALL_BUDGET,
+    budget: int = tools.CALL_BUDGET,
 ) -> Report:
     """Every situation, every repetition, against the planner graph.
 

@@ -16,6 +16,8 @@ Every message the bot gets reaches `planning()`. You can write anything and you 
 - **What the entrance may not decide** (ADR-0006 item 4): not which workout is due, not whether a plan fits, and no training fact it did not get from a tool.
 - **`bot.Coach` is renamed.** It is the thread's turn-taking -- one run at a time, and the queue behind it -- and the word is needed for the node that coaches. `bot._Conversation` is that same turn-taking and keeps it; `runs.Conversation` was renamed to the negotiation in 01.
 - **`said` is what the entrance reads**, and `planner.starting()` goes on leaving it alone.
+- **The logger's two interrupts already carry the shape of their answer.** 02 made the payload say which kind it is: `{"kind": "clarify", "ask": ...}` is prose the user writes, and `{"kind": "exclusion", "ask": ..., "granularity": ..., "value": ..., "retest_date": ...}` is yes or no. The terminal reads that in `cli._answered`; the chat is where the closed one becomes two buttons. Resuming takes a string for the first and a bool for the second.
+- **02 left the run's beginning and ending in two copies after all.** `record.identity` and `record.closing` are shared, but each graph's `starting` and its `timed` wrapper are its own, and `turn` mints an identity for a run Studio started in both of them. Three small copies, and the entrance makes a fourth unless they come together first.
 
 ## Acceptance criteria
 

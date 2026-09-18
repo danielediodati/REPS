@@ -3,30 +3,54 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import StateSnapshot
 
 from trainer.coach.calls import answered
 from trainer.engine import home
+
+logger = logging.getLogger(__name__)
+
+
+class Graph(Protocol):
+    """The half of a compiled graph this module reads: where its live run got to.
+
+    A protocol rather than either graph's type, because both write their runs
+    here and neither is this module's to import.
+    """
+
+    def get_state(self, config: RunnableConfig) -> StateSnapshot: ...
 
 ARCHIVE_NAME = "runs"
 """The directory in the home the closed runs land in, one per negotiation."""
 
 ACCEPTED = "accepted"
 TURNED_DOWN = "turned down"
+DONE = "done"
+"""The run finished its work and there was nothing to accept or turn down.
+
+A report read and a document emitted is this: ADR-0007 names a run *one
+proposal pursued* because the only graph then was the planner, and a run of
+the logger pursues nothing -- the report is already a fact.
+"""
+
 REFUSED = "refused"
 """The validator refused every attempt the run had."""
 
 FAILED = "failed"
 """The run raised, and whoever caught it wrote the ending the node could not.
 
-These four are every way a run can finish. A run still waiting on an answer
-has no ending, and neither has one that was cut: where the reader found it is
-the reader's to derive (ADR-0007, item 7).
+These five are every way a run can finish. A run still waiting on an
+answer has no ending, and neither has one that was cut: where the reader found
+it is the reader's to derive (ADR-0007, item 7).
 """
 
 
@@ -45,6 +69,78 @@ def now() -> str:
     return datetime.now().astimezone().isoformat()
 
 
+def negotiation_id() -> str:
+    """A negotiation's name: when it was asked, and enough to tell two of them apart."""
+    return f"{datetime.now().astimezone():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
+
+
+def identity(negotiation: str, follows: str | None) -> dict[str, Any]:
+    """Who a run is: its name, the ask it belongs to, what it follows, and no ending yet.
+
+    Shared by every graph that writes runs, because a run is one thing
+    whatever produced it -- and a second copy of these six keys would be a
+    second answer to what a run is.
+    """
+    return {
+        "negotiation": negotiation,
+        "run": uuid4().hex[:8],
+        "follows": follows,
+        "began": now(),
+        "ended": "",
+        "ending": "",
+    }
+
+
+def closing(
+    state: Mapping[str, Any],
+    ending: str,
+    budget: int,
+    archive: Path | None,
+    **also: Any,
+) -> dict[str, Any]:
+    """This run is over: the ending is written the moment it happens.
+
+    Returns what the node contributes to the state, so the live run agrees
+    with the document beside it. The closing node's own seconds are not in
+    that document, because it is written before the node returns -- which is
+    when the ending became true, and the alternative is a record that exists a
+    super-step after the thing it records.
+
+    `archive` of `None` keeps nothing, which is what a measurement passes: an
+    eval pass is dozens of runs nobody had, and in the home they would be the
+    history session 10 reads.
+    """
+    finished: dict[str, Any] = {"ending": ending, "ended": now(), **also}
+    if archive is not None and state.get("run"):
+        keep({**state, **finished}, budget, archive)
+    return finished
+
+
+def failed(
+    graph: Graph,
+    config: RunnableConfig,
+    budget: int,
+    archive: Path | None = None,
+) -> None:
+    """The run an exception left behind, ended as fallen over.
+
+    A node cannot write after it has raised, so whoever catches the exception
+    writes the ending for it (ADR-0007, item 1). Never at the cost of the
+    exception itself: a failure to write the document is logged and swallowed,
+    because the caller is already on its way to telling the user something
+    went wrong.
+    """
+    if archive is None:
+        return
+    try:
+        state = graph.get_state(config).values
+        if not state.get("run") or state.get("ending"):
+            return
+        keep({**state, "ending": FAILED, "ended": now()}, budget, archive)
+    except Exception:
+        logger.exception("the run that fell over could not be written down")
+
+
 def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
     """The run record, derived from the graph's own state rather than kept alongside it.
 
@@ -55,6 +151,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
     """
     messages: Sequence[AnyMessage] = state.get("messages", ())
     emitted = state.get("plan")
+    document = state.get("document")
     return {
         "negotiation": str(state.get("negotiation", "")),
         "run": str(state.get("run", "")),
@@ -77,7 +174,9 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         "spent": int(state.get("spent", 0)),
         "budget": int(state.get("budget", budget)),
         "nodes": [_node(entry) for entry in state.get("timings", ())],
+        "questions": [list(said) for said in state.get("questions", ())],
         "plan": None if emitted is None else emitted.model_dump(),
+        "performed": None if document is None else document.model_dump(),
         "workout": state.get("workout"),
     }
 
@@ -125,6 +224,9 @@ def summary(record: Mapping[str, Any]) -> list[str]:
     attempts = len(record.get("attempts", ()))
     if attempts > 1:
         lines.append(f"  {attempts} attempts; the validator refused the earlier ones")
+    asked = len(record.get("questions", ()))
+    if asked:
+        lines.append(f"  {asked} question(s) asked")
     counted = record.get("tokens", {"input": 0, "output": 0})
     lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
     spent_on = _seconds(record)

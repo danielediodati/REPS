@@ -16,7 +16,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 from uuid import uuid4
 
 import click
@@ -26,14 +26,23 @@ from langgraph.types import Command
 
 from trainer import (
     __version__,
-    agent,
     evaluation,
     log,
     log_evaluation,
     log_set,
     plan,
+    tools,
 )
-from trainer.coach import bot, checkpoints, logfile, memory, models, planner, runs
+from trainer.coach import (
+    bot,
+    checkpoints,
+    logfile,
+    logger,
+    memory,
+    models,
+    planner,
+    runs,
+)
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -129,7 +138,7 @@ def reported() -> Iterator[None]:
         raise click.ClickException(str(error)) from error
     except plan.PlanError as error:
         raise click.ClickException(str(error)) from error
-    except agent.AgentError as error:
+    except models.ModelError as error:
         # No credentials, or the provider refusing the request. A state the
         # user can act on, not a failure of the plan they asked for.
         raise click.ClickException(str(error)) from error
@@ -634,7 +643,7 @@ somebody's notes does.
     "call_budget",
     metavar="N",
     type=click.IntRange(min=1),
-    default=agent.CALL_BUDGET,
+    default=tools.CALL_BUDGET,
     show_default=True,
     help="Tool calls each run may make before it is asked to emit anyway.",
 )
@@ -735,16 +744,23 @@ def _log_suite(
     wrong workout, a volume figure its own document does not produce. Thirty
     agent runs cost minutes and money, and every one of them measures nothing
     if the set and the catalog disagree.
+
+    Then the provider, and only then, for the reason the plan suite checks it
+    at all: a key nobody set is a precondition with a fix, not thirty rows of
+    *not run* under a matrix of dashes. After the set, because a set that
+    disagrees with the catalog is worth saying on a machine with no key.
     """
     holds = log_set.load()
     _refuse(log_evaluation.missing(connection, holds))
     chosen = _chosen(holds.rows, only, "report")
     with log_evaluation.prepared(connection, holds) as where:
         _refuse(log_evaluation.verify(where, holds))
+        on = models.chat()
+        models.ready(on)
         report = log_evaluation.run(
             where,
             chosen,
-            build=lambda: agent.groq(agent.LOGGER),
+            on=on,
             repetitions=repetitions,
             records=records,
             budget=call_budget,
@@ -925,7 +941,7 @@ def runs_show(name: str, as_json: bool) -> None:
         click.echo(
             f"{found.live.run}  {runs.moment(found.live.moved)}  {found.outcome}"
         )
-        for said in run_record.summary(runs.of(found.live, agent.CALL_BUDGET)):
+        for said in run_record.summary(runs.of(found.live, tools.CALL_BUDGET)):
             click.echo(said)
 
 
@@ -935,7 +951,7 @@ def _documents(found: runs.Negotiation, one: runs.Run | None) -> str:
         return run_record.document(one.document)
     held: list[Mapping[str, object]] = [written.document for written in found.runs]
     if found.open and found.live is not None:
-        held.append(runs.of(found.live, agent.CALL_BUDGET))
+        held.append(runs.of(found.live, tools.CALL_BUDGET))
     return json.dumps(held, indent=1)
 
 
@@ -1141,7 +1157,7 @@ def admissible_command(
     "call_budget",
     metavar="N",
     type=click.IntRange(min=1),
-    default=agent.CALL_BUDGET,
+    default=tools.CALL_BUDGET,
     show_default=True,
     help="Tool calls the model may make before it is asked to emit anyway.",
 )
@@ -1365,7 +1381,7 @@ def _asked(
             if not refused:
                 final = graph.invoke(Command(resume=planner.accepted()), thread)
         except Exception:
-            planner.failed(graph, thread, budget=call_budget, archive=archive)
+            run_record.failed(graph, thread, call_budget, archive)
             raise
         finally:
             if record_path is not None:
@@ -1384,7 +1400,7 @@ def _asked(
 
 
 def _copied(
-    graph: planner.Planner, thread: RunnableConfig, archive: Path, where: Path
+    graph: run_record.Graph, thread: RunnableConfig, archive: Path, where: Path
 ) -> None:
     """The run's own document, put where `--record` asked for it.
 
@@ -1449,7 +1465,7 @@ def _recorded(
     "call_budget",
     metavar="N",
     type=click.IntRange(min=1),
-    default=agent.CALL_BUDGET,
+    default=tools.CALL_BUDGET,
     show_default=True,
     help="Tool calls the model may make before it is asked to emit anyway.",
 )
@@ -1501,45 +1517,43 @@ def log_command(
         _require_enrichment(connection)
         with reported():
             if source is not None:
-                performed = log.parse(source.read_text(encoding="utf-8"))
+                final = _by_hand(connection, source, today)
                 trailer: list[str] = []
             else:
-                performed, trailer = _read(
-                    connection, said, today, call_budget, record_path
-                )
-
-            log.validate(connection, performed, today)
-            blocks = log.to_performed(connection, performed)
-            # The flags are read off `blocks` rather than off the document,
-            # because `blocks` is what gets written: adherence fills in what
-            # the report did not mention, and an exercise filled in that way
-            # is as much a performed exercise as one the user named.
-            flagged = log.flags(connection, performed, blocks, today)
+                final, trailer = _read(connection, said, today, call_budget, record_path)
 
             # Printed before it is written, for the reason `trainer plan`
             # gives: a database that cannot be written to is worth an error,
             # and it is not worth throwing away what the user reported in
             # order to report one.
-            for line in log.render(connection, performed, blocks, flagged):
+            document = final["document"]
+            blocks = log.to_performed(connection, document)
+            # The flags are read off `blocks` rather than off the document,
+            # because `blocks` is what gets written: adherence fills in what
+            # the report did not mention, and an exercise filled in that way is
+            # as much a performed exercise as one the user named.
+            flagged = log.flags(connection, document, blocks, today)
+            for line in log.render(connection, document, blocks, flagged):
                 click.echo(_ascii(line))
             for line in trailer:
                 click.echo(_ascii(line))
 
-            exclusion, retest_date = log.proposed(connection, performed)
-            if exclusion is not None and source is None:
-                assert retest_date is not None  # `proposed` pairs both or neither
-                if not _confirmed(exclusion, retest_date):
-                    exclusion, retest_date = None, None
+            logger.performed(connection, final, blocks)
 
-            workouts.record_performed(
-                connection,
-                blocks,
-                on=today,
-                report=performed.report,
-                workout_id=performed.workout_id,
-                exclusion=exclusion,
-                retest_date=retest_date,
-            )
+
+def _by_hand(
+    connection: sqlite3.Connection, source: Path, today: str
+) -> dict[str, Any]:
+    """A document written by hand, in the shape a run of the logger would have left.
+
+    The same validator and the same writer, reached without a model. The
+    author's own proposal stands unasked: confirming the line you just typed
+    is noise, and the confirmation exists because a *model* read an exclusion
+    out of a passing remark.
+    """
+    performed = log.parse(source.read_text(encoding="utf-8"))
+    log.validate(connection, performed, today)
+    return {"document": performed, "today": today, "confirmed": True}
 
 
 def _read(
@@ -1548,41 +1562,69 @@ def _read(
     today: str,
     call_budget: int,
     record_path: Path | None,
-) -> tuple[log.PerformedWorkout, list[str]]:
-    """One logging run: the document the model emitted, and how it went.
-
-    The record is written *before* a refusal is raised, on purpose: it is what
-    you open to find out why the model emitted what it did, and a refusal is
-    exactly the case you want it for.
+) -> tuple[dict[str, Any], list[str]]:
+    """One run of the logger graph: what it understood, and how it went.
 
     Which workout is open is resolved here and put in the brief. Which workout
     the report is *about* is not: a user who trained something else entirely
     says so in the sentence, and the sentence is the model's to read.
 
-    **The model is built before the report is asked for.** No credentials, or
-    a backend nobody built, is a state that is knowable before anything is
-    typed -- and prompting first means the user writes out their whole workout
-    and then loses it to an error that was already true.
+    **The provider is checked before the report is asked for.** No
+    credentials, a model the provider does not serve, a server that is not
+    running: all knowable before anything is typed, and prompting first means
+    the user writes out their whole workout and then loses it to an error that
+    was already true.
+
+    The record is written whichever way the run goes, and *before* a refusal
+    is raised: it is what you open to find out why the model emitted what it
+    did, and a refusal is exactly the case you want it for.
     """
-    model = agent.groq(agent.LOGGER)
+    on = models.chat()
+    models.ready(on)
     if not said:
         said = str(click.prompt("What did you do", type=str))
     open_workout = workouts.awaiting(connection)
-    record = agent.log_workout(
-        connection,
-        said,
-        today,
-        model=model,
-        ask=_ask,
-        awaiting=None if open_workout is None else open_workout.id,
-        prescribed_on=None if open_workout is None else open_workout.prescribed_on,
-        budget=call_budget,
-    )
-    if record_path is not None:
-        record_path.write_text(record.model_dump_json(indent=1), encoding="utf-8")
-    if record.refused is not None:
-        raise click.ClickException(record.refused)
-    return record.document, ["", *agent.summary(record)]
+    archive = run_record.archive()
+    with checkpoints.saver() as saver:
+        graph = logger.build(
+            on, budget=call_budget, checkpointer=saver, archive=archive
+        )
+        thread: RunnableConfig = {"configurable": {"thread_id": f"log:{uuid4()}"}}
+        given: Any = logger.starting(
+            said,
+            today,
+            awaiting=None if open_workout is None else open_workout.id,
+            prescribed_on=None if open_workout is None else open_workout.prescribed_on,
+        )
+        try:
+            while True:
+                final = graph.invoke(given, thread)
+                waiting = final.get("__interrupt__")
+                if not waiting:
+                    break
+                given = Command(resume=_answered(waiting[0].value))
+        except Exception:
+            run_record.failed(graph, thread, call_budget, archive)
+            raise
+        finally:
+            if record_path is not None:
+                _copied(graph, thread, archive, record_path)
+
+    if final["refused"] is not None:
+        raise click.ClickException(final["refused"])
+    return final, ["", *run_record.summary(run_record.of(final, call_budget))]
+
+
+def _answered(question: Mapping[str, Any]) -> str | bool:
+    """One question from the graph, put to whoever is at the terminal.
+
+    Open or closed is the graph's to say, not this door's: the same payload
+    reaches the chat, where the closed one is two buttons and the open one is
+    a message to reply to.
+    """
+    if question.get("kind") == logger.EXCLUSION:
+        return _confirmed(question)
+    return _ask(str(question.get("ask", "")))
 
 
 TYPOGRAPHY = {
@@ -1642,7 +1684,7 @@ def _ask(question: str) -> str:
             return answer
 
 
-def _confirmed(exclusion: exclusions.Exclusion, retest_date: str) -> bool:
+def _confirmed(question: Mapping[str, Any]) -> bool:
     """Whether the exclusion the model proposed is actually written.
 
     Asked only on the model path. A document given with `--from` carries the
@@ -1654,11 +1696,12 @@ def _confirmed(exclusion: exclusions.Exclusion, retest_date: str) -> bool:
     Declining writes the workout and no exclusion. The report keeps the user's
     words either way, so the remark that prompted it is still on the row.
     """
+    click.echo(_ascii(str(question.get("ask", ""))))
     return bool(
         click.confirm(
             _ascii(
-                f"Stop prescribing {exclusion.granularity} '{exclusion.value}' "
-                f"until {retest_date}?"
+                f"Stop prescribing {question['granularity']} "
+                f"'{question['value']}' until {question['retest_date']}?"
             ),
             default=False,
         )

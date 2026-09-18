@@ -9,7 +9,7 @@ between the two phases and nothing that overwrites one of them can still
 compute it.
 
 **Only the CLI commands call these writers, and they call them from the
-command.** Not from `plan.py`, not from `log.py`, not from `agent.py`:
+command.** Not from `plan.py`, not from `log.py`, not from a graph:
 `trainer eval` runs eighteen agent loops against the project database, and a
 plan that persisted from inside the agent would write eighteen phantom
 prescribed workouts into the very state the measurement is taken from -- where

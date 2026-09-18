@@ -24,7 +24,7 @@ from telegram.error import InvalidToken, RetryAfter, TimedOut
 from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import enrich
-from trainer import agent
+from trainer import tools
 from trainer import plan as plans
 from trainer import tools
 from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, graph_of, plan_of
@@ -1633,5 +1633,5 @@ def test_a_run_from_the_chat_reads_back_afterwards(
     assert negotiation.outcome == runs.WAITING, "nobody has answered the plan"
     assert negotiation.live is not None
     assert negotiation.live.thread == bot.thread_for(CHAT)
-    written = runs.of(negotiation.live, agent.CALL_BUDGET)
+    written = runs.of(negotiation.live, tools.CALL_BUDGET)
     assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"

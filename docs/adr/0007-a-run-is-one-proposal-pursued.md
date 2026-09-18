@@ -28,6 +28,15 @@ Session 10 asks how many plans it takes before one is worth doing. Today the evi
 - **The checkpointer is a live-state mechanism, not an archive.** Ticket 8.3 already had to guard against its serializer refusing to read back what it had written. An archive in a format we do not own is one upgrade away from being unreadable, and it is the user's own history.
 - **The reader is used when the provider is what is wrong.** Reading the interrupt state through `graph.get_state` would make `trainer runs` need a configured model to tell you why the model could not be reached.
 
+## Amended in session 9
+
+**A run is one thing pursued, and a proposal is only one kind.** The logger
+became the second subgraph, and a run of it reads one report into a document:
+it pursues nothing and there is nothing to accept or turn down. It ends
+`done`, the fifth ending, and everything else here holds unchanged — it is
+written the moment it happens, it leaves a document in the archive, and where
+the reader found it stays the reader's to derive.
+
 ## Consequences
 
 - **`record.Run` goes.** The model, provider and budget carried in the run's config were the identity of a run answered by one model; the model belongs to the node that did the work and goes in the record's node entries.

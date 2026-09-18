@@ -22,7 +22,6 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
@@ -30,7 +29,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 from pydantic import TypeAdapter
 
-from trainer import agent, tools
+from trainer import tools
 from trainer import plan as plans
 from trainer.coach import models
 from trainer.coach import record as records
@@ -56,7 +55,7 @@ like 22/45, which JSON has no way to represent."""
 Observed twice on Ollama in one evening, from different causes: a tool call
 carrying `{"chest": 22/45}`, which JSON has no arithmetic for, and a tool call
 truncated by a context too small to finish it. Both are the model getting it
-wrong, which is the case `agent.execute` exists for -- but the provider
+wrong, which is the case `tools.execute` exists for -- but the provider
 refuses them before any of our code sees a call, so the recovery it offers
 never comes into play and a run of several minutes is simply lost.
 """
@@ -88,7 +87,7 @@ volume and adherence, and those it already has.
 **Named, not derived by subtracting one name from `tools.TOOLS`.** Written that
 way this was the one place a tool could arrive without anybody deciding it
 should: rename the excluded tool and the planner silently gains it, with
-`agent.registered`'s guard -- which only checks the names that are *asked* for
+`tools.registered`'s guard -- which only checks the names that are *asked* for
 -- unable to say a word.
 """
 
@@ -248,7 +247,7 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
             request.groups,
         )
     ]
-    schema = agent.strict_schema(plans.WorkoutPlan)
+    schema = tools.strict_schema(plans.WorkoutPlan)
 
     def restrict(node: Any) -> None:
         if isinstance(node, dict):
@@ -388,7 +387,7 @@ Planner = CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]
 
 def build(
     on: models.Chat,
-    budget: int = agent.CALL_BUDGET,
+    budget: int = tools.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
 ) -> Planner:
@@ -400,27 +399,16 @@ def build(
     history session 10 is supposed to read.
     """
     model = on.model
-    offered = agent.registered("planner", TOOLS)
+    offered = tools.registered("planner", TOOLS)
 
-    def closed(state: PlannerState | dict[str, Any], ending: str, **also: Any) -> dict[str, Any]:
-        """This run is over: the ending is written the moment it happens.
-
-        The closing node's own seconds are not in the document, because the
-        document is written before that node returns -- which is when the
-        ending became true, and the alternative is a record that exists a
-        super-step after the thing it records.
-        """
-        finished: dict[str, Any] = {
-            "ending": ending,
-            "ended": records.now(),
-            **also,
-        }
-        if archive is not None and state.get("run"):
-            records.keep({**state, **finished}, budget, archive)
-        return finished
+    def closed(
+        state: PlannerState | dict[str, Any], ending: str, **also: Any
+    ) -> dict[str, Any]:
+        """This run is over, written where both graphs write theirs."""
+        return records.closing(state, ending, budget, archive, **also)
 
     definitions = [
-        {"type": "function", "function": agent.schema(tool)} for tool in offered
+        {"type": "function", "function": tools.schema(tool)} for tool in offered
     ]
 
     def turn(state: PlannerState) -> dict[str, Any]:
@@ -496,8 +484,8 @@ def build(
         answers = []
         for call in reply.tool_calls:
             call_id = answered(call)
-            result = agent.execute(
-                agent.Call(id=call_id, name=call["name"], arguments=call["args"]),
+            result = tools.execute(
+                tools.Call(id=call_id, name=call["name"], arguments=call["args"]),
                 offered,
                 KEEPS,
             )
@@ -676,33 +664,6 @@ def build(
     )
     graph.add_edge("prescribe", END)
     return graph.compile(checkpointer=checkpointer)
-
-
-def failed(
-    graph: Planner,
-    config: RunnableConfig,
-    budget: int = agent.CALL_BUDGET,
-    archive: Path | None = None,
-) -> None:
-    """The run an exception left behind, ended as fallen over.
-
-    A node cannot write after it has raised, so whoever catches the exception
-    writes the ending for it (ADR-0007, item 1). Never at the cost of the
-    exception itself: a failure to write the document is logged and swallowed,
-    because the caller is already on its way to telling the user something
-    went wrong.
-    """
-    if archive is None:
-        return
-    try:
-        state = graph.get_state(config).values
-        if not state.get("run") or state.get("ending"):
-            return
-        records.keep(
-            {**state, "ending": records.FAILED, "ended": records.now()}, budget, archive
-        )
-    except Exception:
-        logger.exception("the run that fell over could not be written down")
 
 
 def studio() -> Planner:

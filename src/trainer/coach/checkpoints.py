@@ -14,6 +14,7 @@ from langgraph.checkpoint.serde._msgpack import SAFE_MSGPACK_TYPES
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+from trainer import log as logs
 from trainer import plan as plans
 from trainer.engine import database, home
 from trainer.engine.exclusions import Exclusion
@@ -40,6 +41,7 @@ DECLARED: tuple[type, ...] = (
     plans.Refusal,
     plans.Violation,
     plans.WorkoutPlan,
+    logs.PerformedWorkout,
     Exclusion,
 )
 """The types of ours a checkpoint holds, declared so they can be read back.
@@ -51,7 +53,7 @@ somewhere downstream, saying nothing about serialization. Declared, the
 serializer is explicit both ways, and strict about everything else.
 
 `PlannerState` holds a `Request`, a tuple of `Violation`s per refusal and a
-`WorkoutPlan`. `Exclusion` and `Refusal` travel *inside* the request -- `turn`
+`WorkoutPlan`; `LoggerState` holds a `PerformedWorkout`. `Exclusion` and `Refusal` travel *inside* the request -- `turn`
 folds today's standing exclusions into it before the model is called, and
 every plan the negotiation turned down rides in it from ADR-0007 on -- and a
 dataclass keeps its field values as objects rather than flattening them.

@@ -69,7 +69,7 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 | `ollama` (default) | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
 
-An unreachable server, a model nobody pulled and a missing key are each reported as a state with the command that fixes it. `trainer log` stays on Groq until session 9 whatever `LLM_BACKEND` names, so it needs `GROQ_API_KEY` either way.
+An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks the provider and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
@@ -82,24 +82,23 @@ The log says why a run stopped; `trainer runs` says what it was doing. `trainer 
 ## Development
 
 ```sh
-uv run pytest    # offline: conftest.py removes sockets and credentials
-uv run mypy      # strict
-uv run langgraph dev                  # the planner graph in LangGraph Studio
+uv run pytest       # offline: conftest.py removes sockets and credentials
+uv run mypy         # strict
+uv run langgraph dev  # the planner and the logger in LangGraph Studio
 ```
 
-In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`.
+In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`. The logger's is the report: `{"report": "panca bene, solo 3 serie di military", "today": "2026-09-18"}`.
 
 ## Layout
 
 ```
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
-  coach/      the LangGraph agent: the planner graph, the Telegram bot, the checkpointer and the run records
+  coach/      the LangGraph agent: the planner and logger graphs, the Telegram bot, the checkpointer and the run archive
   data/       vendored catalog, muscle-group mapping, config example
-  tools.py    the tool surface, shared by the agent and the MCP server
+  tools.py    the tool surface and how a model calls it, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer
   log.py      the report's shape and validator
-  agent.py    the old tool loop, kept for `trainer log` until session 9
 docs/
   adr/        decisions
   enrichment/ vocabulary definitions and hand-decided rows, read by the code
