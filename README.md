@@ -14,7 +14,7 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 - one directory for everything the machine writes, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation;
 - a rotating log the bot owns, holding every state and every exception and never the token or the owner id, named by the two chat lines that point at it;
 - a checkpointer that declares the types it writes, so the threads on disk survive the LangGraph version that stops constructing undeclared ones;
-- `trainer runs list` and `trainer runs show`, which read a run back off the checkpointer: what it called, what the validator refused, what it cost, and for one cut mid-flight what it had reached.
+- `trainer runs list` and `trainer runs show`, which read a run back: what it called, what the validator refused, what it cost, and for one cut mid-flight what it had reached.
 
 Every message still asks for today's workout: the entrance that talks is session 9 (ADR-0006).
 
@@ -58,8 +58,8 @@ uv run trainer state
 uv run trainer eval --suite plan                              # or --suite log
 uv run trainer mcp                                            # the engine's tools over MCP
 uv run trainer bot                                            # answer Telegram, the owner only
-uv run trainer runs list                                      # the conversations the checkpointer holds
-uv run trainer runs show chat:123456                          # what that run called, spent and reached
+uv run trainer runs list                                      # every negotiation, and what it came to
+uv run trainer runs show 20260918-190412-3f9a                 # its runs: what each called, spent and reached
 ```
 
 **Choosing the provider.** `trainer plan` and `trainer eval --suite plan` run the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
@@ -75,7 +75,9 @@ An unreachable server, a model nobody pulled and a missing key are each reported
 
 **Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records. `trainer bot` also writes `trainer.log` there, rotated at a megabyte and four files deep, holding every state and every exception and never the token or the owner id. It has no override, because the chat names it by name when a run cannot start or falls over.
 
-**A run that stopped can be read back.** The log says why it stopped; `trainer runs` says what it was doing. `trainer runs list` names every conversation in the checkpointer with when it last moved and whether it ended with a plan, a refusal or nothing; `trainer runs show THREAD` prints that run's record — the tools it called, the attempts the validator refused, the tokens, the seconds each node cost — and `--json` gives the whole thing, the same document `trainer plan --record` writes. A run cut mid-flight reads back at the last checkpoint it reached, with no outcome invented for it.
+**Every run can be read back.** A *run* is one proposal pursued, from the request being assembled to your answer; turning a plan down ends it and the plan that follows belongs to another. One ask and all its runs are a *negotiation* (ADR-0007). A run that ends is written into `runs/` in the home the moment it ends, so the evidence of an evening survives the checkpointer, which keeps only the run that is alive.
+
+The log says why a run stopped; `trainer runs` says what it was doing. `trainer runs list` names every negotiation with when it last moved, how many runs it took and what it came to — accepted, turned down, refused by the validator, fallen over, *cut*, or *waiting since* the day it asked. `trainer runs show NAME` takes a negotiation or one of its runs and prints each one's record: the tools it called, the attempts the validator refused, the tokens, the seconds each node cost, and the words you turned it down with. `--json` gives the documents whole, which is what `trainer plan --record` copies. It reads documents and nothing else — no provider, no graph, no model — because it is the tool you reach for when the provider is what is wrong.
 
 ## Development
 

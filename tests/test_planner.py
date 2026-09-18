@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from conftest import enrich, make_exercise
 from trainer import agent, tools
 from trainer import plan as plans
-from trainer.coach import checkpoints, planner, record
+from trainer.coach import checkpoints, models, planner, record
 from trainer.engine import catalog, database, exclusions, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
@@ -48,6 +48,19 @@ PATTERNS = {
 }
 
 BARBELL_45 = plans.Request(equipment=("barbell",), budget_min=45)
+
+SCRIPTED = "scripted"
+STAND_IN = "a-stand-in"
+
+
+def graph_of(model: BaseChatModel, **built: Any) -> planner.Planner:
+    """The planner graph on a scripted model, named the way a real one is.
+
+    `build` takes the model with its name and its provider, because the record
+    writes them per node, and every test here would otherwise repeat the same
+    three-field wrapper around a stand-in.
+    """
+    return planner.build(models.Chat(model, SCRIPTED, STAND_IN), **built)
 
 
 @pytest.fixture()
@@ -148,7 +161,7 @@ def test_a_turn_with_no_tool_call_goes_to_emit(connection: sqlite3.Connection) -
         documents=[plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["plan"] == plan_of("Barbell_Squat")
     assert final["violations"] == ()
@@ -170,7 +183,7 @@ def test_a_tool_call_is_answered_before_the_planner_turns_again(
         documents=[plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     answered = model.seen[1][-1]
     assert isinstance(answered, ToolMessage)
@@ -187,7 +200,7 @@ def test_a_spent_call_budget_goes_to_emit(connection: sqlite3.Connection) -> Non
         documents=[plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model, budget=1).invoke({"request": BARBELL_45})
+    final = graph_of(model, budget=1).invoke({"request": BARBELL_45})
 
     assert len(model.seen) == 1
     assert final["spent"] == 1
@@ -205,7 +218,7 @@ def test_a_run_that_spends_the_whole_default_budget_still_emits(
         documents=[plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["spent"] == agent.CALL_BUDGET
     assert final["plan"] == plan_of("Barbell_Squat")
@@ -222,7 +235,7 @@ def test_a_run_that_spends_the_budget_and_every_attempt_still_ends(
         documents=[plan_of("Dumbbell_Bench_Press")] * planner.ATTEMPTS,
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["attempts"] == planner.ATTEMPTS
     assert final["violations"]
@@ -236,7 +249,7 @@ def test_a_refusal_goes_back_to_the_planner_with_the_validators_message(
         documents=[plan_of("Dumbbell_Bench_Press"), plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     feedback = model.seen[1][-1]
     assert isinstance(feedback, HumanMessage)
@@ -263,7 +276,7 @@ def test_a_plan_that_breaks_two_rules_gets_both_back_in_one_message(
         ],
     )
 
-    final = planner.build(model).invoke({"request": request})
+    final = graph_of(model).invoke({"request": request})
 
     fed_back = [
         message
@@ -279,7 +292,7 @@ def test_a_plan_that_breaks_two_rules_gets_both_back_in_one_message(
 def test_the_third_refusal_ends_the_run_as_refused(connection: sqlite3.Connection) -> None:
     model = Scripted(documents=[plan_of("Dumbbell_Bench_Press")] * 4)
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["attempts"] == 3
     assert [violation.rule for violation in final["violations"]] == [plans.ADMISSIBLE]
@@ -301,12 +314,12 @@ def test_the_record_holds_every_attempt_and_what_each_node_cost(
         documents=[plan_of("Dumbbell_Bench_Press"), plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
-    written = record.of(final, model="a-stand-in", provider="scripted")
+    final = graph_of(model).invoke({"request": BARBELL_45})
+    written = record.of(final, agent.CALL_BUDGET)
 
-    assert written["provider"] == "scripted"
-    assert written["model"] == "a-stand-in"
-    assert written["outcome"] == "valid"
+    assert "model" not in written, "the model belongs to the node that answered"
+    assert {node["model"] for node in written["nodes"]} == {STAND_IN}
+    assert {node["provider"] for node in written["nodes"]} == {SCRIPTED}
     assert [attempt["violations"] for attempt in written["attempts"]][0][0]["rule"] == (
         plans.ADMISSIBLE
     )
@@ -345,8 +358,8 @@ def test_a_failed_call_the_model_gave_no_id_is_recorded_as_failed(
         documents=[plan_of("Barbell_Squat")],
     )
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
-    written = record.of(final, model="a-stand-in", provider="scripted")
+    final = graph_of(model).invoke({"request": BARBELL_45})
+    written = record.of(final, agent.CALL_BUDGET)
 
     assert written["calls"][0]["failed"] is True
 
@@ -369,7 +382,7 @@ def test_a_finished_runs_state_is_read_back_by_its_thread_id(
     thread: RunnableConfig = {"configurable": {"thread_id": "one"}}
 
     with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
-        graph = planner.build(model, checkpointer=saver)
+        graph = graph_of(model, checkpointer=saver)
         graph.invoke({"request": BARBELL_45}, thread)
 
         assert graph.get_state(thread).values["plan"] == plan_of("Barbell_Squat")
@@ -395,7 +408,7 @@ def test_the_emit_schema_offers_exactly_todays_admissible_ids(
 ) -> None:
     model = Scripted(documents=[plan_of("Barbell_Squat")])
 
-    planner.build(model).invoke({"request": BARBELL_45})
+    graph_of(model).invoke({"request": BARBELL_45})
 
     enums = exercise_id_enums(model.schemas[0])
     assert enums
@@ -413,7 +426,7 @@ def test_the_emit_schema_leaves_out_what_a_persisted_exclusion_covers(
     connection.commit()
     model = Scripted(documents=[plan_of("Standing_Military_Press")])
 
-    planner.build(model).invoke({"request": BARBELL_45})
+    graph_of(model).invoke({"request": BARBELL_45})
 
     for enum in exercise_id_enums(model.schemas[0]):
         assert enum == ["Standing_Military_Press"]
@@ -424,7 +437,7 @@ def test_the_emit_schema_cannot_express_an_id_outside_todays_set(
 ) -> None:
     model = Scripted(documents=[plan_of("Barbell_Squat")])
 
-    planner.build(model).invoke({"request": BARBELL_45})
+    graph_of(model).invoke({"request": BARBELL_45})
 
     schema = model.schemas[0]
     jsonschema.validate(plan_of("Barbell_Squat").model_dump(), schema)
@@ -441,11 +454,11 @@ def test_an_emission_that_is_not_a_plan_at_all_is_refused_and_recorded_as_none(
     prescribed."""
     model = Scripted(raw=["I would start with squats."] * planner.ATTEMPTS)
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["plan"] is None
     assert [violation.rule for violation in final["violations"]] == [plans.SHAPE]
-    assert record.of(final, "a-stand-in", "scripted")["plan"] is None
+    assert record.of(final, agent.CALL_BUDGET)["plan"] is None
 
 
 def test_a_plan_the_block_vocabulary_cannot_express_is_refused_on_shape(
@@ -472,7 +485,7 @@ def test_a_plan_the_block_vocabulary_cannot_express_is_refused_on_shape(
     )
     model = Scripted(documents=[uncostable] * planner.ATTEMPTS)
 
-    final = planner.build(model).invoke({"request": BARBELL_45})
+    final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert [violation.rule for violation in final["violations"]] == [plans.SHAPE]
     assert final["plan"] == uncostable, "the plan is still recorded whole"
@@ -815,22 +828,48 @@ def test_the_refused_plan_and_the_reason_reach_the_model() -> None:
     request = plans.Request(
         equipment=("barbell",),
         budget_min=45,
-        refused=plan_of("Barbell_Squat"),
-        because="I do not feel like squatting",
+        refusals=plans.turned_down(
+            (), plan_of("Barbell_Squat"), "I do not feel like squatting"
+        ),
     )
 
     written = planner.brief(request)
 
-    assert "turned it down" in written
+    assert "turned each one down" in written
     assert "Barbell_Squat" in written
     assert "I do not feel like squatting" in written
     assert "do not give up" in written
 
 
+def test_the_brief_carries_every_refusal_of_the_negotiation() -> None:
+    """The last one whole, the ones before it as the exercises they named
+    (ADR-0007, item 4). One step of memory is not memory: with only the newest
+    kept, the first plan of the evening can be offered again."""
+    refusals: tuple[plans.Refusal, ...] = ()
+    for said, offered in (
+        ("troppo lunga", plan_of("Barbell_Squat")),
+        ("non mi va la panca", plan_of("Dumbbell_Bench_Press")),
+        ("basta spalle", plan_of("Standing_Military_Press")),
+    ):
+        refusals = plans.turned_down(refusals, offered, said)
+
+    written = planner.brief(
+        plans.Request(equipment=("barbell",), budget_min=45, refusals=refusals)
+    )
+
+    assert "You have proposed 3 workout(s)" in written
+    assert "Turned down: Barbell_Squat." in written
+    assert "Turned down: Dumbbell_Bench_Press." in written
+    assert "Turned down, in full:" in written
+    assert '"exercise_id": "Standing_Military_Press"' in written
+    for said in ("troppo lunga", "non mi va la panca", "basta spalle"):
+        assert said in written
+
+
 def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
     written = planner.brief(plans.Request(equipment=("barbell",), budget_min=45))
 
-    assert "turned it down" not in written
+    assert "turned each one down" not in written
     assert "rather not" not in written
 
 
@@ -839,7 +878,7 @@ def test_a_run_with_no_refusal_says_nothing_about_one() -> None:
 
 def waiting(model: BaseChatModel) -> tuple[planner.Planner, RunnableConfig]:
     """A graph that can pause, and the thread it pauses on."""
-    return planner.build(model, checkpointer=InMemorySaver()), {
+    return graph_of(model, checkpointer=InMemorySaver()), {
         "configurable": {"thread_id": "one"}
     }
 
@@ -1038,7 +1077,7 @@ def test_a_turn_the_provider_refuses_goes_back_to_the_model(
     the whole run -- minutes of it on Ollama -- is thrown away over a slash.
     """
     model = Refusing(documents=[plan_of("Barbell_Squat")])
-    graph = planner.build(model, checkpointer=InMemorySaver())
+    graph = graph_of(model, checkpointer=InMemorySaver())
 
     final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
 
@@ -1058,7 +1097,7 @@ def test_a_provider_that_keeps_refusing_ends_the_run(
     acceptable turn twice running will not on the third, and the minutes spent
     finding out are minutes the user is waiting."""
     model = Refusing(times=planner.REJECTIONS + 1, documents=[plan_of("Barbell_Squat")])
-    graph = planner.build(model, checkpointer=InMemorySaver())
+    graph = graph_of(model, checkpointer=InMemorySaver())
 
     with pytest.raises(RuntimeError, match="error parsing tool call"):
         graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
@@ -1074,7 +1113,7 @@ def test_the_brief_is_written_once_across_a_refusal(
     would mean the model planning against two briefs at once.
     """
     model = Refusing(documents=[plan_of("Barbell_Squat")])
-    graph = planner.build(model, checkpointer=InMemorySaver())
+    graph = graph_of(model, checkpointer=InMemorySaver())
 
     final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
 
@@ -1103,7 +1142,7 @@ def test_the_refusal_budget_is_consecutive_and_not_a_run_total(
             plan_of("Barbell_Squat"),         # the one that stands
         ],
     )
-    graph = planner.build(model, checkpointer=InMemorySaver())
+    graph = graph_of(model, checkpointer=InMemorySaver())
 
     final = graph.invoke({"request": BARBELL_45}, {"configurable": {"thread_id": "t"}})
 

@@ -637,13 +637,48 @@ def test_the_plan_that_was_refused_is_not_an_answer(
                            "prescription": {"unit": "reps", "amount": 8}}))
     again = plans.parse(text)
     request = plans.Request(
-        equipment=("barbell",), budget_min=45, refused=plans.parse(text)
+        equipment=("barbell",),
+        budget_min=45,
+        refusals=plans.turned_down((), plans.parse(text), "non mi va"),
     )
 
     (refused,) = plans.validate(connection, plans.to_blocks(again), request, again)
 
     assert refused.rule == plans.REFUSED
-    assert "just refused" in refused.says
+    assert "already turned down" in refused.says
+
+
+def test_the_first_plan_of_the_evening_is_still_refused_four_refusals_later(
+    connection: sqlite3.Connection,
+) -> None:
+    """One step of memory is not memory (ADR-0007, item 5). The negotiation
+    narrows the older refusals to their exercise ids, which is exactly what it
+    takes to recognise the first plan coming back round."""
+    text = document(block({"exercise_id": "Barbell_Squat",
+                           "prescription": {"unit": "reps", "amount": 8}}))
+    first = plans.parse(text)
+    refusals = plans.turned_down((), first, "troppo lunga")
+    for exercise, said in (
+        ("Dumbbell_Bench_Press", "non mi va la panca"),
+        ("Standing_Military_Press", "basta spalle"),
+        ("Barbell_Deadlift", "no"),
+    ):
+        refusals = plans.turned_down(
+            refusals,
+            plans.parse(
+                document(block({"exercise_id": exercise,
+                                "prescription": {"unit": "reps", "amount": 8}}))
+            ),
+            said,
+        )
+    request = plans.Request(
+        equipment=("barbell",), budget_min=45, refusals=refusals
+    )
+    again = plans.parse(text)
+
+    violations = plans.validate(connection, plans.to_blocks(again), request, again)
+
+    assert [violation.rule for violation in violations] == [plans.REFUSED]
 
 
 def test_a_different_plan_after_a_refusal_passes(
@@ -659,7 +694,11 @@ def test_a_different_plan_after_a_refusal_passes(
         document(block({"exercise_id": "Barbell_Squat",
                         "prescription": {"unit": "reps", "amount": 5}}, rounds=5))
     )
-    request = plans.Request(equipment=("barbell",), budget_min=45, refused=refused)
+    request = plans.Request(
+        equipment=("barbell",),
+        budget_min=45,
+        refusals=plans.turned_down((), refused, "non mi va"),
+    )
 
     assert plans.validate(connection, plans.to_blocks(offered), request, offered) == ()
 

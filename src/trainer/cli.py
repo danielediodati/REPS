@@ -10,8 +10,9 @@ decides how a person should read it.
 
 from __future__ import annotations
 
+import json
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
@@ -21,7 +22,6 @@ from uuid import uuid4
 import click
 from click.core import ParameterSource
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from trainer import (
@@ -856,86 +856,102 @@ def bot_command() -> None:
 
 @main.group("runs")
 def runs_group() -> None:
-    """Read back what the planner did, off the checkpointer.
+    """Read back what the coach did: the negotiations it held, and how each one ended.
 
-    Every run leaves its whole state on disk, so a run that stopped -- because
-    the machine did, or because the validator refused it to the end -- can be
-    asked afterwards what it had reached. The log says why a run stopped; this
-    says what it was doing.
+    Documents in the home, written the moment a run ended, plus whichever run
+    the checkpointer is still carrying. Nothing here builds a graph or names a
+    model, so it answers with the provider unreachable -- which is the state
+    you reach for it in (ADR-0007, item 9).
     """
 
 
 @runs_group.command("list")
 def runs_list() -> None:
-    """List the conversations the checkpointer holds, most recently moved first."""
-    with reported(), _checkpointed() as saver:
-        held = runs.conversations(saver)
+    """List the negotiations, most recently moved first."""
+    with reported():
+        held = _negotiations()
     if not held:
         click.echo(
-            f"{checkpoints.checkpoints_path()} holds no conversation yet; "
-            "run `trainer plan` or `trainer bot` first"
+            f"{run_record.archive()} holds no negotiation yet; run `trainer "
+            "plan` or `trainer bot` first"
         )
         return
-    width = max(len(conversation.thread) for conversation in held)
-    for conversation in held:
-        click.echo(runs.line(conversation, width))
+    width = max(len(negotiation.negotiation) for negotiation in held)
+    for negotiation in held:
+        click.echo(runs.line(negotiation, width))
 
 
 @runs_group.command("show")
-@click.argument("thread")
+@click.argument("name")
 @click.option(
     "--json",
     "as_json",
     is_flag=True,
-    help="Print the whole record instead of the summary: every call with its "
-    "arguments, every violation, the plan.",
+    help="Print the whole document instead of the summary: every call with "
+    "its arguments, every violation, the plan.",
 )
-def runs_show(thread: str, as_json: bool) -> None:
-    """Print one conversation's run record, as `trainer plan --record` writes it.
+def runs_show(name: str, as_json: bool) -> None:
+    """Print a negotiation's runs, or one run of it, by name.
 
-    At the last checkpoint the thread reached, which for a run cut mid-flight
-    is where it was cut: the calls it had made, the attempts it had spent and
-    the nodes that finished.
+    A run with no document beside it is one that was cut, and it is printed
+    off the checkpointer from where it stopped: the calls it had made, the
+    attempts it had spent and the nodes that finished.
     """
-    with reported(), _checkpointed() as saver:
-        found = runs.read(saver, thread)
+    with reported():
+        held = _negotiations()
+    found = runs.named(held, name)
     if found is None:
         raise click.ClickException(
-            f"{checkpoints.checkpoints_path()} holds no conversation {thread}; "
-            "`trainer runs list` names the ones it has"
+            f"there is no negotiation or run named {name}; `trainer runs "
+            "list` names the ones there are"
         )
-    conversation, values = found
+    one = runs.run_named(found, name)
     if as_json:
-        click.echo(
-            run_record.document(
-                run_record.of(values, conversation.on.model, conversation.on.provider)
-            )
-        )
+        click.echo(_documents(found, one))
         return
-    click.echo(runs.line(conversation))
-    for line in run_record.summary(
-        values, conversation.on.model, conversation.on.provider, conversation.on.budget
-    ):
-        click.echo(line)
+    click.echo(runs.line(found))
+    for written in (one,) if one is not None else found.runs:
+        click.echo("")
+        said = written.document.get("because") or ""
+        click.echo(
+            f"{written.run}  {runs.moment(written.ended)}  {written.ending}"
+            + (f" -- {said}" if said else "")
+        )
+        for said in run_record.summary(written.document):
+            click.echo(said)
+    if one is None and found.open:
+        assert found.live is not None
+        click.echo("")
+        click.echo(
+            f"{found.live.run}  {runs.moment(found.live.moved)}  {found.outcome}"
+        )
+        for said in run_record.summary(runs.of(found.live, agent.CALL_BUDGET)):
+            click.echo(said)
 
 
-@contextmanager
-def _checkpointed() -> Iterator[SqliteSaver]:
-    """The checkpointer, opened to be read, and a state when nothing has written one.
+def _documents(found: runs.Negotiation, one: runs.Run | None) -> str:
+    """What `--json` prints: one run's document, or every document of a negotiation."""
+    if one is not None:
+        return run_record.document(one.document)
+    held: list[Mapping[str, object]] = [written.document for written in found.runs]
+    if found.open and found.live is not None:
+        held.append(runs.of(found.live, agent.CALL_BUDGET))
+    return json.dumps(held, indent=1)
 
-    Checked rather than opened blindly: `saver` creates the file, so a reader
-    pointed at the wrong home would make an empty one there and report it as a
-    history with nothing in it.
+
+def _negotiations() -> list[runs.Negotiation]:
+    """Every negotiation, from the archive and from whatever the checkpointer still holds.
+
+    The checkpointer is opened only if it is already there: `saver` creates
+    the file, so a reader pointed at the wrong home would make an empty one
+    and report it as a history with nothing in it.
     """
+    closed = runs.kept(run_record.archive())
     path = checkpoints.checkpoints_path()
     if not path.exists():
-        raise click.ClickException(
-            f"there is no checkpointer at {path}; run `trainer plan` or "
-            "`trainer bot` first, or point "
-            f"{checkpoints.CHECKPOINTS_ENV} at the file you mean"
-        )
+        return runs.negotiations(closed, ())
     with checkpoints.saver() as saver:
-        yield saver
+        return runs.negotiations(closed, runs.live(saver))
 
 
 @main.command("config")
@@ -1337,32 +1353,57 @@ def _asked(
     on = models.chat()
     models.ready(on)
     with checkpoints.saver() as saver:
-        graph = planner.build(on.model, budget=call_budget, checkpointer=saver)
-        thread: RunnableConfig = run_record.on(
-            f"plan:{uuid4()}", run_record.Run(on.name, on.provider, call_budget)
+        archive = run_record.archive()
+        graph = planner.build(
+            on, budget=call_budget, checkpointer=saver, archive=archive
         )
-        final = graph.invoke({"request": request}, thread)
-
-        refused = final["violations"]
-        emitted = final["plan"]
+        thread: RunnableConfig = {"configurable": {"thread_id": f"plan:{uuid4()}"}}
         try:
+            final = graph.invoke(planner.starting(request), thread)
+            refused = final["violations"]
+            emitted = final["plan"]
             if not refused:
                 final = graph.invoke(Command(resume=planner.accepted()), thread)
+        except Exception:
+            planner.failed(graph, thread, budget=call_budget, archive=archive)
+            raise
         finally:
             if record_path is not None:
-                record_path.write_text(
-                    run_record.written(final, on.name, on.provider), encoding="utf-8"
-                )
+                _copied(graph, thread, archive, record_path)
         if refused:
             raise click.ClickException(plan.refusal(refused))
         assert emitted is not None, "a run with no violations emitted a plan"
+        written = run_record.of(final, call_budget)
 
     blocks = plan.to_blocks(emitted)
     return emitted, [
         *plan.render(connection, emitted, blocks, request.budget_min),
         "",
-        *run_record.summary(final, on.name, on.provider, call_budget),
+        *run_record.summary(written),
     ]
+
+
+def _copied(
+    graph: planner.Planner, thread: RunnableConfig, archive: Path, where: Path
+) -> None:
+    """The run's own document, put where `--record` asked for it.
+
+    Copied out of the archive rather than derived a second time, so the two
+    files are the same bytes: a record written twice is two answers to one
+    question, and the second one drifts.
+    """
+    try:
+        values = graph.get_state(thread).values
+    except Exception:
+        # This runs in a `finally`, and a checkpointer that cannot be read is
+        # already the reason the run is ending: raised from here it would
+        # replace the exception that says so with one about a record.
+        return
+    held = run_record.path_of(
+        archive, str(values.get("negotiation", "")), str(values.get("run", ""))
+    )
+    if held.exists():
+        where.write_text(held.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def _recorded(

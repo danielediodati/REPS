@@ -1,102 +1,68 @@
-"""One run of the planner graph, as JSON: what it called, what was refused, what it cost."""
+"""A closed run as a document: how it ended, what it called, what was refused, what it cost."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
 
-from trainer import agent
 from trainer.coach.calls import answered
+from trainer.engine import home
 
-MODEL = "model"
-PROVIDER = "provider"
-BUDGET = "budget"
+ARCHIVE_NAME = "runs"
+"""The directory in the home the closed runs land in, one per negotiation."""
 
-UNKNOWN = "unknown"
-"""What a run that was checkpointed before `on` carried its identity is named by."""
-
+ACCEPTED = "accepted"
+TURNED_DOWN = "turned down"
 REFUSED = "refused"
-VALID = "valid"
+"""The validator refused every attempt the run had."""
 
-UNFINISHED = "unfinished"
-"""A run that never reached the validator: nothing refused it and it has no plan.
+FAILED = "failed"
+"""The run raised, and whoever caught it wrote the ending the node could not.
 
-The third outcome, and the one this vocabulary was missing. Without it a run
-cut mid-flight reads as `valid`, which is a plan claimed for a run that never
-emitted one.
+These four are every way a run can finish. A run still waiting on an answer
+has no ending, and neither has one that was cut: where the reader found it is
+the reader's to derive (ADR-0007, item 7).
 """
 
 
-@dataclass(frozen=True)
-class Run:
-    """Who answered a run, and inside what budget.
+def archive() -> Path:
+    """Where the closed runs live: the home's, unless a caller names another."""
+    return home.inside(ARCHIVE_NAME)
 
-    The three things the record needs that the graph's state does not hold.
-    They travel in the run's config, which is how `on` below puts them where a
-    later reader can find them.
+
+def now() -> str:
+    """This moment, in this machine's own time zone.
+
+    To the microsecond, because it is what orders the runs of one negotiation:
+    three plans turned down inside a minute are three runs, and to the second
+    they would sort by nothing.
     """
-
-    model: str
-    provider: str
-    budget: int
+    return datetime.now().astimezone().isoformat()
 
 
-def on(thread: str, run: Run) -> RunnableConfig:
-    """The config a run travels on: its thread, and who is answering it.
+def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
+    """The run record, derived from the graph's own state rather than kept alongside it.
 
-    LangGraph keeps every extra `configurable` key in each checkpoint's
-    metadata, so the model, the provider and the budget are on disk beside the
-    state without being part of it. That is what lets `trainer runs` report a
-    run it did not start -- asked of the model afterwards, the name and the
-    provider are two attributes on two classes, and the environment may have
-    named a different one since.
+    `budget` is what the run had, for a state that does not say -- a checkpoint
+    written before runs carried theirs. The run's own wins: `trainer plan
+    --call-budget 3` cut mid-flight is read back by a reader that was never
+    told, and *3 of 12 tool calls* would be a number about nobody's run.
     """
-    return {
-        "configurable": {
-            "thread_id": thread,
-            MODEL: run.model,
-            PROVIDER: run.provider,
-            BUDGET: run.budget,
-        }
-    }
-
-
-def ran(metadata: Mapping[str, Any]) -> Run:
-    """A run's identity, as a checkpoint's metadata kept it.
-
-    Forgiving of a checkpoint written before this was carried: those exist on
-    disk, and refusing to read them would take the whole history with them.
-    """
-    declared = metadata.get(BUDGET)
-    return Run(
-        model=str(metadata.get(MODEL, UNKNOWN)),
-        provider=str(metadata.get(PROVIDER, UNKNOWN)),
-        budget=int(declared) if isinstance(declared, int) else agent.CALL_BUDGET,
-    )
-
-
-def outcome(state: Mapping[str, Any]) -> str:
-    """Where a run got to: refused by the validator, holding a valid plan, or neither yet."""
-    if state.get("violations"):
-        return REFUSED
-    if not state.get("attempts"):
-        return UNFINISHED
-    return VALID
-
-
-def of(state: Mapping[str, Any], model: str, provider: str) -> dict[str, Any]:
-    """The run record, derived from the graph's own state rather than kept alongside it."""
     messages: Sequence[AnyMessage] = state.get("messages", ())
     emitted = state.get("plan")
     return {
-        "provider": provider,
-        "model": model,
-        "outcome": outcome(state),
+        "negotiation": str(state.get("negotiation", "")),
+        "run": str(state.get("run", "")),
+        "follows": state.get("follows"),
+        "began": str(state.get("began", "")),
+        "ended": str(state.get("ended", "")),
+        "ending": str(state.get("ending", "")),
+        "because": str(state.get("because", "")),
         "attempts": [
             {
                 "violations": [
@@ -108,56 +74,111 @@ def of(state: Mapping[str, Any], model: str, provider: str) -> dict[str, Any]:
         ],
         "calls": _calls(messages),
         "tokens": _tokens(messages),
-        "nodes": [
-            {"node": node, "seconds": round(seconds, 3)}
-            for node, seconds in state.get("timings", ())
-        ],
+        "spent": int(state.get("spent", 0)),
+        "budget": int(state.get("budget", budget)),
+        "nodes": [_node(entry) for entry in state.get("timings", ())],
         "plan": None if emitted is None else emitted.model_dump(),
+        "workout": state.get("workout"),
     }
 
 
-def written(state: Mapping[str, Any], model: str, provider: str) -> str:
-    """The record of one run, as a document."""
-    return document(of(state, model, provider))
-
-
 def document(record: Mapping[str, Any]) -> str:
-    """One record written down. The one definition of how, so that `--record` and the eval's files read alike."""
+    """One record written down. The one definition of how, so that the archive and `--record` read alike."""
     return json.dumps(record, indent=1)
 
 
-def summary(state: Mapping[str, Any], model: str, provider: str, budget: int) -> list[str]:
+def keep(state: Mapping[str, Any], budget: int, into: Path) -> Path:
+    """One closed run, written where it outlives the checkpointer (ADR-0007, item 6).
+
+    A file per run under a directory per negotiation: the grouping the reader
+    needs is the directory listing, so reading an evening back never means
+    opening every document the home holds.
+    """
+    written = of(state, budget)
+    path = path_of(into, written["negotiation"], written["run"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(document(written), encoding="utf-8")
+    return path
+
+
+def path_of(into: Path, negotiation: str, run: str) -> Path:
+    """Where one run's document lives."""
+    return into / negotiation / f"{run}.json"
+
+
+def summary(record: Mapping[str, Any]) -> list[str]:
     """The run in a few lines, for the terminal. ASCII.
 
     The attempts are said out loud because they are the thing session 6 added:
     a plan that was refused and fixed is a different run from one that passed
-    first time, and the record is the only other place that says so.
+    first time, and the document is the only other place that says so.
     """
-    messages: Sequence[AnyMessage] = state.get("messages", ())
-    spent = state.get("spent", 0)
+    budget = int(record.get("budget", 0))
+    spent = int(record.get("spent", 0))
     used = f"{spent} of {budget} tool calls"
-    if spent >= budget:
+    if budget and spent >= budget:
         used += " (budget spent; the plan was emitted with what it had)"
-    lines = [f"{model} on {provider} -- {used}"]
-    failed = sum(1 for call in _calls(messages) if call["failed"])
+    lines = [f"{_answered_by(record)} -- {used}"]
+    failed = sum(1 for call in record.get("calls", ()) if call["failed"])
     if failed:
         lines.append(f"  {failed} of those calls came back an error")
-    attempts = state.get("attempts", 0)
+    attempts = len(record.get("attempts", ()))
     if attempts > 1:
         lines.append(f"  {attempts} attempts; the validator refused the earlier ones")
-    counted = _tokens(messages)
+    counted = record.get("tokens", {"input": 0, "output": 0})
     lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
-    spent_on = _seconds(state)
+    spent_on = _seconds(record)
     if spent_on:
         lines.append(f"  {spent_on}")
+    wrote = record.get("workout")
+    if wrote is not None:
+        lines.append(f"  wrote prescribed workout {wrote}")
     return lines
 
 
-def _seconds(state: Mapping[str, Any]) -> str:
+def _answered_by(record: Mapping[str, Any]) -> str:
+    """Who did the work, as the nodes name them, in the order they first ran.
+
+    Read off the nodes rather than the top of the document, because from this
+    ticket on there is no one model to read there: the entrance and the two
+    subgraphs run on models of their own (ADR-0006).
+    """
+    named: list[str] = []
+    for node in record.get("nodes", ()):
+        model, provider = node.get("model", ""), node.get("provider", "")
+        if not model and not provider:
+            continue
+        answered_by = f"{model} on {provider}"
+        if answered_by not in named:
+            named.append(answered_by)
+    return ", ".join(named) if named else "nobody on record"
+
+
+def _node(entry: Sequence[Any]) -> dict[str, Any]:
+    """One timing, as the state kept it.
+
+    Two shapes, because the checkpoints on disk hold the one session 6 wrote:
+    a node and its seconds, with nobody named. Read as what it is rather than
+    refused, which would take the history with it.
+    """
+    if len(entry) == 2:
+        node, seconds = entry
+        return {"node": node, "model": "", "provider": "", "seconds": round(seconds, 3)}
+    node, model, provider, seconds = entry
+    return {
+        "node": node,
+        "model": model,
+        "provider": provider,
+        "seconds": round(seconds, 3),
+    }
+
+
+def _seconds(record: Mapping[str, Any]) -> str:
     """What each node cost, summed over the times it ran. ASCII, one line."""
     totals: dict[str, float] = {}
-    for node, seconds in state.get("timings", ()):
-        totals[node] = totals.get(node, 0.0) + seconds
+    for node in record.get("nodes", ()):
+        name = str(node["node"])
+        totals[name] = totals.get(name, 0.0) + float(node["seconds"])
     return ", ".join(f"{node} {seconds:.1f}s" for node, seconds in totals.items())
 
 

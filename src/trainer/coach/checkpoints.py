@@ -37,6 +37,7 @@ def checkpoints_path() -> Path:
 
 DECLARED: tuple[type, ...] = (
     plans.Request,
+    plans.Refusal,
     plans.Violation,
     plans.WorkoutPlan,
     Exclusion,
@@ -50,10 +51,10 @@ somewhere downstream, saying nothing about serialization. Declared, the
 serializer is explicit both ways, and strict about everything else.
 
 `PlannerState` holds a `Request`, a tuple of `Violation`s per refusal and a
-`WorkoutPlan`. `Exclusion` is the fourth and was not in the ticket: it travels
-*inside* the request, because `turn` folds today's standing exclusions into it
-before the model is called, and a dataclass keeps its field values as objects
-rather than flattening them.
+`WorkoutPlan`. `Exclusion` and `Refusal` travel *inside* the request -- `turn`
+folds today's standing exclusions into it before the model is called, and
+every plan the negotiation turned down rides in it from ADR-0007 on -- and a
+dataclass keeps its field values as objects rather than flattening them.
 
 The plan's nested models -- `PlanBlock`, `PlanItem`, `Prescription` -- are not
 here and do not belong here: a pydantic model is written as `model_dump()`, so

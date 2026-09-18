@@ -10,6 +10,7 @@ Every message the bot gets reaches `planning()`. You can write anything and you 
 
 - **An entrance node that holds the conversation**, on a small fast model of its own, reaching the planner and the logger as tools, with the engine's read tools on the same surface -- so *"quanto petto ho fatto questo ciclo"* is answered without entering a subgraph.
 - **The per-node model.** The entrance names its own model and provider; the planner and the logger keep the one `LLM_BACKEND` names. The record's node entries carry the model that answered each node (01 moved them there), so a record never reports the entrance's model for work the planner did.
+  - 01 stopped halfway: `planner.build` takes one `models.Chat` and its `timed` wrapper stamps that name on every node it wraps. One model per graph is enough while there is one graph; the entrance is where the wrapper has to be told which model answered the node it is timing.
 - **Five of the seven fixed lines go**: `STARTED`, `QUEUED`, `WRITTEN`, `SUPERSEDED` and `NO_PLAN` become things the entrance says. `BLOCKED` and `FAILED` stay constants -- they are the two cases where the model is absent or not to be trusted, and nothing raised leaves the machine.
 - **The entrance answers before the work is finished.** A plan takes minutes; the turn is answered at once and the run proceeds behind it with its progress in the draft.
 - **What the entrance may not decide** (ADR-0006 item 4): not which workout is due, not whether a plan fits, and no training fact it did not get from a tool.

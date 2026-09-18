@@ -15,6 +15,7 @@ Blocked by: 01 -- the logger writes runs, and a run built before it has a defini
 - **`trainer log` runs the subgraph**, on the provider `LLM_BACKEND` names, like `trainer plan`.
 - **`agent.py` is deleted with it**, and with it `QUESTION_MARKER` and the hand-written adapter. `coach/models.py` reads `GROQ_MODEL`, `GROQ_API_KEY` and `GROQ_MAX_TOKENS` from `agent.py` today, so those settings move into `models.py` first. **`GROQ_MODEL`'s default names a model that is not there** -- the Groq path dies on a 404 -- so it is set to one that answers, checked by running it, and `models.ready()` reports a model Groq does not have as a state with its fix.
 - **A report is a fact and is never refused** for what the user did. What the engine noticed is a flag, computed when the workout is read.
+- **The run's beginning and ending are inside `planner.build` today.** 01 put `identity`, `following` and the `closed` helper there, and `build` takes the archive to write into (`None` means keep nothing, which is what the eval suites pass). A second subgraph makes them two copies, so they come out into something both graphs use before the logger writes its first run.
 
 ## Acceptance criteria
 

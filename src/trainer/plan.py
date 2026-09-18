@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sqlite3
 from collections.abc import Sequence
@@ -175,6 +176,36 @@ class WorkoutPlan(BaseModel):
 
 
 @dataclass(frozen=True)
+class Refusal:
+    """A plan the user turned down, and what they said turning it down.
+
+    It belongs to the negotiation rather than to the run that was refused, and
+    travels into every later run of it (ADR-0007). The newest one is kept
+    whole; the ones before it keep their exercise ids and their words, because
+    the ids are all a later plan needs in order not to repeat one.
+    """
+
+    because: str
+    exercise_ids: tuple[str, ...]
+    plan: WorkoutPlan | None = None
+
+
+def exercise_ids(plan: WorkoutPlan) -> tuple[str, ...]:
+    """Every exercise the plan names, in the order it prescribes them."""
+    return tuple(item.exercise_id for block in plan.blocks for item in block.items)
+
+
+def turned_down(
+    refusals: Sequence[Refusal], plan: WorkoutPlan, because: str
+) -> tuple[Refusal, ...]:
+    """The negotiation's refusals with this one on the end, the earlier ones narrowed to their ids."""
+    return (
+        *(dataclasses.replace(refusal, plan=None) for refusal in refusals),
+        Refusal(because=because, exercise_ids=exercise_ids(plan), plan=plan),
+    )
+
+
+@dataclass(frozen=True)
 class Request:
     """What the plan was asked for, and what it is checked against.
 
@@ -206,12 +237,9 @@ class Request:
     preferences: tuple[str, ...] = ()
     """Exercise ids the user would rather not do; a plan names one only with a `despite` row."""
 
-    refused: WorkoutPlan | None = None
-    """A plan the user just turned down, on a second pass. The new one has to
-    differ from it; how is the agent's business."""
-
-    because: str = ""
-    """What the user said when they turned it down; it reaches the model and no rule checks it."""
+    refusals: tuple[Refusal, ...] = ()
+    """Every plan this negotiation has already turned down, oldest first. The
+    new one has to differ from each of them; how is the agent's business."""
 
 
 @dataclass(frozen=True)
@@ -528,7 +556,7 @@ def validate(
         broken
         for broken in (
             _preferences_acknowledged(plan, request),
-            _not_the_plan_that_was_refused(plan, request),
+            _not_a_plan_already_refused(plan, request),
         )
         if broken is not None
     )
@@ -643,22 +671,32 @@ def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> Violation 
     return None
 
 
-def _not_the_plan_that_was_refused(plan: WorkoutPlan, request: Request) -> Violation | None:
-    """Asked again, it has to answer differently.
+def _not_a_plan_already_refused(plan: WorkoutPlan, request: Request) -> Violation | None:
+    """Asked again, it has to answer differently -- from every plan the negotiation turned down.
 
     The weakest possible reading of *proposes again* -- not the same document
     -- and deliberately so: what makes the second plan better is the agent's
     business, and a rule about *how* different it must be would be this file
     deciding method. What it refuses is the one answer that is certainly not a
     second proposal.
+
+    A refusal the negotiation has narrowed to its exercise ids is compared on
+    those, which is the weakest reading still available once the document is
+    gone -- and coarser than the newest one's: a plan naming the same
+    exercises in the same order is refused however different the rest of it
+    is. That is what an evening of memory costs, against the one step this
+    rule used to have.
     """
-    if request.refused is None:
-        return None
-    if plan == request.refused:
+    for refusal in request.refusals:
+        if refusal.plan is not None:
+            if plan != refusal.plan:
+                continue
+        elif exercise_ids(plan) != refusal.exercise_ids:
+            continue
         return Violation(
             REFUSED,
-            "this is the plan that was just refused, unchanged. Propose a "
-            "different one: the user said no, and saying it again is not an "
+            "this is a plan the user has already turned down. Propose a "
+            "different one: they said no, and saying it again is not an "
             "answer",
         )
     return None

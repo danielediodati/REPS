@@ -10,7 +10,7 @@ Blocked by: 02, 03 -- it measures the subgraph, through the door the entrance ad
 
 - **The suite enters at the logger subgraph**, the way the plan suite enters at the planner, and the question it used to read off a marked line is the `interrupt()` the subgraph raises.
 - **The invariants are the log set's own rows**, unchanged: the suite measures a different implementation of the same thing, not a different standard. U7 still checks only that nothing is invented.
-- **Each run reports what it cost**, like the plan suite: the model, the attempts, the wall time. It writes the same record document as everything else (01).
+- **Each run reports what it cost**, like the plan suite: the model, the attempts, the wall time. It writes the same record document as everything else (01) -- into the eval runs directory and never into the home's archive, which the plan suite arranges by building its graph with no archive at all. A pass is a measurement, not an evening.
 - **It runs against a fixture named in `TRAINER_DB`.** The tools open their own connection, so a fixture nothing points at is invisible to the agent under measurement.
 
 ## Acceptance criteria

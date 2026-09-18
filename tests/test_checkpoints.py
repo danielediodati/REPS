@@ -23,7 +23,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.serde import jsonplus
 
 from conftest import enrich
-from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, plan_of
+from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, graph_of, plan_of
 from trainer import plan as plans
 from trainer.coach import checkpoints, planner
 from trainer.engine import catalog, database, migrations
@@ -47,11 +47,11 @@ def test_the_declared_types_come_back_as_themselves(
     """Written by one process, read by the next: the demo's restart."""
     path = tmp_path / "checkpoints.sqlite"
     with checkpoints.saver(path) as saver:
-        graph = planner.build(Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver)
+        graph = graph_of(Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver)
         graph.invoke({"request": BARBELL_45}, THREAD)
 
     with checkpoints.saver(path) as saver:
-        values = planner.build(
+        values = graph_of(
             Scripted(documents=[]), checkpointer=saver
         ).get_state(THREAD).values
 
@@ -126,7 +126,7 @@ def test_nothing_in_the_state_is_written_unregistered(
     """
     path = tmp_path / "checkpoints.sqlite"
     with checkpoints.saver(path) as saver:
-        graph = planner.build(Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver)
+        graph = graph_of(Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver)
         graph.invoke({"request": BARBELL_45}, THREAD)
 
     # Both are said once per type per process, and this suite has run the
@@ -136,7 +136,7 @@ def test_nothing_in_the_state_is_written_unregistered(
 
     with caplog.at_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus"):
         with checkpoints.saver(path) as saver:
-            planner.build(Scripted(documents=[]), checkpointer=saver).get_state(THREAD)
+            graph_of(Scripted(documents=[]), checkpointer=saver).get_state(THREAD)
 
     assert caplog.records == []
 

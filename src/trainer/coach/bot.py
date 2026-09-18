@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Seque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -422,7 +423,7 @@ class Coach:
         return False
 
 
-def planning(graph: planner.Planner, on: run_record.Run) -> Run:
+def planning(graph: planner.Planner, archive: Path) -> Run:
     """One message, planned: today's request assembled, the graph run, the plan offered.
 
     The request comes from `plan.requested`, which the terminal calls too --
@@ -444,7 +445,7 @@ def planning(graph: planner.Planner, on: run_record.Run) -> Run:
     """
 
     async def run(thread: str, text: str, chat: Chat) -> None:
-        graph.update_state(run_record.on(thread, on), {"said": [text]})
+        graph.update_state(_reading(thread), {"said": [text]})
         try:
             request = await asyncio.to_thread(_todays_request)
         except tools.ToolFailure as state:
@@ -455,8 +456,8 @@ def planning(graph: planner.Planner, on: run_record.Run) -> Run:
             logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
             await chat.say(BLOCKED)
             return
-        final = await streamed(
-            graph, planner.starting(request), run_record.on(thread, on), chat
+        final = await _ending(
+            graph, planner.starting(request), thread, chat, archive
         )
         await told(final, thread, chat)
 
@@ -601,7 +602,7 @@ def _todays_request() -> plans.Request:
         return plans.requested(connection, date.today().isoformat()).request
 
 
-def answering(graph: planner.Planner, on: run_record.Run) -> Resume:
+def answering(graph: planner.Planner, archive: Path) -> Resume:
     """The tap, answered: the thread resumes and the run goes on from there (ADR-0005).
 
     The write is the graph's, in the node after the resume. Nothing here
@@ -619,12 +620,29 @@ def answering(graph: planner.Planner, on: run_record.Run) -> Resume:
             return
         # Streamed like any other run: a refusal plans the whole workout
         # again, which is the same minutes of silence a question costs.
-        final = await streamed(
-            graph, Command(resume=_answer(tap)), run_record.on(thread, on), chat
-        )
+        final = await _ending(graph, Command(resume=_answer(tap)), thread, chat, archive)
         await told(final, thread, chat)
 
     return resume
+
+
+async def _ending(
+    graph: planner.Planner, given: Any, thread: str, chat: Chat, archive: Path
+) -> dict[str, Any]:
+    """One run, streamed, and its ending written even when it is the graph falling over.
+
+    A node cannot write after it has raised (ADR-0007, item 1), and the coach
+    above this catches the exception to say `FAILED` -- so the run would
+    otherwise be the one kind that leaves nothing behind, which is the kind
+    you most want to read.
+    """
+    try:
+        return await streamed(graph, given, _reading(thread), chat)
+    except Exception:
+        await asyncio.to_thread(
+            planner.failed, graph, _reading(thread), agent.CALL_BUDGET, archive
+        )
+        raise
 
 
 def _answer(tap: Tap) -> planner.Answer:
@@ -916,9 +934,11 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    graph = planner.build(on.model, checkpointer=saver)
-    ran = run_record.Run(on.name, on.provider, agent.CALL_BUDGET)
+    archive = run_record.archive()
+    graph = planner.build(on, checkpointer=saver, archive=archive)
     coach = Coach(
-        owner_id=declared.owner_id, run=planning(graph, ran), resume=answering(graph, ran)
+        owner_id=declared.owner_id,
+        run=planning(graph, archive),
+        resume=answering(graph, archive),
     )
     application(declared, coach).run_polling()

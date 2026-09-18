@@ -688,13 +688,19 @@ def run(
     what keeps a measurement of eighteen runs from leaving eighteen phantom
     prescribed workouts in the state it is measuring. In memory because these
     threads are of no interest once the run is scored.
+
+    **And no archive.** A pass is a measurement, not an evening: its runs in
+    the home would be the history session 10 reads to ask how many plans an
+    evening takes. The records this suite keeps are its own, under `records`.
     """
     where = records if records is not None else records_path()
-    graph = planner.build(on.model, budget=budget, checkpointer=InMemorySaver())
+    graph = planner.build(on, budget=budget, checkpointer=InMemorySaver())
     outcomes = []
     for situation in chosen:
         for attempt in range(1, repetitions + 1):
-            outcomes.append(_once(connection, situation, attempt, graph, on, where))
+            outcomes.append(
+                _once(connection, situation, attempt, graph, budget, where)
+            )
     return Report(tuple(outcomes))
 
 
@@ -710,7 +716,7 @@ def _once(
     situation: Situation,
     attempt: int,
     graph: planner.Planner,
-    on: models.Chat,
+    budget: int,
     records: Path,
 ) -> Outcome:
     request = situation.request
@@ -720,13 +726,13 @@ def _once(
             # Two turns, not a conversation. The first plan exists only to be
             # turned down, and what is measured is what comes back after --
             # but it was paid for, so it is kept and it counts towards cost.
-            first = _invoked(graph, request, on)
+            first = _invoked(graph, request, budget)
             also.append(first)
             write(records, f"{situation.name}-{attempt}-turned-down", first.document)
             if first.plan is None:
-                # Nothing came back that could be turned down. Handed
-                # `refused=None`, `brief` says nothing about a refusal at all
-                # -- not even the user's reason, which is nested under it --
+                # Nothing came back that could be turned down. With no
+                # refusals to carry, `brief` says nothing about one at all --
+                # not even the user's reason, which travels with the plan --
                 # so the second run is an ordinary planning run. Measured as
                 # situation 5 it would put a green row under a situation that
                 # never happened, which at a bar of 100% is the one failure
@@ -735,9 +741,10 @@ def _once(
                     situation.name, attempt, error=NOTHING_TO_REFUSE, also=tuple(also)
                 )
             request = dataclasses.replace(
-                request, refused=first.plan, because=TURNED_DOWN_BECAUSE
+                request,
+                refusals=plans.turned_down((), first.plan, TURNED_DOWN_BECAUSE),
             )
-        ran = _invoked(graph, request, on)
+        ran = _invoked(graph, request, budget)
     except Exception as error:
         # Every way a provider can fail in the middle of a pass: no
         # credentials, a request it refused, a rate limit, a server that went
@@ -764,7 +771,7 @@ def _once(
     return Outcome(situation.name, attempt, failures, ran, written, also=tuple(also))
 
 
-def _invoked(graph: planner.Planner, request: plans.Request, on: models.Chat) -> Ran:
+def _invoked(graph: planner.Planner, request: plans.Request, budget: int) -> Ran:
     """One run of the graph, and the wall time somebody waited for it.
 
     The clock is read around the whole invocation rather than summed from the
@@ -773,9 +780,9 @@ def _invoked(graph: planner.Planner, request: plans.Request, on: models.Chat) ->
     """
     started = time.monotonic()
     thread: RunnableConfig = {"configurable": {"thread_id": f"eval:{uuid4()}"}}
-    final = graph.invoke({"request": request}, thread)
+    final = graph.invoke(planner.starting(request), thread)
     return Ran(
-        record=run_record.of(final, on.name, on.provider),
+        record=run_record.of(final, budget),
         request=final["request"],
         plan=final["plan"],
         spent=final.get("spent", 0),

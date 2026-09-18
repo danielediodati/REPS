@@ -7,8 +7,11 @@ import logging
 import operator
 import sqlite3
 import time
-from datetime import date
+from collections.abc import Sequence
+from datetime import date, datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol, TypedDict, cast
+from uuid import uuid4
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
@@ -19,6 +22,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
@@ -29,6 +33,7 @@ from pydantic import TypeAdapter
 from trainer import agent, tools
 from trainer import plan as plans
 from trainer.coach import models
+from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import admissible, constraints, workouts
 
@@ -169,19 +174,38 @@ def brief(request: plans.Request) -> str:
             '{"exercise_id": "...", "why": "..."}. The field is `why`; '
             "`reason` belongs to a block. Proposing one silently is rejected."
         )
-    if request.refused is not None:
+    if request.refusals:
+        lines.append(turned_down(request.refusals))
         lines.append(
-            "You proposed this workout and the user turned it down:\n"
-            + request.refused.model_dump_json(indent=1)
-        )
-        if request.because:
-            lines.append(f"They said: {request.because}")
-        lines.append(
-            "Propose a different one. Do not argue it, do not hand back the "
-            "same plan, and do not give up and offer something token: they "
-            "still want to train today."
+            "Propose a different one. Do not argue it, do not hand back a "
+            "plan they have already turned down, and do not give up and offer "
+            "something token: they still want to train today."
         )
     lines.append("Plan the workout.")
+    return "\n".join(lines)
+
+
+def turned_down(refusals: Sequence[plans.Refusal]) -> str:
+    """Every plan this negotiation has turned down, oldest first, as the model reads them.
+
+    The newest one whole, because it is the one being answered and the model
+    has to see what it is changing; the ones before it as the exercises they
+    named, which is what a plan has to avoid repeating and is all the
+    negotiation still keeps of them (ADR-0007, item 4).
+    """
+    lines = [
+        f"You have proposed {len(refusals)} workout(s) already and the user "
+        "turned each one down."
+    ]
+    for turned_down in refusals:
+        if turned_down.plan is None:
+            lines.append("Turned down: " + ", ".join(turned_down.exercise_ids) + ".")
+        else:
+            lines.append(
+                "Turned down, in full:\n" + turned_down.plan.model_dump_json(indent=1)
+            )
+        if turned_down.because:
+            lines.append(f"They said: {turned_down.because}")
     return "\n".join(lines)
 
 
@@ -243,6 +267,22 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
 
 class PlannerState(TypedDict, total=False):
     request: plans.Request
+    negotiation: str
+    """The ask this run belongs to. One ask, N runs, at most one plan accepted."""
+
+    run: str
+    follows: str | None
+    """The run this one was born from, when a refusal ended that one."""
+
+    began: str
+    ended: str
+    ending: str
+    """How this run finished, written the moment it happens and empty until then.
+
+    A run still waiting on an answer has no ending, and neither has one that
+    was cut: what the reader found is the reader's to derive (ADR-0007, item 7).
+    """
+
     said: Annotated[list[str], operator.add]
     """What the user has written on this thread, in the order they wrote it.
 
@@ -254,19 +294,63 @@ class PlannerState(TypedDict, total=False):
 
     messages: Annotated[list[AnyMessage], add_messages]
     spent: int
+    budget: int
+    """Tool calls this run was given. In the state because the reader has no
+    other way back to it: a run cut mid-flight is read off its checkpoint, and
+    what bounded it was an argument to `build` that nobody kept."""
+
     attempts: int
     rejections: int
     """Turns the provider has refused *in a row*, reset by the first it accepts."""
 
     violations: tuple[plans.Violation, ...]
-    refusals: Annotated[list[tuple[plans.Violation, ...]], operator.add]
-    timings: Annotated[list[tuple[str, float]], operator.add]
+    refusals: list[tuple[plans.Violation, ...]]
+    """What the validator refused, attempt by attempt, **in this run only**.
+
+    Written whole rather than appended to, because a run's record is its own.
+    Accumulated by a reducer -- which is what these were, and `_beginning` has
+    no way to say *empty* to one -- the plan the user turned down at nine is
+    an attempt of the run at ten.
+    """
+
+    timings: list[tuple[str, str, str, float]]
+    """Node, model, provider and seconds, per node run, for this run only."""
+
     plan: plans.WorkoutPlan | None
     accepted: bool
     workout: int | None
 
 
 def starting(request: plans.Request) -> PlannerState:
+    """The input that starts a negotiation: its first run, following nothing."""
+    return _beginning(request, negotiation=_negotiation_id(), follows=None)
+
+
+def following(request: plans.Request, negotiation: str, follows: str) -> PlannerState:
+    """The run a refusal gives birth to: the same ask, carrying which run it follows."""
+    return _beginning(request, negotiation=negotiation, follows=follows)
+
+
+def _negotiation_id() -> str:
+    """A negotiation's name: when it was asked, and enough to tell two of them apart."""
+    return f"{datetime.now().astimezone():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
+
+
+def identity(negotiation: str, follows: str | None) -> dict[str, Any]:
+    """Who a run is: its name, the ask it belongs to, what it follows, and no ending yet."""
+    return {
+        "negotiation": negotiation,
+        "run": uuid4().hex[:8],
+        "follows": follows,
+        "began": records.now(),
+        "ended": "",
+        "ending": "",
+    }
+
+
+def _beginning(
+    request: plans.Request, *, negotiation: str, follows: str | None
+) -> PlannerState:
     """The input that starts a run, with whatever a previous one left cleared.
 
     One chat is one thread for as long as the chat lives (ADR-0004, item 6),
@@ -275,9 +359,13 @@ def starting(request: plans.Request) -> PlannerState:
     write the brief -- the new request planned against the old one's words --
     and an old `workout` makes a refused run look like one that wrote a
     workout.
+
+    `said` is the one key it leaves alone (ADR-0006): it is what the user has
+    written on this thread, and it outlives every run on it.
     """
     return {
         "request": request,
+        **identity(negotiation, follows),  # type: ignore[typeddict-item]
         "accepted": False,
         "workout": None,
         # Cast because the annotation on `messages` is the list `add_messages`
@@ -288,6 +376,8 @@ def starting(request: plans.Request) -> PlannerState:
         "rejections": 0,
         "spent": 0,
         "violations": (),
+        "refusals": [],
+        "timings": [],
         "plan": None,
     }
 
@@ -297,12 +387,38 @@ Planner = CompiledStateGraph[PlannerState, None, PlannerState, PlannerState]
 
 
 def build(
-    model: BaseChatModel,
+    on: models.Chat,
     budget: int = agent.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
+    archive: Path | None = None,
 ) -> Planner:
-    """The compiled planner graph, running on `model`."""
+    """The compiled planner graph, running on `on`.
+
+    `archive` is where a run goes when it ends (ADR-0007, item 6), and a graph
+    built without one keeps nothing: the eval suites run the same graph
+    dozens of times to measure it, and their runs in the home would be the
+    history session 10 is supposed to read.
+    """
+    model = on.model
     offered = agent.registered("planner", TOOLS)
+
+    def closed(state: PlannerState | dict[str, Any], ending: str, **also: Any) -> dict[str, Any]:
+        """This run is over: the ending is written the moment it happens.
+
+        The closing node's own seconds are not in the document, because the
+        document is written before that node returns -- which is when the
+        ending became true, and the alternative is a record that exists a
+        super-step after the thing it records.
+        """
+        finished: dict[str, Any] = {
+            "ending": ending,
+            "ended": records.now(),
+            **also,
+        }
+        if archive is not None and state.get("run"):
+            records.keep({**state, **finished}, budget, archive)
+        return finished
+
     definitions = [
         {"type": "function", "function": agent.schema(tool)} for tool in offered
     ]
@@ -312,6 +428,11 @@ def build(
         if not isinstance(request, plans.Request):
             # Studio and the HTTP API send the request as JSON.
             request = TypeAdapter(plans.Request).validate_python(request)
+        # Those two doors start a thread with a request and nothing else, and
+        # a run has to be a thing that can be read back whichever door opened
+        # it. Only when there is no run yet: every later turn of this one
+        # would otherwise give it a new name.
+        born = {} if state.get("run") else identity(_negotiation_id(), None)
         opening: list[AnyMessage] = []
         if not state.get("messages"):
             with tools.reported(), tools.opened() as connection:
@@ -353,15 +474,21 @@ def build(
             if refused > REJECTIONS:
                 raise
             logger.warning("the provider refused a turn (%d): %s", refused, error)
-            return {
+            return born | {
                 "request": request,
+                "budget": budget,
                 "rejections": refused,
                 "messages": [
                     *opening,
                     HumanMessage(REFUSED_TURN.format(why=error), name="provider"),
                 ],
             }
-        return {"request": request, "rejections": 0, "messages": [*opening, reply]}
+        return born | {
+            "request": request,
+            "budget": budget,
+            "rejections": 0,
+            "messages": [*opening, reply],
+        }
 
     def run_tools(state: PlannerState) -> dict[str, Any]:
         reply = state["messages"][-1]
@@ -411,7 +538,7 @@ def build(
         decided: dict[str, Any] = {
             "attempts": attempts,
             "violations": violations,
-            "refusals": [violations],
+            "refusals": [*state.get("refusals", []), violations],
             "plan": emitted,
         }
         if violations and attempts < ATTEMPTS:
@@ -420,6 +547,8 @@ def build(
                     FEEDBACK.format(violations=plans.refusal(violations)), name="validator"
                 )
             ]
+        elif violations:
+            decided.update(closed({**state, **decided}, records.REFUSED))
         return decided
 
     def propose(state: PlannerState) -> dict[str, Any]:
@@ -434,25 +563,31 @@ def build(
         if answer.get("accepted"):
             return {"accepted": True}
         request = state["request"]
+        because = answer.get("because", "")
         shorter = answer.get("minutes")
-        # The turn that follows is a fresh proposal and not an argument with
-        # the one before it, so the messages go and the brief is written again
-        # -- this time carrying what the user said.
+        # Turning a plan down ends the run that offered it (ADR-0007, item 2).
+        # What it cost is written here and nowhere else: the state below is
+        # the next run's, and everything this one spent is about to be cleared.
+        closed(state, records.TURNED_DOWN, because=because)
+        # The run that follows is a fresh proposal and not an argument with the
+        # one before it, so the messages go and the brief is written again --
+        # this time carrying every plan the negotiation has turned down.
         again = dataclasses.replace(
             request,
-            refused=offered,
-            because=answer.get("because", ""),
+            refusals=plans.turned_down(request.refusals, offered, because),
             budget_min=shorter if shorter is not None else request.budget_min,
             # An allocation divides the minutes that were asked for, so a
             # shorter workout carries none: `turn` divides the new budget.
             allocation=() if shorter is not None else request.allocation,
         )
         # `dict(...)` because a node contributes a plain mapping, while
-        # `starting` is typed as the state so it can also be a run's input.
-        return dict(starting(again))
+        # `following` is typed as the state so it can also be a run's input.
+        return dict(
+            following(again, state["negotiation"], follows=state["run"])
+        )
 
-    def record(state: PlannerState) -> dict[str, Any]:
-        """The accepted plan, written as the prescribed workout it now is."""
+    def prescribe(state: PlannerState) -> dict[str, Any]:
+        """The accepted plan, written as the prescribed workout it now is, and the run closed."""
         accepted_plan = state["plan"]
         assert accepted_plan is not None, "nothing is written without a plan"
         with tools.reported(), tools.opened() as connection:
@@ -466,7 +601,9 @@ def build(
                 ),
                 on=date.today().isoformat(),
             )
-        return {"workout": written}
+        return {"workout": written} | closed(
+            {**state, "workout": written}, records.ACCEPTED
+        )
 
     def after_planner(state: PlannerState) -> Literal["tools", "emit", "planner"]:
         reply = state["messages"][-1]
@@ -491,15 +628,30 @@ def build(
             return "done"
         return "planner"
 
-    def after_propose(state: PlannerState) -> Literal["planner", "record"]:
-        return "record" if state.get("accepted") else "planner"
+    def after_propose(state: PlannerState) -> Literal["planner", "prescribe"]:
+        return "prescribe" if state.get("accepted") else "planner"
 
-    def timed(node: str, run: Node) -> Node:
-        """Every node says what it cost: the minutes are the thing being measured."""
+    def timed(node: str, step: Node) -> Node:
+        """Every node says who answered it and what it cost: the minutes are the thing being measured.
+
+        A node that started a new run says so by handing back timings of its
+        own, and keeps them: its seconds belong to neither run. On `propose`,
+        the only node that does it, they are how long the user took to answer,
+        which is not a cost of planning at all.
+        """
 
         def counted(state: PlannerState) -> dict[str, Any]:
             started = time.monotonic()
-            return run(state) | {"timings": [(node, time.monotonic() - started)]}
+            produced = step(state)
+            if "timings" in produced:
+                return produced
+            spent = time.monotonic() - started
+            return produced | {
+                "timings": [
+                    *state.get("timings", []),
+                    (node, on.name, on.provider, spent),
+                ]
+            }
 
         return counted
 
@@ -509,7 +661,7 @@ def build(
     graph.add_node("emit", timed("emit", emit))
     graph.add_node("validate", timed("validate", validate))
     graph.add_node("propose", timed("propose", propose))
-    graph.add_node("record", timed("record", record))
+    graph.add_node("prescribe", timed("prescribe", prescribe))
     graph.add_edge(START, "planner")
     graph.add_conditional_edges("planner", after_planner)
     graph.add_conditional_edges("tools", after_tools)
@@ -520,12 +672,47 @@ def build(
         {"planner": "planner", "propose": "propose", "done": END},
     )
     graph.add_conditional_edges(
-        "propose", after_propose, {"planner": "planner", "record": "record"}
+        "propose", after_propose, {"planner": "planner", "prescribe": "prescribe"}
     )
-    graph.add_edge("record", END)
+    graph.add_edge("prescribe", END)
     return graph.compile(checkpointer=checkpointer)
 
 
+def failed(
+    graph: Planner,
+    config: RunnableConfig,
+    budget: int = agent.CALL_BUDGET,
+    archive: Path | None = None,
+) -> None:
+    """The run an exception left behind, ended as fallen over.
+
+    A node cannot write after it has raised, so whoever catches the exception
+    writes the ending for it (ADR-0007, item 1). Never at the cost of the
+    exception itself: a failure to write the document is logged and swallowed,
+    because the caller is already on its way to telling the user something
+    went wrong.
+    """
+    if archive is None:
+        return
+    try:
+        state = graph.get_state(config).values
+        if not state.get("run") or state.get("ending"):
+            return
+        records.keep(
+            {**state, "ending": records.FAILED, "ended": records.now()}, budget, archive
+        )
+    except Exception:
+        logger.exception("the run that fell over could not be written down")
+
+
 def studio() -> Planner:
-    """The planner graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it."""
-    return build(models.chat().model)
+    """The planner graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it.
+
+    On the home's archive, like the two real doors and unlike the eval suites:
+    a run driven from Studio is one run somebody had, against the real catalog
+    and the real checkpointer, and it already writes a prescribed workout when
+    a plan is accepted. Given an archive of its own it would be the one door
+    whose runs `trainer runs` cannot read -- while debugging the graph, which
+    is the only reason to be in Studio at all.
+    """
+    return build(models.chat(), archive=records.archive())

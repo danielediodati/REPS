@@ -17,7 +17,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import enrich
-from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, plan_of
+from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, graph_of, plan_of
 from trainer import plan as plans
 from trainer.coach import planner, progress
 from trainer.engine import catalog, database, migrations
@@ -53,7 +53,7 @@ def looking() -> AIMessage:
 
 def streamed(model: Scripted) -> list[str]:
     """A whole run, with `Progress` fed the chunks LangGraph emits."""
-    graph = planner.build(model, checkpointer=InMemorySaver())
+    graph = graph_of(model, checkpointer=InMemorySaver())
     lines = progress.Progress()
     for chunk in graph.stream(
         {"request": BARBELL_45},

@@ -1764,8 +1764,8 @@ def test_plan_writes_the_run_record_when_asked(
 
     assert result.exit_code == 0, result.output
     written = json.loads(record.read_text(encoding="utf-8"))
-    assert written["provider"] == "scripted"
-    assert written["outcome"] == "valid"
+    assert written["ending"] == "accepted"
+    assert {node["provider"] for node in written["nodes"]} == {"scripted"}
     assert [call["name"] for call in written["calls"]] == ["allocate"]
     assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
 
@@ -1792,7 +1792,7 @@ def test_plan_writes_the_record_even_when_the_plan_is_refused(
 
     assert result.exit_code != 0
     written = json.loads(record.read_text(encoding="utf-8"))
-    assert written["outcome"] == "refused"
+    assert written["ending"] == "refused"
     assert len(written["attempts"]) == planner.ATTEMPTS
     assert written["attempts"][-1]["violations"], "a refused run recorded no violation"
     assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Dumbbell_Bicep_Curl"
@@ -3549,7 +3549,7 @@ def test_bot_with_a_token_telegram_refuses_names_botfather(
     assert healthy_bot == []
 
 
-def test_runs_list_names_the_conversation_a_plan_left_behind(
+def test_runs_list_names_the_negotiation_a_plan_left_behind(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from test_planner import plan_of
@@ -3560,9 +3560,9 @@ def test_runs_list_names_the_conversation_a_plan_left_behind(
     result = runner.invoke(main, ["runs", "list"])
 
     assert result.exit_code == 0, result.output
-    assert "plan:" in result.output
-    assert "valid" in result.output
-    assert "a-stand-in on scripted" in result.output
+    assert "1 run" in result.output
+    assert "accepted" in result.output
+    assert "a-stand-in" not in result.output, "a listing names no model"
     assert result.output.isascii()
 
 
@@ -3584,12 +3584,12 @@ def test_runs_show_prints_the_record_trainer_plan_wrote_for_the_same_run(
         ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs",
              "--record", str(record)],
     )
-    thread = runner.invoke(main, ["runs", "list"]).output.split()[0]
+    negotiation = runner.invoke(main, ["runs", "list"]).output.split()[0]
 
-    result = runner.invoke(main, ["runs", "show", thread, "--json"])
+    result = runner.invoke(main, ["runs", "show", negotiation, "--json"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == json.loads(record.read_text(encoding="utf-8"))
+    assert json.loads(result.output) == [json.loads(record.read_text(encoding="utf-8"))]
 
 
 def test_runs_show_summarises_the_run_for_the_terminal(
@@ -3603,18 +3603,19 @@ def test_runs_show_summarises_the_run_for_the_terminal(
         documents=[plan_of("Barbell_Squat")],
     )
     runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
-    thread = runner.invoke(main, ["runs", "list"]).output.split()[0]
+    negotiation = runner.invoke(main, ["runs", "list"]).output.split()[0]
 
-    result = runner.invoke(main, ["runs", "show", thread])
+    result = runner.invoke(main, ["runs", "show", negotiation])
 
     assert result.exit_code == 0, result.output
     assert "1 of 12 tool calls" in result.output
     assert "tokens in" in result.output
     assert "emit" in result.output, "the per-node seconds are not there"
+    assert "wrote prescribed workout" in result.output
     assert result.output.isascii()
 
 
-def test_runs_show_names_the_listing_when_the_thread_is_unknown(
+def test_runs_show_names_the_listing_when_the_name_is_unknown(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from test_planner import plan_of
@@ -3628,6 +3629,61 @@ def test_runs_show_names_the_listing_when_the_thread_is_unknown(
     assert "trainer runs list" in result.output
 
 
+def test_runs_list_shows_an_evening_of_refusals_as_one_negotiation(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two plans turned down and one accepted are one ask, not three rows.
+
+    The documents are written here rather than negotiated, because `trainer
+    plan` has no buttons: printing a plan has always meant keeping it, and the
+    refusing is the chat's (ADR-0005). What is under test is the listing.
+    """
+    from trainer.coach import record
+
+    for minute, (run, ending) in enumerate(
+        [("aaa", record.TURNED_DOWN), ("bbb", record.TURNED_DOWN), ("ccc", record.ACCEPTED)]
+    ):
+        record.keep(
+            {
+                "negotiation": "20260918-190000-abcd",
+                "run": run,
+                "began": f"2026-09-18T19:0{minute}:00+02:00",
+                "ended": f"2026-09-18T19:0{minute}:30+02:00",
+                "ending": ending,
+            },
+            12,
+            record.archive(),
+        )
+
+    result = runner.invoke(main, ["runs", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines() == [result.output.strip()], "one ask, one row"
+    assert "20260918-190000-abcd" in result.output
+    assert "3 runs" in result.output
+    assert "accepted" in result.output
+
+
+def test_runs_answers_with_a_provider_that_cannot_be_built(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reader is what you reach for when the provider is what is wrong, so
+    it must not need one (ADR-0007, item 9)."""
+    from test_planner import plan_of
+
+    scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")])
+    runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    listed = runner.invoke(main, ["runs", "list"])
+    shown = runner.invoke(main, ["runs", "show", listed.output.split()[0]])
+
+    assert listed.exit_code == 0, listed.output
+    assert shown.exit_code == 0, shown.output
+    assert "accepted" in shown.output
+
+
 def test_runs_report_an_empty_history_as_a_state_and_write_no_file(
     runner: CliRunner, enriched: Path
 ) -> None:
@@ -3637,7 +3693,8 @@ def test_runs_report_an_empty_history_as_a_state_and_write_no_file(
 
     result = runner.invoke(main, ["runs", "list"])
 
-    assert result.exit_code != 0
+    assert result.exit_code == 0, result.output
+    assert "no negotiation yet" in result.output
     assert "trainer plan" in result.output
     assert not checkpoints.checkpoints_path().exists()
 
@@ -3646,7 +3703,7 @@ def test_runs_list_says_so_when_the_checkpointer_is_there_but_empty(
     runner: CliRunner, enriched: Path
 ) -> None:
     """`trainer bot` opens the checkpointer before it answers anything, so a
-    file with no conversation in it is a state that happens."""
+    file with no run in it is a state that happens."""
     from trainer.coach import checkpoints
 
     with checkpoints.saver():
@@ -3655,5 +3712,5 @@ def test_runs_list_says_so_when_the_checkpointer_is_there_but_empty(
     result = runner.invoke(main, ["runs", "list"])
 
     assert result.exit_code == 0, result.output
-    assert "no conversation yet" in result.output
+    assert "no negotiation yet" in result.output
     assert "trainer plan" in result.output
