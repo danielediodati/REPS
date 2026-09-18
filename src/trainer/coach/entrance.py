@@ -1,0 +1,444 @@
+"""The entrance: the node that talks, reaching the planner and the logger as tools (ADR-0006)."""
+
+from __future__ import annotations
+
+import operator
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import Annotated, Any, Literal, TypedDict
+
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+)
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
+
+from trainer import tools
+from trainer.coach import models
+from trainer.coach import record as records
+from trainer.coach.calls import answered
+
+
+def plan_today() -> str:
+    """Plan today's workout and offer it to the user.
+
+    Call this when they ask what to train, ask for a workout, or say they are
+    about to train. Everything the plan is made of -- today's equipment, the
+    minutes, the muscle groups that are due -- is derived from what they
+    declared and from what they have already trained, so this takes no
+    arguments and you supply none of it. Which workout is due is never yours
+    to choose.
+
+    Planning takes minutes. The call comes back at once and the plan arrives in
+    the chat by itself: your turn is to tell them you are on it, not to
+    describe a plan you have not seen.
+
+    The body is never run. The graph answers this call by starting the planner
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers plan_today; nothing calls it")
+
+
+def log_workout() -> str:
+    """Record the workout the user has just described, in their own words.
+
+    Call this when they are reporting training that has already happened --
+    what they did, how it went, what hurt. What they wrote reaches the logger
+    exactly as they typed it, so this takes no arguments: never retell it,
+    never translate it, never tidy it up.
+
+    The body is never run. The graph answers this call by starting the logger
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers log_workout; nothing calls it")
+
+
+PLAN_TODAY = plan_today.__name__
+LOG_WORKOUT = log_workout.__name__
+
+HANDOFFS = (plan_today, log_workout)
+"""The two subgraphs, on the same surface as the reads (ADR-0006, item 2)."""
+
+STARTED = {
+    PLAN_TODAY: (
+        "The planner has started. Tell the user you are putting today's "
+        "workout together and that it will arrive shortly. You have not seen "
+        "it, so say nothing about what is in it."
+    ),
+    LOG_WORKOUT: (
+        "The logger has started reading what they wrote. Tell them you are "
+        "writing it down. You have not read it back yet, so do not repeat any "
+        "of it to them as fact."
+    ),
+}
+"""What a handoff call is answered with: not words for the user, but what the
+model is told so it can find its own."""
+
+ONE_AT_A_TIME = (
+    "That one was not started: one thing at a time, and the first call of this "
+    "turn is what is running. Say only what that one is doing."
+)
+
+SPENT = (
+    "You have no tool calls left. Answer with what you know, and say you do "
+    "not know the rest rather than filling it in."
+)
+"""What a read past the budget is answered with, the way the logger answers a
+question past its own (`logger.SPENT_ASKING`)."""
+
+TOOLS = (
+    "pattern_history",
+    "last_performed_load",
+    "adherence_history",
+    "volume_deficit",
+    "unreported_workouts",
+    "prescribed_workout",
+    "search_exercises",
+    "compare_variants",
+)
+"""The engine's reads, so a question about training is answered here.
+
+Named rather than derived by subtraction, for the reason `planner.TOOLS` is.
+`admissible_set`, `remaining_budget` and `allocate` are left out: they are the
+arithmetic a plan is chosen with, and the entrance does not plan -- it hands
+that to `plan_today` and never judges the answer (ADR-0006, item 4).
+"""
+
+KEEPS = ("id", "name", "equipment", "primary_muscles")
+"""What talking about an exercise needs. `name` above all: the entrance answers
+in prose, and an id read out loud is not an answer."""
+
+TALKING = """\
+You are the entrance to a training system, and the only part of it the user
+talks to. You answer in Italian, in one or two sentences, the way a coach
+texting back would -- never a list, never a form, never a wall of text.
+
+Behind you is a deterministic engine over an exercise catalog and the training
+state. It answers questions and never decides how to train, and nothing it
+offers you writes anything down.
+
+What a turn asks of you:
+
+- They want something to train, now or today: call `plan_today`.
+- They are telling you about training they have already done: call
+  `log_workout`.
+- They ask something the tools above can answer -- how much of a muscle group
+  this cycle, what they lifted last time, whether a workout is still
+  unreported: call the tool and answer from what came back.
+- Anything else -- hello, a question about how this works, a remark -- is
+  yours to answer directly.
+
+What you may never do:
+
+- **State a training fact no tool gave you.** Not a load, not a number of
+  sets, not how much of a muscle group they have done, not what they trained
+  last. If no tool answered it, say you do not know and offer to look.
+- **Decide which workout is due.** That is the rotation, read off what has been
+  performed, and `plan_today` reads it for you.
+- **Judge whether a plan fits.** That is the validator's, and it has already
+  refused plans you would have accepted.
+- Invent an exercise, an id or a date.
+
+One call per turn is enough. When you have what you need, answer.
+"""
+
+RELAYING = """\
+Something has just happened, and you are the one who tells the user about it.
+Say it to them in Italian, in one or two sentences, in your own words. Say
+nothing this does not say -- above all no numbers and no exercise names.
+
+{situation}"""
+"""How a thing that happened is put to the model.
+
+The words here are instructions and never what the user reads: what reaches
+the chat is the model's own sentence, which is the whole of ADR-0006. A branch
+whose words are written in advance is the router this replaced.
+"""
+
+HELLO = (
+    "The user has just opened the chat, or sent /start. Introduce yourself as "
+    "their trainer in one line and tell them they can write to you whenever "
+    "they like, in their own words."
+)
+
+QUEUED = (
+    "They have written again while you are still working on what they asked "
+    "for before. Tell them you are still on the previous one and will come to "
+    "this straight after."
+)
+
+PRESCRIBED = (
+    "They accepted the workout you offered, and it is now written down as "
+    "today's. Tell them it is theirs and wish them a good session."
+)
+
+SUPERSEDED = (
+    "They tapped a button on a plan the conversation has already moved past, "
+    "so there was nothing to answer. Tell them that plan is no longer the one "
+    "in hand and that writing to you again gets them another."
+)
+
+NO_PLAN = (
+    "You could not reach a workout that fits today's constraints: every "
+    "attempt was refused by the rules. Tell them so plainly, without blaming "
+    "anything, and invite them to write again."
+)
+
+LOGGED = (
+    "The workout they reported has been written down. Tell them it is "
+    "recorded."
+)
+
+NOT_LOGGED = (
+    "What they reported could not be turned into a workout the engine will "
+    "accept, so nothing was written. Tell them it did not go through and ask "
+    "them to tell you again in their own words."
+)
+
+SITUATIONS = (HELLO, QUEUED, PRESCRIBED, SUPERSEDED, NO_PLAN, LOGGED, NOT_LOGGED)
+"""Everything the machine can ask the entrance to say.
+
+Enumerated so a test can put each of them to a stand-in: every one of them was
+a fixed Italian line before this, and the thing that must not come back is a
+situation nobody can say.
+"""
+
+
+class EntranceState(TypedDict, total=False):
+    said: Annotated[list[str], operator.add]
+    """What the user has written on this thread, in the order they wrote it."""
+
+    messages: Annotated[list[AnyMessage], add_messages]
+    """The conversation, kept across runs.
+
+    Unlike either subgraph's, which is a working history one run long and is
+    cleared when the next starts. This is the conversation itself: the entrance
+    is the only node that remembers the turn before.
+    """
+
+    negotiation: str
+    run: str
+    follows: str | None
+    began: str
+    ended: str
+    ending: str
+
+    spent: int
+    budget: int
+    timings: list[tuple[str, str, str, float]]
+
+    relaying: str
+    """The situation this turn was opened to say, and empty when the user spoke."""
+
+    handoff: str
+    """Which subgraph this turn reached for, and empty when it answered itself."""
+
+    answer: str
+    """What goes into the chat. The model's sentence, never a constant."""
+
+
+def heard(text: str) -> EntranceState:
+    """The input that starts a turn: what the user wrote, onto the thread's own history."""
+    return _beginning() | {"said": [text], "messages": [HumanMessage(text)]}
+
+
+def relayed(situation: str) -> EntranceState:
+    """The input that starts a turn the machine opened: one thing that happened, to be said."""
+    return _beginning() | {"relaying": situation}
+
+
+def _beginning() -> EntranceState:
+    """A run of the entrance, with what the run before it left cleared.
+
+    `messages` and `said` are what it leaves alone: one is the conversation and
+    the other is what the user has written on this thread, and both outlive
+    every run on it (ADR-0006).
+    """
+    return {
+        **records.identity(records.negotiation_id(), None),  # type: ignore[typeddict-item]
+        "spent": 0,
+        "timings": [],
+        "relaying": "",
+        "handoff": "",
+        "answer": "",
+    }
+
+
+def carried(final: Mapping[str, Any]) -> dict[str, Any]:
+    """What the entrance hands the subgraph it opened: the run it began, and its seconds.
+
+    One run and not two. The user asked once, so what they asked is one run
+    (ADR-0007), and the entrance is its first node -- which is what makes the
+    run document name the entrance's model on the entrance's node and the
+    subgraph's on the rest.
+    """
+    return {
+        "negotiation": str(final.get("negotiation", "")),
+        "run": str(final.get("run", "")),
+        "follows": final.get("follows"),
+        "began": str(final.get("began", "")),
+        "ended": "",
+        "ending": "",
+        "timings": list(final.get("timings", ())),
+    }
+
+
+Entrance = CompiledStateGraph[EntranceState, None, EntranceState, EntranceState]
+"""The compiled graph, as `build` returns it."""
+
+
+def build(
+    on: models.Chat,
+    budget: int = tools.CALL_BUDGET,
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    archive: Path | None = None,
+) -> Entrance:
+    """The compiled entrance graph, talking on `on`.
+
+    **Nothing here writes, and nothing here plans.** The reads answer questions
+    about what has been trained; everything else is handed to a subgraph, which
+    the caller runs once this turn has been answered (ADR-0006, item 6).
+    """
+    model = on.model
+    offered = tools.registered("entrance", TOOLS)
+    reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
+    handoffs = [{"type": "function", "function": tools.schema(tool)} for tool in HANDOFFS]
+    timed = records.timing(on)
+
+    def talk(state: EntranceState) -> dict[str, Any]:
+        """One turn of the conversation, with the tools bound only while they are still useful.
+
+        The system prompt is prepended rather than stored, because this history
+        is never cleared: kept in it, the words the entrance works to would be
+        whatever they were on the day the thread started.
+        """
+        born = records.born(state)
+        situation = state.get("relaying", "")
+        asked = (
+            [HumanMessage(RELAYING.format(situation=situation), name="machine")]
+            if situation
+            else []
+        )
+        definitions: list[dict[str, Any]] = []
+        if not situation and not state.get("handoff"):
+            # A turn that has already reached for a subgraph, and a turn opened
+            # to say one thing, both have nothing left to do but speak. Bound
+            # anyway, a model that calls a tool there is a second handoff on a
+            # turn that has one, or a tool call answering nobody.
+            definitions = [*(reads if state.get("spent", 0) < budget else []), *handoffs]
+        bound = model.bind_tools(definitions) if definitions else model
+        reply = bound.invoke([SystemMessage(TALKING), *state.get("messages", []), *asked])
+        return born | {"budget": budget, "messages": [*asked, reply]}
+
+    def read(state: EntranceState) -> dict[str, Any]:
+        """The turn's reads, run -- unless the budget they were taken off the
+        table for has already gone.
+
+        The bound is kept here as well as in `talk`, because the two are not
+        the same guarantee: `talk` stops *offering* the reads and this stops
+        *running* them. A model that calls a tool it was not offered would
+        otherwise spend the surface past its budget, one turn at a time, and
+        the only thing to end the run would be LangGraph's recursion limit.
+        """
+        reply = state["messages"][-1]
+        assert isinstance(reply, AIMessage)
+        spent = state.get("spent", 0)
+        if spent >= budget:
+            return {
+                "messages": [
+                    ToolMessage(SPENT, tool_call_id=answered(call), name=call["name"])
+                    for call in reply.tool_calls
+                ]
+            }
+        answers = [_answer(call, offered) for call in reply.tool_calls]
+        return {"messages": answers, "spent": spent + len(answers)}
+
+    def hand_off(state: EntranceState) -> dict[str, Any]:
+        """The turn that reached for a subgraph: which one, and every call in it answered.
+
+        Every call, because a turn carrying a read beside the handoff still has
+        to come back whole -- a tool call left without its answer is a history
+        the next turn is refused on.
+        """
+        reply = state["messages"][-1]
+        assert isinstance(reply, AIMessage)
+        taken = ""
+        answers: list[AnyMessage] = []
+        spent = 0
+        for call in reply.tool_calls:
+            if call["name"] not in STARTED:
+                spent += 1
+                answers.append(_answer(call, offered))
+                continue
+            said = ONE_AT_A_TIME if taken else STARTED[call["name"]]
+            taken = taken or call["name"]
+            answers.append(
+                ToolMessage(said, tool_call_id=answered(call), name=call["name"])
+            )
+        return {
+            "messages": answers,
+            "handoff": taken,
+            "spent": state.get("spent", 0) + spent,
+        }
+
+    def answer(state: EntranceState) -> dict[str, Any]:
+        """What the chat is told, and the run closed unless a subgraph is carrying it on."""
+        reply = state["messages"][-1]
+        said = reply.text.strip() if isinstance(reply, AIMessage) else ""
+        decided: dict[str, Any] = {"answer": said}
+        if not state.get("handoff"):
+            decided.update(
+                records.closing({**state, **decided}, records.DONE, budget, archive)
+            )
+        return decided
+
+    def after_talk(state: EntranceState) -> Literal["reads", "handoff", "answer"]:
+        reply = state["messages"][-1]
+        if state.get("handoff") or not isinstance(reply, AIMessage):
+            return "answer"
+        called = {call["name"] for call in reply.tool_calls}
+        if called & set(STARTED):
+            return "handoff"
+        return "reads" if called else "answer"
+
+    graph = StateGraph(EntranceState)
+    graph.add_node("entrance", timed("entrance", talk))
+    graph.add_node("reads", timed("reads", read))
+    graph.add_node("handoff", timed("handoff", hand_off))
+    graph.add_node("answer", timed("answer", answer))
+    graph.add_edge(START, "entrance")
+    graph.add_conditional_edges("entrance", after_talk)
+    graph.add_edge("reads", "entrance")
+    graph.add_edge("handoff", "entrance")
+    graph.add_edge("answer", END)
+    return graph.compile(checkpointer=checkpointer)
+
+
+def _answer(
+    call: ToolCall, offered: Sequence[Callable[..., Any]]
+) -> ToolMessage:
+    """One engine read, run and handed back."""
+    call_id = answered(call)
+    result = tools.execute(
+        tools.Call(id=call_id, name=call["name"], arguments=call["args"]),
+        offered,
+        KEEPS,
+    )
+    return ToolMessage(
+        result.content,
+        tool_call_id=call_id,
+        name=call["name"],
+        status="error" if result.failed else "success",
+    )
+
+
+def studio() -> Entrance:
+    """The entrance on the model `ENTRANCE_MODEL` names, as `langgraph dev` serves it."""
+    return build(models.entrance(), archive=records.archive())

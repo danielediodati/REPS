@@ -20,12 +20,34 @@ GROQ_MODEL_ENV = "GROQ_MODEL"
 API_KEY_ENV = "GROQ_API_KEY"
 MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
 
+ENTRANCE_BACKEND_ENV = "ENTRANCE_BACKEND"
+ENTRANCE_MODEL_ENV = "ENTRANCE_MODEL"
+"""The entrance's own provider and model (ADR-0006, item 3).
+
+Two settings and not one, because the entrance is the node latency is felt on
+and the planner is the node that needs the reasoning: the useful arrangement
+on this laptop is a small local model answering hello while `LLM_BACKEND`
+points the planner at Groq. Either of them empty falls back to what the coach
+runs on, so a fresh clone still has one provider to think about.
+"""
+
 OLLAMA = "ollama"
 GROQ = "groq"
 BACKENDS = (OLLAMA, GROQ)
 """What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
 
 DEFAULT_MODEL = "gpt-oss:20b"
+
+DEFAULT_ENTRANCE_MODEL = "llama3.1"
+"""The local model the entrance talks on, when `ENTRANCE_MODEL` does not name one.
+
+Not `DEFAULT_MODEL`. The entrance is read and answered on every turn, and
+`gpt-oss:20b` on this laptop's CPU is half a minute to say hello -- worse than
+the silence ADR-0006 replaces. `llama3.1` is the model the roadmap's own risk
+note records as running on the Radeon 860M while `gpt-oss:20b` terminates its
+Vulkan backend, so on the machine this was written for the entrance is the
+node that gets the GPU.
+"""
 
 DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
 """The Groq model, when `GROQ_MODEL` does not name one.
@@ -76,7 +98,15 @@ thing that is actually missing.
 """
 
 REASONING = "low"
-"""How hard `gpt-oss` reasons before it answers."""
+"""How hard `gpt-oss` reasons before it answers.
+
+Asked of every model that plans, and of none that talks. Ollama refuses the
+setting outright on a model that has no thinking phase -- `llama3.1` answers
+`"llama3.1" does not support thinking` with a 400, which is the first turn of
+the conversation lost -- and the entrance would not want it anyway: it reads
+prose and writes prose, and the seconds spent reasoning are the seconds the
+user is looking at an empty chat.
+"""
 
 
 class ModelError(RuntimeError):
@@ -96,14 +126,29 @@ class Chat:
     model: BaseChatModel
     provider: str
     name: str
+    setting: str = ""
+    """Which variable named this model, so a state about it names the line to edit.
+
+    Two nodes now name two models (ADR-0006), and a 404 on the entrance's
+    answered with *set `GROQ_MODEL`* sends the reader to the planner's line.
+    """
 
 
 def backend() -> str:
     """Which provider the coach runs on, and a state for one nobody built."""
-    named = os.environ.get(BACKEND_ENV) or OLLAMA
+    return _built(BACKEND_ENV, os.environ.get(BACKEND_ENV) or OLLAMA)
+
+
+def entrance_backend() -> str:
+    """Which provider the entrance talks on: its own, or the coach's when it names none."""
+    named = os.environ.get(ENTRANCE_BACKEND_ENV)
+    return _built(ENTRANCE_BACKEND_ENV, named) if named else backend()
+
+
+def _built(variable: str, named: str) -> str:
     if named not in BACKENDS:
         raise ModelError(
-            f"{BACKEND_ENV} names {named!r}, and the providers built are "
+            f"{variable} names {named!r}, and the providers built are "
             f"{', '.join(BACKENDS)}"
         )
     return named
@@ -112,8 +157,25 @@ def backend() -> str:
 def chat() -> Chat:
     """The chat model the environment names, on either provider."""
     if backend() == GROQ:
-        return Chat(groq_model(), GROQ, groq_model_name())
-    return Chat(ollama_model(), OLLAMA, model_name())
+        return Chat(groq_model(), GROQ, groq_model_name(), GROQ_MODEL_ENV)
+    return Chat(ollama_model(), OLLAMA, model_name(), MODEL_ENV)
+
+
+def entrance() -> Chat:
+    """The model the entrance holds the conversation on, which is its own (ADR-0006).
+
+    Falls back to the coach's provider and to that provider's default model, so
+    an installation that has said nothing about the entrance still gets one --
+    on Ollama a smaller model than the planner's, because this is the node the
+    user waits on.
+    """
+    if entrance_backend() == GROQ:
+        named = os.environ.get(ENTRANCE_MODEL_ENV) or groq_model_name()
+        return Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
+    named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
+    return Chat(
+        ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV
+    )
 
 
 def model_name() -> str:
@@ -149,23 +211,29 @@ def max_tokens() -> int:
     return asked
 
 
-def ollama_model() -> ChatOllama:
-    """The Ollama chat model the environment names."""
+def ollama_model(
+    named: str | None = None, reasoning: str | None = REASONING
+) -> ChatOllama:
+    """The Ollama chat model the environment names, or another this machine has.
+
+    `reasoning` of `None` leaves the setting off the request altogether, which
+    is what a model with no thinking phase needs.
+    """
     return ChatOllama(
-        model=model_name(),
+        model=named or model_name(),
         base_url=os.environ.get(BASE_URL_ENV) or None,
         num_ctx=_context_length(),
-        reasoning=REASONING,
+        reasoning=reasoning,
     )
 
 
-def groq_model() -> ChatGroq:
-    """The Groq chat model the environment names."""
+def groq_model(named: str | None = None) -> ChatGroq:
+    """The Groq chat model the environment names, or another Groq serves."""
     key = os.environ.get(API_KEY_ENV)
     if not key:
         raise ModelError(NO_CREDENTIALS)
     return ChatGroq(
-        model=groq_model_name(),
+        model=named or groq_model_name(),
         api_key=SecretStr(key),
         max_tokens=max_tokens(),
     )
@@ -230,7 +298,7 @@ def _groq_ready(on: Chat) -> None:
         # sorted alphabetically and opens on a text-to-speech model: a state
         # whose way out does not work is worse than the 404 it replaced.
         raise ModelError(
-            f"Groq does not serve {on.name}; set {GROQ_MODEL_ENV} to "
+            f"Groq does not serve {on.name}; set {on.setting or GROQ_MODEL_ENV} to "
             f"{DEFAULT_GROQ_MODEL}, or leave it empty for the same, or pick "
             f"another of: {', '.join(sorted(served))}"
         )

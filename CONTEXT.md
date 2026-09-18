@@ -104,6 +104,11 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 **Thread**: one chat's conversation, kept on disk and alive across restarts. One chat is one thread for as long as the chat lives.
 _Avoid_: conversation, which says the same thing loosely.
 
+**Entrance**: the node the user talks to. It holds the conversation on a model of its own, answers what the engine's read tools can answer, and reaches the planner and the logger as tools (ADR-0006). It states no training fact a tool did not give it, and it decides nothing the engine decides.
+_Avoid_: router, which is what it replaced, and supervisor, which is session 13's.
+
+**Situation**: one thing that happened, named by the machine for the entrance to say in its own words — a plan accepted, a message arriving mid-run, a plan the thread has moved past. The name is the machine's and the sentence is the model's; a situation whose words are fixed is a constant by another name.
+
 **Run**: one thing a graph was asked for, pursued to an end — a proposal from the request being assembled to the user's answer, or one report read into a document. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
 _Avoid_: calling one invocation of the graph a run, or one message in the queue.
 

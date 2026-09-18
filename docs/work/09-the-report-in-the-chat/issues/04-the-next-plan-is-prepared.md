@@ -14,6 +14,13 @@ The plan takes minutes on the local model, and today those minutes are always sp
 - **It does not run while you are being answered.** One run at a time per thread is what the turn-taking guarantees, and a background plan must not make the bot look busy to the person typing into it.
 - **The declaration decides whether it happens at all.** A plan prepared for a day the user does not train is minutes of a laptop's CPU spent on nothing.
 
+## What 03 left for this one
+
+- **A run has to be startable without an entrance turn in front of it.** 03 made a turn one run: the entrance is its first node and `entrance.carried` hands the run and its seconds to the subgraph, which is how one document names both models. A plan nobody asked for has no entrance turn, so it opens its own run with `planner.starting` alone -- which works today, and is the thing to say out loud rather than discover.
+- **`bot._planning` and `bot._logging` both take the entrance's final state**, for `carried` only. The machine-triggered path is the same two functions without it.
+- **The entrance's latency does not matter here and does matter everywhere else.** Measured on `llama3.1` on the dev laptop: about a minute for a user turn, six seconds to say one thing that happened (ADR-0006, *Why*). Nobody is waiting on a prepared plan, so this is the one path where the minutes are free -- and the line it arrives on is a relayed situation, which is the cheap kind.
+- **`bot.under(thread, PLANNING)` is the thread a prepared plan runs on**, the same one a requested plan uses. That is what makes *superseded rather than duplicated* fall out of the checkpointer instead of needing a rule.
+
 ## Acceptance criteria
 
 - [ ] Reporting a workout leaves a plan waiting in the chat, without a request.

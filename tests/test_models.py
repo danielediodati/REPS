@@ -295,3 +295,89 @@ def test_max_tokens_is_read_from_the_environment(
     monkeypatch.setenv(models.MAX_TOKENS_ENV, "4096")
 
     assert models.max_tokens() == 4096
+
+
+# -- the entrance's own model (ADR-0006, item 3) -------------------------------
+
+
+def test_the_entrance_runs_on_a_smaller_model_than_the_planner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not `DEFAULT_MODEL`. The entrance is read and answered on every turn,
+    and half a minute to say hello is worse than the silence it replaces."""
+    monkeypatch.delenv(models.ENTRANCE_MODEL_ENV, raising=False)
+    monkeypatch.delenv(models.MODEL_ENV, raising=False)
+
+    front = models.entrance()
+
+    assert front.name == models.DEFAULT_ENTRANCE_MODEL
+    assert front.name != models.DEFAULT_MODEL
+    assert front.provider == models.OLLAMA
+
+
+def test_the_entrance_takes_the_model_the_environment_names_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.ENTRANCE_MODEL_ENV, "llama3.2:3b")
+
+    assert models.entrance().name == "llama3.2:3b"
+
+
+def test_the_entrance_falls_back_to_the_provider_the_coach_runs_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One provider to think about on a fresh clone, and two lines when the
+    planner goes to Groq and the entrance stays here."""
+    monkeypatch.delenv(models.ENTRANCE_BACKEND_ENV, raising=False)
+    monkeypatch.setenv(models.BACKEND_ENV, models.GROQ)
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+
+    assert models.entrance().provider == models.GROQ
+
+
+def test_the_entrance_can_stay_local_while_the_planner_goes_to_groq(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, models.GROQ)
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.ENTRANCE_BACKEND_ENV, models.OLLAMA)
+
+    assert models.entrance().provider == models.OLLAMA
+    assert models.chat().provider == models.GROQ
+
+
+def test_an_entrance_backend_nobody_built_names_its_own_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.ENTRANCE_BACKEND_ENV, "vllm")
+
+    with pytest.raises(models.ModelError, match=models.ENTRANCE_BACKEND_ENV):
+        models.entrance()
+
+
+def test_a_model_groq_does_not_serve_names_the_line_that_chose_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two nodes name two models, and *set `GROQ_MODEL`* on the entrance's 404
+    sends the reader to the planner's line."""
+    monkeypatch.setenv(models.BACKEND_ENV, models.GROQ)
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.ENTRANCE_MODEL_ENV, "a-name-groq-retired")
+    serving(monkeypatch, models.DEFAULT_GROQ_MODEL)
+
+    with pytest.raises(models.ModelError, match=models.ENTRANCE_MODEL_ENV):
+        models.ready(models.entrance())
+
+
+def test_the_entrance_never_asks_a_local_model_to_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ollama refuses the setting outright on a model with no thinking phase:
+    `"llama3.1" does not support thinking`, a 400, and the first turn of the
+    conversation lost. The default entrance model is one of those, and the
+    entrance would not want it anyway -- the seconds spent reasoning are the
+    seconds the user is looking at an empty chat."""
+    monkeypatch.delenv(models.ENTRANCE_MODEL_ENV, raising=False)
+
+    assert cast(Any, models.entrance().model).reasoning is None
+    assert cast(Any, models.chat().model).reasoning == models.REASONING

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
@@ -16,6 +17,9 @@ from langgraph.types import StateSnapshot
 
 from trainer.coach.calls import answered
 from trainer.engine import home
+
+if TYPE_CHECKING:
+    from trainer.coach import models
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,16 @@ class Graph(Protocol):
     """
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot: ...
+
+
+class Node(Protocol):
+    """One step of a graph. The parameter is named, which is what LangGraph asks of a node.
+
+    Typed on the state as `Any`, because the three graphs hold three different
+    states and what `timing` below does to a node is the same for all of them.
+    """
+
+    def __call__(self, state: Any) -> dict[str, Any]: ...
 
 ARCHIVE_NAME = "runs"
 """The directory in the home the closed runs land in, one per negotiation."""
@@ -89,6 +103,52 @@ def identity(negotiation: str, follows: str | None) -> dict[str, Any]:
         "ended": "",
         "ending": "",
     }
+
+
+def born(state: Mapping[str, Any]) -> dict[str, Any]:
+    """The identity a run that was started without one needs, or nothing when it has one.
+
+    Studio and the HTTP API open a thread with the graph's own input and
+    nothing else, and a run has to be a thing that can be read back whichever
+    door opened it. Nothing once there is a run: every later turn of it would
+    otherwise give it a new name.
+    """
+    return {} if state.get("run") else identity(negotiation_id(), None)
+
+
+def timing(on: models.Chat) -> Callable[[str, Node], Node]:
+    """Wrap a graph's nodes so each says who answered it and what it cost.
+
+    The seconds are the thing being measured, and the model is beside them
+    because from ADR-0006 there is no one model per run: the entrance answers
+    its own node on a small fast model and the subgraph it opens answers the
+    rest on the one `LLM_BACKEND` names. Read off the top of the document
+    instead, a planning run would report the entrance's model for work the
+    planner did.
+
+    A node that started a new run says so by handing back timings of its own,
+    and keeps them: its seconds belong to neither run. On `propose`, the only
+    node that does it, they are how long the user took to answer, which is not
+    a cost of planning at all.
+    """
+
+    def timed(node: str, step: Node) -> Node:
+        def counted(state: Any) -> dict[str, Any]:
+            started = time.monotonic()
+            produced = step(state)
+            if "timings" in produced:
+                return produced
+            spent = time.monotonic() - started
+            return produced | {
+                "timings": [
+                    *state.get("timings", []),
+                    (node, on.name, on.provider, spent),
+                ]
+            }
+
+        return counted
+
+    return timed
 
 
 def closing(

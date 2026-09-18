@@ -7,7 +7,14 @@ import contextlib
 import logging
 import os
 import random
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Mapping,
+    Sequence,
+)
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date
@@ -18,10 +25,13 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
 
+from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import logfile, models, planner, progress
+from trainer.coach import entrance, logfile, models, planner, progress
+from trainer.coach import logger as logger_graph
 from trainer.coach import record as run_record
+from trainer.engine import workouts
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -35,8 +45,6 @@ EXAMPLE = ".env.example"
 
 logger = logging.getLogger(__name__)
 
-STARTED = "Sono il tuo allenatore. Scrivimi quando vuoi."
-
 IN_THE_LOG = f"Il motivo è scritto in {logfile.LOG_NAME}."
 """Where the detail is, said the same way by both lines that have one.
 
@@ -47,7 +55,7 @@ layout on a third party's servers for no gain.
 """
 
 BLOCKED = (
-    "Non posso pianificare: c'è qualcosa da sistemare sul PC. " + IN_THE_LOG
+    "Non posso lavorarci: c'è qualcosa da sistemare sul PC. " + IN_THE_LOG
 )
 """A precondition the machine gets wrong, said without saying which.
 
@@ -79,8 +87,6 @@ a draft is drawn at all, and the first minute of a local run is exactly when
 the user most needs to see something.
 """
 
-QUEUED = "Sto ancora lavorando a quello di prima. Questo lo faccio subito dopo."
-
 FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova. " + IN_THE_LOG
 """Said when a run raises.
 
@@ -88,6 +94,10 @@ A provider that falls over mid-run is the ordinary case on a laptop, and the
 user is looking at a phone. An exception that reaches only the log is a bot
 that has stopped answering, and the draft the run was writing into is gone
 thirty seconds later with nothing left behind to say what happened.
+
+It is also what a silent entrance gets. ADR-0006 keeps these two lines
+constants because they are the cases where the model is absent or not to be
+trusted, and a turn that came back with no words is one of them.
 """
 
 
@@ -177,13 +187,36 @@ def thread_for(chat_id: int) -> str:
     Derived from the chat id rather than invented per run, which is what lets
     the conversation survive a restart: the checkpointer is on disk, and the
     next process computes the same thread id for the same chat.
+
+    This one is the entrance's -- the conversation itself. The subgraphs it
+    opens run on threads of their own, named off this one by `under`.
     """
     return f"chat:{chat_id}"
+
+
+PLANNING = "plan"
+LOGGING = "log"
+
+
+def under(thread: str, graph: str) -> str:
+    """One of a chat's subgraph threads, derived from the chat's own.
+
+    Three graphs on one thread id would write three states into one
+    checkpoint, and every one of them has a channel called `messages`: on the
+    entrance it is the conversation and on either subgraph a working history
+    one run long. Derived rather than minted, for the reason `thread_for` is:
+    the next process computes the same names for the same chat, so a plan
+    offered before a restart is still answerable after it.
+    """
+    return f"{thread}/{graph}"
 
 
 KEPT = "ok"
 TURNED_DOWN = "no"
 SHORTER = "30"
+
+CONFIRMED = "y"
+DECLINED = "n"
 
 SHORTER_MINUTES = 30
 
@@ -194,22 +227,33 @@ BUTTONS = (
 )
 """The three answers a proposed plan takes, as (action, label)."""
 
+CONFIRM = ((CONFIRMED, "Sì"), (DECLINED, "No"))
+"""The two answers the exclusion the logger proposes takes.
+
+A closed question, which is what the payload says it is: the terminal reads
+the same two answers as a prompt (`cli._confirmed`), and here they are the
+buttons that shape.
+"""
+
+ACTIONS = dict(BUTTONS) | dict(CONFIRM)
+"""Every action a callback may carry, so one tap is recognised and no other is."""
+
 SAID = {
     TURNED_DOWN: "Non mi va questo allenamento.",
     SHORTER: f"Ho solo {SHORTER_MINUTES} minuti.",
 }
 """What a tap means in words, because the planner is told why and not which button."""
 
-WRITTEN = "Fatto. È il tuo allenamento di oggi."
-
-SUPERSEDED = (
-    "Quel piano non è più quello in corso: scrivimi di nuovo e te ne preparo un altro."
+EXCLUSION_ASKED = (
+    "{why}\n\nSmetto di proporti «{value}» fino al {retest_date}. Va bene?"
 )
-"""A tap on a plan the thread has moved past. Not an error, and never silence."""
+"""The exclusion, as the chat puts it.
 
-NO_PLAN = (
-    "Non sono riuscito a farti un piano che stia dentro i vincoli. Riprova a scrivermi."
-)
+The model's `why` first, because it is the part that says what was read in the
+report, and then what would actually stop and until when -- which is the half
+the user is being asked to agree to and the half the model does not decide:
+`logger.confirm` classifies the value against the catalog before asking.
+"""
 
 SEPARATOR = "|"
 
@@ -237,7 +281,7 @@ def tap_of(data: str) -> Tap | None:
     """The tap a callback carries, or nothing when it is not one of ours."""
     action, _, rest = data.partition(SEPARATOR)
     thread, _, proposal = rest.partition(SEPARATOR)
-    if action not in dict(BUTTONS) or not thread or not proposal:
+    if action not in ACTIONS or not thread or not proposal:
         logger.info("ignored a callback carrying %r", data)
         return None
     return Tap(action=action, thread=thread, proposal=proposal)
@@ -283,10 +327,19 @@ class Chat:
 
 
 Run = Callable[[str, str, Chat], Awaitable[None]]
-"""The work one message causes, on one thread: `planning` below."""
+"""The work one message causes, on one thread: `talking` below."""
 
 Resume = Callable[[str, "Tap", Chat], Awaitable[None]]
-"""The work one tap causes: it answers the interrupt the plan is waiting on."""
+"""The work one tap causes: it answers the interrupt a run is waiting on."""
+
+Relay = Callable[[str, str, Chat], Awaitable[None]]
+"""One thing that happened, said on this thread in the entrance's own words.
+
+The machine names the situation; the sentence is the model's (ADR-0006). Its
+own type because the turn-taking says three of them -- hello, *in coda*, and
+whatever a run it is holding could not say for itself -- and none of those is
+a run.
+"""
 
 Turn = str | Tap
 """One piece of work on a thread: something the user wrote, or a button they tapped."""
@@ -303,20 +356,37 @@ class _Conversation:
     waiting: list[Waiting] = field(default_factory=list)
 
 
-class Coach:
-    """One run at a time per thread, for the owner and nobody else."""
+class Turns:
+    """One run at a time per thread, for the owner and nobody else.
 
-    def __init__(self, owner_id: int, run: Run, resume: Resume | None = None) -> None:
+    The turn-taking and nothing else. It was `Coach` until ADR-0006, which
+    needed the word for the node that does the coaching: what this holds is
+    whether the thread is busy and what arrived while it was.
+    """
+
+    def __init__(
+        self,
+        owner_id: int,
+        run: Run,
+        resume: Resume | None = None,
+        relay: Relay | None = None,
+    ) -> None:
         self._owner_id = owner_id
         self._run = run
         self._resume = resume
+        self._relay = relay
         self._threads: dict[str, _Conversation] = {}
 
     async def started(self, user_id: int, chat_id: int, chat: Chat) -> None:
-        """Answer `/start`, if the owner sent it."""
+        """Answer `/start`, if the owner sent it.
+
+        Outside the queue, and on purpose: saying hello must not wait out the
+        four minutes a plan takes. Two entrance turns never overlap even so --
+        the graph is serialised per thread where it is invoked.
+        """
         if not self._answers(user_id):
             return
-        await self._tell(thread_for(chat_id), chat, STARTED)
+        await self._relayed(thread_for(chat_id), chat, entrance.HELLO)
 
     async def arriving(
         self, user_id: int, chat_id: int, text: str, chat: Chat
@@ -355,7 +425,7 @@ class Coach:
             # Queued before the acknowledgement is attempted, not after: a chat
             # that cannot be written to must not also cost the message.
             conversation.waiting.append((turn, chat))
-            await self._tell(thread, chat, QUEUED)
+            await self._relayed(thread, chat, entrance.QUEUED)
             return
 
         conversation.busy = True
@@ -414,6 +484,21 @@ class Coach:
         except Exception:
             logger.exception("could not write to %s", thread)
 
+    async def _relayed(self, thread: str, chat: Chat, situation: str) -> None:
+        """One thing that happened, said by the entrance, whose failure is nobody's problem.
+
+        The rule `_tell` keeps, with one more way to go wrong in front of it:
+        the sentence has to be generated before it can be sent, and a model
+        that is not there must not take the update handler down with it. That
+        is the case ADR-0006 item 5 leaves a constant for.
+        """
+        assert self._relay is not None, "a situation reached the turn-taking with no entrance"
+        try:
+            await self._relay(thread, situation, chat)
+        except Exception:
+            logger.exception("the entrance could not speak on %s", thread)
+            await self._tell(thread, chat, FAILED)
+
     def _answers(self, user_id: int) -> bool:
         """Whether this is the owner, checked before anything looks at the message."""
         if user_id == self._owner_id:
@@ -422,45 +507,194 @@ class Coach:
         return False
 
 
-def planning(graph: planner.Planner, archive: Path) -> Run:
-    """One message, planned: today's request assembled, the graph run, the plan offered.
+@dataclass(frozen=True)
+class Graphs:
+    """The three graphs one chat is answered by, and where their runs are kept.
 
-    The request comes from `plan.requested`, which the terminal calls too --
-    the chat names almost nothing, and everything it does not name is derived
-    from the declaration and from the performed workouts rather than asked
-    for. What the user wrote goes into the thread as `said` and nothing reads
-    it: this ticket plans today's workout whatever the words were, and reading
-    them is the router's job in session 8.
+    One object rather than three parameters and a path, because every door
+    below reaches for more than one of them: the entrance decides, a subgraph
+    does the work, and the entrance says what came of it.
+    """
+
+    entrance: entrance.Entrance
+    planner: planner.Planner
+    logger: logger_graph.Logger
+    archive: Path
+    talking: dict[str, asyncio.Lock] = field(default_factory=dict)
+    """One lock per thread, so two turns never invoke the entrance on it at once.
+
+    The queue in `Turns` serialises the *work* a chat causes, and this is the
+    half it cannot. A message arriving mid-run is answered by the entrance
+    saying so, and that sentence is itself a turn on the thread the run in
+    flight is already talking on -- two invocations, one checkpoint.
+    """
+
+
+def talking(graphs: Graphs) -> Run:
+    """One message, answered by the entrance, which may hand it on to a subgraph.
+
+    The turn is answered as soon as the entrance has spoken and the subgraph
+    runs behind it (ADR-0006, item 6): a plan is minutes, and a chat that says
+    nothing for four of them is the silence this replaces.
+
+    What the entrance may decide is in ADR-0006 item 4, and the two things it
+    is not asked are here: which workout is due comes from the rotation, read
+    off the performed workouts by `plan.requested`, and which prescribed
+    workout a report is filed against is resolved by `workouts.awaiting`.
+    """
+
+    async def run(thread: str, text: str, chat: Chat) -> None:
+        if await asyncio.to_thread(_asking, graphs, thread) is not None:
+            # The logger is holding a clarifying question, so this message is
+            # the answer to it and not a new turn. That is the graph's own
+            # state and not something the entrance is asked to work out.
+            await _reporting(graphs, thread, Command(resume=text), chat)
+            return
+        final = await _entrance(graphs, thread, entrance.heard(text))
+        await _spoken(final, thread, chat)
+        handoff = str(final.get("handoff", ""))
+        if handoff == entrance.PLAN_TODAY:
+            await _planning(graphs, thread, final, chat)
+        elif handoff == entrance.LOG_WORKOUT:
+            await _logging(graphs, thread, text, final, chat)
+
+    return run
+
+
+def relaying(graphs: Graphs) -> Relay:
+    """One thing that happened, put to the entrance for it to say in its own words."""
+
+    async def relay(thread: str, situation: str, chat: Chat) -> None:
+        await _relay(graphs, thread, situation, chat)
+
+    return relay
+
+
+async def _relay(graphs: Graphs, thread: str, situation: str, chat: Chat) -> None:
+    final = await _entrance(graphs, thread, entrance.relayed(situation))
+    await _spoken(final, thread, chat)
+
+
+async def _entrance(
+    graphs: Graphs, thread: str, given: Any
+) -> dict[str, Any]:
+    """One turn of the entrance, serialised per thread and with its ending written.
+
+    A node cannot write after it has raised (ADR-0007, item 1), and the turn
+    above this catches the exception to say `FAILED` -- so without this the
+    entrance would be the one graph whose failures leave nothing behind.
+    """
+    on = _reading(thread)
+    async with graphs.talking.setdefault(thread, asyncio.Lock()):
+        try:
+            return cast(
+                dict[str, Any],
+                await asyncio.to_thread(graphs.entrance.invoke, given, on),
+            )
+        except Exception:
+            await asyncio.to_thread(
+                run_record.failed,
+                graphs.entrance,
+                on,
+                tools.CALL_BUDGET,
+                graphs.archive,
+            )
+            raise
+
+
+async def _spoken(final: Mapping[str, Any], thread: str, chat: Chat) -> None:
+    """What the entrance said, into the chat.
+
+    A turn that came back with no words is the model failing rather than
+    choosing silence, and it is answered the way an absent one is: nothing
+    raised leaves the machine, and the chat gets the constant ADR-0006 keeps
+    for exactly this.
+    """
+    said = str(final.get("answer", "")).strip()
+    if not said:
+        logger.warning("the entrance answered %s with nothing", thread)
+    await chat.say(said or FAILED)
+
+
+async def _planning(
+    graphs: Graphs, thread: str, final: Mapping[str, Any], chat: Chat
+) -> None:
+    """The planner, behind the turn the entrance has already answered.
 
     A run started here supersedes any plan the thread was still waiting on.
     Invoking with fresh input drops the pending proposal, and a tap on it
-    afterwards finds an interrupt id that no longer matches, which is what
-    `SUPERSEDED` answers.
+    afterwards finds an interrupt id that no longer matches.
 
     Assembling the request is a synchronous read of SQLite and of the
     declaration, and it is the half that can be refused -- so it happens
     before the draft opens. Promising minutes of work and then answering with
     a state is worse than answering with the state.
     """
+    try:
+        request = await asyncio.to_thread(_todays_request)
+    except tools.ToolFailure as state:
+        # Logged here rather than left to the caller: `_attempt` catches what
+        # escapes a run, and this is a state the run never reached. With the
+        # traceback, which is not noise on a state: it says which of the
+        # preconditions the run stopped on.
+        logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    given = dict(planner.starting(request)) | entrance.carried(final)
+    await _proposing(graphs, thread, given, chat)
 
-    async def run(thread: str, text: str, chat: Chat) -> None:
-        graph.update_state(_reading(thread), {"said": [text]})
-        try:
-            request = await asyncio.to_thread(_todays_request)
-        except tools.ToolFailure as state:
-            # Logged here rather than left to the caller: `_attempt` catches
-            # what escapes a run, and this is a state the run never reached.
-            # With the traceback, which is not noise on a state: it says which
-            # of the preconditions the run stopped on.
-            logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
-            await chat.say(BLOCKED)
-            return
-        final = await _ending(
-            graph, planner.starting(request), thread, chat, archive
+
+async def _proposing(graphs: Graphs, thread: str, given: Any, chat: Chat) -> None:
+    """One run of the planner, streamed, and what it leaves the chat holding."""
+    settled = await _ending(
+        graphs.planner,
+        given,
+        under(thread, PLANNING),
+        chat,
+        graphs.archive,
+        progress.Progress(progress.PLAN),
+    )
+    await told(graphs, settled, thread, chat)
+
+
+async def _logging(
+    graphs: Graphs, thread: str, text: str, final: Mapping[str, Any], chat: Chat
+) -> None:
+    """The logger, behind the turn the entrance has already answered.
+
+    The report is `text` -- what the user typed, character for character. The
+    entrance never retells it: a paraphrase is the system's reading of the
+    user rather than the user, and `report` is what a hypothesis is formed
+    from.
+    """
+    try:
+        open_workout = await asyncio.to_thread(_awaiting)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot read a report: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    given = dict(
+        logger_graph.starting(
+            text,
+            date.today().isoformat(),
+            awaiting=None if open_workout is None else open_workout.id,
+            prescribed_on=None if open_workout is None else open_workout.prescribed_on,
         )
-        await told(final, thread, chat)
+    ) | entrance.carried(final)
+    await _reporting(graphs, thread, given, chat)
 
-    return run
+
+async def _reporting(graphs: Graphs, thread: str, given: Any, chat: Chat) -> None:
+    """One run of the logger, streamed, and what it leaves the chat holding."""
+    settled = await _ending(
+        graphs.logger,
+        given,
+        under(thread, LOGGING),
+        chat,
+        graphs.archive,
+        progress.Progress(progress.LOG),
+    )
+    await reported(graphs, settled, thread, chat)
 
 
 DRAFT_SECONDS = 20.0
@@ -473,10 +707,11 @@ back to being empty, which is the state this ticket exists to end.
 
 
 async def streamed(
-    graph: planner.Planner,
+    graph: Any,
     given: Any,
     on: RunnableConfig,
     chat: Chat,
+    lines: progress.Progress,
 ) -> dict[str, Any]:
     """One run, with its progress in the chat while it happens.
 
@@ -500,8 +735,11 @@ async def streamed(
 
     The last `values` chunk carries what `invoke` would have returned, the
     pending interrupt included, so `told` reads the same shape either way.
+
+    `lines` is handed in because the two subgraphs share four node names and
+    mean different things by three of them: a draft saying *scrivo il piano*
+    while a report is being read is a lie about what the machine is doing.
     """
-    lines = progress.Progress()
     final: dict[str, Any] = {}
     loop = asyncio.get_running_loop()
     arriving: asyncio.Queue[Any] = asyncio.Queue()
@@ -601,42 +839,86 @@ def _todays_request() -> plans.Request:
         return plans.requested(connection, date.today().isoformat()).request
 
 
-def answering(graph: planner.Planner, archive: Path) -> Resume:
+def _awaiting() -> workouts.Workout | None:
+    """The prescribed workout a report would be filed against, off the same function `trainer log` uses."""
+    with tools.reported(), tools.opened() as connection:
+        return workouts.awaiting(connection)
+
+
+def _asking(graphs: Graphs, thread: str) -> Any | None:
+    """The clarifying question the logger is holding on this thread, or nothing.
+
+    The exclusion is not one of these. It is a closed question with two
+    buttons under it, so a message arriving while it waits is a new turn and
+    not an answer -- which is what the payload's `kind` is for (ADR-0006, and
+    the terminal reads the same field in `cli._answered`).
+    """
+    pending = graphs.logger.get_state(_reading(under(thread, LOGGING))).interrupts
+    if not pending:
+        return None
+    asked = pending[0].value
+    if isinstance(asked, Mapping) and asked.get("kind") == logger_graph.CLARIFY:
+        return pending[0]
+    return None
+
+
+def answering(graphs: Graphs) -> Resume:
     """The tap, answered: the thread resumes and the run goes on from there (ADR-0005).
 
-    The write is the graph's, in the node after the resume. Nothing here
-    touches the database, which is what keeps the interface out of the
-    training facts.
+    Which graph is resumed is read off the action, because a button carries 64
+    bytes and the two sets of actions are disjoint. The write is the graph's
+    for a plan and `_written`'s for a report, and neither is this function's:
+    what happens here is a resume and a stream.
     """
 
     async def resume(thread: str, tap: Tap, chat: Chat) -> None:
-        pending = graph.get_state(_reading(thread)).interrupts
+        if tap.action in dict(CONFIRM):
+            await _confirming(graphs, thread, tap, chat)
+            return
+        pending = graphs.planner.get_state(
+            _reading(under(thread, PLANNING))
+        ).interrupts
         if not pending or pending[0].id != tap.proposal:
             # The thread has moved on, or this plan was already answered. A
             # tap on it is a question about a plan that is no longer the one
             # in hand, and silence would read as a bot that is down.
-            await chat.say(SUPERSEDED)
+            await _relay(graphs, thread, entrance.SUPERSEDED, chat)
             return
         # Streamed like any other run: a refusal plans the whole workout
         # again, which is the same minutes of silence a question costs.
-        final = await _ending(graph, Command(resume=_answer(tap)), thread, chat, archive)
-        await told(final, thread, chat)
+        await _proposing(graphs, thread, Command(resume=_answer(tap)), chat)
 
     return resume
 
 
+async def _confirming(graphs: Graphs, thread: str, tap: Tap, chat: Chat) -> None:
+    """The exclusion, confirmed or declined, and the run carried on from there."""
+    pending = graphs.logger.get_state(_reading(under(thread, LOGGING))).interrupts
+    if not pending or pending[0].id != tap.proposal:
+        await _relay(graphs, thread, entrance.SUPERSEDED, chat)
+        return
+    await _reporting(
+        graphs, thread, Command(resume=tap.action == CONFIRMED), chat
+    )
+
+
 async def _ending(
-    graph: planner.Planner, given: Any, thread: str, chat: Chat, archive: Path
+    graph: Any,
+    given: Any,
+    thread: str,
+    chat: Chat,
+    archive: Path,
+    lines: progress.Progress,
 ) -> dict[str, Any]:
     """One run, streamed, and its ending written even when it is the graph falling over.
 
-    A node cannot write after it has raised (ADR-0007, item 1), and the coach
-    above this catches the exception to say `FAILED` -- so the run would
-    otherwise be the one kind that leaves nothing behind, which is the kind
-    you most want to read.
+    A node cannot write after it has raised (ADR-0007, item 1), and the
+    turn-taking above this catches the exception to say `FAILED` -- so the run
+    would otherwise be the one kind that leaves nothing behind, which is the
+    kind you most want to read.
     """
     try:
-        return await streamed(graph, given, _reading(thread), chat)
+        return await streamed(graph, given, _reading(thread), chat, lines)
     except Exception:
         await asyncio.to_thread(
             run_record.failed, graph, _reading(thread), tools.CALL_BUDGET, archive
@@ -649,7 +931,7 @@ def _answer(tap: Tap) -> planner.Answer:
 
     A button is not a sentence, and the planner is told *why* rather than
     which of three things was pressed -- the same field the user's own words
-    will reach it through when session 8's router reads what they typed.
+    reach it through when they turn a plan down by writing instead of tapping.
     """
     if tap.action == KEPT:
         return planner.accepted()
@@ -658,12 +940,18 @@ def _answer(tap: Tap) -> planner.Answer:
     return planner.refused(SAID[TURNED_DOWN])
 
 
-async def told(final: dict[str, Any], thread: str, chat: Chat) -> None:
-    """What the chat is left holding when a run stops: a plan, the workout, or neither.
+async def told(
+    graphs: Graphs, final: Mapping[str, Any], thread: str, chat: Chat
+) -> None:
+    """What the chat is left holding when a planning run stops: a plan, the workout, or neither.
 
     An ordinary message in every case. The draft the run was writing into is a
     thirty-second preview and is gone by the time the user reads this, which is
     the difference between watching a run and being told what it decided.
+
+    The plan itself is rendered here and the other two are the entrance's to
+    say: a plan is a document with a shape, and *it is yours now* is a
+    sentence.
     """
     waiting = final.get("__interrupt__")
     if waiting:
@@ -676,11 +964,81 @@ async def told(final: dict[str, Any], thread: str, chat: Chat) -> None:
             ],
         )
     elif final.get("workout") is not None:
-        await chat.say(WRITTEN)
+        await _relay(graphs, thread, entrance.PRESCRIBED, chat)
     else:
         # Every attempt refused by the validator. There is no plan to offer,
         # and saying nothing would leave the user waiting on a run that ended.
-        await chat.say(NO_PLAN)
+        await _relay(graphs, thread, entrance.NO_PLAN, chat)
+
+
+async def reported(
+    graphs: Graphs, final: Mapping[str, Any], thread: str, chat: Chat
+) -> None:
+    """What the chat is left holding when a run of the logger stops.
+
+    The write happens here and never in the graph (`logger.build`), so a run
+    stopped on a question leaves the training tables exactly as they were.
+    """
+    waiting = final.get("__interrupt__")
+    if waiting:
+        await _asked(waiting[0], thread, chat)
+        return
+    if final.get("refused") is not None:
+        await _relay(graphs, thread, entrance.NOT_LOGGED, chat)
+        return
+    await asyncio.to_thread(_written, final)
+    await _relay(graphs, thread, entrance.LOGGED, chat)
+
+
+async def _asked(waiting: Any, thread: str, chat: Chat) -> None:
+    """The question the run stopped on, put to the chat the way its kind asks for.
+
+    Open or closed is the graph's to say and not this door's -- the same
+    payload reaches the terminal, where the closed one is a yes/no prompt.
+    Here it is two buttons, and the open one is a message to reply to.
+    """
+    question = waiting.value
+    if question.get("kind") == logger_graph.EXCLUSION:
+        await chat.offer(
+            exclusion(question),
+            [
+                (carried(Tap(action, thread, waiting.id)), label)
+                for action, label in CONFIRM
+            ],
+        )
+        return
+    await chat.say(str(question.get("ask", "")))
+
+
+def exclusion(question: Mapping[str, Any]) -> str:
+    """The proposed exclusion, as the chat asks about it.
+
+    Escaped and with no markup of its own. Everything in it was written by a
+    model or read out of the catalog, and MarkdownV2 makes a dot and a hyphen
+    syntax -- an unescaped one loses the question, not the formatting.
+    """
+    from telegram.helpers import escape_markdown
+
+    return escape_markdown(
+        EXCLUSION_ASKED.format(
+            why=question.get("ask", ""),
+            value=question.get("value", ""),
+            retest_date=question.get("retest_date", ""),
+        ),
+        version=2,
+    )
+
+
+def _written(final: Mapping[str, Any]) -> int:
+    """The document, and the exclusion only if it was confirmed, written down.
+
+    The blocks are resolved once and handed to the writer, the way the
+    terminal does it: resolving them twice is two answers to what adherence
+    filled in.
+    """
+    with tools.reported(), tools.opened() as connection:
+        blocks = logs.to_performed(connection, final["document"])
+        return logger_graph.performed(connection, final, blocks)
 
 
 HEADING = "*Blocco {position}* · {rounds} giri · {rest}s di recupero · {minutes}:{seconds:02d}"
@@ -746,13 +1104,18 @@ def _reading(thread: str) -> RunnableConfig:
     return {"configurable": {"thread_id": thread}}
 
 
-def turns(graph: planner.Planner, thread: str) -> list[str]:
-    """What the user has written on this thread, in the order they wrote it."""
+def turns(graph: run_record.Graph, thread: str) -> list[str]:
+    """What the user has written on this thread, in the order they wrote it.
+
+    Off the entrance, which is where `said` now lives: it is the conversation
+    the entrance reads, and the planner's `starting` goes on leaving its own
+    copy of the key alone (ADR-0006).
+    """
     said: list[str] = graph.get_state(_reading(thread)).values.get("said", [])
     return list(said)
 
 
-def application(declared: Settings, coach: Coach) -> Application[Any, Any, Any, Any, Any, Any]:
+def application(declared: Settings, coach: Turns) -> Application[Any, Any, Any, Any, Any, Any]:
     """The Telegram application, with its handlers wired to `coach`.
 
     `concurrent_updates`, because the queue depends on it: processed one at a
@@ -800,7 +1163,7 @@ Handler = Callable[["Update", "ContextTypes.DEFAULT_TYPE"], Coroutine[Any, Any, 
 is narrower than an awaitable one and is what its own signatures ask for."""
 
 
-def _on_start(coach: Coach) -> Handler:
+def _on_start(coach: Turns) -> Handler:
     async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         who = _who(update)
         if who is None:
@@ -811,7 +1174,7 @@ def _on_start(coach: Coach) -> Handler:
     return handle
 
 
-def _on_message(coach: Coach) -> Handler:
+def _on_message(coach: Turns) -> Handler:
     async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         who = _who(update)
         # `effective_message` rather than `message`: which field carried the
@@ -826,7 +1189,7 @@ def _on_message(coach: Coach) -> Handler:
     return handle
 
 
-def _on_tap(coach: Coach) -> Handler:
+def _on_tap(coach: Turns) -> Handler:
     async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         tap = update.callback_query
         who = _who(update)
@@ -848,7 +1211,7 @@ def _who(update: Update) -> tuple[int, int] | None:
     """Who sent it and where, or nothing at all.
 
     An update carries neither on some kinds -- a poll answer, a channel post --
-    and there is nobody to answer and no thread to run on. `Coach` decides
+    and there is nobody to answer and no thread to run on. `Turns` decides
     whether the user is the owner; this only decides whether there is a user.
     """
     if update.effective_user is None or update.effective_chat is None:
@@ -919,13 +1282,36 @@ def _drafting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Draft:
     return draft
 
 
-def serve(
-    declared: Settings, on: models.Chat, saver: BaseCheckpointSaver[Any]
-) -> None:
-    """Long-poll until interrupted, holding the model, the checkpointer and the graph.
+def graphs(
+    front: models.Chat,
+    on: models.Chat,
+    saver: BaseCheckpointSaver[Any],
+    archive: Path,
+) -> Graphs:
+    """The three graphs, each on the model that answers it (ADR-0006, item 3).
 
-    All three for the life of the process (ADR-0004, item 6): the compiled
-    graph is what the threads are stored against.
+    `front` is the entrance's and `on` is the one `LLM_BACKEND` names, which
+    both subgraphs keep: the entrance is the node latency is felt on and the
+    planner is the one that has to reason.
+    """
+    return Graphs(
+        entrance=entrance.build(front, checkpointer=saver, archive=archive),
+        planner=planner.build(on, checkpointer=saver, archive=archive),
+        logger=logger_graph.build(on, checkpointer=saver, archive=archive),
+        archive=archive,
+    )
+
+
+def serve(
+    declared: Settings,
+    front: models.Chat,
+    on: models.Chat,
+    saver: BaseCheckpointSaver[Any],
+) -> None:
+    """Long-poll until interrupted, holding the models, the checkpointer and the graphs.
+
+    All of them for the life of the process (ADR-0004, item 6): the compiled
+    graphs are what the threads are stored against.
 
     The checkpointer is opened by the caller rather than here, the way every
     command opens its database. It is the one thing in the startup block that
@@ -933,11 +1319,11 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    archive = run_record.archive()
-    graph = planner.build(on, checkpointer=saver, archive=archive)
-    coach = Coach(
+    built = graphs(front, on, saver, run_record.archive())
+    coach = Turns(
         owner_id=declared.owner_id,
-        run=planning(graph, archive),
-        resume=answering(graph, archive),
+        run=talking(built),
+        resume=answering(built),
+        relay=relaying(built),
     )
     application(declared, coach).run_polling()

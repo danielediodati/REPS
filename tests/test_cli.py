@@ -3443,11 +3443,13 @@ def healthy_bot(
     monkeypatch.setenv("OLLAMA_CONTEXT_LENGTH", "8192")
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
 
-    class Listed:
-        model = "gpt-oss:20b"
-
     class Listing:
-        models = [Listed()]
+        """Both models this machine would need: the planner's and the entrance's."""
+
+        models = [
+            type("Listed", (), {"model": "gpt-oss:20b"})(),
+            type("Listed", (), {"model": models.DEFAULT_ENTRANCE_MODEL})(),
+        ]
 
     monkeypatch.setattr(ollama.Client, "list", lambda self: Listing())
 
@@ -3456,7 +3458,9 @@ def healthy_bot(
 
     monkeypatch.setattr(Bot, "get_me", known)
     polled: list[object] = []
-    monkeypatch.setattr(bot, "serve", lambda declared, on, saver: polled.append(declared))
+    monkeypatch.setattr(
+        bot, "serve", lambda declared, front, on, saver: polled.append(declared)
+    )
     return polled
 
 
@@ -3749,3 +3753,29 @@ def test_runs_list_says_so_when_the_checkpointer_is_there_but_empty(
     assert result.exit_code == 0, result.output
     assert "no negotiation yet" in result.output
     assert "trainer plan" in result.output
+
+
+def test_bot_says_which_model_answers_the_entrance(
+    runner: CliRunner, healthy_bot: list[object]
+) -> None:
+    """Two nodes, two models (ADR-0006). The block says both, because which one
+    is answering hello is the thing latency is felt on."""
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert f"entrance:    {models.DEFAULT_ENTRANCE_MODEL} on ollama" in result.output
+    assert result.output.isascii()
+
+
+def test_bot_checks_the_entrance_model_before_it_starts(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
+) -> None:
+    """Knowable before anything is typed. Left to the first message, a model
+    nobody pulled arrives as a run that fell over on the greeting."""
+    monkeypatch.setenv(models.ENTRANCE_MODEL_ENV, "a-model-nobody-pulled")
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 1
+    assert "ollama pull a-model-nobody-pulled" in result.output
+    assert healthy_bot == [], "it polled anyway"

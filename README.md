@@ -71,7 +71,11 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
-**Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks the provider and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
+**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Both models are checked before the bot starts.
+
+**Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
+
+**What the chat does with what you write.** You write in your own words and the entrance decides: a request for today's workout starts the planner, a report starts the logger, and a question about what you have trained is answered from the engine's read tools without either. Your turn is answered at once and the work goes on behind it, with the graph's progress in the draft — a plan is minutes. The plan arrives with three buttons; the logger's clarifying question is a message to reply to and the exclusion it proposes is two. Nothing the chat says is a fixed line except the two about the machine being in trouble, and neither of those quotes what went wrong: that goes to `trainer.log`.
 
 **Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records. `trainer bot` also writes `trainer.log` there, rotated at a megabyte and four files deep, holding every state and every exception and never the token or the owner id. It has no override, because the chat names it by name when a run cannot start or falls over.
 
@@ -87,14 +91,14 @@ uv run mypy         # strict
 uv run langgraph dev  # the planner and the logger in LangGraph Studio
 ```
 
-In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`. The logger's is the report: `{"report": "panca bene, solo 3 serie di military", "today": "2026-09-18"}`.
+In Studio the planner's input is the request as JSON: `{"request": {"equipment": ["dumbbell"], "budget_min": 45, "groups": ["chest", "arms"]}}`. The logger's is the report: `{"report": "panca bene, solo 3 serie di military", "today": "2026-09-18"}`. The entrance's is a message: `{"messages": [{"role": "user", "content": "cosa faccio oggi?"}]}` — it decides, and says which subgraph it would have started rather than starting one.
 
 ## Layout
 
 ```
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
-  coach/      the LangGraph agent: the planner and logger graphs, the Telegram bot, the checkpointer and the run archive
+  coach/      the LangGraph agent: the entrance, the planner and logger graphs, the Telegram bot, the checkpointer and the run archive
   data/       vendored catalog, muscle-group mapping, config example
   tools.py    the tool surface and how a model calls it, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer

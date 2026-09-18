@@ -19,6 +19,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from conftest import enrich
 from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, graph_of, plan_of
 from trainer import plan as plans
+from trainer.coach import logger as coach_logger
 from trainer.coach import planner, progress
 from trainer.engine import catalog, database, migrations
 
@@ -116,10 +117,18 @@ def test_a_run_that_never_reaches_a_valid_plan_says_so(
     assert lines[-1] == progress.EXHAUSTED.format(attempts=planner.ATTEMPTS)
 
 
-def test_every_tool_the_planner_can_call_has_a_line(catalogued: sqlite3.Connection) -> None:
-    """A tool added to the planner's surface with no line of its own would
-    reach the chat as `uso volume_deficit`, which is the code talking."""
-    assert set(progress.CALLS) == set(planner.TOOLS)
+def test_every_tool_a_streamed_run_can_call_has_a_line(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """A tool added to a streamed graph's surface with no line of its own
+    would reach the chat as `uso volume_deficit`, which is the code talking.
+
+    Both graphs, because from session 9 both are streamed into the draft; the
+    logger's question is a call like any other and shows as one.
+    """
+    assert set(progress.CALLS) == set(planner.TOOLS) | set(coach_logger.TOOLS) | {
+        coach_logger.ask_user.__name__
+    }
 
 
 def test_a_tool_the_model_called_wrong_is_still_a_line(

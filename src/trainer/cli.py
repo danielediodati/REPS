@@ -826,8 +826,12 @@ def bot_command() -> None:
     else is ignored. Both settings are read from the environment, never from
     `training.toml`, which holds what you declare about your training.
 
+    Two models answer it (ADR-0006): the entrance holds the conversation on
+    the one `ENTRANCE_MODEL` names, and the planner and the logger it reaches
+    run on `LLM_BACKEND`'s.
+
     Everything the bot needs is checked before it starts, and only for the
-    provider `LLM_BACKEND` selects: on Ollama the server, the model and
+    providers selected: on Ollama the server, both models and
     `OLLAMA_CONTEXT_LENGTH`; on Groq the key; and the token, with Telegram.
 
     What happens then goes to a rotating log in the home, never to the token or
@@ -842,6 +846,11 @@ def bot_command() -> None:
         on = models.chat()
         models.ready(on)
         context = models.context_length(on)
+        # Both models, because both are asked for on the first message: the
+        # entrance answers the turn and the subgraph does the work, and a
+        # model nobody pulled is knowable now rather than mid-conversation.
+        front = models.entrance()
+        models.ready(front)
         name = bot.identified(declared)
 
         # Opened before the block is printed, not after: a block that says
@@ -850,6 +859,7 @@ def bot_command() -> None:
         with checkpoints.saver() as saver:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.name}")
+            click.echo(f"entrance:    {front.name} on {front.provider}")
             click.echo(
                 f"context:     {context} tokens"
                 if context is not None
@@ -867,7 +877,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, on, saver)
+            bot.serve(declared, front, on, saver)
 
 
 @main.group("runs")

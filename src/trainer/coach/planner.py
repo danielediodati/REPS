@@ -6,14 +6,11 @@ import dataclasses
 import logging
 import operator
 import sqlite3
-import time
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol, TypedDict, cast
-from uuid import uuid4
+from typing import Annotated, Any, Literal, TypedDict, cast
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
@@ -229,12 +226,6 @@ def refused(because: str = "", minutes: int | None = None) -> Answer:
     return answer
 
 
-class Node(Protocol):
-    """One step of the graph. The parameter is named, which is what LangGraph asks of a node."""
-
-    def __call__(self, state: PlannerState) -> dict[str, Any]: ...
-
-
 def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict[str, Any]:
     """`WorkoutPlan`'s strict schema, with every `exercise_id` held to today's admissible ids."""
     admissible_ids = [
@@ -322,29 +313,12 @@ class PlannerState(TypedDict, total=False):
 
 def starting(request: plans.Request) -> PlannerState:
     """The input that starts a negotiation: its first run, following nothing."""
-    return _beginning(request, negotiation=_negotiation_id(), follows=None)
+    return _beginning(request, negotiation=records.negotiation_id(), follows=None)
 
 
 def following(request: plans.Request, negotiation: str, follows: str) -> PlannerState:
     """The run a refusal gives birth to: the same ask, carrying which run it follows."""
     return _beginning(request, negotiation=negotiation, follows=follows)
-
-
-def _negotiation_id() -> str:
-    """A negotiation's name: when it was asked, and enough to tell two of them apart."""
-    return f"{datetime.now().astimezone():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
-
-
-def identity(negotiation: str, follows: str | None) -> dict[str, Any]:
-    """Who a run is: its name, the ask it belongs to, what it follows, and no ending yet."""
-    return {
-        "negotiation": negotiation,
-        "run": uuid4().hex[:8],
-        "follows": follows,
-        "began": records.now(),
-        "ended": "",
-        "ending": "",
-    }
 
 
 def _beginning(
@@ -364,7 +338,7 @@ def _beginning(
     """
     return {
         "request": request,
-        **identity(negotiation, follows),  # type: ignore[typeddict-item]
+        **records.identity(negotiation, follows),  # type: ignore[typeddict-item]
         "accepted": False,
         "workout": None,
         # Cast because the annotation on `messages` is the list `add_messages`
@@ -400,6 +374,7 @@ def build(
     """
     model = on.model
     offered = tools.registered("planner", TOOLS)
+    timed = records.timing(on)
 
     def closed(
         state: PlannerState | dict[str, Any], ending: str, **also: Any
@@ -416,11 +391,7 @@ def build(
         if not isinstance(request, plans.Request):
             # Studio and the HTTP API send the request as JSON.
             request = TypeAdapter(plans.Request).validate_python(request)
-        # Those two doors start a thread with a request and nothing else, and
-        # a run has to be a thing that can be read back whichever door opened
-        # it. Only when there is no run yet: every later turn of this one
-        # would otherwise give it a new name.
-        born = {} if state.get("run") else identity(_negotiation_id(), None)
+        born = records.born(state)
         opening: list[AnyMessage] = []
         if not state.get("messages"):
             with tools.reported(), tools.opened() as connection:
@@ -618,30 +589,6 @@ def build(
 
     def after_propose(state: PlannerState) -> Literal["planner", "prescribe"]:
         return "prescribe" if state.get("accepted") else "planner"
-
-    def timed(node: str, step: Node) -> Node:
-        """Every node says who answered it and what it cost: the minutes are the thing being measured.
-
-        A node that started a new run says so by handing back timings of its
-        own, and keeps them: its seconds belong to neither run. On `propose`,
-        the only node that does it, they are how long the user took to answer,
-        which is not a cost of planning at all.
-        """
-
-        def counted(state: PlannerState) -> dict[str, Any]:
-            started = time.monotonic()
-            produced = step(state)
-            if "timings" in produced:
-                return produced
-            spent = time.monotonic() - started
-            return produced | {
-                "timings": [
-                    *state.get("timings", []),
-                    (node, on.name, on.provider, spent),
-                ]
-            }
-
-        return counted
 
     graph = StateGraph(PlannerState)
     graph.add_node("planner", timed("planner", turn))

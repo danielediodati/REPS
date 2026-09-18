@@ -269,6 +269,11 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # is the one writer a report reaches -- called from the door that
         # asked, never from a node. See the next test.
         "coach/logger.py",
+        # Session 9: the chat is one of those doors, and what it reads here is
+        # `awaiting` -- which prescribed workout a report would be filed
+        # against, the same read `trainer log` opens with. The next test is
+        # what says it does not write.
+        "coach/bot.py",
         "log.py",
         "log_evaluation.py",
         "log_set.py",

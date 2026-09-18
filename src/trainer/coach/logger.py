@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol, TypedDict, cast
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -213,12 +212,6 @@ def brief(
     return "\n".join(lines)
 
 
-class Node(Protocol):
-    """One step of the graph. The parameter is named, which is what LangGraph asks of a node."""
-
-    def __call__(self, state: LoggerState) -> dict[str, Any]: ...
-
-
 class LoggerState(TypedDict, total=False):
     report: str
     """The user's own words, as they wrote them."""
@@ -311,6 +304,7 @@ def build(
     offered = tools.registered("logger", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
     asking = {"type": "function", "function": tools.schema(ask_user)}
+    timed = records.timing(on)
 
     def closed(
         state: LoggerState | dict[str, Any], ending: str, **also: Any
@@ -319,13 +313,7 @@ def build(
         return records.closing(state, ending, budget, archive, **also)
 
     def turn(state: LoggerState) -> dict[str, Any]:
-        # Studio and the HTTP API start a thread with a report and nothing
-        # else, and a run has to be a thing that can be read back whichever
-        # door opened it. Only when there is no run yet: every later turn of
-        # this one would otherwise give it a new name.
-        born = (
-            {} if state.get("run") else records.identity(records.negotiation_id(), None)
-        )
+        born = records.born(state)
         opening: list[AnyMessage] = []
         if not state.get("messages"):
             opening = [
@@ -482,22 +470,6 @@ def build(
         if state.get("refused") is not None or performed is None:
             return "done"
         return "confirm" if performed.proposed_exclusion is not None else "done"
-
-    def timed(node: str, step: Node) -> Node:
-        """Every node says who answered it and what it cost."""
-
-        def counted(state: LoggerState) -> dict[str, Any]:
-            started = time.monotonic()
-            produced = step(state)
-            spent = time.monotonic() - started
-            return produced | {
-                "timings": [
-                    *state.get("timings", []),
-                    (node, on.name, on.provider, spent),
-                ]
-            }
-
-        return counted
 
     graph = StateGraph(LoggerState)
     graph.add_node("logger", timed("logger", turn))

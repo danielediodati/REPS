@@ -1,4 +1,4 @@
-"""What a planning run is doing, in the words the chat shows while it works."""
+"""What a run is doing, in the words the chat shows while it works."""
 
 from __future__ import annotations
 
@@ -25,13 +25,16 @@ CALLS = {
     "volume_deficit": "confronto il volume pianificato con quello fatto",
     "unreported_workouts": "controllo se è rimasto un allenamento senza report",
     "compare_variants": "confronto {id_a} e {id_b}",
+    "prescribed_workout": "rileggo l'allenamento {workout_id}",
+    "ask_user": "ti chiedo una cosa",
 }
-"""One line per tool the planner can call, in the user's language.
+"""One line per tool a streamed run can call, in the user's language.
 
-Keyed by `planner.TOOLS`, and a test fails the build when one of them is
-missing a line. The words the model chose are shown as they arrive -- an
-equipment name is the catalog's own and is not translated here, which is the
-same rule that keeps a hand-copied equipment list out of the code.
+Keyed by the tool lists of the graphs that are streamed, and a test fails the
+build when one of them is missing a line. The words the model chose are shown
+as they arrive -- an equipment name is the catalog's own and is not translated
+here, which is the same rule that keeps a hand-copied equipment list out of
+the code.
 """
 
 UNKNOWN = "uso {tool}"
@@ -51,6 +54,17 @@ ONE_BLOCK = "1 blocco"
 BLOCKS = "{count} blocchi"
 AGAIN = "va bene, ne penso un altro"
 
+WRITING_REPORT = "metto giù quello che hai fatto"
+READ = "report letto"
+NOT_READ = "il report non è passato: {why}"
+
+PLAN = "plan"
+LOG = "log"
+"""Which run is being watched. The two graphs share four node names and mean
+different things by three of them: `emit` writes a plan on one and a performed
+workout on the other, and a draft that says *scrivo il piano* while a report is
+being read is a lie about what the machine is doing."""
+
 LIMIT = 3500
 """Characters a draft is cut to, under Telegram's 4096, oldest lines first."""
 
@@ -63,7 +77,8 @@ class Progress:
     run itself, not a second account of it written beside the run.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, of: str = PLAN) -> None:
+        self.of = of
         self.lines: list[str] = []
         self._pending: list[Any] = []
         self._emitted = 0
@@ -87,18 +102,26 @@ class Progress:
         return "\n".join(shown)[-LIMIT:]
 
     def _node(self, node: str, delta: Mapping[str, Any]) -> None:
-        if node == "planner":
+        if node in ("planner", "logger"):
             self._pending = list(_calls(delta.get("messages", ())))
         elif node == "tools":
             self._answered(delta.get("messages", ()))
         elif node == "emit":
-            self.lines.append(WRITING if self._emitted == 0 else REWRITING)
+            self.lines.append(self._writing())
             self._emitted += 1
         elif node == "validate":
-            self._validated(delta)
+            self._validated(delta) if self.of == PLAN else self._read(delta)
         elif node == "propose" and "request" in delta:
             # The plan was turned down and the node handed back a fresh run.
             self.lines.append(AGAIN)
+        # `confirm` says nothing: the exclusion it proposes is put to the user
+        # as a question in the chat, and a draft repeating it is the same
+        # sentence twice.
+
+    def _writing(self) -> str:
+        if self.of == LOG:
+            return WRITING_REPORT
+        return WRITING if self._emitted == 0 else REWRITING
 
     def _answered(self, answers: Sequence[Any]) -> None:
         """One line per call, with the answers the tools node paired them with.
@@ -125,6 +148,11 @@ class Progress:
         self.lines.append(
             REFUSED.format(rules=", ".join(broken.rule for broken in violations))
         )
+
+    def _read(self, delta: Mapping[str, Any]) -> None:
+        """What the logger's validator made of the document it was handed."""
+        refused = delta.get("refused")
+        self.lines.append(READ if refused is None else NOT_READ.format(why=refused))
 
 
 def _counted(blocks: int) -> str:
