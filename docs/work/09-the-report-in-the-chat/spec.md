@@ -1,8 +1,8 @@
 # Session 9: the report in the chat
 
-**Goal**: after training you write the report in Telegram, the bot asks one question and you answer with a button, and the next plan arrives without being asked for.
+**Goal**: after training you write the report in Telegram, the bot asks one question and you answer with a button.
 
-**Demo**: a chat. You report a workout in your own words, the bot asks the one thing it needs, you tap the answer, and the next plan is waiting later without a request.
+**Demo**: a chat. You report a workout in your own words, the bot asks the one thing it needs, and you tap the answer.
 
 **Read first**:
 - ADR-0007, what a run and a negotiation are -- 01 builds it and everything else stands on it;
@@ -11,12 +11,13 @@
 - ADR-0004, the architecture;
 - CONTEXT.md: *run*, *negotiation*, *ending*, *run record*, *report*, *adherence*, *pending question*.
 
-**Order**: 01 first and alone. Both the logger and the entrance write runs, and built before the run has a definition they are built twice. Then 02, which is the second subgraph the entrance will route to, and 03, which puts the entrance in front of both. 04 needs 02 and 03; 05 last, because it measures what 02 built through the door 03 added.
+**Order**: 01 first and alone. Both the logger and the entrance write runs, and built before the run has a definition they are built twice. Then 02, which is the second subgraph the entrance will route to, and 03, which puts the entrance in front of both. 04 is withdrawn (ADR-0008); 05 last, because it measures what 02 built through the door 03 added.
 
 **Out of scope**:
-- a plan worth doing, the methodology and the time floor: session 10 (its tickets 02 and 03 are already cut);
-- onboarding, memory, triage: session 11;
-- hypotheses and trials: session 12. What a refusal leaves behind is *kept* here (ADR-0007 item 4) and promoted to a conclusion there.
+- the mesocycle, and the next one prepared unasked: session 10 (ADR-0008);
+- a plan worth doing, the methodology and the time floor: session 11 (its tickets 02 and 03 are already cut);
+- onboarding, memory, triage: session 12;
+- hypotheses and trials: session 13. What a refusal leaves behind is *kept* here (ADR-0007 item 4) and promoted to a conclusion there.
 
 ## Facts the tickets rely on
 

@@ -370,7 +370,7 @@ def build(
     `archive` is where a run goes when it ends (ADR-0007, item 6), and a graph
     built without one keeps nothing: the eval suites run the same graph
     dozens of times to measure it, and their runs in the home would be the
-    history session 10 is supposed to read.
+    history session 11 is supposed to read.
     """
     model = on.model
     offered = tools.registered("planner", TOOLS)

@@ -168,7 +168,7 @@ def closing(
 
     `archive` of `None` keeps nothing, which is what a measurement passes: an
     eval pass is dozens of runs nobody had, and in the home they would be the
-    history session 10 reads.
+    history session 11 reads.
     """
     finished: dict[str, Any] = {"ending": ending, "ended": now(), **also}
     if archive is not None and state.get("run"):

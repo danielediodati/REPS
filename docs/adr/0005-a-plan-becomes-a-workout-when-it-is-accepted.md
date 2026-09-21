@@ -24,3 +24,7 @@ Until session 7 a plan and a prescribed workout were the same event: `trainer pl
 - **`trainer plan` needs a checkpointer**, with no bot involved, because it now invokes and resumes. The same machine runs behind both doors.
 - **The write moves out of the plan command** into a graph node after the resume.
 - **The refusal sentence is not covered by this.** It reaches the planner through the graph state, which the checkpointer persists; what is guaranteed is that it never becomes a training fact. ADR-0004 item 5 already assigns conversation to the checkpointer.
+
+## Amended in session 9
+
+**What is accepted is a mesocycle** (ADR-0008). Accepting it prescribes nothing: each of its workouts is prescribed when it is served as today's, which keeps this ADR's reason intact — no outstanding prescription for a workout that has not come yet.

@@ -2,7 +2,7 @@
 
 The demo this exists for is pulling the plug. The log says why a run stopped;
 these say what it was doing, what it came to, and how many plans an evening
-took -- which is the measurement session 10 is built on, and the one the old
+took -- which is the measurement session 11 is built on, and the one the old
 state machine deleted by being asked the question.
 """
 
@@ -231,7 +231,7 @@ def test_a_graph_with_no_archive_keeps_nothing(
     catalogued: sqlite3.Connection, archive: Path
 ) -> None:
     """The eval suites run this graph dozens of times to measure it, and their
-    runs in the home would be the history session 10 reads."""
+    runs in the home would be the history session 11 reads."""
     graph_of(Scripted(documents=[plan_of("Barbell_Squat")])).invoke(
         planner.starting(BARBELL_45)
     )

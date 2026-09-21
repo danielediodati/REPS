@@ -708,7 +708,7 @@ def run(
     threads are of no interest once the run is scored.
 
     **And no archive.** A pass is a measurement, not an evening: its runs in
-    the home would be the history session 10 reads to ask how many plans an
+    the home would be the history session 11 reads to ask how many plans an
     evening takes. The records this suite keeps are its own, under `records`.
     """
     where = records if records is not None else records_path()

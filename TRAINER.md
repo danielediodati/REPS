@@ -81,6 +81,7 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 ### Agent: the deliberative layer
 
 - Chooses the tools, the exercises, their order and the rest, and says why.
+- Plans a **mesocycle**, not a workout: every workout of the cycle with fixed exercises, and how many cycles it holds, with a reason. Between workouts it plans nothing; today's is read off the mesocycle, adapted only for today's constraint (ADR-0008).
 - Emits a **plan**, never prose, against a schema whose `exercise_id` can only be an admissible id. The validator checks what a schema cannot, and sends refusals back.
 - Asks instead of guessing (`interrupt()`). Proposes an exclusion only for the user to confirm.
 - Decides between a full workout, a reduced one and rest. The reduced workout protects adherence.

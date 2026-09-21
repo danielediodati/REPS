@@ -4,7 +4,7 @@ The only glossary. Every load-bearing term is defined here, once, and the other 
 
 ## The unit of training
 
-**Workout**: one training session. It is **prescribed** when the user accepts the plan emitted for it (ADR-0005) and **performed** once it is reported. A plan that is turned down is not a workout and reaches no table. A performed workout need not have been prescribed.
+**Workout**: one training session. It is **prescribed** when it is served as today's, off an accepted mesocycle (ADR-0005, ADR-0008) and **performed** once it is reported. A plan that is turned down is not a workout and reaches no table. A performed workout need not have been prescribed.
 _Avoid_: session, which in ROADMAP.md means a unit of development work.
 
 **Unreported**: a prescribed workout with no report after a later workout has been performed. It contributes no volume and is never assumed done. Whether to ask about it is the agent's call.
@@ -12,7 +12,12 @@ _Avoid_: session, which in ROADMAP.md means a unit of development work.
 **Cycle**: one complete rotation through the workouts being trained. The user declares its length. It advances when a workout is performed, never when a date passes.
 _Avoid_: week; mesocycle.
 
-**Mesocycle**: 4-6 weeks with a fixed progression scheme and a fixed goal. It is the unit a split holds for.
+**Mesocycle**: a workout for each slot of the cycle, with fixed exercises, repeated for a number of cycles the agent chooses with a reason (ADR-0008). It is accepted once and read from between workouts; nothing is planned in between.
+_Avoid_: programme, routine, and counting it in weeks.
+
+**Change**: a request that rewrites the mesocycle for the cycles left, e.g. *"no more lunges"*.
+
+**Adaptation**: today's workout planned from the mesocycle's under today's constraint (less time, missing equipment). The mesocycle stays as it was.
 
 **Ramp-in**: a workout on the normal scheme with reduced volume and loads chosen by feel, used when returning from a break.
 
@@ -105,14 +110,14 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 _Avoid_: conversation, which says the same thing loosely.
 
 **Entrance**: the node the user talks to. It holds the conversation on a model of its own, answers what the engine's read tools can answer, and reaches the planner and the logger as tools (ADR-0006). It states no training fact a tool did not give it, and it decides nothing the engine decides.
-_Avoid_: router, which is what it replaced, and supervisor, which is session 13's.
+_Avoid_: router, which is what it replaced, and supervisor, which is session 14's.
 
 **Situation**: one thing that happened, named by the machine for the entrance to say in its own words — a plan accepted, a message arriving mid-run, a plan the thread has moved past. The name is the machine's and the sentence is the model's; a situation whose words are fixed is a constant by another name.
 
 **Run**: one thing a graph was asked for, pursued to an end — a proposal from the request being assembled to the user's answer, or one report read into a document. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
 _Avoid_: calling one invocation of the graph a run, or one message in the queue.
 
-**Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for today's workout*. What a refusal leaves behind belongs to it, never to the run that was refused.
+**Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for a mesocycle*, a change to it, or an adaptation. The machine opens one when a mesocycle's last cycle ends. What a refusal leaves behind belongs to it, never to the run that was refused.
 _Avoid_: request, which is what a single run is given.
 
 **Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, or fallen over. *Done* is a run with nothing to accept or turn down, which is what reading a report is. A run that is waiting on an answer has no ending, and neither has one that was cut.

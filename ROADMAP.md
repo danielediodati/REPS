@@ -54,21 +54,35 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 1. **Logging to a file the bot owns**, rotated. Every state and every exception, recorded where the person who can act on it is sitting; the token and the owner id never in it. `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»*. — **done** `35340d2`
 
    **Nothing raised leaves the machine**, and this is where it goes instead. Session 7 made those two lines generic on purpose: the engine's states carry absolute paths — the file to copy, the directory to copy it into — and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers, for a path nobody can act on from a phone. Until this lands, the only record is the bot's own stderr.
-2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 11, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
+2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 12, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
 3. **The checkpoint's types are registered.** `plan.Request`, `plan.Violation` and `plan.WorkoutPlan` are written into checkpoints by a serializer that now warns it will stop reading them back. Today a warning; on the LangGraph upgrade, every conversation on disk is unreadable. — **done** `be457c6`
 4. **The run record can be read back.** Session 6 item 3 already puts it in the graph state — attempts, tool calls, tokens, wall time per node — and nothing has ever read it. Without this, *control* means only *I have logs*. — **done** `edd866d`
 
 ## Session 9 — `0.9.0` — The report in the chat
 
-**Demo**: after training you write the report in Telegram. The bot asks one question and you answer with a button. The next plan arrives without being asked for.
+**Demo**: after training you write the report in Telegram. The bot asks one question and you answer with a button.
 
-1. **What a run is, and where it goes when it ends** (ADR-0007). `trainer runs` was built in session 8 over a state machine that overwrites its own history: a plan turned down already ends a run, and the record of the run that offered it is destroyed at that moment -- which is the measurement session 10 is built on. A run ends, the ending is written, the closed run is a document in the home, and a negotiation holds the runs of one ask. The reader depends on nothing that can break. `record.Run` and `unfinished` go with it. — **done** `94e2068`
+1. **What a run is, and where it goes when it ends** (ADR-0007). `trainer runs` was built in session 8 over a state machine that overwrites its own history: a plan turned down already ends a run, and the record of the run that offered it is destroyed at that moment -- which is the measurement session 11 is built on. A run ends, the ending is written, the closed run is a document in the home, and a negotiation holds the runs of one ask. The reader depends on nothing that can break. `record.Run` and `unfinished` go with it. — **done** `94e2068`
 2. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts. The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted with it -- a deletion is the second half of the work that makes it possible, not an issue of its own -- and the Groq settings move into `coach/models.py`, including the default model name that answers with a 404 today. — **done** `af6a6f2`
 3. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay. It carries the per-node model with it, which issue 1 has already moved into the record's nodes. `bot.Coach` is renamed here: it is the turn-taking, and the word is needed for the node that coaches. — **done** `d8f7fc9`
-4. **The next plan is prepared asynchronously.** A performed workout triggers planning, and the plan waits in the chat. A negotiation nobody asked for is still a negotiation.
+4. ~~**The next plan is prepared asynchronously.**~~ **Withdrawn** (ADR-0008): planning after every workout re-plans a programme that should hold for several cycles. It returns as session 10 item 4.
 5. **The log eval suite runs against the graph.**
 
-## Session 10 — `0.10.0` — A plan worth doing
+## Session 10 — `0.10.0` — The mesocycle
+
+**Demo**: you ask for a mesocycle and accept it once. On each of the next workouts the bot answers at once with the next one from it, the last load beside each exercise. After the last cycle the next mesocycle is waiting in the chat.
+
+1. **The planner emits a mesocycle** (ADR-0008): a workout per slot of the cycle, how many cycles it lasts, and why. Each workout validated as one is today. Accepted, it is kept in SQLite.
+2. **Today's workout is read, not planned.** The rotation's slot off the mesocycle, no model call, the last performed load beside each exercise. It is prescribed when served.
+3. **A change and an adaptation.** A change rewrites the mesocycle for the cycles left; an adaptation plans today from the mesocycle's workout and leaves it alone. The entrance tells them apart, and asks when it cannot.
+4. **The next mesocycle is prepared when the last cycle ends**, and waits in the chat. What ticket 9.4 established still holds:
+   - a negotiation nobody asked for is still one, and `trainer runs list` tells it apart from one the user opened;
+   - left unanswered it reads *waiting*, with how long, never *abandoned* (ADR-0007 item 8);
+   - it runs outside the turn-taking queue, so a message arriving meanwhile is answered, and it opens no draft;
+   - it starts its run with `planner.starting` alone, on `bot.under(thread, PLANNING)`, so a user request while it waits gets the prepared one and never a second.
+5. **The plan eval suite on a mesocycle**, with its wall time on the local model: several plans' worth of minutes is the risk this session carries.
+
+## Session 11 — `0.11.0` — A plan worth doing
 
 **Demo**: the same request twice — the 25-minute circuit the bot proposed in session 7 beside what comes out now.
 
@@ -84,14 +98,14 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 11 | `0.11.0` | ten onboarding questions, resumed after a day away, ending in a week 1 plan; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
-| 12 | `0.12.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
-| 13 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
+| 12 | `0.12.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 13 | `0.13.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
+| 14 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 
-**Portfolio-ready** is session 13. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
+**Portfolio-ready** is session 14. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
-- progression and return from a break (the mesocycle scheme, ramp-in by dates, the methodology document);
+- progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
 - Level 2, a simulated user with hidden truths;
 - diagnosed pathologies;
 - an on-device feature, if a phone model ever earns one.
