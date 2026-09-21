@@ -381,3 +381,31 @@ def test_the_entrance_never_asks_a_local_model_to_reason(
 
     assert cast(Any, models.entrance().model).reasoning is None
     assert cast(Any, models.chat().model).reasoning == models.REASONING
+
+
+def test_groqs_day_running_out_is_a_state_saying_when_to_come_back() -> None:
+    """Every request after it is refused the same way, so it is not a run that failed."""
+    from conftest import refused_by_groq
+
+    spent = models.spent(refused_by_groq())
+
+    assert spent is not None
+    said = str(spent)
+    assert "daily" in said and "14m8s" in said and "qwen/qwen3.8-27b" in said
+    assert said.isascii()
+
+
+def test_a_limit_per_minute_is_not_the_day_running_out() -> None:
+    """The SDK waits those out itself; the next request may well go through."""
+    from conftest import refused_by_groq
+
+    minute = refused_by_groq(
+        "Error code: 429 - Rate limit reached on tokens per minute (TPM): "
+        "Limit 8000. Please try again in 1.2s."
+    )
+
+    assert models.spent(minute) is None
+
+
+def test_any_other_failure_is_not_a_spent_quota() -> None:
+    assert models.spent(ConnectionError("the server went away")) is None

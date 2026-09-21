@@ -808,3 +808,23 @@ def test_the_environment_is_put_back_and_the_copy_is_deleted(
 
     assert os.environ[database.DATABASE_ENV_VAR] == "the-users-own.sqlite"
     assert not left_behind.exists()
+
+
+def test_a_spent_quota_stops_the_log_pass_too(
+    where: log_evaluation.Fixture, holds: log_set.LogSet, tmp_path: Path
+) -> None:
+    from conftest import Exhausted
+
+    model = Exhausted()
+
+    report = log_evaluation.run(
+        where,
+        [row(holds, "U1"), row(holds, "U2")],
+        on=stand_in(model),
+        repetitions=3,
+        records=tmp_path / "runs",
+    )
+
+    assert model.calls == 1
+    assert report.total == 6 and report.held == 0
+    assert report.stopped is not None

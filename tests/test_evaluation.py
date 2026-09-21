@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 from types import EllipsisType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -750,3 +750,33 @@ def test_the_database_the_model_reads_is_the_one_the_environment_names(
     import os
 
     assert database.DATABASE_ENV_VAR not in os.environ
+
+
+def test_a_spent_quota_stops_the_pass_and_says_so(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """On 2026-09-21 Groq's free day ran out after 11 of 90 runs. The other 79
+    went out anyway, each refused the same way, and the pass ended calling the
+    10% it came to a bug -- about a quota."""
+    from conftest import Exhausted
+
+    model = Exhausted()
+    chosen = evaluation.situations(connection)[:2]
+
+    report = evaluation.run(
+        connection,
+        chosen,
+        on=models.Chat(cast(Any, model), "groq", "qwen/qwen3.8-27b"),
+        repetitions=2,
+        records=tmp_path / "records",
+    )
+
+    assert model.calls == 1
+    assert report.total == 4 and report.held == 0
+    assert report.stopped is not None and "daily" in report.stopped
+    printed = "\n".join(
+        evaluation.failures(report) + evaluation.totals(report, "held")
+    )
+    assert report.stopped in printed
+    assert "a bug" not in printed
+    assert printed.count(report.stopped) == 1, "said once, not once per run"

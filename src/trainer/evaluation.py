@@ -575,6 +575,9 @@ class Outcome:
     never weighted: the weight is a cost, and nothing was paid.
     """
 
+    skipped: bool = False
+    """Never attempted: the pass stopped before it (`Report.stopped` says why)."""
+
     @property
     def held(self) -> bool:
         return self.error is None and not self.failures
@@ -587,6 +590,8 @@ class Outcome:
 @dataclass(frozen=True)
 class Report:
     outcomes: tuple[Outcome, ...] = field(default_factory=tuple)
+    stopped: str | None = None
+    """The state that ended the pass early, when one did."""
 
     @property
     def total(self) -> int:
@@ -713,12 +718,37 @@ def run(
     """
     where = records if records is not None else records_path()
     graph = planner.build(on, budget=budget, checkpointer=InMemorySaver())
-    outcomes = []
-    for situation in chosen:
+    return measured(
+        [situation.name for situation in chosen],
+        repetitions,
+        lambda at, attempt: _once(
+            connection, chosen[at], attempt, graph, budget, where
+        ),
+    )
+
+
+def measured(
+    cases: Sequence[str], repetitions: int, once: Callable[[int, int], Outcome]
+) -> Report:
+    """Every case, every repetition, until the provider's day runs out.
+
+    `once` takes the case's position and the attempt. The runs a spent quota
+    leaves are counted as not made rather than attempted: each would be refused
+    the same way, and all it would add is the same line again.
+    """
+    outcomes: list[Outcome] = []
+    for at, case in enumerate(cases):
         for attempt in range(1, repetitions + 1):
-            outcomes.append(
-                _once(connection, situation, attempt, graph, budget, where)
-            )
+            try:
+                outcomes.append(once(at, attempt))
+            except models.QuotaSpent as spent:
+                outcomes.extend(
+                    Outcome(left, again, error=str(spent), skipped=True)
+                    for position, left in enumerate(cases)
+                    for again in range(1, repetitions + 1)
+                    if (position, again) >= (at, attempt)
+                )
+                return Report(tuple(outcomes), stopped=str(spent))
     return Report(tuple(outcomes))
 
 
@@ -764,6 +794,8 @@ def _once(
             )
         ran = _invoked(graph, request, budget)
     except Exception as error:
+        if (quota := models.spent(error)) is not None:
+            raise quota from error
         # Every way a provider can fail in the middle of a pass: no
         # credentials, a request it refused, a rate limit, a server that went
         # away. Caught broadly on purpose -- the run lands in the *not run*
@@ -948,7 +980,7 @@ def failures(report: Report, about: Mapping[str, str] | None = None) -> list[str
         named = outcome.case
         if outcome.case in said:
             named = f"{outcome.case} ({said[outcome.case]})"
-        if outcome.error is not None:
+        if outcome.error is not None and not outcome.skipped:
             lines.append(f"{named} #{outcome.attempt}: {outcome.error}")
         for name, why in outcome.failures:
             where = outcome.written or "(not written)"
@@ -983,7 +1015,11 @@ def totals(report: Report, held: str) -> list[str]:
         f"cost: {report.calls} tool calls, {report.input_tokens} tokens in, "
         f"{report.output_tokens} out"
     )
-    if not report.passed:
+    if report.stopped is not None:
+        skipped = sum(1 for outcome in report.outcomes if outcome.skipped)
+        lines.append("")
+        lines.append(f"Stopped with {skipped} runs not made: {report.stopped}.")
+    elif not report.passed:
         lines.append("")
         lines.append("The bar is 100%. Anything below it is a bug, not a knob.")
     return lines

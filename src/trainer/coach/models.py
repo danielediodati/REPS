@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
+import groq
 import ollama
 from langchain_core.language_models import BaseChatModel
 from langchain_groq import ChatGroq
@@ -111,6 +113,37 @@ user is looking at an empty chat.
 
 class ModelError(RuntimeError):
     """A provider the environment gets wrong, stated with its fix."""
+
+
+class QuotaSpent(ModelError):
+    """The provider will take no more requests today, stated with when it will."""
+
+
+_PER_DAY = re.compile(r"per day \(")
+_MODEL = re.compile(r"for model `([^`]+)`")
+_AGAIN = re.compile(r"try again in ((?:\d+h)?(?:\d+m)?\d+)(?:\.\d+)?s")
+
+
+def spent(error: BaseException) -> QuotaSpent | None:
+    """The state a refused request is in, when what refused it is the day's quota.
+
+    Only the day's: a per-minute limit is waited out by the SDK, and the next
+    request may well go through.
+    """
+    if isinstance(error, QuotaSpent):
+        return error
+    said = str(error)
+    if not isinstance(error, groq.RateLimitError) or not _PER_DAY.search(said):
+        return None
+    model = _MODEL.search(said)
+    again = _AGAIN.search(said)
+    return QuotaSpent(
+        "Groq's daily token quota"
+        + (f" for {model.group(1)}" if model else "")
+        + " is spent"
+        + (f"; try again in {again.group(1)}s" if again else "")
+        + ", or run fewer with --only"
+    )
 
 
 @dataclass(frozen=True)

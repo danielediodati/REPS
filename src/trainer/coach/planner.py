@@ -429,6 +429,9 @@ def build(
             # instead, three isolated hiccups spread across the validator's
             # own retries would end a run that was recovering from every one
             # of them.
+            if (quota := models.spent(error)) is not None:
+                # Not the model's turn at all: every retry is refused the same way.
+                raise quota from error
             refused = state.get("rejections", 0) + 1
             if refused > REJECTIONS:
                 raise

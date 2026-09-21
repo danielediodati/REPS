@@ -262,3 +262,42 @@ def checkpointed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = directory / "checkpoints.sqlite"
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(path))
     return path
+
+
+DAILY_QUOTA = (
+    "Error code: 429 - {'error': {'message': 'Rate limit reached for model "
+    "`qwen/qwen3.8-27b` in organization `org_x` service tier `on_demand` on "
+    "tokens per day (TPD): Limit 200000, Used 198660, Requested 3303. Please "
+    "try again in 14m8.016s. Need more tokens? Upgrade to Dev Tier today at "
+    "https://console.groq.com/settings/billing', 'type': 'tokens', 'code': "
+    "'rate_limit_exceeded'}}"
+)
+"""What Groq raised on 2026-09-21 when the free tier's day ran out, verbatim."""
+
+
+def refused_by_groq(message: str = DAILY_QUOTA) -> Exception:
+    """Groq's own rate-limit error, carrying `message`, with no request sent."""
+    import groq
+    import httpx
+
+    response = httpx.Response(
+        429, request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat")
+    )
+    return groq.RateLimitError(message, response=response, body=None)
+
+
+class Exhausted:
+    """A chat model whose provider has no quota left: every call raises, and is counted."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def bind_tools(self, *args: Any, **kwargs: Any) -> Exhausted:
+        return self
+
+    def with_structured_output(self, *args: Any, **kwargs: Any) -> Exhausted:
+        return self
+
+    def invoke(self, *args: Any, **kwargs: Any) -> Any:
+        self.calls += 1
+        raise refused_by_groq()

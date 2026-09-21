@@ -685,11 +685,11 @@ def run(
     """
     into = records if records is not None else evaluation.records_path()
     graph = logger.build(on, budget=budget, checkpointer=InMemorySaver())
-    outcomes = []
-    for row in chosen:
-        for attempt in range(1, repetitions + 1):
-            outcomes.append(_once(where, row, attempt, graph, into, budget))
-    return evaluation.Report(tuple(outcomes))
+    return evaluation.measured(
+        [row.name for row in chosen],
+        repetitions,
+        lambda at, attempt: _once(where, chosen[at], attempt, graph, into, budget),
+    )
 
 
 def _once(
@@ -704,6 +704,8 @@ def _once(
     try:
         read = _invoked(graph, where, row, awaiting, prescribed_on, budget)
     except Exception as error:
+        if (quota := models.spent(error)) is not None:
+            raise quota from error
         # Every way a provider can fail in the middle of a pass: no
         # credentials, a request it refused, a rate limit, a server that went
         # away. Caught broadly for the reason the plan suite catches broadly
