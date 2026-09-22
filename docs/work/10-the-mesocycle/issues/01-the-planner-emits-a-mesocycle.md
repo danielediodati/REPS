@@ -36,3 +36,4 @@ Today the planner emits one `WorkoutPlan` for today's slot. ADR-0008 item 1: it 
 - Built in `dd6ff16`, `5d4a0fa`, `cf18cf7`. `trainer plan --mesocycle` refuses `--workout`, `--group` and `--from`; `--equipment`, `--time`, `--exclude` and `--avoid` apply to every slot.
 - `/code-review`: two findings, both fixed with a test. The run record did not carry the kept mesocycle's id; a mesocycle request sent as JSON would have been read as one workout's.
 - Open: the real-provider run and its wall time on the local model. Groq's daily quota was spent on 9.6 the same day.
+- From 10.3: a change (`trainer plan --change`) is the same 5-slot emission, and took **585 s** on `gpt-oss:20b` (CPU), 2 attempts. Groq cannot take it on the free tier: the first turn asks 8003 input tokens against a 7000-a-minute cap. `--mesocycle` itself is still unmeasured.

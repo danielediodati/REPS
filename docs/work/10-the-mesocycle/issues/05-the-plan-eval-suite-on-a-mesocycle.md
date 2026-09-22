@@ -12,6 +12,11 @@ Blocked by: 01.
 - **Wall time per run on the local model**, reported beside attempts and tool calls, as the plan suite already reports them.
 - **It runs against a fixture named in `TRAINER_DB`** (CLAUDE.md standing rule).
 
+## Left by 03
+
+- **Groq's free tier cannot plan a mesocycle.** Its input cap is 7000 tokens a minute, and the first planner turn of a 5-slot mesocycle asks for 8003: `413 rate_limit_exceeded` before any tool call, as a raw traceback from `trainer plan`.
+- **One 5-slot mesocycle on `gpt-oss:20b` (CPU) took 585 s** (`trainer plan --change`, 2 attempts, 34.5k tokens in, 2.6k out; planner 427 s, emit 154 s). Six situations are about an hour, and one refused twice will not fit a 10-minute call.
+
 ## References
 
 - TRAINER.md § Evaluation; ADR-0008

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import operator
+import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -20,11 +22,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 
+from trainer import plan as plans
 from trainer import tools
 from trainer.coach import models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.engine import mesocycles
+from trainer.engine import catalog, constraints, mesocycles
+from trainer.engine.exclusions import ExclusionError
 
 
 def todays_workout() -> str:
@@ -61,6 +65,51 @@ def plan_mesocycle() -> str:
     raise AssertionError("the graph answers plan_mesocycle; nothing calls it")
 
 
+def adapt_today(
+    said: str,
+    minutes: int | None = None,
+    without: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> str:
+    """Plan today's workout again from their mesocycle's, for today only.
+
+    Call this when what they want is today's workout changed and the
+    mesocycle left as it is: less time today, equipment they do not have
+    today, something to keep out today. Which workout is today's is read for
+    you; you say only what is different about today.
+
+    - `said`: what they asked for, in their own words.
+    - `minutes`: the time they have today, when they said it.
+    - `without`: equipment they do not have today, as the catalog names it.
+    - `exclude`: a movement pattern or joint to keep out today, as the
+      catalog names it.
+
+    When it starts, the adapted workout arrives in the chat by itself in a few
+    minutes: tell them you are on it. When it does not, what comes back says
+    why: call it again put right, or ask them.
+
+    The body is never run. The graph answers this call by starting the planner
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers adapt_today; nothing calls it")
+
+
+def change_mesocycle(said: str) -> str:
+    """Rewrite their mesocycle for the cycles left, keeping the count already done.
+
+    Call this when they want the mesocycle itself changed from now on: an
+    exercise gone for good, a different emphasis, a different number of
+    cycles. `said` is what they want changed, in their own words.
+
+    The new mesocycle arrives in the chat by itself in a few minutes: tell
+    them you are on it. When it does not start, what comes back says why.
+
+    The body is never run. The graph answers this call by starting the planner
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers change_mesocycle; nothing calls it")
+
+
 def log_workout() -> str:
     """Record the workout the user has just described, in their own words.
 
@@ -77,13 +126,18 @@ def log_workout() -> str:
 
 TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
+ADAPT_TODAY = adapt_today.__name__
+CHANGE_MESOCYCLE = change_mesocycle.__name__
 LOG_WORKOUT = log_workout.__name__
 
-HANDOFFS = (todays_workout, plan_mesocycle, log_workout)
+HANDOFFS = (todays_workout, plan_mesocycle, adapt_today, change_mesocycle, log_workout)
 """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
 
-CARRIED = (PLAN_MESOCYCLE, LOG_WORKOUT)
+CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, LOG_WORKOUT)
 """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
+
+CHECKED = (ADAPT_TODAY, CHANGE_MESOCYCLE)
+"""The handoffs whose request is assembled before they start, so a misread goes back to the model."""
 
 SERVING = (
     "Today's workout is read off their mesocycle and goes into the chat right "
@@ -101,11 +155,26 @@ UNREADABLE = (
     "and the next message says so. Tell them only that you could not read it."
 )
 
+MISREAD = (
+    "That was not started: {error}. Call it again with that put right, or "
+    "ask them what they meant."
+)
+
 STARTED = {
     PLAN_MESOCYCLE: (
         "The planner has started on a mesocycle. Tell the user you are putting "
         "it together and that it will arrive shortly. You have not seen it, so "
         "say nothing about what is in it."
+    ),
+    ADAPT_TODAY: (
+        "The planner has started adapting today's workout; the mesocycle stays "
+        "as it is. Tell them you are on it and that it will arrive shortly. You "
+        "have not seen it, so say nothing about what is in it."
+    ),
+    CHANGE_MESOCYCLE: (
+        "The planner has started rewriting the mesocycle for the cycles left. "
+        "Tell them you are on it and that it will arrive shortly. You have not "
+        "seen it, so say nothing about what is in it."
     ),
     LOG_WORKOUT: (
         "The logger has started reading what they wrote. Tell them you are "
@@ -164,6 +233,17 @@ What a turn asks of you:
 - They want something to train, now or today: call `todays_workout`.
 - They ask for a new mesocycle, or say yes when you offered one: call
   `plan_mesocycle`.
+- They want today's workout different for today only -- less time, missing
+  equipment, something to keep out today, as in «oggi ho solo mezz'ora»: call
+  `adapt_today`.
+- They want the mesocycle itself changed from now on -- an exercise gone for
+  good, a different emphasis, as in «d'ora in poi niente stacchi»: call
+  `change_mesocycle`.
+- When you cannot tell whether they mean today only or from now on, as in
+  «niente panca», ask them which, in one sentence, and call nothing.
+
+An exercise named in a sentence like these is one they want out of their
+training, not one to look up.
 - They are telling you about training they have already done: call
   `log_workout`.
 - They ask something the tools above can answer -- how much of a muscle group
@@ -282,6 +362,9 @@ class EntranceState(TypedDict, total=False):
     handoff: str
     """Which subgraph this turn reached for, and empty when it answered itself."""
 
+    asked: dict[str, Any]
+    """The arguments the handoff was called with: what an adaptation or a change was asked."""
+
     answer: str
     """What goes into the chat. The model's sentence, never a constant."""
 
@@ -309,6 +392,7 @@ def _beginning() -> EntranceState:
         "timings": [],
         "relaying": "",
         "handoff": "",
+        "asked": {},
         "answer": "",
     }
 
@@ -342,8 +426,11 @@ def build(
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
     today: Callable[[], str] | None = None,
+    checking: Callable[[str, Mapping[str, Any]], str | None] | None = None,
 ) -> Entrance:
     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
+
+    `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
     about what has been trained; everything else is handed to a subgraph, which
@@ -352,9 +439,19 @@ def build(
     model = on.model
     offered = tools.registered("entrance", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
-    handoffs = [{"type": "function", "function": tools.schema(tool)} for tool in HANDOFFS]
     timed = records.timing(on)
     looked_up = today if today is not None else reading_today
+    checked = checking if checking is not None else startable
+    free = [
+        {"type": "function", "function": tools.schema(tool)}
+        for tool in HANDOFFS
+        if tool.__name__ not in CHECKED
+    ]
+    bounded = [
+        {"type": "function", "function": tools.schema(tool)}
+        for tool in HANDOFFS
+        if tool.__name__ in CHECKED
+    ]
 
     def talk(state: EntranceState) -> dict[str, Any]:
         """One turn of the conversation, with the tools bound only while they are still useful.
@@ -376,7 +473,10 @@ def build(
             # to say one thing, both have nothing left to do but speak. Bound
             # anyway, a model that calls a tool there is a second handoff on a
             # turn that has one, or a tool call answering nobody.
-            definitions = [*(reads if state.get("spent", 0) < budget else []), *handoffs]
+            # A checked handoff can be refused and called again, so it is
+            # bounded like a read; the others always start.
+            within = state.get("spent", 0) < budget
+            definitions = [*(reads + bounded if within else []), *free]
         bound = model.bind_tools(definitions) if definitions else model
         reply = bound.invoke([SystemMessage(TALKING), *state.get("messages", []), *asked])
         return born | {"budget": budget, "messages": [*asked, reply]}
@@ -414,27 +514,34 @@ def build(
         reply = state["messages"][-1]
         assert isinstance(reply, AIMessage)
         taken = ""
+        asked: dict[str, Any] = {}
         answers: list[AnyMessage] = []
         spent = 0
         for call in reply.tool_calls:
-            if call["name"] not in HANDED:
+            name = call["name"]
+            if name not in HANDED:
                 spent += 1
                 answers.append(_answer(call, offered))
                 continue
-            said = (
-                ONE_AT_A_TIME
-                if taken
-                else looked_up()
-                if call["name"] == TODAYS_WORKOUT
-                else STARTED[call["name"]]
-            )
-            taken = taken or call["name"]
-            answers.append(
-                ToolMessage(said, tool_call_id=answered(call), name=call["name"])
-            )
+            if taken:
+                said = ONE_AT_A_TIME
+            elif name == TODAYS_WORKOUT:
+                said, taken = looked_up(), name
+            elif name not in CHECKED:
+                said, taken = STARTED[name], name
+            elif state.get("spent", 0) + spent >= budget:
+                said = SPENT
+            else:
+                refused = checked(name, call["args"])
+                if refused is None:
+                    said, taken, asked = STARTED[name], name, dict(call["args"])
+                else:
+                    said, spent = refused, spent + 1
+            answers.append(ToolMessage(said, tool_call_id=answered(call), name=name))
         return {
             "messages": answers,
             "handoff": taken,
+            "asked": asked,
             "spent": state.get("spent", 0) + spent,
         }
 
@@ -485,6 +592,65 @@ def reading_today() -> str:
     except tools.ToolFailure:
         return UNREADABLE
     return SERVING
+
+
+MISREADS = (
+    ExclusionError,
+    constraints.ConstraintError,
+    plans.PlanRejected,
+    TypeError,
+    ValueError,
+)
+"""What a request refuses because the model misread the user, beside the unknown value `startable` names first."""
+
+
+def startable(handoff: str, asked: Mapping[str, Any]) -> str | None:
+    """Why this adaptation or change cannot start, as the entrance is told it, or `None`."""
+    try:
+        with tools.reported(), tools.opened() as connection:
+            try:
+                requested(connection, handoff, asked)
+            except mesocycles.MesocycleError:
+                return NO_MESOCYCLE
+            except catalog.UnknownFilterValue as error:
+                return MISREAD.format(
+                    error=f"{error}; the catalog has {', '.join(error.valid)}"
+                )
+            except MISREADS as error:
+                return MISREAD.format(error=error)
+    except tools.ToolFailure:
+        return UNREADABLE
+    return None
+
+
+def requested(
+    connection: sqlite3.Connection, handoff: str, asked: Mapping[str, Any]
+) -> plans.Request | plans.MesocycleRequest:
+    """The request an adaptation or a change hands the planner, off the arguments it was called with."""
+    today = date.today().isoformat()
+    said = str(asked.get("said", ""))
+    if handoff == CHANGE_MESOCYCLE:
+        return plans.change_requested(connection, today, said=said)
+    minutes = asked.get("minutes")
+    return plans.adaptation_requested(
+        connection,
+        today,
+        plans.Asked(
+            minutes=None if minutes is None else int(minutes),
+            exclude=_listed(asked.get("exclude")),
+        ),
+        said=said,
+        without=_listed(asked.get("without")),
+    )
+
+
+def _listed(given: Any) -> tuple[str, ...]:
+    """A list argument, with one value where the list belongs read as that value."""
+    if not given:
+        return ()
+    if isinstance(given, str):
+        return (given,)
+    return tuple(str(value) for value in given)
 
 
 def _answer(

@@ -2369,3 +2369,64 @@ def test_tapping_no_on_a_mesocycle_offers_another(
     assert "2 cicli" in text
     assert len(buttons) == len(bot.MESOCYCLE_BUTTONS)
     assert mesocycles.active(catalogued) is None
+
+
+# -- a change and an adaptation (ADR-0008 item 6) ------------------------------
+
+
+def adapting_from(catalogued: sqlite3.Connection, *turns: AIMessage, planned: Any) -> bot.Graphs:
+    """A kept mesocycle, an entrance that reaches for `turns` and then serves, and a planner."""
+    served_from(catalogued)
+    return graphs_of(
+        graph_of(planned, checkpointer=InMemorySaver()),
+        front=Talking(handoff=entrance.TODAYS_WORKOUT, turns=list(turns)),
+    )
+
+
+def test_an_adaptation_is_offered_accepted_and_served_and_the_mesocycle_stays(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = adapting_from(
+        catalogued,
+        calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
+        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2)]),
+    )
+    kept = mesocycles.active(catalogued)
+
+    sent = asking(graphs, "solo 30 minuti oggi").offers
+    ((text, buttons),) = sent
+    assert "30" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+
+    said, say = spoken()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
+
+    assert said == [entrance.PRESCRIBED]
+    assert mesocycles.active(catalogued) == kept
+    ((served, _),) = asking(graphs).offers
+    assert "*Blocco 1* · 2 giri" in served, "asked again, the adapted workout is today's"
+    assert [state for _, state in workout_rows(catalogued)] == ["prescribed"]
+
+
+def test_a_change_is_offered_accepted_and_kept_counting_on(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    changed = mesocycle_of(plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press"))
+    graphs = adapting_from(
+        catalogued,
+        calling(entrance.CHANGE_MESOCYCLE, said="meno giri di squat"),
+        planned=Scripted(raw=[changed.model_dump_json()]),
+    )
+    before = mesocycles.active(catalogued)
+    assert before is not None
+
+    ((_, buttons),) = asking(graphs, "d'ora in poi meno giri di squat").offers
+    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    said, say = spoken()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
+
+    assert said == [entrance.KEPT]
+    after = mesocycles.active(catalogued)
+    assert after is not None and after.id != before.id
+    assert after.accepted_after == before.accepted_after
+    assert after.slots[0][0].block.rounds == 2

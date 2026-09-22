@@ -25,7 +25,9 @@ from trainer.engine import (
     config,
     constraints,
     database,
+    mesocycles,
     migrations,
+    workouts,
 )
 from trainer.engine.exclusions import Exclusion
 
@@ -1035,3 +1037,117 @@ def test_a_mesocycle_already_turned_down_is_refused(
     (violation,) = plans.validate_mesocycle(connection, parsed, asked)
 
     assert violation.rule == plans.REFUSED
+
+
+# -- an adaptation and a change: today's slot, or the mesocycle, asked again --
+
+
+def kept(connection: sqlite3.Connection, cycles: int = 4) -> int:
+    """The squat day and the press day, accepted."""
+    parsed = plans.parse_mesocycle(mesocycle(squat_day(), press_day(), cycles=cycles))
+    return mesocycles.record_mesocycle(
+        connection,
+        tuple(
+            tuple(
+                workouts.PrescribedBlock(block=costed, reason=shape.reason)
+                for shape, costed in zip(workout.blocks, plans.to_blocks(workout), strict=True)
+            )
+            for workout in parsed.workouts
+        ),
+        cycles=parsed.cycles,
+        why=parsed.why,
+        on=TODAY,
+    )
+
+
+def test_an_adaptation_starts_from_todays_slot_under_todays_constraint(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    identifier = kept(connection)
+
+    asked = plans.adaptation_requested(
+        connection, TODAY, plans.Asked(minutes=30), said="solo 30 minuti oggi"
+    )
+
+    assert (asked.budget_min, asked.groups) == (30, ("legs",))
+    assert asked.adapting is not None
+    assert asked.adapting.workout == plans.WorkoutPlan.model_validate(squat_day())
+    assert (asked.adapting.mesocycle, asked.adapting.served_after) == (identifier, 0)
+    assert asked.adapting.said == "solo 30 minuti oggi"
+
+
+def test_an_adaptation_needs_a_mesocycle_to_adapt(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    with pytest.raises(mesocycles.MesocycleError, match="--mesocycle"):
+        plans.adaptation_requested(connection, TODAY, plans.Asked(minutes=30))
+
+
+def test_equipment_missing_today_comes_off_what_was_declared(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+
+    asked = plans.adaptation_requested(connection, TODAY, plans.Asked(), without=("barbell",))
+
+    assert asked.equipment == ("body only",)
+
+
+def test_equipment_missing_today_is_checked_against_the_catalog(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+
+    with pytest.raises(catalog.UnknownFilterValue):
+        plans.adaptation_requested(connection, TODAY, plans.Asked(), without=("dumbells",))
+
+
+def test_missing_every_piece_of_equipment_is_refused_rather_than_ignored(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """An empty list is what `requested` reads as *nothing named*, which is all of it."""
+    kept(connection)
+
+    with pytest.raises(plans.PlanRejected, match="nothing left"):
+        plans.adaptation_requested(
+            connection, TODAY, plans.Asked(), without=("barbell", "body only")
+        )
+
+
+def test_a_change_is_asked_with_the_mesocycle_it_rewrites(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    identifier = kept(connection, cycles=3)
+
+    asked = plans.change_requested(connection, TODAY, said="basta squat")
+
+    assert [slot.groups for slot in asked.slots] == [("legs",), ("shoulders",)]
+    assert asked.changing is not None
+    assert asked.changing.current == plans.parse_mesocycle(
+        mesocycle(squat_day(), press_day(), cycles=3)
+    )
+    assert (asked.changing.mesocycle, asked.changing.accepted_after) == (identifier, 0)
+    assert (asked.changing.cycle, asked.changing.said) == (1, "basta squat")
+
+
+def test_a_change_needs_a_mesocycle_to_change(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    with pytest.raises(mesocycles.MesocycleError, match="--mesocycle"):
+        plans.change_requested(connection, TODAY, said="basta squat")
+
+
+def test_a_change_that_would_end_before_the_cycle_it_is_in_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """Its cycles count the ones done: fewer than the current one ends it on the spot."""
+    kept(connection, cycles=3)
+    asked = plans.change_requested(connection, TODAY, said="basta squat")
+    assert asked.changing is not None
+    asked = dataclasses.replace(asked, changing=dataclasses.replace(asked.changing, cycle=2))
+    parsed = plans.parse_mesocycle(mesocycle(squat_day(), press_day(), cycles=1))
+
+    (violation,) = plans.validate_mesocycle(connection, parsed, asked)
+
+    assert violation.rule == plans.CYCLES
+    assert "cycle 2" in violation.says

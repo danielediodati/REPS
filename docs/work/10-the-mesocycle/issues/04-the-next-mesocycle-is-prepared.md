@@ -20,6 +20,8 @@ Triggered by the report that completes the last cycle. The brief carries the mes
 ## Left by 02
 
 - After the last cycle `mesocycles.today` raises *finished its N cycles*, `entrance.reading_today` answers `NO_MESOCYCLE`, and the entrance offers to plan one. Once the next is prepared, that answer should point at the one waiting, not offer a new one.
+- 03 made `entrance.startable` answer `adapt_today` and `change_mesocycle` with the same `NO_MESOCYCLE` after the last cycle; the same fix applies there.
+- Accepting a mesocycle withdraws the ended one's serving nobody performed (`mesocycles.record_mesocycle`). After the last cycle there is none, so the prepared one's acceptance takes nothing back.
 
 ## References
 

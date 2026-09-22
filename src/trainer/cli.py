@@ -1189,6 +1189,13 @@ def admissible_command(
     "repeated for as many cycles as the agent says and why. Accepted, it is "
     "kept; nothing is prescribed until a workout is served (ADR-0008).",
 )
+@click.option(
+    "--change",
+    "change",
+    metavar="TEXT",
+    help="Rewrite the accepted mesocycle for the cycles left, as TEXT asks, "
+    "keeping the count already done (ADR-0008).",
+)
 @click.pass_context
 def plan_command(
     context: click.Context,
@@ -1202,6 +1209,7 @@ def plan_command(
     call_budget: int,
     record_path: Path | None,
     mesocycle: bool,
+    change: str | None,
 ) -> None:
     """Plan a workout, and print it.
 
@@ -1210,10 +1218,12 @@ def plan_command(
     served, with the load each exercise was last performed with. No model is
     asked (ADR-0008). With none accepted it says so and names `--mesocycle`.
 
-    Any option that shapes the workout plans one instead: the groups off the
-    declared split at the position the performed workouts put it, the minutes
-    off the declared cap, and the equipment off what you declared you have.
-    Every option below overrides one of those for today.
+    An option that shapes today's workout adapts that slot of the mesocycle
+    for today and leaves the mesocycle alone. With no mesocycle, or with
+    `--workout` or `--group`, it plans one from nothing instead: the groups off
+    the declared split at the position the performed workouts put it, the
+    minutes off the declared cap, and the equipment off what you declared you
+    have. Every option below overrides one of those for today.
 
     The planner graph is asked for the plan, on the provider `LLM_BACKEND`
     names, using the same tools `trainer mcp` serves and inside a budget of
@@ -1228,16 +1238,29 @@ def plan_command(
     nothing at all: half a workout with a refusal under it reads as a workout
     with a footnote.
     """
+    if change is not None and not change.strip():
+        raise click.UsageError("--change says what to change: it cannot be blank")
+    if change is not None and mesocycle:
+        raise click.UsageError(
+            "--change rewrites the accepted mesocycle and --mesocycle plans a new "
+            "one: give one or the other"
+        )
+    if change is not None and (workout is not None or groups):
+        raise click.UsageError(
+            "--change rewrites every slot of the mesocycle, so it names none: drop "
+            "--workout and --group"
+        )
     if mesocycle and (workout is not None or groups):
         raise click.UsageError(
             "--mesocycle plans every slot of the split, so it names none: drop "
             "--workout and --group"
         )
-    if mesocycle and source is not None:
+    if (mesocycle or change is not None) and source is not None:
         raise click.UsageError(
-            "--from checks one hand-written workout; --mesocycle asks a model for every slot"
+            "--from checks one hand-written workout; --mesocycle and --change ask "
+            "a model for every slot"
         )
-    served = not mesocycle and source is None and workout is None and budget is None
+    served = not mesocycle and change is None and source is None and workout is None and budget is None
     served = served and not (equipment or exclude or groups or avoid)
     if source is not None or served:
         _only_with_a_model(
@@ -1258,12 +1281,13 @@ def plan_command(
             for line in _served(connection, today):
                 click.echo(_ascii(line))
         return
-    if mesocycle:
+    if mesocycle or change is not None:
         with _opened() as connection, reported():
-            asked = plan.mesocycle_requested(
-                connection,
-                today,
-                plan.Asked(equipment=equipment, minutes=budget, exclude=exclude, avoid=avoid),
+            shaped = plan.Asked(equipment=equipment, minutes=budget, exclude=exclude, avoid=avoid)
+            asked = (
+                plan.mesocycle_requested(connection, today, shaped)
+                if change is None
+                else plan.change_requested(connection, today, change, shaped)
             )
             try:
                 lines = _asked_mesocycle(connection, asked, call_budget, record_path)
@@ -1279,21 +1303,28 @@ def plan_command(
             # over the cap is the more basic thing to be told about --
             # reported the other way round, a mistyped file hides a mistyped
             # rotation.
-            assembled = plan.requested(
-                connection,
-                today,
-                plan.Asked(
-                    equipment=equipment,
-                    minutes=budget,
-                    workout=workout,
-                    groups=groups,
-                    exclude=exclude,
-                    avoid=avoid,
-                ),
+            shaping = plan.Asked(
+                equipment=equipment,
+                minutes=budget,
+                workout=workout,
+                groups=groups,
+                exclude=exclude,
+                avoid=avoid,
             )
-            request = assembled.request
-            if assembled.rotation is not None:
-                click.echo(_rotation(assembled.rotation, request.groups))
+            adapting = (
+                _adaptable(connection) if source is None and workout is None and not groups else None
+            )
+            if adapting is not None:
+                request = plan.adaptation_requested(connection, today, shaping)
+                click.echo(
+                    f"adapting mesocycle workout {adapting.slot} of {adapting.slots}, "
+                    f"cycle {adapting.cycle} of {adapting.cycles} -- {', '.join(request.groups)}"
+                )
+            else:
+                assembled = plan.requested(connection, today, shaping)
+                request = assembled.request
+                if assembled.rotation is not None:
+                    click.echo(_rotation(assembled.rotation, request.groups))
 
             parsed: plan.WorkoutPlan | None = None
             if source is not None:
@@ -1334,6 +1365,14 @@ def plan_command(
             # resume, so the command is still the writer for it.
             if parsed is not None:
                 _recorded(connection, accepted, today)
+
+
+def _adaptable(connection: sqlite3.Connection) -> mesocycles.Today | None:
+    """Today's slot of the mesocycle, or `None` when there is none to adapt and one is planned from nothing."""
+    try:
+        return mesocycles.today(connection)
+    except mesocycles.MesocycleError:
+        return None
 
 
 def _rotation(where: state.Rotation, groups: tuple[str, ...]) -> str:

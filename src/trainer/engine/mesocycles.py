@@ -36,11 +36,14 @@ def record_mesocycle(
     cycles: int,
     why: str,
     on: str,
+    accepted_after: int | None = None,
 ) -> int:
     """Keep an accepted mesocycle, end the one it replaces, and return its id.
 
     Each slot is checked as a plan (`duration.check_plan`) before anything is
-    written. Nothing is prescribed: that happens when a slot is served.
+    written. Nothing is prescribed: that happens when a slot is served. The
+    ended one's serving that nobody has performed yet is withdrawn with it.
+    `accepted_after` is given by a change, which keeps the count it rewrites.
     """
     for blocks in slots:
         if not blocks:
@@ -49,16 +52,19 @@ def record_mesocycle(
 
     connection.execute("BEGIN IMMEDIATE")
     try:
-        performed = connection.execute(
-            "SELECT COUNT(*) FROM workouts WHERE state = 'performed'"
-        ).fetchone()[0]
+        performed = _performed(connection)
+        ending = connection.execute(
+            "SELECT id FROM mesocycles WHERE ended_on IS NULL"
+        ).fetchone()
+        if ending is not None:
+            _withdraw(connection, int(ending["id"]), performed)
         connection.execute(
             "UPDATE mesocycles SET ended_on = ? WHERE ended_on IS NULL", (on,)
         )
         cursor = connection.execute(
             "INSERT INTO mesocycles (accepted_on, accepted_after, cycles, why) "
             "VALUES (?, ?, ?, ?)",
-            (on, performed, cycles, why),
+            (on, performed if accepted_after is None else accepted_after, cycles, why),
         )
         assert cursor.lastrowid is not None  # an INSERT always has one
         mesocycle_id = cursor.lastrowid
@@ -73,6 +79,23 @@ def record_mesocycle(
             pass
         raise
     return mesocycle_id
+
+
+def _performed(connection: sqlite3.Connection) -> int:
+    return int(
+        connection.execute(
+            "SELECT COUNT(*) FROM workouts WHERE state = 'performed'"
+        ).fetchone()[0]
+    )
+
+
+def _withdraw(connection: sqlite3.Connection, mesocycle_id: int, served_after: int) -> None:
+    """The serving at this count taken back, if nobody has performed it: it was never trained."""
+    connection.execute(
+        "DELETE FROM workouts WHERE state = 'prescribed' AND id IN "
+        "(SELECT workout_id FROM served WHERE mesocycle_id = ? AND served_after = ?)",
+        (mesocycle_id, served_after),
+    )
 
 
 def _write_block(
@@ -162,6 +185,8 @@ class Today:
     cycle: int
     cycles: int
     blocks: tuple[workouts.PrescribedBlock, ...]
+    performed: int
+    """Workouts performed so far: what a serving of today is keyed by."""
 
 
 def today(connection: sqlite3.Connection) -> Today:
@@ -188,21 +213,35 @@ def today(connection: sqlite3.Connection) -> Today:
         cycle=since // len(kept.slots) + 1,
         cycles=kept.cycles,
         blocks=kept.slots[where.position - 1],
+        performed=where.performed,
     )
 
 
 def record_served(connection: sqlite3.Connection, on: str) -> tuple[Today, int]:
-    """Today's workout, prescribed the first time it is served, and its workout id."""
+    """Today's workout, prescribed the first time it is served, and its workout id.
+
+    Served again, it is the prescription on record, which an adaptation may
+    have made different from the slot.
+    """
     connection.execute("BEGIN IMMEDIATE")
     try:
         found = today(connection)
-        performed = state.rotation(connection).performed
+        performed = found.performed
         row = connection.execute(
             "SELECT workout_id FROM served WHERE mesocycle_id = ? AND served_after = ?",
             (found.mesocycle, performed),
         ).fetchone()
         if row is not None:
             workout_id = int(row["workout_id"])
+            found = Today(
+                mesocycle=found.mesocycle,
+                slot=found.slot,
+                slots=found.slots,
+                cycle=found.cycle,
+                cycles=found.cycles,
+                blocks=workouts.prescribed(connection, workout_id),
+                performed=found.performed,
+            )
         else:
             workout_id = workouts.write_prescribed(connection, found.blocks, on)
             connection.execute(
@@ -218,3 +257,46 @@ def record_served(connection: sqlite3.Connection, on: str) -> tuple[Today, int]:
             pass
         raise
     return found, workout_id
+
+
+def record_adapted(
+    connection: sqlite3.Connection,
+    blocks: Sequence[workouts.PrescribedBlock],
+    *,
+    on: str,
+    mesocycle: int,
+    served_after: int,
+) -> int:
+    """Prescribe an adapted workout as today's serving of the mesocycle, and return its id.
+
+    The mesocycle is not touched (ADR-0008 item 6). A serving of the same day
+    that nobody performed is withdrawn; a day the rotation has moved past, or
+    a mesocycle since replaced, is a state.
+    """
+    if not blocks:
+        raise workouts.WorkoutError("a workout is at least one block")
+    duration.check_plan([prescribed.block for prescribed in blocks])
+
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        found = today(connection)
+        if (found.mesocycle, found.performed) != (mesocycle, served_after):
+            raise MesocycleError(
+                "the day this workout was adapted for has moved on: a workout was "
+                "reported or another mesocycle accepted since; ask for today's again"
+            )
+        _withdraw(connection, mesocycle, served_after)
+        workout_id = workouts.write_prescribed(connection, blocks, on)
+        connection.execute(
+            "INSERT INTO served (workout_id, mesocycle_id, slot, served_after) "
+            "VALUES (?, ?, ?, ?)",
+            (workout_id, mesocycle, found.slot, served_after),
+        )
+        connection.execute("COMMIT")
+    except Exception:
+        try:
+            connection.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
+    return workout_id

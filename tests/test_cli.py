@@ -3989,3 +3989,113 @@ def test_plan_off_the_mesocycle_has_no_run_to_record(
 
     assert result.exit_code == 2
     assert "asks no model" in result.output
+
+
+# -- trainer plan: an adaptation and a change (ADR-0008 item 6) ------------------
+
+
+def test_an_option_shaping_today_adapts_the_mesocycles_workout(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_planner import plan_of
+
+    from trainer.engine import mesocycles
+
+    kept_mesocycle(enriched, declared_training)
+    with closing(database.connect(enriched)) as connection:
+        before = mesocycles.active(connection)
+    model = scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat", rounds=2)])
+
+    result = runner.invoke(main, ["plan", "--time", "30"])
+
+    assert result.exit_code == 0, result.output
+    assert "adapting mesocycle workout 1 of 2, cycle 1 of 3 -- legs" in result.output
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "Today's workout in the mesocycle" in briefed and "30 minutes" in briefed
+    with closing(database.connect(enriched)) as connection:
+        assert mesocycles.active(connection) == before
+    no_model(monkeypatch)
+    served = runner.invoke(main, ["plan"])
+    assert "block 1 -- 2 rounds" in served.output, served.output
+    assert [row["state"] for row in workout_rows(enriched)] == [
+        "performed",
+        "performed",
+        "prescribed",
+    ]
+
+
+def test_naming_another_workout_still_plans_one_from_nothing(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_planner import plan_of
+
+    kept_mesocycle(enriched, declared_training)
+    model = scripted_graph(monkeypatch, documents=[plan_of("Standing_Military_Press")])
+
+    result = runner.invoke(main, ["plan", "--workout", "2", "--time", "30"])
+
+    assert result.exit_code == 0, result.output
+    assert "adapting" not in result.output
+    assert "Today's workout in the mesocycle" not in "\n".join(
+        message.text for message in model.seen[0]
+    )
+
+
+def test_plan_change_rewrites_the_mesocycle_and_keeps_its_count(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_planner import mesocycle_of, plan_of
+
+    from trainer.engine import mesocycles
+
+    kept_mesocycle(enriched, declared_training)
+    changed = mesocycle_of(plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press"), cycles=3)
+    model = scripted_graph(monkeypatch, raw=[changed.model_dump_json()])
+
+    result = runner.invoke(main, ["plan", "--change", "meno giri di squat"])
+
+    assert result.exit_code == 0, result.output
+    assert "meno giri di squat" in "\n".join(message.text for message in model.seen[0])
+    with closing(database.connect(enriched)) as connection:
+        kept = mesocycles.active(connection)
+        assert kept is not None and kept.accepted_after == 2
+        assert kept.slots[0][0].block.rounds == 2
+
+
+def test_plan_change_with_no_mesocycle_names_the_state_and_the_fix(
+    runner: CliRunner, enriched: Path, declared_training: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_planner import LEGS_AND_SHOULDERS
+
+    declared_training.write_text(LEGS_AND_SHOULDERS, encoding="utf-8")
+    no_model(monkeypatch)
+
+    result = runner.invoke(main, ["plan", "--change", "basta squat"])
+
+    assert result.exit_code == 1
+    assert "trainer plan --mesocycle" in result.output
+
+
+@pytest.mark.parametrize("flag", [["--workout", "2"], ["--group", "legs"], ["--mesocycle"]])
+def test_plan_change_names_no_workout_and_is_not_a_new_mesocycle(
+    runner: CliRunner, enriched: Path, flag: list[str]
+) -> None:
+    result = runner.invoke(main, ["plan", "--change", "basta squat", *flag])
+
+    assert result.exit_code == 2
+
+
+def test_plan_change_that_says_nothing_is_refused(runner: CliRunner, enriched: Path) -> None:
+    result = runner.invoke(main, ["plan", "--change", "  "])
+
+    assert result.exit_code == 2
+    assert "--change" in result.output

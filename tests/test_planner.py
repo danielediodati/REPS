@@ -1293,3 +1293,106 @@ def test_a_mesocycle_request_sent_as_json_is_read_as_one(
     final = graph.invoke({"request": dc.asdict(two_slots)}, thread)  # type: ignore[call-overload]
 
     assert final["plan"] == offered
+
+
+# -- an adaptation and a change (ADR-0008 item 6) ------------------------------
+
+
+def keeping(connection: sqlite3.Connection, two_slots: plans.MesocycleRequest) -> int:
+    """The squat day and the press day, accepted through the graph."""
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=3)
+    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
+    graph.invoke(planner.starting(two_slots), thread)
+    return int(graph.invoke(Command(resume=planner.accepted()), thread)["mesocycle"])
+
+
+def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    keeping(connection, two_slots)
+    asked = plans.adaptation_requested(
+        connection, "2026-09-22", plans.Asked(minutes=30), said="solo 30 minuti oggi"
+    )
+    model = Scripted(documents=[plan_of("Barbell_Squat", rounds=2)])
+    graph, thread = pausing(model)
+
+    graph.invoke(planner.starting(asked), thread)
+
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "solo 30 minuti oggi" in briefed
+    assert "Barbell_Squat" in briefed, "today's slot is the starting point"
+    assert "30 minutes" in briefed
+
+
+def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    keeping(connection, two_slots)
+    before = mesocycles.active(connection)
+    asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
+    graph, thread = pausing(Scripted(documents=[plan_of("Barbell_Squat", rounds=2)]))
+    graph.invoke(planner.starting(asked), thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    assert mesocycles.active(connection) == before
+    _, served = mesocycles.record_served(connection, "2026-09-22")
+    assert served == final["workout"]
+    assert [block.block.rounds for block in workouts.prescribed(connection, served)] == [2]
+
+
+def test_an_adaptation_turned_down_is_planned_again_from_the_same_slot(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    keeping(connection, two_slots)
+    asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
+    model = Scripted(
+        turns=[AIMessage(content="planned"), AIMessage(content="another")],
+        documents=[plan_of("Barbell_Squat", rounds=2), plan_of("Barbell_Squat", rounds=1)],
+    )
+    graph, thread = pausing(model)
+    graph.invoke(planner.starting(asked), thread)
+
+    final = graph.invoke(Command(resume=planner.refused("troppo")), thread)
+
+    assert final["plan"] == plan_of("Barbell_Squat", rounds=1)
+    assert final["request"].adapting == asked.adapting
+    assert "troppo" in "\n".join(message.text for message in model.seen[-1])
+
+
+def test_a_change_is_briefed_with_the_mesocycle_and_what_to_change(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    keeping(connection, two_slots)
+    asked = plans.change_requested(connection, "2026-09-22", said="basta squat")
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    model = Scripted(raw=[offered.model_dump_json()])
+    graph, thread = pausing(model)
+
+    graph.invoke(planner.starting(asked), thread)
+
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "basta squat" in briefed
+    assert "cycle 1 of 3" in briefed
+    assert '"Barbell_Squat"' in briefed, "the mesocycle being changed, whole"
+
+
+def test_an_accepted_change_replaces_the_mesocycle_and_keeps_its_count(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    old = keeping(connection, two_slots)
+    before = mesocycles.active(connection)
+    assert before is not None
+    asked = plans.change_requested(connection, "2026-09-22", said="meno serie di squat")
+    changed = mesocycle_of(
+        plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press"), cycles=3
+    )
+    graph, thread = pausing(Scripted(raw=[changed.model_dump_json()]))
+    graph.invoke(planner.starting(asked), thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    kept = mesocycles.active(connection)
+    assert kept is not None and kept.id == final["mesocycle"] != old
+    assert kept.accepted_after == before.accepted_after
+    assert kept.slots[0][0].block.rounds == 2

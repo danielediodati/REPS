@@ -240,3 +240,118 @@ def test_a_split_that_changed_since_acceptance_is_a_state(
 
     with pytest.raises(mesocycles.MesocycleError, match="split"):
         mesocycles.today(connection)
+
+
+def adapted(connection: sqlite3.Connection, **where: int) -> int:
+    """Today's slot adapted to a plank, as the planner writes an accepted adaptation."""
+    found = mesocycles.today(connection)
+    return mesocycles.record_adapted(
+        connection,
+        slot("Plank", reps=None, seconds=20),
+        on=TODAY,
+        mesocycle=where.get("mesocycle", found.mesocycle),
+        served_after=where.get("served_after", found.performed),
+    )
+
+
+def test_an_adaptation_is_todays_serving_and_leaves_the_mesocycle_alone(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection)
+    kept = mesocycles.active(connection)
+
+    workout_id = adapted(connection)
+
+    _, served = mesocycles.record_served(connection, TODAY)
+    assert served == workout_id
+    assert workouts.prescribed(connection, workout_id) == slot("Plank", reps=None, seconds=20)
+    assert mesocycles.active(connection) == kept
+
+
+def test_an_adaptation_withdraws_the_serving_it_replaces(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    """Served and then adapted, the unadapted prescription was never trained,
+    and left standing it would read as a workout skipped."""
+    accepted(connection)
+    _, unadapted = mesocycles.record_served(connection, TODAY)
+
+    workout_id = adapted(connection)
+
+    assert workouts.workout(connection, unadapted) is None
+    assert workouts.awaiting(connection) == workouts.workout(connection, workout_id)
+    assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 1
+
+
+def test_an_adaptation_of_a_day_that_has_moved_on_is_a_state(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    """Planned before a report moved the rotation, it is no longer today's."""
+    accepted(connection)
+    before = mesocycles.today(connection).performed
+    performed(connection)
+
+    with pytest.raises(mesocycles.MesocycleError, match="moved on"):
+        adapted(connection, served_after=before)
+    assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 1
+
+
+def test_a_change_continues_the_cycle_count(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection, cycles=3)
+    for _ in range(3):
+        _, served = mesocycles.record_served(connection, TODAY)
+        performed(connection, served)
+    old = mesocycles.active(connection)
+    assert old is not None
+
+    mesocycles.record_mesocycle(
+        connection,
+        (slot("Plank"), slot("Plank", reps=None, seconds=45)),
+        cycles=3,
+        why="no squats from here",
+        on=TODAY,
+        accepted_after=old.accepted_after,
+    )
+
+    found = mesocycles.today(connection)
+    assert (found.cycle, found.slot) == (2, 2)
+    assert found.blocks == slot("Plank", reps=None, seconds=45)
+
+
+def test_accepting_one_withdraws_the_serving_of_the_one_it_ends(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection)
+    _, old = mesocycles.record_served(connection, TODAY)
+
+    accepted(connection)
+
+    assert workouts.workout(connection, old) is None
+    _, new = mesocycles.record_served(connection, TODAY)
+    assert new != old
+
+
+def test_accepting_one_keeps_a_serving_already_performed(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection)
+    _, old = mesocycles.record_served(connection, TODAY)
+    performed(connection, old)
+
+    accepted(connection)
+
+    kept = workouts.workout(connection, old)
+    assert kept is not None and kept.state == "performed"
+
+
+def test_served_after_an_adaptation_it_reads_as_the_adapted_workout(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection)
+    adapted(connection)
+
+    found, _ = mesocycles.record_served(connection, TODAY)
+
+    assert found.blocks == slot("Plank", reps=None, seconds=20)

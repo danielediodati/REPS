@@ -558,7 +558,7 @@ def talking(graphs: Graphs) -> Run:
         handoff = str(final.get("handoff", ""))
         if handoff == entrance.TODAYS_WORKOUT:
             await _serving(thread, chat)
-        elif handoff == entrance.PLAN_MESOCYCLE:
+        elif handoff in (entrance.PLAN_MESOCYCLE, *entrance.CHECKED):
             await _planning(graphs, thread, final, chat)
         elif handoff == entrance.LOG_WORKOUT:
             await _logging(graphs, thread, text, final, chat)
@@ -653,7 +653,7 @@ def _served() -> str | None:
 async def _planning(
     graphs: Graphs, thread: str, final: Mapping[str, Any], chat: Chat
 ) -> None:
-    """The planner, asked for a mesocycle, behind the turn the entrance has already answered.
+    """The planner, asked for a mesocycle, a change or an adaptation, behind the turn the entrance has already answered.
 
     A run started here supersedes any plan the thread was still waiting on.
     Invoking with fresh input drops the pending proposal, and a tap on it
@@ -665,7 +665,9 @@ async def _planning(
     a state is worse than answering with the state.
     """
     try:
-        request = await asyncio.to_thread(_mesocycle_request)
+        request = await asyncio.to_thread(
+            _handed, str(final.get("handoff", "")), dict(final.get("asked", {}))
+        )
     except tools.ToolFailure as state:
         # Logged here rather than left to the caller: `_attempt` catches what
         # escapes a run, and this is a state the run never reached. With the
@@ -867,10 +869,12 @@ async def drafting(
             await task
 
 
-def _mesocycle_request() -> plans.MesocycleRequest:
-    """A mesocycle's request, off the same function `trainer plan --mesocycle` assembles it with."""
+def _handed(handoff: str, asked: Mapping[str, Any]) -> plans.Request | plans.MesocycleRequest:
+    """The planner's request for this handoff, off the functions `trainer plan` assembles it with."""
     with tools.reported(), tools.opened() as connection:
-        return plans.mesocycle_requested(connection, date.today().isoformat(), plans.Asked())
+        if handoff == entrance.PLAN_MESOCYCLE:
+            return plans.mesocycle_requested(connection, date.today().isoformat(), plans.Asked())
+        return entrance.requested(connection, handoff, asked)
 
 
 def _awaiting() -> workouts.Workout | None:

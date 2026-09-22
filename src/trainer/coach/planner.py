@@ -196,6 +196,8 @@ def brief(request: plans.Request) -> str:
             '{"exercise_id": "...", "why": "..."}. The field is `why`; '
             "`reason` belongs to a block. Proposing one silently is rejected."
         )
+    if request.adapting is not None:
+        lines.append(adapted(request.adapting))
     if request.refusals:
         lines.append(turned_down(request.refusals))
         lines.append(
@@ -205,6 +207,34 @@ def brief(request: plans.Request) -> str:
         )
     lines.append("Plan the workout.")
     return "\n".join(lines)
+
+
+def adapted(adapting: plans.Adapting) -> str:
+    """Today's slot of the mesocycle, as the starting point an adaptation is planned from."""
+    lines = [
+        "This adapts today's workout from their mesocycle, which is below. Start "
+        "from it: keep what still fits today and change only what today's "
+        "constraint asks for. The mesocycle itself stays as it is.",
+    ]
+    if adapting.said:
+        lines.append(f"They said: {adapting.said}")
+    lines.append("Today's workout in the mesocycle:\n" + adapting.workout.model_dump_json(indent=1))
+    return "\n".join(lines)
+
+
+def changed(changing: plans.Changing) -> str:
+    """The active mesocycle, as what a change rewrites for the cycles left."""
+    return "\n".join(
+        [
+            "This changes the mesocycle they are following, which is below: it is "
+            f"in cycle {changing.cycle} of {changing.current.cycles}. Rewrite it "
+            "for the cycles left, changing what they asked for and keeping the "
+            "rest. `cycles` is the total, counting the ones already done, so it "
+            f"is at least {changing.cycle}.",
+            f"What they want changed: {changing.said}",
+            "The mesocycle now:\n" + changing.current.model_dump_json(indent=1),
+        ]
+    )
 
 
 def mesocycle_brief(request: plans.MesocycleRequest) -> str:
@@ -233,6 +263,8 @@ def mesocycle_brief(request: plans.MesocycleRequest) -> str:
             + ", ".join(first.preferences)
             + ". Leave them out, or add a row to that workout's `despite`."
         )
+    if request.changing is not None:
+        lines.append(changed(request.changing))
     if request.refusals:
         lines.append(
             f"You have proposed {len(request.refusals)} mesocycle(s) already and "
@@ -726,7 +758,10 @@ def build(
         """
         accepted_plan = state["plan"]
         assert accepted_plan is not None, "nothing is written without a plan"
+        request = state["request"]
         if isinstance(accepted_plan, plans.Mesocycle):
+            assert isinstance(request, plans.MesocycleRequest)
+            changing = request.changing
             with tools.reported(), tools.opened() as connection:
                 kept = mesocycles.record_mesocycle(
                     connection,
@@ -742,20 +777,32 @@ def build(
                     cycles=accepted_plan.cycles,
                     why=accepted_plan.why,
                     on=date.today().isoformat(),
+                    accepted_after=None if changing is None else changing.accepted_after,
                 )
             return {"mesocycle": kept} | closed(
                 {**state, "mesocycle": kept}, records.ACCEPTED
             )
+        assert isinstance(request, plans.Request)
+        blocks = tuple(
+            workouts.PrescribedBlock(block=costed, reason=shape.reason)
+            for shape, costed in zip(
+                accepted_plan.blocks, plans.to_blocks(accepted_plan), strict=True
+            )
+        )
+        on = date.today().isoformat()
         with tools.reported(), tools.opened() as connection:
-            written = workouts.record_prescribed(
-                connection,
-                tuple(
-                    workouts.PrescribedBlock(block=costed, reason=shape.reason)
-                    for shape, costed in zip(
-                        accepted_plan.blocks, plans.to_blocks(accepted_plan), strict=True
-                    )
-                ),
-                on=date.today().isoformat(),
+            # An adaptation is today's serving of the mesocycle, or asking
+            # again would serve the unadapted slot beside it.
+            written = (
+                workouts.record_prescribed(connection, blocks, on=on)
+                if request.adapting is None
+                else mesocycles.record_adapted(
+                    connection,
+                    blocks,
+                    on=on,
+                    mesocycle=request.adapting.mesocycle,
+                    served_after=request.adapting.served_after,
+                )
             )
         return {"workout": written} | closed(
             {**state, "workout": written}, records.ACCEPTED

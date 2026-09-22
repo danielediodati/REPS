@@ -54,6 +54,8 @@ uv run trainer catalog --equipment dumbbell
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"
 uv run trainer plan --mesocycle                               # a workout per slot of the split, kept when accepted
 uv run trainer plan                                           # today's workout off it, with the last load beside each exercise
+uv run trainer plan --time 30                                 # today's adapted for today only; the mesocycle stays
+uv run trainer plan --change "basta affondi"                  # the mesocycle rewritten for the cycles left
 uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
 uv run trainer eval --suite plan                              # or --suite log

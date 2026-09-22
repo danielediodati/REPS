@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from trainer.engine import admissible, budget, catalog, config, constraints, duration
 from trainer.engine import exclusions as exclusion_state
-from trainer.engine import state, workouts
+from trainer.engine import mesocycles, state, workouts
 from trainer.engine.exclusions import Exclusion
 
 
@@ -46,6 +46,7 @@ BUDGET = "budget"
 PREFERENCES = "preferences"
 REFUSED = "refused"
 SLOTS = "slots"
+CYCLES = "cycles"
 
 
 # -- the shape ----------------------------------------------------------------
@@ -229,6 +230,18 @@ def turned_down(
 
 
 @dataclass(frozen=True)
+class Adapting:
+    """Today's slot of the mesocycle an adaptation starts from, and what the user said (ADR-0008 item 6)."""
+
+    mesocycle: int
+    served_after: int
+    """Workouts performed when it was asked: the day it is today's workout for."""
+
+    workout: WorkoutPlan
+    said: str = ""
+
+
+@dataclass(frozen=True)
 class Request:
     """What the plan was asked for, and what it is checked against.
 
@@ -264,6 +277,9 @@ class Request:
     """Every plan this negotiation has already turned down, oldest first. The
     new one has to differ from each of them; how is the agent's business."""
 
+    adapting: Adapting | None = None
+    """Set when this is an adaptation: accepted, it is today's serving and the mesocycle stays."""
+
 
 @dataclass(frozen=True)
 class MesocycleRefusal:
@@ -275,11 +291,25 @@ class MesocycleRefusal:
 
 
 @dataclass(frozen=True)
+class Changing:
+    """The active mesocycle a change rewrites, where its count stands, and what the user wants changed."""
+
+    mesocycle: int
+    accepted_after: int
+    """Kept by the new one, so its cycles go on counting from the same place."""
+
+    cycle: int
+    current: Mesocycle
+    said: str
+
+
+@dataclass(frozen=True)
 class MesocycleRequest:
     """One `Request` per slot of the cycle, in the split's order, and what the negotiation turned down."""
 
     slots: tuple[Request, ...]
     refusals: tuple[MesocycleRefusal, ...] = ()
+    changing: Changing | None = None
 
 
 def mesocycle_turned_down(
@@ -409,6 +439,68 @@ def mesocycle_requested(
             ).request
             for slot in range(1, declared.cycle_length + 1)
         )
+    )
+
+
+def adaptation_requested(
+    connection: sqlite3.Connection,
+    today: str,
+    asked: Asked = Asked(),
+    said: str = "",
+    without: tuple[str, ...] = (),
+) -> Request:
+    """Today's request with today's slot of the mesocycle as its starting point.
+
+    `without` is equipment missing today, taken off what was named or declared.
+    """
+    if asked.workout is not None or asked.groups:
+        raise PlanRejected(
+            "an adaptation is of the workout the rotation is at; naming another "
+            "one plans it from nothing"
+        )
+    found = mesocycles.today(connection)
+    if without:
+        for value in without:
+            catalog.check_value(connection, "equipment", value)
+        having = asked.equipment or _equipment(connection, (), _declared())
+        left = tuple(value for value in having if value not in without)
+        if not left:
+            raise PlanRejected(
+                f"without {', '.join(without)} there is nothing left of "
+                f"{', '.join(having)} to train with"
+            )
+        asked = dataclasses.replace(asked, equipment=left)
+    return dataclasses.replace(
+        requested(connection, today, asked).request,
+        adapting=Adapting(
+            mesocycle=found.mesocycle,
+            served_after=found.performed,
+            workout=from_prescribed(found.blocks),
+            said=said,
+        ),
+    )
+
+
+def change_requested(
+    connection: sqlite3.Connection, today: str, said: str, asked: Asked = Asked()
+) -> MesocycleRequest:
+    """A mesocycle's request carrying the active one it rewrites for the cycles left."""
+    found = mesocycles.today(connection)
+    active = mesocycles.active(connection)
+    assert active is not None, "`today` found a mesocycle"
+    return dataclasses.replace(
+        mesocycle_requested(connection, today, asked),
+        changing=Changing(
+            mesocycle=active.id,
+            accepted_after=active.accepted_after,
+            cycle=found.cycle,
+            current=Mesocycle(
+                workouts=[from_prescribed(slot) for slot in active.slots],
+                cycles=active.cycles,
+                why=active.why,
+            ),
+            said=said,
+        ),
     )
 
 
@@ -669,6 +761,16 @@ def validate_mesocycle(
             ),
         )
     found: list[Violation] = []
+    changing = request.changing
+    if changing is not None and mesocycle.cycles < changing.cycle:
+        found.append(
+            Violation(
+                CYCLES,
+                f"cycles is {mesocycle.cycles} and the mesocycle is in cycle "
+                f"{changing.cycle}: a change keeps the count, so cycles is the "
+                f"total and at least {changing.cycle}",
+            )
+        )
     for slot, (workout, asked) in enumerate(zip(mesocycle.workouts, request.slots), start=1):
         try:
             broken = validate(connection, to_blocks(workout), asked, workout)
