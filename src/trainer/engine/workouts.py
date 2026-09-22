@@ -123,13 +123,7 @@ def record_prescribed(
 
     connection.execute("BEGIN IMMEDIATE")
     try:
-        cursor = connection.execute(
-            "INSERT INTO workouts (state, prescribed_on) VALUES ('prescribed', ?)",
-            (on,),
-        )
-        workout_id = _inserted(cursor)
-        for position, prescribed in enumerate(blocks, start=1):
-            _write_block(connection, workout_id, position, prescribed)
+        workout_id = write_prescribed(connection, blocks, on)
         # Inside the try, because a COMMIT can fail too -- a concurrent writer
         # holding the lock, a full disk. Left outside it, that failure would
         # escape with the transaction still open, and the next call on this
@@ -145,6 +139,20 @@ def record_prescribed(
         except sqlite3.Error:
             pass
         raise
+    return workout_id
+
+
+def write_prescribed(
+    connection: sqlite3.Connection, blocks: Sequence[PrescribedBlock], on: str
+) -> int:
+    """Write one checked prescribed workout inside a transaction the caller holds, and return its id."""
+    cursor = connection.execute(
+        "INSERT INTO workouts (state, prescribed_on) VALUES ('prescribed', ?)",
+        (on,),
+    )
+    workout_id = _inserted(cursor)
+    for position, prescribed in enumerate(blocks, start=1):
+        _write_block(connection, workout_id, position, prescribed)
     return workout_id
 
 

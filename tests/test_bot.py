@@ -39,6 +39,7 @@ from test_planner import (
     Scripted,
     calling,
     graph_of,
+    mesocycle_of,
     plan_of,
 )
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -51,7 +52,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from trainer.coach import bot, checkpoints, entrance, logfile, models, planner, progress
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
-from trainer.engine import catalog, database, exclusions, migrations, workouts
+from trainer.engine import catalog, database, exclusions, mesocycles, migrations, workouts
 
 OWNER = 6421
 STRANGER = 99
@@ -72,6 +73,10 @@ is not empty for -- which is what lets a run here reach a plan instead of a
 refusal about a group nothing covers. The suite's own `DECLARED_CONFIG` trains
 chest and arms, which this catalog has nothing barbell for.
 """
+
+
+A_MESOCYCLE = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+"""What the planner offers when the chat asks for a mesocycle against `FIXTURE_SPLIT`."""
 
 
 @pytest.fixture()
@@ -245,7 +250,7 @@ def graphs_of(
     return bot.Graphs(
         entrance=entrance.build(
             models.Chat(
-                front if front is not None else Talking(handoff=entrance.PLAN_TODAY),
+                front if front is not None else Talking(handoff=entrance.PLAN_MESOCYCLE),
                 FRONT_PROVIDER,
                 FRONT_MODEL,
             ),
@@ -653,7 +658,7 @@ def test_the_thread_survives_a_restart(
     `trainer bot` are. The conversation is the checkpointer's (ADR-0004, item
     5), so the second process finds what the first was told."""
     path = tmp_path / "checkpoints.sqlite"
-    written = [plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]
+    written: list[plans.WorkoutPlan | plans.Mesocycle] = [A_MESOCYCLE, A_MESOCYCLE]
 
     with checkpoints.saver(path) as saver:
         graph = graph_of(Scripted(documents=written[:1]), checkpointer=saver)
@@ -684,7 +689,7 @@ def test_two_chats_are_two_threads(
 ) -> None:
     with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
         graph = graph_of(
-            Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]),
+            Scripted(documents=[A_MESOCYCLE, A_MESOCYCLE]),
             checkpointer=saver,
         )
         graphs = graphs_of(graph, saver=saver)
@@ -723,30 +728,30 @@ def logging_on(chat_id: int = CHAT) -> RunnableConfig:
     }
 
 
-def test_asking_what_today_is_reaches_a_plan_with_buttons(
+def test_asking_for_a_mesocycle_reaches_it_whole_with_two_buttons(
     catalogued: sqlite3.Connection, declared: Path
 ) -> None:
-    """The message names nothing. The groups come from where the rotation is,
-    the minutes from the declared cap, and the equipment from the
-    declaration."""
+    """Every slot is offered, and a mesocycle is kept or turned down: a
+    shorter one is an adaptation of a day (10.3), not of it."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+        Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()
     )
 
-    watched = asking(graphs_of(graph))
+    watched = asking(graphs_of(graph), "preparami un mesociclo")
 
-    assert watched.said == [SAYS], "the entrance answers; the plan is offered"
+    assert watched.said == [SAYS], "the entrance answers; the mesocycle is offered"
     (text, buttons) = watched.offers[0]
-    assert "Barbell Squat" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert "Barbell Squat" in text and "Standing Military Press" in text
+    assert "4 cicli" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
 
 
 def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
     catalogued: sqlite3.Connection, declared: Path
 ) -> None:
-    """Nothing in the message says barbell, 45 minutes or legs."""
+    """Nothing in the message says barbell, 45 minutes, legs or shoulders."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+        Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()
     )
 
     asking(graphs_of(graph))
@@ -754,61 +759,235 @@ def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
     # Read back through the checkpointer, which is where the tuples the
     # request is built out of arrive as lists: msgpack has one sequence.
     planned = graph.get_state(planning_on()).values["request"]
-    assert list(planned.equipment) == ["barbell"]
-    assert planned.budget_min == 45
-    assert list(planned.groups) == ["legs"]
-    assert [tuple(share) for share in planned.allocation] == [("legs", 45)]
+    assert [list(slot.groups) for slot in planned.slots] == [["legs"], ["shoulders"]]
+    assert [slot.budget_min for slot in planned.slots] == [45, 45]
+    assert [list(slot.equipment) for slot in planned.slots] == [["barbell"], ["barbell"]]
 
 
 def test_the_chat_and_the_terminal_plan_against_one_request(
     catalogued: sqlite3.Connection, declared: Path
 ) -> None:
-    """The chat passes an empty `Asked` and the terminal passes what its flags
-    collected; against the same state the two are one request. Compared field
-    by field because the chat's comes back through the checkpointer, where
-    every tuple arrives as a list.
+    """The chat passes an empty `Asked` and `trainer plan --mesocycle` passes
+    what its flags collected; against the same state the two are one request.
+    Compared field by field because the chat's comes back through the
+    checkpointer, where every tuple arrives as a list.
     """
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+        Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()
     )
 
     asking(graphs_of(graph))
 
     from_the_chat = graph.get_state(planning_on()).values["request"]
-    from_the_terminal = plans.requested(
+    from_the_terminal = plans.mesocycle_requested(
         catalogued, date.today().isoformat(), plans.Asked()
-    ).request
-    assert list(from_the_chat.equipment) == list(from_the_terminal.equipment)
-    assert from_the_chat.budget_min == from_the_terminal.budget_min
-    assert list(from_the_chat.groups) == list(from_the_terminal.groups)
-    assert [tuple(share) for share in from_the_chat.allocation] == list(
-        from_the_terminal.allocation
     )
-    assert list(from_the_chat.preferences) == list(from_the_terminal.preferences)
+    for chat, terminal in zip(from_the_chat.slots, from_the_terminal.slots, strict=True):
+        assert list(chat.equipment) == list(terminal.equipment)
+        assert chat.budget_min == terminal.budget_min
+        assert list(chat.groups) == list(terminal.groups)
+        assert [tuple(share) for share in chat.allocation] == list(terminal.allocation)
+        assert list(chat.preferences) == list(terminal.preferences)
 
 
-def test_tapping_accept_on_what_the_chat_offered_writes_the_workout(
+def test_tapping_accept_on_the_mesocycle_keeps_it_and_prescribes_nothing(
     catalogued: sqlite3.Connection, declared: Path
 ) -> None:
-    """The first door that reaches ticket 03's resume: asked for, offered,
-    accepted, written -- and written by the graph, never by the bot."""
+    """Asked for, offered, accepted, kept -- by the graph, never by the bot.
+    A workout is prescribed when it is served (ADR-0008 item 4)."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+        Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()
     )
     thread = bot.thread_for(CHAT)
     graphs = graphs_of(graph)
     sent = asking(graphs).offers
-    assert workout_rows(catalogued) == []
 
     said, say = spoken()
     _, offer = offered()
     coach = turns_of(graphs)
     asyncio.run(coach.tapped(OWNER, CHAT, sent[0][1][0][0], channel(say, offer)))
 
-    assert said == [entrance.PRESCRIBED]
+    assert said == [entrance.KEPT]
+    assert mesocycles.active(catalogued) is not None
+    assert workout_rows(catalogued) == []
+    assert bot.turns(graphs.entrance, thread) == ["cosa faccio oggi?"]
+
+
+# -- what am I doing today? ----------------------------------------------------
+
+
+def served_from(catalogued: sqlite3.Connection) -> bot.Graphs:
+    """A kept mesocycle, and a chat whose every message asks what today is."""
+    mesocycles.record_mesocycle(
+        catalogued,
+        tuple(
+            tuple(
+                workouts.PrescribedBlock(block=block, reason=shape.reason)
+                for shape, block in zip(
+                    workout.blocks, plans.to_blocks(workout), strict=True
+                )
+            )
+            for workout in A_MESOCYCLE.workouts
+        ),
+        cycles=A_MESOCYCLE.cycles,
+        why=A_MESOCYCLE.why,
+        on=date.today().isoformat(),
+    )
+    return graphs_of(
+        graph_of(Scripted(), checkpointer=InMemorySaver()),
+        front=Talking(handoff=entrance.TODAYS_WORKOUT),
+    )
+
+
+def test_todays_workout_is_read_off_the_mesocycle_without_the_planner(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = served_from(catalogued)
+
+    watched = asking(graphs)
+
+    assert watched.said == [SAYS]
+    ((text, buttons),) = watched.offers
+    assert "Barbell Squat" in text and "Standing Military Press" not in text
+    assert "ultimo carico: non lo so" in text
+    assert buttons == [], "a served workout is not a proposal"
+    assert graphs.planner.get_state(planning_on()).values == {}, "the planner ran"
     (written,) = workout_rows(catalogued)
     assert written[1] == "prescribed"
-    assert bot.turns(graphs.entrance, thread) == ["cosa faccio oggi?"]
+
+
+def test_the_entrance_is_told_there_is_a_workout_to_send(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = served_from(catalogued)
+
+    asking(graphs)
+
+    told = graphs.entrance.get_state(
+        {"configurable": {"thread_id": bot.thread_for(CHAT)}}
+    ).values["messages"]
+    assert entrance.SERVING in [message.text for message in told]
+
+
+def test_the_last_load_is_beside_the_exercise(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = served_from(catalogued)
+    workouts.record_performed(
+        catalogued,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id="Barbell_Squat",
+                        unit="reps",
+                        amount=5,
+                        amount_source="reported",
+                        load_kg=102.5,
+                        load_kg_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on="2026-09-01",
+        report="squat",
+    )
+    workouts.record_performed(
+        catalogued,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id="Standing_Military_Press",
+                        unit="reps",
+                        amount=5,
+                        amount_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on="2026-09-02",
+        report="press",
+    )
+
+    ((text, _),) = asking(graphs).offers
+
+    assert "Barbell Squat" in text
+    assert "ultimo carico 102\\.5 kg" in text, "escaped: a dot is MarkdownV2 syntax"
+
+
+def test_asked_twice_it_is_one_prescribed_workout(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = served_from(catalogued)
+
+    first = asking(graphs).offers
+    second = asking(graphs, "e oggi?").offers
+
+    assert first == second
+    assert len(workout_rows(catalogued)) == 1
+
+
+def test_reporting_it_moves_the_next_serving_to_the_next_slot(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = served_from(catalogued)
+    asking(graphs)
+    (served,) = workout_rows(catalogued)
+    workouts.record_performed(
+        catalogued,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id="Barbell_Squat",
+                        unit="reps",
+                        amount=8,
+                        amount_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on=date.today().isoformat(),
+        report="squat",
+        workout_id=int(served[0]),
+    )
+
+    ((text, _),) = asking(graphs).offers
+
+    assert "Standing Military Press" in text and "Barbell Squat" not in text
+    assert [state for _, state in workout_rows(catalogued)] == ["performed", "prescribed"]
+
+
+def test_with_no_mesocycle_the_entrance_offers_one_and_nothing_is_served(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graphs = graphs_of(
+        graph_of(Scripted(), checkpointer=InMemorySaver()),
+        front=Talking(handoff=entrance.TODAYS_WORKOUT),
+    )
+
+    watched = asking(graphs)
+
+    told = graphs.entrance.get_state(
+        {"configurable": {"thread_id": bot.thread_for(CHAT)}}
+    ).values["messages"]
+    assert entrance.NO_MESOCYCLE in [message.text for message in told]
+    assert watched.said == [SAYS]
+    assert watched.offers == []
+    assert workout_rows(catalogued) == []
 
 
 def test_asking_again_supersedes_the_plan_still_waiting(
@@ -817,7 +996,7 @@ def test_asking_again_supersedes_the_plan_still_waiting(
     """A second question is a second plan, and the buttons under the first one
     stop answering anything -- which is what `SUPERSEDED` is for."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]),
+        Scripted(documents=[A_MESOCYCLE, A_MESOCYCLE]),
         checkpointer=InMemorySaver(),
     )
     first = asking(graphs_of(graph)).offers
@@ -840,7 +1019,7 @@ def test_a_second_question_is_planned_against_its_own_brief(
     """The thread keeps the messages of the run before it, and `turn` writes
     the brief only when it finds none. Left there, the second plan is asked
     for as a follow-up to a conversation about the first."""
-    model = Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")])
+    model = Scripted(documents=[A_MESOCYCLE, A_MESOCYCLE])
     graph = graph_of(model, checkpointer=InMemorySaver())
 
     asking(graphs_of(graph))
@@ -1489,7 +1668,10 @@ def refusing_then_planning() -> Scripted:
     """A run the validator turns down once: the loop this ticket makes visible."""
     return Scripted(
         turns=[AIMessage(content="Planned."), AIMessage(content="Again.")],
-        documents=[plan_of("Dumbbell_Bench_Press"), plan_of("Barbell_Squat")],
+        documents=[
+            mesocycle_of(plan_of("Dumbbell_Bench_Press"), plan_of("Standing_Military_Press")),
+            A_MESOCYCLE,
+        ],
     )
 
 
@@ -1549,7 +1731,7 @@ def test_the_draft_opens_on_a_line_of_our_own(
         progress.WRITING,
         f"il validatore ha rifiutato: {plans.ADMISSIBLE}",
         progress.REWRITING,
-        "piano valido, 1 blocco",
+        "piano valido, 2 allenamenti",
     ]
 
 
@@ -1584,7 +1766,7 @@ def test_a_draft_that_cannot_be_sent_does_not_cost_the_plan(
         raise RuntimeError("Timed out")
 
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=InMemorySaver()
+        Scripted(documents=[A_MESOCYCLE]), checkpointer=InMemorySaver()
     )
     watched = Channels()
     graphs = graphs_of(graph)
@@ -1774,7 +1956,7 @@ def test_a_run_streams_against_the_checkpointer_the_bot_actually_uses(
     """
     with checkpoints.saver(tmp_path / "checkpoints.sqlite") as saver:
         graph = graph_of(
-            Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver
+            Scripted(documents=[A_MESOCYCLE]), checkpointer=saver
         )
         watched = Channels()
         graphs = graphs_of(graph)
@@ -1821,7 +2003,7 @@ def test_a_run_from_the_chat_reads_back_afterwards(
 
     with checkpoints.saver(path) as saver:
         graph = graph_of(
-            Scripted(documents=[plan_of("Barbell_Squat")]), checkpointer=saver
+            Scripted(documents=[A_MESOCYCLE]), checkpointer=saver
         )
         graphs = graphs_of(graph)
         coach = turns_of(graphs)
@@ -1835,7 +2017,7 @@ def test_a_run_from_the_chat_reads_back_afterwards(
     assert negotiation.live is not None
     assert negotiation.live.thread == bot.under(bot.thread_for(CHAT), bot.PLANNING)
     written = runs.of(negotiation.live, tools.CALL_BUDGET)
-    assert written["plan"]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
+    assert written["plan"]["workouts"][0]["blocks"][0]["items"][0]["exercise_id"] == "Barbell_Squat"
 
 
 # -- the report, in the chat ---------------------------------------------------
@@ -1997,7 +2179,7 @@ def test_the_run_document_names_the_model_that_answered_each_node(
     own node on a small fast model and the planner answers the rest on the one
     `LLM_BACKEND` names, and the document says which did which."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]),
+        Scripted(documents=[A_MESOCYCLE]),
         checkpointer=InMemorySaver(),
         archive=tmp_path / "runs",
     )
@@ -2028,7 +2210,7 @@ def test_a_planning_turn_is_one_run_and_not_two(
     planner carries it on, so the turn leaves one document and not one per
     graph."""
     graph = graph_of(
-        Scripted(documents=[plan_of("Barbell_Squat")]),
+        Scripted(documents=[A_MESOCYCLE]),
         checkpointer=InMemorySaver(),
         archive=tmp_path / "runs",
     )
@@ -2066,7 +2248,7 @@ def test_the_turn_is_answered_before_the_planner_has_finished(
     async def scenario() -> tuple[list[str], list[Any], list[Any]]:
         went_on = threading.Event()
         graph = graph_of(
-            Blocking(went_on=went_on, documents=[plan_of("Barbell_Squat")]),
+            Blocking(went_on=went_on, documents=[A_MESOCYCLE]),
             checkpointer=InMemorySaver(),
         )
         graphs = graphs_of(graph)
@@ -2164,3 +2346,26 @@ def test_the_closed_question_escapes_what_telegram_would_read_as_markup() -> Non
     assert "military\\-press" in asked
     assert "\\(2 serie\\)" in asked
     assert "shoulder" in asked
+
+
+def test_tapping_no_on_a_mesocycle_offers_another(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    graph = graph_of(
+        Scripted(
+            turns=[AIMessage(content="Planned."), AIMessage(content="Another.")],
+            documents=[A_MESOCYCLE, A_MESOCYCLE.model_copy(update={"cycles": 2})],
+        ),
+        checkpointer=InMemorySaver(),
+    )
+    graphs = graphs_of(graph)
+    sent = asking(graphs).offers
+    no = next(data for data, label in sent[0][1] if bot.tap_of(data).action == bot.TURNED_DOWN)  # type: ignore[union-attr]
+    watched = Channels()
+
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, no, watched.chat))
+
+    ((text, buttons),) = watched.offers
+    assert "2 cicli" in text
+    assert len(buttons) == len(bot.MESOCYCLE_BUTTONS)
+    assert mesocycles.active(catalogued) is None

@@ -55,6 +55,7 @@ from trainer.engine import (
     enrichment,
     exclusions,
     graph,
+    mesocycles,
     migrations,
     muscle_groups,
     reference_set,
@@ -104,6 +105,8 @@ def reported() -> Iterator[None]:
         # and this one was not, which would have made it the only one to reach
         # the terminal as a traceback -- the reachable paths are all guarded
         # upstream today, and that is exactly how a gap like this survives.
+        raise click.ClickException(str(error)) from error
+    except mesocycles.MesocycleError as error:
         raise click.ClickException(str(error)) from error
     except budget.BudgetError as error:
         # `trainer plan` is the first command that divides the time. A
@@ -1202,10 +1205,15 @@ def plan_command(
 ) -> None:
     """Plan a workout, and print it.
 
-    With no options at all it plans the next workout of the rotation: the
-    groups off the declared split at the position the performed workouts put
-    it, the minutes off the declared cap, and the equipment off what you
-    declared you have. Every option below overrides one of those for today.
+    With no options at all it reads today's workout off the accepted
+    mesocycle: the slot the rotation is at, prescribed when it is first
+    served, with the load each exercise was last performed with. No model is
+    asked (ADR-0008). With none accepted it says so and names `--mesocycle`.
+
+    Any option that shapes the workout plans one instead: the groups off the
+    declared split at the position the performed workouts put it, the minutes
+    off the declared cap, and the equipment off what you declared you have.
+    Every option below overrides one of those for today.
 
     The planner graph is asked for the plan, on the provider `LLM_BACKEND`
     names, using the same tools `trainer mcp` serves and inside a budget of
@@ -1229,9 +1237,12 @@ def plan_command(
         raise click.UsageError(
             "--from checks one hand-written workout; --mesocycle asks a model for every slot"
         )
-    if source is not None:
+    served = not mesocycle and source is None and workout is None and budget is None
+    served = served and not (equipment or exclude or groups or avoid)
+    if source is not None or served:
         _only_with_a_model(
             context,
+            "--from" if source is not None else "today's workout off the mesocycle",
             ("--call-budget", "call_budget"),
             ("--record", "record_path"),
         )
@@ -1242,6 +1253,11 @@ def plan_command(
         _writable(record_path)
 
     today = date.today().isoformat()
+    if served:
+        with _opened() as connection, reported():
+            for line in _served(connection, today):
+                click.echo(_ascii(line))
+        return
     if mesocycle:
         with _opened() as connection, reported():
             asked = plan.mesocycle_requested(
@@ -1334,7 +1350,27 @@ def _rotation(where: state.Rotation, groups: tuple[str, ...]) -> str:
     )
 
 
-def _only_with_a_model(context: click.Context, *options: tuple[str, str]) -> None:
+def _served(connection: sqlite3.Connection, today: str) -> list[str]:
+    """Today's workout off the mesocycle, prescribed once, and how it reads."""
+    found, workout_id = mesocycles.record_served(connection, today)
+    return [
+        f"mesocycle: workout {found.slot} of {found.slots}, "
+        f"cycle {found.cycle} of {found.cycles}",
+        *plan.render(
+            connection,
+            plan.from_prescribed(found.blocks),
+            [prescribed.block for prescribed in found.blocks],
+            config.load().duration_cap_min,
+            loads=True,
+        ),
+        "",
+        f"prescribed as workout {workout_id}",
+    ]
+
+
+def _only_with_a_model(
+    context: click.Context, path: str, *options: tuple[str, str]
+) -> None:
     """Refuse an option that does nothing on the path being taken.
 
     `--from` is the no-model path, so a call budget has nothing to bound and
@@ -1349,7 +1385,7 @@ def _only_with_a_model(context: click.Context, *options: tuple[str, str]) -> Non
     for option, name in options:
         if context.get_parameter_source(name) is ParameterSource.COMMANDLINE:
             raise click.UsageError(
-                f"{option} has no meaning with --from: that path asks no model, "
+                f"{option} has no meaning with {path}: that path asks no model, "
                 "so there are no tool calls to bound and no run to record"
             )
 
@@ -1582,6 +1618,7 @@ def log_command(
     if source is not None:
         _only_with_a_model(
             context,
+            "--from",
             ("--say", "said"),
             ("--call-budget", "call_budget"),
             ("--record", "record_path"),

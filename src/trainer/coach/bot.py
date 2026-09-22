@@ -31,7 +31,7 @@ from trainer import tools
 from trainer.coach import entrance, logfile, models, planner, progress
 from trainer.coach import logger as logger_graph
 from trainer.coach import record as run_record
-from trainer.engine import workouts
+from trainer.engine import config, mesocycles, workouts
 
 if TYPE_CHECKING:
     from telegram import Update
@@ -226,6 +226,9 @@ BUTTONS = (
     (SHORTER, f"Solo {SHORTER_MINUTES} minuti"),
 )
 """The three answers a proposed plan takes, as (action, label)."""
+
+MESOCYCLE_BUTTONS = BUTTONS[:2]
+"""A mesocycle is kept or turned down; a shorter one is an adaptation of a day, not of it."""
 
 CONFIRM = ((CONFIRMED, "Sì"), (DECLINED, "No"))
 """The two answers the exclusion the logger proposes takes.
@@ -553,7 +556,9 @@ def talking(graphs: Graphs) -> Run:
         final = await _entrance(graphs, thread, entrance.heard(text))
         await _spoken(final, thread, chat)
         handoff = str(final.get("handoff", ""))
-        if handoff == entrance.PLAN_TODAY:
+        if handoff == entrance.TODAYS_WORKOUT:
+            await _serving(thread, chat)
+        elif handoff == entrance.PLAN_MESOCYCLE:
             await _planning(graphs, thread, final, chat)
         elif handoff == entrance.LOG_WORKOUT:
             await _logging(graphs, thread, text, final, chat)
@@ -616,10 +621,39 @@ async def _spoken(final: Mapping[str, Any], thread: str, chat: Chat) -> None:
     await chat.say(said or FAILED)
 
 
+async def _serving(thread: str, chat: Chat) -> None:
+    """Today's workout off the mesocycle, prescribed once and sent, with no model call.
+
+    The entrance has already read whether there is one and said so; with none
+    to serve, what it said is the whole answer.
+    """
+    try:
+        text = await asyncio.to_thread(_served)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot serve today's workout: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    if text is None:
+        logger.info("%s has no mesocycle to serve from", thread)
+        return
+    await chat.offer(text, ())
+
+
+def _served() -> str | None:
+    """Today's workout prescribed and rendered, or `None` when no mesocycle serves one."""
+    with tools.reported(), tools.opened() as connection:
+        try:
+            found, _ = mesocycles.record_served(connection, date.today().isoformat())
+        except mesocycles.MesocycleError:
+            return None
+        cap = config.load().duration_cap_min
+    return served(found, cap)
+
+
 async def _planning(
     graphs: Graphs, thread: str, final: Mapping[str, Any], chat: Chat
 ) -> None:
-    """The planner, behind the turn the entrance has already answered.
+    """The planner, asked for a mesocycle, behind the turn the entrance has already answered.
 
     A run started here supersedes any plan the thread was still waiting on.
     Invoking with fresh input drops the pending proposal, and a tap on it
@@ -631,7 +665,7 @@ async def _planning(
     a state is worse than answering with the state.
     """
     try:
-        request = await asyncio.to_thread(_todays_request)
+        request = await asyncio.to_thread(_mesocycle_request)
     except tools.ToolFailure as state:
         # Logged here rather than left to the caller: `_attempt` catches what
         # escapes a run, and this is a state the run never reached. With the
@@ -833,10 +867,10 @@ async def drafting(
             await task
 
 
-def _todays_request() -> plans.Request:
-    """Today's request, off the same function the terminal assembles it with."""
+def _mesocycle_request() -> plans.MesocycleRequest:
+    """A mesocycle's request, off the same function `trainer plan --mesocycle` assembles it with."""
     with tools.reported(), tools.opened() as connection:
-        return plans.requested(connection, date.today().isoformat()).request
+        return plans.mesocycle_requested(connection, date.today().isoformat(), plans.Asked())
 
 
 def _awaiting() -> workouts.Workout | None:
@@ -956,15 +990,23 @@ async def told(
     waiting = final.get("__interrupt__")
     if waiting:
         proposed = final["plan"]
+        if isinstance(proposed, plans.Mesocycle):
+            text = mesocycle_proposal(proposed, final["request"])
+            buttons: Sequence[tuple[str, str]] = MESOCYCLE_BUTTONS
+        else:
+            text = proposal(proposed, final["request"].budget_min)
+            buttons = BUTTONS
         await chat.offer(
-            proposal(proposed, final["request"].budget_min),
+            text,
             [
                 (carried(Tap(action, thread, waiting[0].id)), label)
-                for action, label in BUTTONS
+                for action, label in buttons
             ],
         )
     elif final.get("workout") is not None:
         await _relay(graphs, thread, entrance.PRESCRIBED, chat)
+    elif final.get("mesocycle") is not None:
+        await _relay(graphs, thread, entrance.KEPT, chat)
     else:
         # Every attempt refused by the validator. There is no plan to offer,
         # and saying nothing would leave the user waiting on a run that ended.
@@ -1043,6 +1085,11 @@ def _written(final: Mapping[str, Any]) -> int:
 
 HEADING = "*Blocco {position}* · {rounds} giri · {rest}s di recupero · {minutes}:{seconds:02d}"
 ITEM = "• {name} · {prescription}"
+LAST = " · ultimo carico {load} kg"
+LAST_UNKNOWN = " · ultimo carico: non lo so"
+SERVED = "*Allenamento {slot} di {slots}* · ciclo {cycle} di {cycles}"
+MESOCYCLE = "*Mesociclo* · {cycles} cicli"
+SLOT = "*Allenamento {slot} di {slots}* · {groups}"
 SAID_NO = "  ⚠️ avevi detto di no: {why}"
 WHY = "_{reason}_"
 TOTAL = "*Totale* {total} min su {budget}"
@@ -1051,7 +1098,43 @@ PARSE_MODE = "MarkdownV2"
 """The dialect `proposal` writes and `_offering` sends a plan as."""
 
 
-def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
+def served(found: mesocycles.Today, budget_min: int) -> str:
+    """Today's workout off the mesocycle, with the last load beside each exercise."""
+    heading = SERVED.format(
+        slot=found.slot, slots=found.slots, cycle=found.cycle, cycles=found.cycles
+    )
+    body = proposal(plans.from_prescribed(found.blocks), budget_min, loads=True)
+    return f"{heading}\n\n{body}"
+
+
+def mesocycle_proposal(
+    offered: plans.Mesocycle, request: plans.MesocycleRequest
+) -> str:
+    """The whole mesocycle as the chat shows it: the cycles and why, then one workout per slot."""
+    from telegram.helpers import escape_markdown
+
+    parts = [
+        MESOCYCLE.format(cycles=offered.cycles),
+        WHY.format(reason=escape_markdown(offered.why, version=2)),
+    ]
+    for slot, (workout, asked) in enumerate(
+        zip(offered.workouts, request.slots, strict=True), start=1
+    ):
+        parts.extend(
+            [
+                "",
+                SLOT.format(
+                    slot=slot,
+                    slots=len(request.slots),
+                    groups=escape_markdown(", ".join(asked.groups), version=2),
+                ),
+                proposal(workout, asked.budget_min),
+            ]
+        )
+    return "\n".join(parts)
+
+
+def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> str:
     """The plan as the chat shows it, in the markup Telegram renders.
 
     Off `plans.shown`, which is also what the terminal's lines are folded
@@ -1069,7 +1152,7 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
         return escape_markdown(said, version=2)
 
     with tools.reported(), tools.opened() as connection:
-        reading = plans.shown(connection, plan, plans.to_blocks(plan), budget_min)
+        reading = plans.shown(connection, plan, plans.to_blocks(plan), budget_min, loads)
 
     lines: list[str] = []
     for block in reading.blocks:
@@ -1087,6 +1170,7 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
                 ITEM.format(
                     name=marked(item.name), prescription=marked(item.prescription)
                 )
+                + _last(item.last, marked)
             )
             if item.said is not None:
                 # Its own line and marked, not folded into the block's reason:
@@ -1097,6 +1181,14 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int) -> str:
         lines.append("")
     lines.append(TOTAL.format(total=reading.total_min, budget=reading.budget_min))
     return "\n".join(lines)
+
+
+def _last(last: Any, marked: Callable[[str], str]) -> str:
+    if last is None:
+        return ""
+    if last.value is None:
+        return LAST_UNKNOWN
+    return LAST.format(load=marked(f"{last.value:g}"))
 
 
 def _reading(thread: str) -> RunnableConfig:
@@ -1254,7 +1346,9 @@ def _offering(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Offer:
                     [InlineKeyboardButton(label, callback_data=data)]
                     for data, label in buttons
                 ]
-            ),
+            )
+            if buttons
+            else None,
         )
 
     return offer

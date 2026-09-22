@@ -98,7 +98,7 @@ class Scripted(BaseChatModel):
     """A chat model whose turns and emitted plans were written in advance."""
 
     turns: list[AIMessage] = []
-    documents: list[plans.WorkoutPlan] = []
+    documents: list[plans.WorkoutPlan | plans.Mesocycle] = []
     raw: list[str] = []
     """Emissions that are not documents at all -- prose where the plan belongs,
     which is what a local model does when constrained decoding is not holding

@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from trainer.engine import admissible, budget, catalog, config, constraints, duration
 from trainer.engine import exclusions as exclusion_state
-from trainer.engine import state
+from trainer.engine import state, workouts
 from trainer.engine.exclusions import Exclusion
 
 
@@ -864,6 +864,8 @@ class ShownItem:
     name: str
     prescription: str
     said: str | None = None
+    last: state.Answer[float] | None = None
+    """The load it was last performed with, beside a served workout; `None` beside a proposal."""
 
 
 @dataclass(frozen=True)
@@ -899,6 +901,7 @@ def shown(
     plan: WorkoutPlan,
     blocks: duration.Plan,
     budget_min: int,
+    loads: bool = False,
 ) -> Shown:
     """The plan a reader is shown: names off the catalog, seconds off the engine.
 
@@ -930,6 +933,11 @@ def shown(
                         name=names[item.exercise_id],
                         prescription=_prescription(item),
                         said=acknowledged.get(item.exercise_id),
+                        last=(
+                            state.last_performed_load(connection, item.exercise_id)
+                            if loads
+                            else None
+                        ),
                     )
                     for item in shape.items
                 ),
@@ -954,9 +962,10 @@ def render(
     plan: WorkoutPlan,
     blocks: duration.Plan,
     budget_min: int,
+    loads: bool = False,
 ) -> list[str]:
     """The workout, as the terminal prints it."""
-    reading = shown(connection, plan, blocks, budget_min)
+    reading = shown(connection, plan, blocks, budget_min, loads)
     # Widened to the longest name in this plan rather than fixed: the catalog
     # holds names past fifty characters, and a fixed column either wraps those
     # or pushes every prescription to the right of a page of blanks. The
@@ -970,7 +979,7 @@ def render(
             f"-- {block.seconds // 60}:{block.seconds % 60:02d}"
         )
         for item in block.items:
-            lines.append(f"  {item.name:<{column}}{item.prescription}")
+            lines.append(f"  {item.name:<{column}}{item.prescription}{_last(item.last)}")
             if item.said is not None:
                 # On its own line and marked, not folded into the block's
                 # reason: this is the agent proposing something the user said
@@ -981,6 +990,39 @@ def render(
 
     lines.append(f"total {reading.total_min} min of {reading.budget_min}")
     return lines
+
+
+def _last(last: state.Answer[float] | None) -> str:
+    if last is None:
+        return ""
+    if last.value is None:
+        return "   last load: not recorded"
+    return f"   last {last.value:g} kg"
+
+
+def from_prescribed(blocks: Sequence[workouts.PrescribedBlock]) -> WorkoutPlan:
+    """A kept workout in the wire shape, so it renders the way a proposed one does."""
+    return WorkoutPlan(
+        blocks=[
+            PlanBlock(
+                items=[
+                    PlanItem(
+                        exercise_id=item.exercise_id,
+                        prescription=(
+                            Prescription(unit="reps", amount=item.reps)
+                            if item.reps is not None
+                            else Prescription(unit="seconds", amount=item.seconds or 0)
+                        ),
+                    )
+                    for item in prescribed.block.items
+                ],
+                rounds=prescribed.block.rounds,
+                rest=prescribed.block.rest,
+                reason=prescribed.reason,
+            )
+            for prescribed in blocks
+        ]
+    )
 
 
 def _name(connection: sqlite3.Connection, exercise_id: str) -> str:

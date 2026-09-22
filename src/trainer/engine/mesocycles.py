@@ -6,7 +6,14 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from trainer.engine import duration, workouts
+from trainer.engine import duration, state, workouts
+
+ASK_FOR_ONE = "plan one with `trainer plan --mesocycle`"
+"""The fix every state below names."""
+
+
+class MesocycleError(RuntimeError):
+    """There is no workout to read off a mesocycle today, with the fix."""
 
 
 @dataclass(frozen=True)
@@ -143,3 +150,71 @@ def active(connection: sqlite3.Connection) -> Mesocycle | None:
         accepted_on=str(row["accepted_on"]),
         accepted_after=int(row["accepted_after"]),
     )
+
+
+@dataclass(frozen=True)
+class Today:
+    """The mesocycle's slot the rotation is at, and where that is in its cycles."""
+
+    mesocycle: int
+    slot: int
+    slots: int
+    cycle: int
+    cycles: int
+    blocks: tuple[workouts.PrescribedBlock, ...]
+
+
+def today(connection: sqlite3.Connection) -> Today:
+    """Today's workout off the active mesocycle, or the state that stops it."""
+    kept = active(connection)
+    if kept is None:
+        raise MesocycleError(f"no mesocycle has been accepted; {ASK_FOR_ONE}")
+    where = state.rotation(connection)
+    if where.cycle_length != len(kept.slots):
+        raise MesocycleError(
+            f"the split in training.toml has {where.cycle_length} workouts and the "
+            f"mesocycle has {len(kept.slots)}; {ASK_FOR_ONE}"
+        )
+    since = where.performed - kept.accepted_after
+    if since >= kept.cycles * len(kept.slots):
+        raise MesocycleError(
+            f"the mesocycle accepted on {kept.accepted_on} has finished its "
+            f"{kept.cycles} cycles; {ASK_FOR_ONE}"
+        )
+    return Today(
+        mesocycle=kept.id,
+        slot=where.position,
+        slots=len(kept.slots),
+        cycle=since // len(kept.slots) + 1,
+        cycles=kept.cycles,
+        blocks=kept.slots[where.position - 1],
+    )
+
+
+def record_served(connection: sqlite3.Connection, on: str) -> tuple[Today, int]:
+    """Today's workout, prescribed the first time it is served, and its workout id."""
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        found = today(connection)
+        performed = state.rotation(connection).performed
+        row = connection.execute(
+            "SELECT workout_id FROM served WHERE mesocycle_id = ? AND served_after = ?",
+            (found.mesocycle, performed),
+        ).fetchone()
+        if row is not None:
+            workout_id = int(row["workout_id"])
+        else:
+            workout_id = workouts.write_prescribed(connection, found.blocks, on)
+            connection.execute(
+                "INSERT INTO served (workout_id, mesocycle_id, slot, served_after) "
+                "VALUES (?, ?, ?, ?)",
+                (workout_id, found.mesocycle, found.slot, performed),
+            )
+        connection.execute("COMMIT")
+    except Exception:
+        try:
+            connection.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
+    return found, workout_id

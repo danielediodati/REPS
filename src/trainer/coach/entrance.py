@@ -24,26 +24,41 @@ from trainer import tools
 from trainer.coach import models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
+from trainer.engine import mesocycles
 
 
-def plan_today() -> str:
-    """Plan today's workout and offer it to the user.
+def todays_workout() -> str:
+    """Send the user today's workout, read off the mesocycle they accepted.
 
-    Call this when they ask what to train, ask for a workout, or say they are
-    about to train. Everything the plan is made of -- today's equipment, the
-    minutes, the muscle groups that are due -- is derived from what they
-    declared and from what they have already trained, so this takes no
-    arguments and you supply none of it. Which workout is due is never yours
-    to choose.
+    Call this when they ask what to train, ask for today's workout, or say
+    they are about to train. Which workout is due and what is in it are read
+    for you, so this takes no arguments and you supply none of it.
 
-    Planning takes minutes. The call comes back at once and the plan arrives in
-    the chat by itself: your turn is to tell them you are on it, not to
-    describe a plan you have not seen.
+    What comes back says whether there is a workout to send. When there is,
+    it goes into the chat right after your message: say nothing about what is
+    in it. When there is not, offer to plan a mesocycle.
+
+    The body is never run. The graph answers this call by reading the mesocycle.
+    """
+    raise AssertionError("the graph answers todays_workout; nothing calls it")
+
+
+def plan_mesocycle() -> str:
+    """Plan a mesocycle and offer it to the user: a workout for each slot of
+    their cycle, repeated for several cycles.
+
+    Call this when they ask for a new mesocycle or programme, or say yes to
+    your offer of one. What it is planned against is derived from what they
+    declared, so this takes no arguments.
+
+    Planning takes minutes. The call comes back at once and the mesocycle
+    arrives in the chat by itself: your turn is to tell them you are on it,
+    not to describe a mesocycle you have not seen.
 
     The body is never run. The graph answers this call by starting the planner
     behind the conversation.
     """
-    raise AssertionError("the graph answers plan_today; nothing calls it")
+    raise AssertionError("the graph answers plan_mesocycle; nothing calls it")
 
 
 def log_workout() -> str:
@@ -60,17 +75,37 @@ def log_workout() -> str:
     raise AssertionError("the graph answers log_workout; nothing calls it")
 
 
-PLAN_TODAY = plan_today.__name__
+TODAYS_WORKOUT = todays_workout.__name__
+PLAN_MESOCYCLE = plan_mesocycle.__name__
 LOG_WORKOUT = log_workout.__name__
 
-HANDOFFS = (plan_today, log_workout)
-"""The two subgraphs, on the same surface as the reads (ADR-0006, item 2)."""
+HANDOFFS = (todays_workout, plan_mesocycle, log_workout)
+"""What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
+
+CARRIED = (PLAN_MESOCYCLE, LOG_WORKOUT)
+"""The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
+
+SERVING = (
+    "Today's workout is read off their mesocycle and goes into the chat right "
+    "after your message. Tell them here it is, and say nothing about what is in it."
+)
+
+NO_MESOCYCLE = (
+    "There is no workout to read: no mesocycle has been accepted, or the last "
+    "one has run all its cycles. Tell them so and offer to plan one. Call "
+    "`plan_mesocycle` only once they say yes."
+)
+
+UNREADABLE = (
+    "Today's workout cannot be read: something on the machine needs fixing, "
+    "and the next message says so. Tell them only that you could not read it."
+)
 
 STARTED = {
-    PLAN_TODAY: (
-        "The planner has started. Tell the user you are putting today's "
-        "workout together and that it will arrive shortly. You have not seen "
-        "it, so say nothing about what is in it."
+    PLAN_MESOCYCLE: (
+        "The planner has started on a mesocycle. Tell the user you are putting "
+        "it together and that it will arrive shortly. You have not seen it, so "
+        "say nothing about what is in it."
     ),
     LOG_WORKOUT: (
         "The logger has started reading what they wrote. Tell them you are "
@@ -108,7 +143,7 @@ TOOLS = (
 Named rather than derived by subtraction, for the reason `planner.TOOLS` is.
 `admissible_set`, `remaining_budget` and `allocate` are left out: they are the
 arithmetic a plan is chosen with, and the entrance does not plan -- it hands
-that to `plan_today` and never judges the answer (ADR-0006, item 4).
+that to `plan_mesocycle` and never judges the answer (ADR-0006, item 4).
 """
 
 KEEPS = ("id", "name", "equipment", "primary_muscles")
@@ -126,7 +161,9 @@ offers you writes anything down.
 
 What a turn asks of you:
 
-- They want something to train, now or today: call `plan_today`.
+- They want something to train, now or today: call `todays_workout`.
+- They ask for a new mesocycle, or say yes when you offered one: call
+  `plan_mesocycle`.
 - They are telling you about training they have already done: call
   `log_workout`.
 - They ask something the tools above can answer -- how much of a muscle group
@@ -141,7 +178,7 @@ What you may never do:
   sets, not how much of a muscle group they have done, not what they trained
   last. If no tool answered it, say you do not know and offer to look.
 - **Decide which workout is due.** That is the rotation, read off what has been
-  performed, and `plan_today` reads it for you.
+  performed, and `todays_workout` reads it for you.
 - **Judge whether a plan fits.** That is the validator's, and it has already
   refused plans you would have accepted.
 - Invent an exercise, an id or a date.
@@ -186,9 +223,14 @@ SUPERSEDED = (
 )
 
 NO_PLAN = (
-    "You could not reach a workout that fits today's constraints: every "
-    "attempt was refused by the rules. Tell them so plainly, without blaming "
+    "You could not reach a plan that fits their constraints: every attempt "
+    "was refused by the rules. Tell them so plainly, without blaming "
     "anything, and invite them to write again."
+)
+
+KEPT = (
+    "They accepted the mesocycle you offered, and it is kept. Tell them it is "
+    "theirs, and that asking what to train gets them today's workout from it."
 )
 
 LOGGED = (
@@ -202,7 +244,7 @@ NOT_LOGGED = (
     "them to tell you again in their own words."
 )
 
-SITUATIONS = (HELLO, QUEUED, PRESCRIBED, SUPERSEDED, NO_PLAN, LOGGED, NOT_LOGGED)
+SITUATIONS = (HELLO, QUEUED, PRESCRIBED, KEPT, SUPERSEDED, NO_PLAN, LOGGED, NOT_LOGGED)
 """Everything the machine can ask the entrance to say.
 
 Enumerated so a test can put each of them to a stand-in: every one of them was
@@ -299,8 +341,9 @@ def build(
     budget: int = tools.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
+    today: Callable[[], str] | None = None,
 ) -> Entrance:
-    """The compiled entrance graph, talking on `on`.
+    """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
     about what has been trained; everything else is handed to a subgraph, which
@@ -311,6 +354,7 @@ def build(
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
     handoffs = [{"type": "function", "function": tools.schema(tool)} for tool in HANDOFFS]
     timed = records.timing(on)
+    looked_up = today if today is not None else reading_today
 
     def talk(state: EntranceState) -> dict[str, Any]:
         """One turn of the conversation, with the tools bound only while they are still useful.
@@ -373,11 +417,17 @@ def build(
         answers: list[AnyMessage] = []
         spent = 0
         for call in reply.tool_calls:
-            if call["name"] not in STARTED:
+            if call["name"] not in HANDED:
                 spent += 1
                 answers.append(_answer(call, offered))
                 continue
-            said = ONE_AT_A_TIME if taken else STARTED[call["name"]]
+            said = (
+                ONE_AT_A_TIME
+                if taken
+                else looked_up()
+                if call["name"] == TODAYS_WORKOUT
+                else STARTED[call["name"]]
+            )
             taken = taken or call["name"]
             answers.append(
                 ToolMessage(said, tool_call_id=answered(call), name=call["name"])
@@ -393,7 +443,7 @@ def build(
         reply = state["messages"][-1]
         said = reply.text.strip() if isinstance(reply, AIMessage) else ""
         decided: dict[str, Any] = {"answer": said}
-        if not state.get("handoff"):
+        if state.get("handoff") not in CARRIED:
             decided.update(
                 records.closing({**state, **decided}, records.DONE, budget, archive)
             )
@@ -404,7 +454,7 @@ def build(
         if state.get("handoff") or not isinstance(reply, AIMessage):
             return "answer"
         called = {call["name"] for call in reply.tool_calls}
-        if called & set(STARTED):
+        if called & HANDED:
             return "handoff"
         return "reads" if called else "answer"
 
@@ -419,6 +469,22 @@ def build(
     graph.add_edge("handoff", "entrance")
     graph.add_edge("answer", END)
     return graph.compile(checkpointer=checkpointer)
+
+
+HANDED = {handoff.__name__ for handoff in HANDOFFS}
+
+
+def reading_today() -> str:
+    """Whether there is a workout to serve today, as the entrance is told it."""
+    try:
+        with tools.reported(), tools.opened() as connection:
+            try:
+                mesocycles.today(connection)
+            except mesocycles.MesocycleError:
+                return NO_MESOCYCLE
+    except tools.ToolFailure:
+        return UNREADABLE
+    return SERVING
 
 
 def _answer(

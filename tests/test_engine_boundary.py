@@ -280,6 +280,10 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         "log.py",
         "log_evaluation.py",
         "log_set.py",
+        # Session 10: a served workout renders the way a proposed one does,
+        # so `plan.from_prescribed` reads a slot's blocks back into the wire
+        # shape. It writes nothing.
+        "plan.py",
         "tools.py",
     }
 
@@ -407,3 +411,9 @@ def test_only_an_accepted_mesocycle_is_kept() -> None:
     """ADR-0008: a mesocycle is accepted once, and the node after the resume
     is the one place that keeps it -- never a tool the model can call."""
     assert _callers_of(("record_mesocycle",)) == {"coach/planner.py"}
+
+
+def test_only_a_door_serves_todays_workout() -> None:
+    """ADR-0008 item 4: serving prescribes, so it is a write, and the doors
+    that serve it are its only callers -- never the entrance or a tool."""
+    assert _callers_of(("record_served",)) == {"cli.py", "coach/bot.py"}

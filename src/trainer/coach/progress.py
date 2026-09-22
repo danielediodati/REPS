@@ -52,6 +52,7 @@ EXHAUSTED = "dopo {attempts} tentativi non ho un piano che stia nei vincoli"
 VALID = "piano valido, {blocks}"
 ONE_BLOCK = "1 blocco"
 BLOCKS = "{count} blocchi"
+WORKOUTS = "{count} allenamenti"
 AGAIN = "va bene, ne penso un altro"
 
 WRITING_REPORT = "metto giù quello che hai fatto"
@@ -138,6 +139,9 @@ class Progress:
         violations: Sequence[plans.Violation] = delta.get("violations", ())
         if not violations:
             plan = delta.get("plan")
+            if isinstance(plan, plans.Mesocycle):
+                self.lines.append(VALID.format(blocks=WORKOUTS.format(count=len(plan.workouts))))
+                return
             blocks = len(plan.blocks) if plan is not None else 0
             self.lines.append(VALID.format(blocks=_counted(blocks)))
             return

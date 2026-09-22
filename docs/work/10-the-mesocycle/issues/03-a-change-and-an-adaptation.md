@@ -13,6 +13,13 @@ ADR-0008 item 6. A **change** (*"no more lunges"*) rewrites the mesocycle for th
 - **The entrance tells them apart** from the user's words and asks when it cannot. This is the model's reading, never a keyword rule.
 - Both are negotiations (ADR-0007): turned down, the next proposal must differ.
 
+## Left by 02
+
+- The entrance has no single-workout handoff: 02 replaced `plan_today` with `todays_workout` (a read) and `plan_mesocycle`. The adaptation is the handoff that brings the single-workout planner back. The bot's plumbing for it is still there: `BUTTONS` with *Solo 30 minuti*, `told`'s single-plan branch, `entrance.PRESCRIBED`.
+- `trainer plan` serves the mesocycle only when no option shapes the workout; `--time`, `--equipment`, `--exclude`, `--avoid`, `--workout` and `--group` still plan one workout from nothing. That is where the CLI's adaptation goes.
+- A served workout is not checked against today's exclusions: an exclusion added after acceptance is still served. An adaptation, or a change, is the answer.
+- An adapted workout accepted for today must count as that slot's serving (the `served` table, migration 0009), or asking again serves the unadapted slot beside it.
+
 ## References
 
 - ADR-0006, ADR-0007, ADR-0008; CONTEXT.md: Change, Adaptation, Negotiation

@@ -102,17 +102,51 @@ def test_the_conversation_outlives_the_run(connection: sqlite3.Connection) -> No
 # -- what it hands on ----------------------------------------------------------
 
 
-def test_a_request_for_today_reaches_the_planner(
+def test_a_request_for_a_mesocycle_reaches_the_planner(
     connection: sqlite3.Connection,
 ) -> None:
     model = Scripted(
-        turns=[calling(entrance.PLAN_TODAY), says("Ci penso, arriva a momenti.")]
+        turns=[calling(entrance.PLAN_MESOCYCLE), says("Ci penso, arriva a momenti.")]
     )
+
+    final = graph_of(model).invoke(entrance.heard("preparami un mesociclo"))
+
+    assert final["handoff"] == entrance.PLAN_MESOCYCLE
+    assert final["answer"] == "Ci penso, arriva a momenti."
+
+
+def test_a_request_for_today_is_answered_by_reading_the_mesocycle(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A read and not the planner: no subgraph carries the run on, so it ends here."""
+    model = Scripted(turns=[calling(entrance.TODAYS_WORKOUT), says("Eccolo.")])
+
+    final = graph_of(model, archive=tmp_path, today=lambda: entrance.SERVING).invoke(
+        entrance.heard("cosa faccio oggi?")
+    )
+
+    assert final["handoff"] == entrance.TODAYS_WORKOUT
+    told = [m.text for m in final["messages"] if isinstance(m, ToolMessage)]
+    assert told == [entrance.SERVING]
+    assert final["ending"] == records.DONE
+
+
+def test_with_no_mesocycle_the_read_says_so(connection: sqlite3.Connection) -> None:
+    """Against the engine itself: nothing was ever accepted in this database."""
+    model = Scripted(turns=[calling(entrance.TODAYS_WORKOUT), says("Non ne hai uno.")])
 
     final = graph_of(model).invoke(entrance.heard("cosa faccio oggi?"))
 
-    assert final["handoff"] == entrance.PLAN_TODAY
-    assert final["answer"] == "Ci penso, arriva a momenti."
+    told = [m.text for m in final["messages"] if isinstance(m, ToolMessage)]
+    assert told == [entrance.NO_MESOCYCLE]
+
+
+def test_a_database_that_is_not_there_is_unreadable_not_absent(
+    database_file: Path,
+) -> None:
+    """A missing precondition is not a missing mesocycle: offering to plan one
+    would promise something the machine cannot do."""
+    assert entrance.reading_today() == entrance.UNREADABLE
 
 
 def test_a_report_reaches_the_logger(connection: sqlite3.Connection) -> None:
@@ -128,7 +162,7 @@ def test_a_turn_it_handed_on_is_not_a_run_that_ended(
 ) -> None:
     """The subgraph carries the same run on: the user asked once, so what they
     asked is one run and the entrance is its first node."""
-    model = Scripted(turns=[calling(entrance.PLAN_TODAY), says("ci penso")])
+    model = Scripted(turns=[calling(entrance.PLAN_MESOCYCLE), says("ci penso")])
 
     final = graph_of(model, archive=tmp_path).invoke(entrance.heard("oggi?"))
 
@@ -139,7 +173,7 @@ def test_a_turn_it_handed_on_is_not_a_run_that_ended(
 def test_what_it_hands_on_carries_the_run_and_the_seconds_it_spent(
     connection: sqlite3.Connection,
 ) -> None:
-    model = Scripted(turns=[calling(entrance.PLAN_TODAY), says("ci penso")])
+    model = Scripted(turns=[calling(entrance.PLAN_MESOCYCLE), says("ci penso")])
 
     final = graph_of(model).invoke(entrance.heard("oggi?"))
     carried = entrance.carried(final)
@@ -161,7 +195,7 @@ def test_a_second_subgraph_in_one_turn_is_not_started(
     both = AIMessage(
         content="",
         tool_calls=[
-            {"name": entrance.PLAN_TODAY, "args": {}, "id": "a", "type": "tool_call"},
+            {"name": entrance.PLAN_MESOCYCLE, "args": {}, "id": "a", "type": "tool_call"},
             {"name": entrance.LOG_WORKOUT, "args": {}, "id": "b", "type": "tool_call"},
         ],
     )
@@ -169,7 +203,7 @@ def test_a_second_subgraph_in_one_turn_is_not_started(
 
     final = graph_of(model).invoke(entrance.heard("oggi? ah, e ieri ho fatto squat"))
 
-    assert final["handoff"] == entrance.PLAN_TODAY
+    assert final["handoff"] == entrance.PLAN_MESOCYCLE
     answered = [m for m in final["messages"] if isinstance(m, ToolMessage)]
     assert [m.tool_call_id for m in answered] == ["a", "b"]
     assert answered[1].text == entrance.ONE_AT_A_TIME
@@ -180,18 +214,18 @@ def test_a_handed_off_turn_is_not_offered_the_tools_again(
 ) -> None:
     """The turn after a handoff has nothing left to do but speak, and a tool
     call there is a second run nobody asked for."""
-    model = Scripted(turns=[calling(entrance.PLAN_TODAY), says("ci penso")])
+    model = Scripted(turns=[calling(entrance.PLAN_MESOCYCLE), says("ci penso")])
 
     graph_of(model).invoke(entrance.heard("oggi?"))
 
-    assert entrance.PLAN_TODAY in model.bound[0]
+    assert entrance.PLAN_MESOCYCLE in model.bound[0]
     assert len(model.bound) == 1, "the second turn was offered tools"
 
 
 # -- what it may not decide (ADR-0006, item 4) ---------------------------------
 
 
-def test_neither_subgraph_takes_an_argument_from_the_entrance() -> None:
+def test_no_handoff_takes_an_argument_from_the_entrance() -> None:
     """Which workout is due, and what the report says, are not the entrance's
     to name. A parameter here is a place for it to invent one -- and `report`
     above all, which is the user's own words and is what a hypothesis is
@@ -286,7 +320,7 @@ def test_the_reads_come_off_the_table_once_the_budget_is_spent(
 
     assert "unreported_workouts" in model.bound[0]
     assert "unreported_workouts" not in model.bound[-1]
-    assert entrance.PLAN_TODAY in model.bound[-1], "the subgraphs are not budgeted"
+    assert entrance.PLAN_MESOCYCLE in model.bound[-1], "the subgraphs are not budgeted"
 
 
 # -- saying what happened ------------------------------------------------------

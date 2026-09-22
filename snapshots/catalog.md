@@ -8,7 +8,7 @@ The exercise catalog as it stands in the database, one exercise per row.
 `instructions` and `images` are counts rather than text: this file is for
 reading, not a second copy of the database. Either is fetched by id.
 
-876 exercises, at schema version 8.
+876 exercises, at schema version 9.
 
 | id | name | category | equipment | force | mechanic | level | primary muscles | secondary muscles | instructions | images | movement pattern | loaded joints | spinal axial load | required stability | setup cost min | regression of | variant of | demo url |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

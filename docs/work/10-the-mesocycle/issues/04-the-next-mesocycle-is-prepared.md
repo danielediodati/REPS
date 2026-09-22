@@ -17,6 +17,10 @@ What ticket 9.4 established still holds (ROADMAP § Session 10 item 4):
 
 Triggered by the report that completes the last cycle. The brief carries the mesocycle that ended and what was performed against it.
 
+## Left by 02
+
+- After the last cycle `mesocycles.today` raises *finished its N cycles*, `entrance.reading_today` answers `NO_MESOCYCLE`, and the entrance offers to plan one. Once the next is prepared, that answer should point at the one waiting, not offer a new one.
+
 ## References
 
 - ADR-0007, ADR-0008; CONTEXT.md: Negotiation

@@ -22,6 +22,7 @@ from trainer.coach import models
 from trainer.engine import (
     catalog,
     database,
+    duration,
     exclusions,
     graph,
     migrations,
@@ -3823,3 +3824,168 @@ def test_plan_mesocycle_plans_every_slot_so_it_names_none(
 
     assert result.exit_code != 0
     assert "every slot" in result.output
+
+
+# -- trainer plan, off the mesocycle ---------------------------------------------
+
+
+def kept_mesocycle(path: Path, declared_training: Path) -> None:
+    """Legs then shoulders, accepted, with a squat at 100 kg performed before it."""
+    from test_planner import LEGS_AND_SHOULDERS
+
+    from trainer.engine import mesocycles
+
+    declared_training.write_text(LEGS_AND_SHOULDERS, encoding="utf-8")
+
+    def one(exercise_id: str) -> tuple[workouts.PrescribedBlock, ...]:
+        return (
+            workouts.PrescribedBlock(
+                block=duration.Block(
+                    items=(duration.BlockItem(exercise_id=exercise_id, reps=5),),
+                    rounds=3,
+                    rest=120,
+                ),
+                reason="the lift of the day",
+            ),
+        )
+
+    with closing(database.connect(path)) as connection:
+        for _ in range(2):
+            workouts.record_performed(
+                connection,
+                (
+                    workouts.PerformedBlock(
+                        items=(
+                            workouts.PerformedItem(
+                                exercise_id="Barbell_Squat",
+                                unit="reps",
+                                amount=5,
+                                amount_source="reported",
+                                load_kg=100.0,
+                                load_kg_source="reported",
+                            ),
+                        ),
+                        rounds=3,
+                        rounds_source="reported",
+                        rest=120,
+                        rest_source="reported",
+                    ),
+                ),
+                on="2026-09-01",
+                report="squats",
+            )
+        mesocycles.record_mesocycle(
+            connection,
+            (one("Barbell_Squat"), one("Standing_Military_Press")),
+            cycles=3,
+            why="settle the loads",
+            on="2026-09-02",
+        )
+
+
+def no_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refused() -> None:
+        raise AssertionError("a model was asked for a workout the mesocycle holds")
+
+    monkeypatch.setattr(models, "chat", refused)
+
+
+def test_plan_reads_todays_workout_off_the_mesocycle_with_the_last_load(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept_mesocycle(enriched, declared_training)
+    no_model(monkeypatch)
+
+    result = runner.invoke(main, ["plan"])
+
+    assert result.exit_code == 0, result.output
+    assert "mesocycle: workout 1 of 2, cycle 1 of 3" in result.output
+    assert "Barbell Squat" in result.output
+    assert "last 100 kg" in result.output
+    assert result.output.isascii()
+    (_, _, served) = workout_rows(enriched)
+    assert served["state"] == "prescribed"
+
+
+def test_plan_says_when_nothing_was_ever_lifted_on_an_exercise(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept_mesocycle(enriched, declared_training)
+    no_model(monkeypatch)
+    runner.invoke(main, ["plan"])
+    with closing(database.connect(enriched)) as connection:
+        (served,) = connection.execute("SELECT id FROM workouts WHERE state = 'prescribed'")
+        workouts.record_performed(
+            connection,
+            (
+                workouts.PerformedBlock(
+                    items=(
+                        workouts.PerformedItem(
+                            exercise_id="Barbell_Squat", unit="reps", amount=5, amount_source="reported"
+                        ),
+                    ),
+                    rounds=3,
+                    rounds_source="reported",
+                    rest=120,
+                    rest_source="reported",
+                ),
+            ),
+            on="2026-09-03",
+            report="squats",
+            workout_id=int(served["id"]),
+        )
+
+    result = runner.invoke(main, ["plan"])
+
+    assert result.exit_code == 0, result.output
+    assert "mesocycle: workout 2 of 2" in result.output
+    assert "Standing Military Press" in result.output
+    assert "last load: not recorded" in result.output
+
+
+def test_plan_served_twice_is_one_prescribed_workout(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept_mesocycle(enriched, declared_training)
+    no_model(monkeypatch)
+
+    first = runner.invoke(main, ["plan"])
+    second = runner.invoke(main, ["plan"])
+
+    assert first.exit_code == second.exit_code == 0, second.output
+    assert [row["state"] for row in workout_rows(enriched)] == [
+        "performed",
+        "performed",
+        "prescribed",
+    ]
+
+
+def test_plan_with_no_mesocycle_names_the_state_and_the_fix(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    no_model(monkeypatch)
+
+    result = runner.invoke(main, ["plan"])
+
+    assert result.exit_code == 1
+    assert "no mesocycle has been accepted" in result.output
+    assert "trainer plan --mesocycle" in result.output
+    assert workout_rows(enriched) == []
+
+
+def test_plan_off_the_mesocycle_has_no_run_to_record(
+    runner: CliRunner, enriched: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(main, ["plan", "--record", str(tmp_path / "run.json")])
+
+    assert result.exit_code == 2
+    assert "asks no model" in result.output
