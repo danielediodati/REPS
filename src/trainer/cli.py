@@ -1178,6 +1178,14 @@ def admissible_command(
     type=click.Path(dir_okay=False, path_type=Path),
     help="Write the run record here: the calls, the attempts, what each node cost.",
 )
+@click.option(
+    "--mesocycle",
+    "mesocycle",
+    is_flag=True,
+    help="Plan a mesocycle instead: one workout for every slot of the split, "
+    "repeated for as many cycles as the agent says and why. Accepted, it is "
+    "kept; nothing is prescribed until a workout is served (ADR-0008).",
+)
 @click.pass_context
 def plan_command(
     context: click.Context,
@@ -1190,6 +1198,7 @@ def plan_command(
     avoid: tuple[str, ...],
     call_budget: int,
     record_path: Path | None,
+    mesocycle: bool,
 ) -> None:
     """Plan a workout, and print it.
 
@@ -1211,6 +1220,15 @@ def plan_command(
     nothing at all: half a workout with a refusal under it reads as a workout
     with a footnote.
     """
+    if mesocycle and (workout is not None or groups):
+        raise click.UsageError(
+            "--mesocycle plans every slot of the split, so it names none: drop "
+            "--workout and --group"
+        )
+    if mesocycle and source is not None:
+        raise click.UsageError(
+            "--from checks one hand-written workout; --mesocycle asks a model for every slot"
+        )
     if source is not None:
         _only_with_a_model(
             context,
@@ -1224,6 +1242,20 @@ def plan_command(
         _writable(record_path)
 
     today = date.today().isoformat()
+    if mesocycle:
+        with _opened() as connection, reported():
+            asked = plan.mesocycle_requested(
+                connection,
+                today,
+                plan.Asked(equipment=equipment, minutes=budget, exclude=exclude, avoid=avoid),
+            )
+            try:
+                lines = _asked_mesocycle(connection, asked, call_budget, record_path)
+            except catalog.UnknownFilterValue as error:
+                raise _rejected(error) from error
+            for line in lines:
+                click.echo(_ascii(line))
+        return
     with _opened() as connection:
         with reported():
             # The request first, and the plan after it. The plan is checked
@@ -1376,6 +1408,51 @@ def _asked(
     one would plan today's workout against what was said the last time the
     command was run.
     """
+    emitted, written = _ran(request, call_budget, record_path)
+    assert isinstance(emitted, plan.WorkoutPlan)
+    blocks = plan.to_blocks(emitted)
+    return emitted, [
+        *plan.render(connection, emitted, blocks, request.budget_min),
+        "",
+        *run_record.summary(written),
+    ]
+
+
+def _asked_mesocycle(
+    connection: sqlite3.Connection,
+    request: plan.MesocycleRequest,
+    call_budget: int,
+    record_path: Path | None,
+) -> list[str]:
+    """One run of the planner graph for a mesocycle, accepted, and how it reads."""
+    emitted, written = _ran(request, call_budget, record_path)
+    assert isinstance(emitted, plan.Mesocycle)
+    lines = [f"mesocycle: {emitted.cycles} cycles -- {emitted.why}"]
+    for slot, (workout, asked) in enumerate(
+        zip(emitted.workouts, request.slots, strict=True), start=1
+    ):
+        lines.extend(
+            [
+                "",
+                f"workout {slot} of {len(request.slots)} -- {', '.join(asked.groups)}",
+                *plan.render(connection, workout, plan.to_blocks(workout), asked.budget_min),
+            ]
+        )
+    return [
+        *lines,
+        "",
+        "kept; nothing is prescribed until a workout is served",
+        "",
+        *run_record.summary(written),
+    ]
+
+
+def _ran(
+    request: plan.Request | plan.MesocycleRequest,
+    call_budget: int,
+    record_path: Path | None,
+) -> tuple[plan.WorkoutPlan | plan.Mesocycle, dict[str, Any]]:
+    """The planner graph run once and resumed as accepted, and the run's record."""
     on = models.chat()
     models.ready(on)
     with checkpoints.saver() as saver:
@@ -1399,14 +1476,7 @@ def _asked(
         if refused:
             raise click.ClickException(plan.refusal(refused))
         assert emitted is not None, "a run with no violations emitted a plan"
-        written = run_record.of(final, call_budget)
-
-    blocks = plan.to_blocks(emitted)
-    return emitted, [
-        *plan.render(connection, emitted, blocks, request.budget_min),
-        "",
-        *run_record.summary(written),
-    ]
+        return emitted, run_record.of(final, call_budget)
 
 
 def _copied(

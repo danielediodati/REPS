@@ -3782,3 +3782,44 @@ def test_bot_checks_the_entrance_model_before_it_starts(
     assert result.exit_code == 1
     assert "ollama pull a-model-nobody-pulled" in result.output
     assert healthy_bot == [], "it polled anyway"
+
+
+# -- trainer plan --mesocycle ----------------------------------------------------
+
+
+def test_plan_mesocycle_proposes_one_workout_per_slot_and_keeps_it(
+    runner: CliRunner,
+    enriched: Path,
+    declared_training: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_planner import LEGS_AND_SHOULDERS, mesocycle_of, plan_of
+
+    from trainer.engine import mesocycles
+
+    declared_training.write_text(LEGS_AND_SHOULDERS, encoding="utf-8")
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=3)
+    scripted_graph(monkeypatch, raw=[offered.model_dump_json()])
+
+    result = runner.invoke(main, ["plan", "--mesocycle"])
+
+    assert result.exit_code == 0, result.output
+    assert "workout 1 of 2 -- legs" in result.output
+    assert "workout 2 of 2 -- shoulders" in result.output
+    assert "Barbell Squat" in result.output and "Standing Military Press" in result.output
+    assert "3 cycles" in result.output
+    assert result.output.isascii()
+    with closing(database.connect(enriched)) as connection:
+        kept = mesocycles.active(connection)
+        assert kept is not None and kept.cycles == 3
+        assert workout_rows(enriched) == []
+
+
+@pytest.mark.parametrize("flag", [["--workout", "2"], ["--group", "legs"]])
+def test_plan_mesocycle_plans_every_slot_so_it_names_none(
+    runner: CliRunner, enriched: Path, flag: list[str]
+) -> None:
+    result = runner.invoke(main, ["plan", "--mesocycle", *flag])
+
+    assert result.exit_code != 0
+    assert "every slot" in result.output

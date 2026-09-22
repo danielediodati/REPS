@@ -26,7 +26,7 @@ from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, models, planner, record
 from trainer.coach import logger as coach_logger
-from trainer.engine import catalog, database, exclusions, migrations, workouts
+from trainer.engine import catalog, database, exclusions, mesocycles, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -1161,3 +1161,106 @@ def test_the_refusal_budget_is_consecutive_and_not_a_run_total(
     assert final["attempts"] == 3, "and the validator refused two plans of its own"
     assert final["__interrupt__"], "the run still reached a plan"
     assert final["rejections"] == 0, "the count is cleared by a turn that lands"
+
+
+# -- a mesocycle ---------------------------------------------------------------
+
+LEGS_AND_SHOULDERS = """\
+cycle_length = 2
+duration_cap_min = 45
+volume_denominator = "cycle"
+split = [["legs"], ["shoulders"]]
+equipment = ["barbell"]
+"""
+
+
+def mesocycle_of(*workouts: plans.WorkoutPlan, cycles: int = 4) -> plans.Mesocycle:
+    return plans.Mesocycle(workouts=list(workouts), cycles=cycles, why="settle the loads")
+
+
+@pytest.fixture()
+def two_slots(connection: sqlite3.Connection, declared_training: Path) -> plans.MesocycleRequest:
+    declared_training.write_text(LEGS_AND_SHOULDERS, encoding="utf-8")
+    return plans.mesocycle_requested(connection, "2026-09-22")
+
+
+def pausing(model: BaseChatModel) -> tuple[planner.Planner, RunnableConfig]:
+    """A graph that pauses on the serializer the bot uses."""
+    return graph_of(model, checkpointer=InMemorySaver(serde=checkpoints.Declared())), {
+        "configurable": {"thread_id": "one"}
+    }
+
+
+def test_a_mesocycle_is_proposed_whole(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    model = Scripted(raw=[offered.model_dump_json()])
+    graph, thread = pausing(model)
+
+    final = graph.invoke(planner.starting(two_slots), thread)
+
+    (waited,) = final["__interrupt__"]
+    assert [w["blocks"][0]["items"][0]["exercise_id"] for w in waited.value["workouts"]] == [
+        "Barbell_Squat",
+        "Standing_Military_Press",
+    ]
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "Workout 1" in briefed and "legs" in briefed
+    assert "Workout 2" in briefed and "shoulders" in briefed
+
+
+def test_a_mesocycle_wrong_in_one_slot_goes_back_naming_it(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    wrong = mesocycle_of(plan_of("Standing_Military_Press"), plan_of("Standing_Military_Press"))
+    right = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    model = Scripted(
+        turns=[AIMessage(content="planned"), AIMessage(content="again")],
+        raw=[wrong.model_dump_json(), right.model_dump_json()],
+    )
+    graph, thread = pausing(model)
+
+    final = graph.invoke(planner.starting(two_slots), thread)
+
+    assert final["plan"] == right
+    told = "\n".join(message.text for message in model.seen[-1])
+    assert "workout 1: " in told
+
+
+def test_an_accepted_mesocycle_is_kept_and_prescribes_nothing(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=3)
+    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
+    graph.invoke(planner.starting(two_slots), thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    kept = mesocycles.active(connection)
+    assert kept is not None and final["mesocycle"] == kept.id
+    assert kept.cycles == 3
+    assert [s[0].block.items[0].exercise_id for s in kept.slots] == [
+        "Barbell_Squat",
+        "Standing_Military_Press",
+    ]
+    assert prescribed(connection) == []
+
+
+def test_a_mesocycle_turned_down_is_answered_with_another(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    first = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    second = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=2)
+    model = Scripted(
+        turns=[AIMessage(content="planned"), AIMessage(content="another")],
+        raw=[first.model_dump_json(), second.model_dump_json()],
+    )
+    graph, thread = pausing(model)
+    graph.invoke(planner.starting(two_slots), thread)
+
+    final = graph.invoke(Command(resume=planner.refused("troppi cicli")), thread)
+
+    assert final["plan"] == second
+    briefed = "\n".join(message.text for message in model.seen[-1])
+    assert "troppi cicli" in briefed

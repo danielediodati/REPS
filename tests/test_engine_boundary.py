@@ -274,6 +274,9 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # against, the same read `trainer log` opens with. The next test is
         # what says it does not write.
         "coach/bot.py",
+        # Session 10: a mesocycle's slots are `PrescribedBlock`s, templates
+        # the engine keeps and reads; it writes no workout.
+        "engine/mesocycles.py",
         "log.py",
         "log_evaluation.py",
         "log_set.py",
@@ -398,3 +401,9 @@ def test_the_writer_call_guard_does_not_fire_on_a_reader(tmp_path: Path) -> None
     )
 
     assert _callers_of(root=tmp_path) == set()
+
+
+def test_only_an_accepted_mesocycle_is_kept() -> None:
+    """ADR-0008: a mesocycle is accepted once, and the node after the resume
+    is the one place that keeps it -- never a tool the model can call."""
+    assert _callers_of(("record_mesocycle",)) == {"coach/planner.py"}

@@ -31,7 +31,7 @@ from trainer import plan as plans
 from trainer.coach import models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.engine import admissible, constraints, workouts
+from trainer.engine import admissible, constraints, mesocycles, workouts
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,32 @@ actually need and do not explore for its own sake.
 
 EMIT_PLAN = "Emit the plan now, in the required shape."
 
+MESOCYCLE_PLANNING = f"""\
+You plan a mesocycle for one person: a workout for each slot of their cycle,
+kept the same for several cycles while the loads move (ADR-0008).
+
+{tools.INSTRUCTIONS}
+Each workout is one slot's, and is checked exactly as that slot's single
+workout would be:
+
+- Every exercise must be in what `admissible_set` returns for that slot's
+  groups, equipment and time, written as the `id` that came back.
+- It must fit that slot's time; nothing is trimmed to fit.
+- An exercise appears at most once in a workout. The same exercise may appear
+  in two workouts if both slots train it.
+- Each exercise is prescribed in reps or in seconds, rest travels with the
+  block, and every block carries its reason in one short sentence.
+
+Then say how many cycles the mesocycle is repeated for, and why, in one
+sentence. That number is yours to choose.
+
+A mesocycle that breaks a rule is refused, naming the workout and the rule.
+You have {ATTEMPTS} attempts in all. You also have a budget of tool calls;
+when it runs out you will be asked for the mesocycle with what you know.
+"""
+
+EMIT_MESOCYCLE = "Emit the mesocycle now, in the required shape."
+
 
 def brief(request: plans.Request) -> str:
     """Today's request, in words, for the model to plan against."""
@@ -178,6 +204,58 @@ def brief(request: plans.Request) -> str:
             "something token: they still want to train today."
         )
     lines.append("Plan the workout.")
+    return "\n".join(lines)
+
+
+def mesocycle_brief(request: plans.MesocycleRequest) -> str:
+    """Every slot's request, in words, for the model to plan the mesocycle against."""
+    lines = [f"The cycle has {len(request.slots)} workouts. Plan one for each, in this order."]
+    for slot, asked in enumerate(request.slots, start=1):
+        line = (
+            f"Workout {slot}: trains {', '.join(asked.groups) or 'anything admissible'}; "
+            f"{asked.budget_min} minutes; equipment {', '.join(asked.equipment)}."
+        )
+        if asked.allocation:
+            line += " Time divides as " + ", ".join(
+                f"{group} {minutes} min" for group, minutes in asked.allocation
+            ) + ", as a starting point."
+        lines.append(line)
+    first = request.slots[0] if request.slots else None
+    if first is not None and first.exclusions:
+        lines.append(
+            "Excluded, and already filtered out of the admissible set: "
+            + ", ".join(f"{e.granularity} {e.value}" for e in first.exclusions)
+            + "."
+        )
+    if first is not None and first.preferences:
+        lines.append(
+            "The user has said they would rather not do: "
+            + ", ".join(first.preferences)
+            + ". Leave them out, or add a row to that workout's `despite`."
+        )
+    if request.refusals:
+        lines.append(
+            f"You have proposed {len(request.refusals)} mesocycle(s) already and "
+            "the user turned each one down."
+        )
+        for refused in request.refusals:
+            if refused.mesocycle is None:
+                lines.append(
+                    "Turned down: "
+                    + "; ".join(
+                        f"workout {slot}: {', '.join(ids)}"
+                        for slot, ids in enumerate(refused.exercise_ids, start=1)
+                    )
+                    + "."
+                )
+            else:
+                lines.append(
+                    "Turned down, in full:\n" + refused.mesocycle.model_dump_json(indent=1)
+                )
+            if refused.because:
+                lines.append(f"They said: {refused.because}")
+        lines.append("Propose a different one, and do not argue the last.")
+    lines.append("Plan the mesocycle.")
     return "\n".join(lines)
 
 
@@ -255,8 +333,44 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
     return schema
 
 
+def _mesocycle_schema(
+    connection: sqlite3.Connection, request: plans.MesocycleRequest
+) -> dict[str, Any]:
+    """`Mesocycle`'s strict schema, every `exercise_id` held to what some slot admits.
+
+    One enum for every workout, because the workouts share one item schema;
+    which slot admits which id is the validator's to say.
+    """
+    admissible_ids = sorted(
+        {
+            exercise.id
+            for asked in request.slots
+            for exercise in admissible.admissible_set(
+                connection, asked.exclusions, asked.equipment, asked.budget_min, asked.groups
+            )
+        }
+    )
+    schema = tools.strict_schema(plans.Mesocycle)
+
+    def restrict(node: Any) -> None:
+        if isinstance(node, dict):
+            declared = node.get("properties", {})
+            if "exercise_id" in declared:
+                declared["exercise_id"]["enum"] = admissible_ids
+            for value in node.values():
+                restrict(value)
+        elif isinstance(node, list):
+            for item in node:
+                restrict(item)
+
+    restrict(schema)
+    return schema
+
+
 class PlannerState(TypedDict, total=False):
-    request: plans.Request
+    request: plans.Request | plans.MesocycleRequest
+    """One workout's request, or one per slot when a mesocycle is asked for."""
+
     negotiation: str
     """The ask this run belongs to. One ask, N runs, at most one plan accepted."""
 
@@ -306,23 +420,30 @@ class PlannerState(TypedDict, total=False):
     timings: list[tuple[str, str, str, float]]
     """Node, model, provider and seconds, per node run, for this run only."""
 
-    plan: plans.WorkoutPlan | None
+    plan: plans.WorkoutPlan | plans.Mesocycle | None
     accepted: bool
     workout: int | None
+    mesocycle: int | None
+    """The mesocycle this run's acceptance kept, when a mesocycle was asked for."""
 
 
-def starting(request: plans.Request) -> PlannerState:
+def starting(request: plans.Request | plans.MesocycleRequest) -> PlannerState:
     """The input that starts a negotiation: its first run, following nothing."""
     return _beginning(request, negotiation=records.negotiation_id(), follows=None)
 
 
-def following(request: plans.Request, negotiation: str, follows: str) -> PlannerState:
+def following(
+    request: plans.Request | plans.MesocycleRequest, negotiation: str, follows: str
+) -> PlannerState:
     """The run a refusal gives birth to: the same ask, carrying which run it follows."""
     return _beginning(request, negotiation=negotiation, follows=follows)
 
 
 def _beginning(
-    request: plans.Request, *, negotiation: str, follows: str | None
+    request: plans.Request | plans.MesocycleRequest,
+    *,
+    negotiation: str,
+    follows: str | None,
 ) -> PlannerState:
     """The input that starts a run, with whatever a previous one left cleared.
 
@@ -341,6 +462,7 @@ def _beginning(
         **records.identity(negotiation, follows),  # type: ignore[typeddict-item]
         "accepted": False,
         "workout": None,
+        "mesocycle": None,
         # Cast because the annotation on `messages` is the list `add_messages`
         # reduces to, and a removal is an instruction to that reducer rather
         # than a message the state ever holds.
@@ -388,10 +510,15 @@ def build(
 
     def turn(state: PlannerState) -> dict[str, Any]:
         request = state["request"]
+        if isinstance(request, plans.MesocycleRequest):
+            return _turn(
+                state,
+                request,
+                [SystemMessage(MESOCYCLE_PLANNING), HumanMessage(mesocycle_brief(request))],
+            )
         if not isinstance(request, plans.Request):
             # Studio and the HTTP API send the request as JSON.
             request = TypeAdapter(plans.Request).validate_python(request)
-        born = records.born(state)
         opening: list[AnyMessage] = []
         if not state.get("messages"):
             with tools.reported(), tools.opened() as connection:
@@ -412,6 +539,17 @@ def build(
                 groups=today.groups,
             )
             opening = [SystemMessage(PLANNING), HumanMessage(brief(request))]
+        return _turn(state, request, opening)
+
+    def _turn(
+        state: PlannerState,
+        request: plans.Request | plans.MesocycleRequest,
+        opening: list[AnyMessage],
+    ) -> dict[str, Any]:
+        """One model turn, the opening written only when the run has no history yet."""
+        born = records.born(state)
+        if state.get("messages"):
+            opening = []
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model
         try:
             reply = bound.invoke([*state.get("messages", []), *opening])
@@ -474,9 +612,16 @@ def build(
         return {"messages": answers, "spent": state.get("spent", 0) + len(answers)}
 
     def emit(state: PlannerState) -> dict[str, Any]:
-        asked = HumanMessage(EMIT_PLAN)
+        request = state["request"]
+        asked = HumanMessage(
+            EMIT_MESOCYCLE if isinstance(request, plans.MesocycleRequest) else EMIT_PLAN
+        )
         with tools.reported(), tools.opened() as connection:
-            schema = _emit_schema(connection, state["request"])
+            schema = (
+                _mesocycle_schema(connection, request)
+                if isinstance(request, plans.MesocycleRequest)
+                else _emit_schema(connection, request)
+            )
         structured = model.with_structured_output(
             schema, method="json_schema", include_raw=True
         )
@@ -488,13 +633,20 @@ def build(
         document = state["messages"][-1]
         assert isinstance(document, AIMessage)
         attempts = state.get("attempts", 0) + 1
-        emitted: plans.WorkoutPlan | None = None
+        request = state["request"]
+        emitted: plans.WorkoutPlan | plans.Mesocycle | None = None
         try:
-            emitted = plans.parse(document.text)
-            with tools.opened() as connection:
-                violations = plans.validate(
-                    connection, plans.to_blocks(emitted), state["request"], emitted
-                )
+            if isinstance(request, plans.MesocycleRequest):
+                emitted = plans.parse_mesocycle(document.text)
+                with tools.opened() as connection:
+                    violations = plans.validate_mesocycle(connection, emitted, request)
+            else:
+                plan = plans.parse(document.text)
+                emitted = plan
+                with tools.opened() as connection:
+                    violations = plans.validate(
+                        connection, plans.to_blocks(plan), request, plan
+                    )
         except plans.PlanError as error:
             violations = (plans.Violation(plans.SHAPE, str(error)),)
         decided: dict[str, Any] = {
@@ -531,6 +683,21 @@ def build(
         # What it cost is written here and nowhere else: the state below is
         # the next run's, and everything this one spent is about to be cleared.
         closed(state, records.TURNED_DOWN, because=because)
+        if isinstance(request, plans.MesocycleRequest):
+            assert isinstance(offered, plans.Mesocycle)
+            return dict(
+                following(
+                    dataclasses.replace(
+                        request,
+                        refusals=plans.mesocycle_turned_down(
+                            request.refusals, offered, because
+                        ),
+                    ),
+                    state["negotiation"],
+                    follows=state["run"],
+                )
+            )
+        assert isinstance(offered, plans.WorkoutPlan) and isinstance(request, plans.Request)
         # The run that follows is a fresh proposal and not an argument with the
         # one before it, so the messages go and the brief is written again --
         # this time carrying every plan the negotiation has turned down.
@@ -549,9 +716,33 @@ def build(
         )
 
     def prescribe(state: PlannerState) -> dict[str, Any]:
-        """The accepted plan, written as the prescribed workout it now is, and the run closed."""
+        """The accepted plan, written as the prescribed workout it now is, and the run closed.
+
+        An accepted mesocycle is kept instead, and nothing is prescribed: a
+        workout is prescribed when it is served (ADR-0008 item 4).
+        """
         accepted_plan = state["plan"]
         assert accepted_plan is not None, "nothing is written without a plan"
+        if isinstance(accepted_plan, plans.Mesocycle):
+            with tools.reported(), tools.opened() as connection:
+                kept = mesocycles.record_mesocycle(
+                    connection,
+                    tuple(
+                        tuple(
+                            workouts.PrescribedBlock(block=costed, reason=shape.reason)
+                            for shape, costed in zip(
+                                workout.blocks, plans.to_blocks(workout), strict=True
+                            )
+                        )
+                        for workout in accepted_plan.workouts
+                    ),
+                    cycles=accepted_plan.cycles,
+                    why=accepted_plan.why,
+                    on=date.today().isoformat(),
+                )
+            return {"mesocycle": kept} | closed(
+                {**state, "mesocycle": kept}, records.ACCEPTED
+            )
         with tools.reported(), tools.opened() as connection:
             written = workouts.record_prescribed(
                 connection,
