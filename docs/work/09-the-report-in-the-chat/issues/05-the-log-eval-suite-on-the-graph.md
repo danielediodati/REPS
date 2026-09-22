@@ -21,6 +21,7 @@ What is left is the half 02 could not do: **running it**. Thirty reports against
 |---|---|---|---|---|
 | 2026-09-21 | ollama (CPU) | `gpt-oss:20b` | **24 / 90, 25%** (95 with false confidence counted double) | 102 tool calls, 640k tokens in, 52k out, ~2.6 h |
 | 2026-09-22 | ollama (CPU) | `gpt-oss:20b` | **3 / 15, 20%** on `--only U1 U2 U9 U15 A8`, after 9.6. 5 not run were a shape refusal 9.6 introduced and then fixed | 16 tool calls, 103k tokens in, 9.5k out |
+| 2026-09-22 | groq | `qwen/qwen3.8-27b` | **9 / 12, 75%** on the same rows, A8's 3 not run (daily quota). Asked in 11 of 12 reports that needed no question | 36 tool calls, 161k tokens in, 8k out |
 
 What the first pass says, by cluster (counted by hand, a run can sit in two):
 

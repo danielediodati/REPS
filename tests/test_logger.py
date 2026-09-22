@@ -785,6 +785,15 @@ def test_the_logging_prompt_carries_the_rules_this_ticket_decided() -> None:
         assert rule.lower() in logger.LOGGING.lower(), rule
 
 
+def test_the_prompt_says_what_is_not_a_question() -> None:
+    """On Groq, Qwen asked in 11 of 12 reports that determined their answer:
+    for the reps of a block the user called normal, and to confirm an
+    exclusion the graph confirms on its own."""
+    prompt = logger.LOGGING.lower()
+    assert "a number they did not mention is not a question" in prompt
+    assert "never ask to confirm an exclusion" in prompt
+
+
 def test_the_prompt_does_not_forbid_what_the_set_expects() -> None:
     """The first pass on the graph found `LOGGING` saying *never `assumed`*
     while the set expected it; the model split between the two."""
