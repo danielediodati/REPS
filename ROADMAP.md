@@ -114,5 +114,5 @@ Their issues are cut when each session opens.
 ## Risks
 
 - **The local model has no GPU on this machine.** Measured in session 7, and it is not memory: `gpt-oss:20b` crashes the Vulkan backend of the Radeon 860M at *any* offload, four layers and 2.4 GB included, while `llama3.1` runs on the same device. It is the model, not the size. So it runs on the CPU at **10.3 tok/s generated and 52 tok/s read**, which is four to five minutes for one plan and eleven for a run the validator refuses twice. `reasoning="low"` is already set and buys nothing further. The fallbacks are `qwen3.5:9b`, to measure with `trainer eval --suite plan`, and `LLM_BACKEND=groq`.
-- **Local tool use.** If `gpt-oss:20b` with feedback cannot hold the invariants at 100%, that is a finding about the model, not a reason to lower the bar.
+- **Local tool use.** If `gpt-oss:20b` with feedback cannot hold the invariants at 100%, that is a finding about the model, not a reason to lower the bar. Measured on the logger (9.6): 3 of 15 on `gpt-oss:20b` where Qwen 27B on Groq held 9 of 12 on the same rows; the local model wrote numbers the contract let it leave out.
 - **Telegram's 24-hour window.** Messages sent while the PC is off for longer than that are lost.
