@@ -238,6 +238,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         "plan": None if emitted is None else emitted.model_dump(),
         "performed": None if document is None else document.model_dump(),
         "workout": state.get("workout"),
+        "mesocycle": state.get("mesocycle"),
     }
 
 
@@ -295,6 +296,9 @@ def summary(record: Mapping[str, Any]) -> list[str]:
     wrote = record.get("workout")
     if wrote is not None:
         lines.append(f"  wrote prescribed workout {wrote}")
+    kept = record.get("mesocycle")
+    if kept is not None:
+        lines.append(f"  kept mesocycle {kept}")
     return lines
 
 

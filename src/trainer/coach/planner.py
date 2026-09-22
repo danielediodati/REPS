@@ -510,6 +510,9 @@ def build(
 
     def turn(state: PlannerState) -> dict[str, Any]:
         request = state["request"]
+        if isinstance(request, dict) and "slots" in request:
+            # Studio and the HTTP API send the request as JSON.
+            request = TypeAdapter(plans.MesocycleRequest).validate_python(request)
         if isinstance(request, plans.MesocycleRequest):
             return _turn(
                 state,

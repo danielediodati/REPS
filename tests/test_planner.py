@@ -1264,3 +1264,32 @@ def test_a_mesocycle_turned_down_is_answered_with_another(
     assert final["plan"] == second
     briefed = "\n".join(message.text for message in model.seen[-1])
     assert "troppi cicli" in briefed
+
+
+def test_the_run_record_names_the_mesocycle_it_kept(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
+    graph.invoke(planner.starting(two_slots), thread)
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    written = record.of(final, tools.CALL_BUDGET)
+    assert written["mesocycle"] == final["mesocycle"]
+    assert f"  kept mesocycle {final['mesocycle']}" in record.summary(written)
+
+
+def test_a_mesocycle_request_sent_as_json_is_read_as_one(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """Studio and the HTTP API send the request as JSON; a mesocycle's must not
+    be read as one workout's."""
+    import dataclasses as dc
+
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
+
+    final = graph.invoke({"request": dc.asdict(two_slots)}, thread)  # type: ignore[call-overload]
+
+    assert final["plan"] == offered
