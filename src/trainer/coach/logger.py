@@ -101,6 +101,15 @@ def ask_user(question: str) -> str:
     raise AssertionError("the graph answers ask_user; nothing calls it")
 
 
+def done_reading() -> str:
+    """Say you have read what you need; the document is asked for next.
+
+    The body is never run. A model that ends every turn on a tool call had
+    only `ask_user` to end on, and put *"No question needed"* to the user.
+    """
+    raise AssertionError("the graph answers done_reading; nothing calls it")
+
+
 LOGGING = f"""\
 You read one report of one workout that has already happened, and turn it
 into the document the engine writes down. The document says what the user
@@ -138,8 +147,8 @@ Asking:
   the prescribed one. Most reports need no question at all.
 - Never ask to confirm an exclusion. Propose it in the document; the user is
   asked to confirm it after you emit.
-- When nothing is left to ask, stop calling it; you will be asked for the
-  document.
+- When you have what you need, call `done_reading`; you will be asked for
+  the document.
 - Write questions, and the `why` of an exclusion, in plain ASCII -- `perche`
   and `--`, never an accent or a dash. `report` is exempt: it is copied
   exactly as typed.
@@ -243,6 +252,9 @@ class LoggerState(TypedDict, total=False):
     nothing.
     """
 
+    finished: bool
+    """The model called `done_reading` this turn: the document is next."""
+
     confirmed: bool
     """Whether the exclusion the document proposes is the user's. False until
     they say so, and nothing writes one before that (ADR-0004)."""
@@ -274,6 +286,7 @@ def starting(
         "attempts": 0,
         "refusals": [],
         "refused": None,
+        "finished": False,
         "confirmed": False,
         "timings": [],
     }
@@ -302,6 +315,7 @@ def build(
     offered = tools.registered("logger", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
     asking = {"type": "function", "function": tools.schema(ask_user)}
+    finishing = {"type": "function", "function": tools.schema(done_reading)}
     timed = records.timing(on)
 
     def closed(
@@ -336,6 +350,7 @@ def build(
         definitions = list(reads) if state.get("spent", 0) < budget else []
         if state.get("asked", 0) < ASK_BUDGET:
             definitions.append(asking)
+        definitions.append(finishing)
         bound = model.bind_tools(definitions) if definitions else model
         reply = bound.invoke([*state.get("messages", []), *opening])
         return born | {"budget": budget, "messages": [*opening, reply]}
@@ -362,8 +377,15 @@ def build(
         answers: list[AnyMessage] = []
         asked: list[tuple[str, str]] = []
         spent = 0
+        finished = False
         for call in reply.tool_calls:
             call_id = answered(call)
+            if call["name"] == done_reading.__name__:
+                finished = True
+                answers.append(
+                    ToolMessage(EMIT_LOG, tool_call_id=call_id, name=call["name"])
+                )
+                continue
             if call["name"] == ask_user.__name__:
                 said = _asked(state, len(asked), str(call["args"].get("question", "")))
                 asked.append(said)
@@ -387,6 +409,7 @@ def build(
             )
         return {
             "messages": answers,
+            "finished": finished,
             "spent": state.get("spent", 0) + spent,
             "asked": state.get("asked", 0) + len(asked),
             "questions": [*state.get("questions", []), *asked],
@@ -427,6 +450,7 @@ def build(
             ],
         }
         if refused is not None and attempts < ATTEMPTS:
+            decided["finished"] = False
             decided["messages"] = [
                 HumanMessage(FEEDBACK.format(why=refused), name="validator")
             ]
@@ -471,7 +495,9 @@ def build(
         return "emit"
 
     def after_tools(state: LoggerState) -> Literal["logger", "emit"]:
-        return "emit" if state.get("spent", 0) >= budget else "logger"
+        if state.get("finished") or state.get("spent", 0) >= budget:
+            return "emit"
+        return "logger"
 
     def after_validate(state: LoggerState) -> Literal["logger", "confirm", "done"]:
         performed = state.get("document")

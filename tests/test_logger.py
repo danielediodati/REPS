@@ -305,6 +305,28 @@ def test_an_id_the_model_remembered_rather_than_read_is_refused(
     assert final["document"].blocks, "the document is still recorded whole"
 
 
+def test_a_model_that_finishes_by_calling_a_tool_asks_nothing(
+    connection: sqlite3.Connection,
+) -> None:
+    """On Groq, Qwen ended its reading with a tool call whatever it had to
+    say, and the only free one was `ask_user`: *"No question needed"* reached
+    the user as a question. `done_reading` is the call that ends a reading."""
+    identifier = prescribe(connection)
+    model = scripted(
+        calling("prescribed_workout", workout_id=identifier),
+        calling(logger.done_reading.__name__),
+        emits=report(workout_id=identifier, report="tutto liscio"),
+    )
+
+    final = until_done(
+        graph_of(model), logger.starting("tutto liscio", TODAY, awaiting=identifier)
+    )
+
+    assert final["questions"] == []
+    assert final["refused"] is None
+    assert final["document"].workout_id == identifier
+
+
 def test_a_spent_call_budget_goes_to_emit(connection: sqlite3.Connection) -> None:
     identifier = prescribe(connection)
     model = scripted(
@@ -781,6 +803,7 @@ def test_the_logging_prompt_carries_the_rules_this_ticket_decided() -> None:
         "never an exercise id",
         "the validator",
         logger.ask_user.__name__,
+        logger.done_reading.__name__,
     ):
         assert rule.lower() in logger.LOGGING.lower(), rule
 
