@@ -19,13 +19,13 @@ In 61 of 81 runs the model made one read, `prescribed_workout`, and nothing else
 
 ## What to build
 
-1. **A value the user did not give is `null`.** `amount`, `rounds` and `rest` in the emitted document become nullable, with their sources. `log.to_performed` fills a `null` from the prescription and marks it `assumed`, as it already does for an untouched block. The document carries `reported` and `asked` only; `assumed` is the engine's.
-   - A `null` with nothing prescribed behind it (a substitution, an unplanned block) is refused by the validator, with a sentence saying to ask the user.
+1. **A value the user did not give is `null`.** `amount`, `rounds` and `rest` in the emitted document become nullable, with their sources. `log.to_performed` fills a `null` from the prescription and marks it `assumed`, as it already does for an untouched block. The agent writes `reported` and `asked`; `assumed` stays legal only where the prescription is silent (ADR-0009).
+   - A `null` with nothing prescribed behind it (a substitution, an unplanned block) is refused, and the refusal offers asking the user or writing a reading marked `assumed`.
 2. **A refusal goes back to the model.** Parse errors and `log.validate` refusals come back as a message naming every rule broken, and the run emits again, within an attempt budget like the planner's. The record counts the attempts.
-3. **The exclusion's vocabulary comes from the data.** The movement patterns and loaded joints that `exclusions.classify` accepts, read from the catalog when the graph is built, go into the schema as an enum. Never a constant (CLAUDE.md standing rule).
+3. **The exclusion's vocabulary comes from the data.** A refused exclusion lists the movement patterns and loaded joints `exclusions.classify` accepts, read from the catalog; with 2 the model picks one. Not an enum in the schema: the choice stays the model's. Never a constant (CLAUDE.md standing rule).
 4. **`LOGGING` rewritten** around the new contract: one rule on provenance, none about the form. Say to search the catalog when a named exercise is not in the prescription.
 5. **The set and the scorer follow.**
-   - The 18 expected documents in `docs/logging/eval-set.md` lose their `assumed` values (48 today).
+   - The 18 expected documents in `docs/logging/eval-set.md` lose their `assumed` values, except U6's substitute rest, which nothing prescribes.
    - `log_evaluation._difference` compares the document the engine would write, after `to_performed`, so an untouched block re-emitted as `null` is not a failure.
    - `verify` still recomputes every volume.
 6. **`trainer.log.PerformedWorkout` registered** with the checkpoint serializer (`coach/checkpoints.py`). LangGraph warns that deserializing it will be blocked in a future version, which would break resuming the logger after `interrupt()`.
@@ -42,11 +42,17 @@ Not in scope: the asking half (A rows) beyond what the prompt rewrite does; the 
 
 ## Acceptance criteria
 
-- [ ] A document with `amount: null` on a prescribed exercise resolves to the prescribed amount marked `assumed`; one on an unprescribed exercise is refused with a message that says to ask.
-- [ ] A refused document reaches the model again, and a run that corrects itself on the second attempt ends `done`, with the attempts in its record.
-- [ ] The emitted schema's exclusion values are the catalog's patterns and joints, and a test builds them from a fixture catalog rather than from a list.
-- [ ] `trainer eval --suite log` refuses to start if `verify` fails; the rewritten set passes it.
-- [ ] The 2026-09-21 records of U1, U2 and U9 that failed on form alone would be scored as held by the new `_difference`: checked by rescoring them, not by reading the code.
+- [x] A document with `amount: null` on a prescribed exercise resolves to the prescribed amount marked `assumed`; one on an unprescribed exercise is refused with a message that says to ask.
+- [x] A refused document reaches the model again, and a run that corrects itself on the second attempt ends `done`, with the attempts in its record.
+- [x] A refused exclusion names the catalog's patterns and joints, and a test reads them from a fixture catalog rather than from a list.
+- [x] `trainer eval --suite log` refuses to start if `verify` fails; the rewritten set passes it.
+- [x] The 2026-09-21 records of U1, U2 and U9 that failed on form alone would be scored as held by the new `_difference`: checked by rescoring them, not by reading the code.
 - [ ] `trainer eval --suite log --only U1 U2 U9 U15 A8` on Ollama, run and the number written in 05 next to the first pass.
 - [ ] The checkpoint warning is gone from that pass.
-- [ ] Full test suite and mypy green.
+- [x] Full test suite and mypy green.
+
+## Comments
+
+- Rescored with the new `_difference`, the 50 valid determined runs of the 2026-09-21 pass hold **12** (7 before). U1 3/3, U2-3 and U9-3 now hold; U2-1 and U2-2 still fail, correctly: they mark 10 reps nobody said as `reported`.
+- The checkpoint warning came from the evals' `InMemorySaver()` on LangGraph's default serializer; both evals now use `checkpoints.Declared`, as the bot does.
+- `/code-review`: one finding, the expected document resolved unguarded in `_difference`; guarded, with a test.

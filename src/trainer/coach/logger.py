@@ -23,6 +23,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import interrupt
 
 from trainer import log as logs
+from trainer import plan as plans
 from trainer import tools
 from trainer.coach import models
 from trainer.coach import record as records
@@ -39,6 +40,9 @@ report the agent has failed to read rather than an ambiguous one. Like the
 call budget it is a bound and not a target: running out stops the asking and
 the document is emitted with what is known.
 """
+
+VALIDATOR = "validator"
+"""The rule a `log.validate` refusal is recorded under; `plans.SHAPE` is the other."""
 
 CLARIFY = "clarify"
 """An open question: the answer is prose, and the user writes it."""
@@ -99,82 +103,65 @@ def ask_user(question: str) -> str:
 
 LOGGING = f"""\
 You read one report of one workout that has already happened, and turn it
-into the document the engine writes down.
+into the document the engine writes down. The document says what the user
+told you, and nothing else: the engine fills in the rest from what was
+prescribed.
 
 {tools.INSTRUCTIONS}
-How you read it:
+Reading the report:
 
 - Call `prescribed_workout` for the workout the brief names, first. It is what
-  the report is a deviation from, and it is the closed set of exercises the
-  user is talking about.
-- Resolve every exercise they name inside that set, by its name. Only when
-  nothing in it can be what they meant -- which is what a substitution looks
-  like -- call `search_exercises`, and take the id from what comes back.
-  **Never write an id you remember.** An id that does not exist is refused; an
-  id that exists and is the wrong exercise files the training under something
-  they did not do, and nothing anywhere says so.
-- Emit only what deviated. Everything you leave out is filled in from the
-  prescription and marked as assumed, which is the whole point of logging by
-  deviation -- a workout that went as prescribed is a document with no blocks
-  in it at all.
+  the report is about and the closed set of exercises the user is talking about.
+- Resolve every exercise they name inside that set, by its name. When nothing
+  in it can be what they meant -- a substitution, something done on the end,
+  a workout nobody planned -- call `search_exercises` and take the id from
+  what comes back. **Never write an id you remember.**
+- Write a block only for what the user talked about. A workout that went as
+  prescribed is a document with no blocks.
+- Inside a block you write, a number the user did not give: leave it null,
+  with its source. The engine writes the prescribed one. A number they gave
+  is `reported`; one that came back from a question you asked is `asked`.
 - *Sets*, and Italian *serie*, are **rounds** -- how many times the block was
-  performed. They are never the `amount`, which is the reps or the seconds of
-  one round. *"Solo 3 serie"* is `rounds: 3` with the prescribed reps
-  untouched, not three reps.
-- `report` is the user's own words, verbatim and complete, in the language
-  they wrote them. Not a summary and not a translation.
-- Provenance is `reported` for a value they gave and `asked` for one that came
-  back from a question you asked. Never `assumed`: that is the engine's, and
-  a document claiming it would be claiming the prescription said something.
-- **A value nobody gave is left out, not filled in.** Leaving it out is what
-  the prescription is for; writing it marks it `reported`, which is the state
-  saying the user said it. That is the one mistake here nothing downstream can
-  catch.
-- A number marked `assumed` has to be the prescribed one. Where the plan is
-  silent -- a substituted exercise, a block nobody prescribed -- `assumed` is
-  the honest label for a value the user did not give; where the plan says 10
-  and the document says 8, it is refused.
-- `rpe` is recorded only if they say how hard it felt. Never ask for it and
-  never infer it from how the report reads.
-- `load_kg` is null unless they gave a load, and `load_kg_source` is null
-  with it: the two are written together or both left empty, and a provenance
-  describing nothing is not a provenance. Zero is not *"no load"* either --
-  it is a claim that the bar was empty.
+  performed -- never the `amount`, which is the reps or seconds of one round.
+- `report` is the user's own words, verbatim and complete, in their language.
+- `rpe` only if they say how hard it felt. Never ask for it.
+- `load_kg` only if they gave a load, with its source; otherwise both null.
 
 Asking:
 
-- When the report does not determine a value, call `ask_user` instead of
-  filling it in. A bare number is the case this exists for: *"4 out of 10"* is
-  effort, or it is discomfort, and nothing in the sentence says which.
-- One question per call, and at most {ASK_BUDGET} in all. Somebody has just
-  trained and is answering them on a phone.
-- When you have nothing left to ask, do not call it. You will then be asked
-  for the document.
-- Write the question, and the `why` of any exclusion you propose, in plain
-  ASCII -- `perche`, not `perché`, and `--` rather than a dash. They are
-  printed to a Windows console that has no other alphabet. This applies to
-  what **you** write and never to `report`, which is the user's own words and
-  is copied exactly as they typed them.
+- When a word in the report could mean two different things, or a number
+  has nothing to attach to, call `ask_user` instead of choosing. One question
+  per call, at most {ASK_BUDGET} in all: they have just trained and are
+  answering on a phone.
+- When nothing is left to ask, stop calling it; you will be asked for the
+  document.
+- Write questions, and the `why` of an exclusion, in plain ASCII -- `perche`
+  and `--`, never an accent or a dash. `report` is exempt: it is copied
+  exactly as typed.
 
-Pain, and the one thing you may propose:
+Pain:
 
-- Pain is prose. There is no scale, no threshold, and nothing accumulates.
-- If what they said means a movement should stop being prescribed for a while,
-  propose an exclusion: a `value` naming a movement pattern (`vertical push`)
-  or a loaded joint (`shoulder`) -- never an exercise id, and never something
-  they merely dislike -- a `retest_date` after today, and a `why` saying what
-  you are reading. Do not label which of the two it is; the engine decides
-  that against the catalog.
-- It is a proposal. The user is shown it and confirms it before anything is
-  written, because an exclusion on `shoulder` takes 251 of 582 exercises out
-  of what may ever be prescribed. Propose one when the report is about pain,
-  not when it is about effort.
+- If what they said means a movement should stop being prescribed for a
+  while, propose an exclusion: a movement pattern (`vertical push`) or a
+  loaded joint (`shoulder`) -- never an exercise id -- with a `retest_date`
+  after today and a `why`. It is a proposal the user confirms. Propose one for
+  pain, not for effort or a dislike.
 
-You have a budget of tool calls. When it runs out you will be asked for the
-document with whatever you know at that point.
+The validator checks the document. If it refuses one, you are told why and
+may read, ask and emit again. You also have a budget of tool calls; when it
+runs out you will be asked for the document with what you know.
 """
 
 EMIT_LOG = "Emit the performed workout now, in the required shape."
+
+ATTEMPTS = 3
+"""Documents one run may emit before a refusal ends it."""
+
+FEEDBACK = """The validator refused that document:
+{why}
+Read the report again with this in mind. Look up what you need, ask the user
+if only they know it, then emit the document again."""
+"""What a refusal is turned into, on its way back to the model."""
 
 
 def brief(
@@ -238,6 +225,10 @@ class LoggerState(TypedDict, total=False):
     of the prose: the log eval scores *did it ask* on it."""
 
     document: logs.PerformedWorkout | None
+    attempts: int
+    refusals: list[tuple[plans.Violation, ...]]
+    """What each emitted document broke, in order, and nothing for one that stood: the record's `attempts`."""
+
     refused: str | None
     """What `log.validate` said about the document, or nothing when it passed.
 
@@ -275,6 +266,8 @@ def starting(
         "asked": 0,
         "questions": [],
         "document": None,
+        "attempts": 0,
+        "refusals": [],
         "refused": None,
         "confirmed": False,
         "timings": [],
@@ -407,22 +400,32 @@ def build(
     def validate(state: LoggerState) -> dict[str, Any]:
         document = state["messages"][-1]
         assert isinstance(document, AIMessage)
+        attempts = state.get("attempts", 0) + 1
+        performed: logs.PerformedWorkout | None = None
+        violation: plans.Violation | None = None
         try:
             performed = logs.parse(document.text)
-        except logs.LogError as error:
-            return {"document": None} | closed(
-                {**state, "document": None, "refused": str(error)},
-                records.REFUSED,
-                refused=str(error),
-            )
-        refused: str | None = None
-        try:
             with tools.opened() as connection:
                 logs.validate(connection, performed, state["today"])
+        except logs.LogError as error:
+            violation = plans.Violation(plans.SHAPE, str(error))
         except logs.LogRejected as error:
-            refused = str(error)
-        decided: dict[str, Any] = {"document": performed, "refused": refused}
-        if refused is not None or performed.proposed_exclusion is None:
+            violation = plans.Violation(VALIDATOR, str(error))
+        refused = None if violation is None else violation.says
+        decided: dict[str, Any] = {
+            "document": performed,
+            "refused": refused,
+            "attempts": attempts,
+            "refusals": [
+                *state.get("refusals", []),
+                () if violation is None else (violation,),
+            ],
+        }
+        if refused is not None and attempts < ATTEMPTS:
+            decided["messages"] = [
+                HumanMessage(FEEDBACK.format(why=refused), name="validator")
+            ]
+        elif refused is not None or performed is None or performed.proposed_exclusion is None:
             decided.update(closed({**state, **decided}, _ending(refused)))
         return decided
 
@@ -465,9 +468,11 @@ def build(
     def after_tools(state: LoggerState) -> Literal["logger", "emit"]:
         return "emit" if state.get("spent", 0) >= budget else "logger"
 
-    def after_validate(state: LoggerState) -> Literal["confirm", "done"]:
+    def after_validate(state: LoggerState) -> Literal["logger", "confirm", "done"]:
         performed = state.get("document")
-        if state.get("refused") is not None or performed is None:
+        if state.get("refused") is not None:
+            return "logger" if state.get("attempts", 0) < ATTEMPTS else "done"
+        if performed is None:
             return "done"
         return "confirm" if performed.proposed_exclusion is not None else "done"
 
@@ -482,7 +487,9 @@ def build(
     graph.add_conditional_edges("tools", after_tools)
     graph.add_edge("emit", "validate")
     graph.add_conditional_edges(
-        "validate", after_validate, {"confirm": "confirm", "done": END}
+        "validate",
+        after_validate,
+        {"logger": "logger", "confirm": "confirm", "done": END},
     )
     graph.add_edge("confirm", END)
     return graph.compile(checkpointer=checkpointer)

@@ -100,16 +100,11 @@ SET = """\
     {
       "items": [
         {
-          "exercise_id": "Military_Press",
-          "unit": "reps",
-          "amount": 10,
-          "amount_source": "assumed"
+          "exercise_id": "Military_Press"
         }
       ],
       "rounds": 2,
-      "rounds_source": "reported",
-      "rest": 120,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": null
@@ -366,6 +361,77 @@ def test_the_document_the_row_expects_holds_everything(
     assert weight == 1
 
 
+def test_the_set_writes_assumed_only_where_the_prescription_is_silent() -> None:
+    """A number the prescription has is left out and adherence writes it. The
+    committed set writes `assumed` only in a block no prescribed exercise is
+    in -- U6's substitute, whose rest nobody said and nothing prescribes."""
+    holds = log_set.load()
+    prescribed = {
+        found.name: {
+            entry.exercise_id for block in found.blocks for entry in block.block.items
+        }
+        for found in holds.prescriptions
+    }
+    for expected in holds.unambiguous:
+        assert expected.expects is not None
+        planned = prescribed.get(expected.prescription or "", set())
+        for block in expected.expects.blocks:
+            sources = {block.rounds_source, block.rest_source} | {
+                entry.amount_source for entry in block.items
+            }
+            if "assumed" in sources:
+                assert not planned & {entry.exercise_id for entry in block.items}, (
+                    expected.name
+                )
+
+
+def test_a_block_written_out_with_nothing_said_in_it_is_not_a_failure(
+    where: log_evaluation.Fixture, holds: log_set.LogSet
+) -> None:
+    """U2 is about the press. A model that also writes the untouched squat
+    block, every number left empty, produces the same workout -- the form of
+    the emission is not what is scored."""
+    expected = row(holds, "U2")
+    assert expected.expects is not None
+    emitted = expected.expects.model_copy(deep=True)
+    emitted.blocks.insert(
+        0,
+        log.PerformedBlock(
+            items=[log.PerformedItem(exercise_id="Bench_Press")]
+        ),
+    )
+
+    failures, _ = log_evaluation.score(where, expected, record(emitted))
+
+    assert failures == ()
+
+
+def test_an_expected_document_that_cannot_be_resolved_is_named_not_raised(
+    where: log_evaluation.Fixture, holds: log_set.LogSet
+) -> None:
+    """`verify` refuses such a set before `trainer eval` starts; scoring called
+    on its own still says so rather than taking the pass down."""
+    broken = row(holds, "U2")
+    assert broken.expects is not None
+    unresolvable = broken.expects.model_copy(deep=True)
+    unresolvable.blocks[0].items[0] = log.PerformedItem(exercise_id="Barbell_Squat")
+    wanting = log_set.Row(
+        name="U2",
+        describes=broken.describes,
+        report=broken.report,
+        prescription=broken.prescription,
+        expects=unresolvable,
+        pattern_volume=broken.pattern_volume,
+        muscle_volume=broken.muscle_volume,
+    )
+
+    failures, _ = log_evaluation.score(where, wanting, record(broken.expects))
+
+    assert "the expected document cannot be resolved" in why(
+        failures, log_evaluation.DOCUMENT
+    )
+
+
 def test_a_number_that_moved_is_named_with_the_field_it_is_on(
     where: log_evaluation.Fixture, holds: log_set.LogSet
 ) -> None:
@@ -376,7 +442,9 @@ def test_a_number_that_moved_is_named_with_the_field_it_is_on(
 
     failures, _ = log_evaluation.score(where, expected, record(emitted))
 
-    assert "block 1: rounds 3, expected 2" in why(failures, log_evaluation.DOCUMENT)
+    assert "block Military_Press: rounds 3, expected 2" in why(
+        failures, log_evaluation.DOCUMENT
+    )
     # And the volume it produces moves with it, which is the fact the rest of
     # the engine reads.
     assert "pattern axis horizontal push 4, vertical push 3" in why(
@@ -392,11 +460,13 @@ def test_a_provenance_that_claims_the_user_said_it(
     expected = row(holds, "U2")
     assert expected.expects is not None
     emitted = expected.expects.model_copy(deep=True)
-    emitted.blocks[0].items[0].amount_source = "reported"
+    emitted.blocks[0].items[0] = log.PerformedItem(
+        exercise_id="Military_Press", unit="reps", amount=10, amount_source="reported"
+    )
 
     failures, _ = log_evaluation.score(where, expected, record(emitted))
 
-    assert "amount_source 'reported', expected 'assumed'" in why(
+    assert "Military_Press amount_source 'reported', expected 'assumed'" in why(
         failures, log_evaluation.DOCUMENT
     )
 
@@ -420,13 +490,24 @@ def test_an_exercise_that_was_not_prescribed_shows_on_both_the_document_and_the_
     expected = row(holds, "U2")
     assert expected.expects is not None
     emitted = expected.expects.model_copy(deep=True)
-    emitted.blocks[0].items[0].exercise_id = "Barbell_Squat"
+    emitted.blocks[0] = log.PerformedBlock(
+        items=[
+            log.PerformedItem(
+                exercise_id="Barbell_Squat", unit="reps", amount=10, amount_source="reported"
+            )
+        ],
+        rounds=2,
+        rounds_source="reported",
+        rest=120,
+        rest_source="reported",
+    )
 
     failures, _ = log_evaluation.score(where, expected, record(emitted))
 
     document = why(failures, log_evaluation.DOCUMENT)
-    assert "Military_Press is not in it" in document
-    assert "Barbell_Squat is in it and was not expected" in document
+    assert "block Barbell_Squat is in it and was not expected" in document
+    # The press it replaced is filled in as prescribed, so its rounds are wrong.
+    assert "block Military_Press: rounds 3, expected 2" in document
     assert "squat 2" in why(failures, log_evaluation.VOLUME)
 
 
@@ -717,6 +798,37 @@ def test_a_run_of_a_row_scores_it_and_writes_the_record(
     assert (tmp_path / "runs" / "U2-1.json").exists()
     briefed = "\n".join(message.text for message in model.seen[0])
     assert briefed.count("di militari solo 2 serie che ero cotto") == 1
+
+
+def test_a_run_that_waits_on_a_confirmation_resumes_on_declared_types(
+    where: log_evaluation.Fixture,
+    holds: log_set.LogSet,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A proposed exclusion stops the graph, and resuming it reads the
+    document back from the checkpoint. LangGraph logs that an undeclared type
+    read back there will be refused in a future version; the suite resumes on
+    the serializer the bot uses, which declares it."""
+    from langgraph.checkpoint.serde import jsonplus
+
+    # LangGraph says it once per process, so a test that ran earlier would
+    # otherwise have used up the warning this one is looking for.
+    monkeypatch.setattr(jsonplus, "_warned_unregistered_types", set())
+    expected = row(holds, "U1")
+    assert expected.expects is not None
+    proposing = expected.expects.model_copy(deep=True)
+    proposing.proposed_exclusion = log.ProposedExclusion(
+        value="shoulder", retest_date="2026-10-01", why="la spalla"
+    )
+    model = scripted(AIMessage(content="chiaro"), emits=proposing)
+
+    log_evaluation.run(
+        where, [expected], on=stand_in(model), repetitions=1, records=tmp_path
+    )
+
+    assert not [line for line in caplog.messages if "unregistered type" in line]
 
 
 def test_the_answerer_says_the_same_thing_to_every_question(

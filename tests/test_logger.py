@@ -293,6 +293,7 @@ def test_an_id_the_model_remembered_rather_than_read_is_refused(
             blocks=[done("Barbell_Bench_Press_Medium_Grip")],
             report="panca",
         ),
+        times=logger.ATTEMPTS,
     )
 
     final = until_done(
@@ -503,6 +504,7 @@ def proposing(identifier: int, retest: str = "2026-10-15") -> Scripted:
                 value="shoulder", retest_date=retest, why="la spalla tirava"
             ),
         ),
+        times=logger.ATTEMPTS,
     )
 
 
@@ -605,7 +607,7 @@ def test_a_run_of_the_logger_leaves_a_run_document(
     assert {node["model"] for node in kept.document["nodes"]} == {STAND_IN}
 
 
-def test_a_refused_document_ends_the_run_as_refused(
+def test_a_document_refused_to_the_last_attempt_ends_the_run_as_refused(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
     from trainer.coach import runs
@@ -619,6 +621,7 @@ def test_a_refused_document_ends_the_run_as_refused(
             blocks=[done("Barbell_Bench_Press_Medium_Grip")],
             report="panca",
         ),
+        times=logger.ATTEMPTS,
     )
 
     until_done(
@@ -628,6 +631,34 @@ def test_a_refused_document_ends_the_run_as_refused(
 
     (kept,) = runs.kept(archive)
     assert kept.ending == run_record.REFUSED
+    assert len(kept.document["attempts"]) == logger.ATTEMPTS
+
+
+def test_a_refusal_goes_back_to_the_model_and_it_corrects_the_document(
+    connection: sqlite3.Connection,
+) -> None:
+    """The validator's sentence is what the model reads next, and the run it
+    corrects ends `done` with both attempts on the record."""
+    identifier = prescribe(connection)
+    wrong = report(
+        workout_id=identifier, blocks=[done("TRACIONE")], report="trazioni"
+    )
+    right = report(workout_id=identifier, blocks=[done("Barbell_Squat")], report="trazioni")
+    model = Scripted(
+        turns=[AIMessage(content="chiaro"), AIMessage(content="ora ho capito")],
+        raw=[wrong.model_dump_json(), right.model_dump_json()],
+    )
+
+    final = until_done(
+        graph_of(model), logger.starting("trazioni", TODAY, awaiting=identifier)
+    )
+
+    assert final["refused"] is None
+    assert final["document"] == right
+    assert final["ending"] == run_record.DONE
+    told = [message.text for message in model.seen[-1]]
+    assert any("TRACIONE" in said and "catalog" in said for said in told)
+    assert len(run_record.of(final, tools.CALL_BUDGET)["attempts"]) == 2
 
 
 # -- nothing the graph does writes ---------------------------------------------
@@ -741,15 +772,23 @@ def test_the_logging_prompt_carries_the_rules_this_ticket_decided() -> None:
     never told is a finding that is the prompt's fault."""
     for rule in (
         "prescribed_workout",
+        "search_exercises",
         "never write an id you remember",
-        "only what deviated",
+        "leave it null",
         "verbatim",
         "never ask for it",
         f"at most {logger.ASK_BUDGET} in all",
         "never an exercise id",
+        "the validator",
         logger.ask_user.__name__,
     ):
         assert rule.lower() in logger.LOGGING.lower(), rule
+
+
+def test_the_prompt_does_not_forbid_what_the_set_expects() -> None:
+    """The first pass on the graph found `LOGGING` saying *never `assumed`*
+    while the set expected it; the model split between the two."""
+    assert "never `assumed`" not in logger.LOGGING.lower()
 
 
 def test_the_prompt_no_longer_teaches_a_marker() -> None:

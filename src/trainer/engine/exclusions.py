@@ -49,13 +49,17 @@ def classify(connection: sqlite3.Connection, value: str) -> Exclusion:
     catalog, so a value can never match both; if it matches neither, it is
     refused, exercise id or otherwise.
     """
-    if value in catalog.values(connection, "movement_pattern"):
+    patterns = catalog.values(connection, "movement_pattern")
+    joints = catalog.joint_values(connection)
+    if value in patterns:
         return Exclusion("pattern", value)
-    if value in catalog.joint_values(connection):
+    if value in joints:
         return Exclusion("joint", value)
     raise ExclusionError(
         f"{value!r} is not a movement pattern or a loaded joint -- "
-        "an exclusion names one of the two, never an exercise id"
+        "an exclusion names one of the two, never an exercise id.\n"
+        f"Movement patterns: {', '.join(patterns)}\n"
+        f"Loaded joints: {', '.join(joints)}"
     )
 
 

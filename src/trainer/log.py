@@ -116,7 +116,9 @@ class PerformedItem(BaseModel):
     `load_kg` and `load_kg_source` stand or fall together: a provenance
     describing nothing is not a provenance, which is migration 0006's own
     rule, restated here so it arrives as a sentence about the document rather
-    than as a CHECK constraint.
+    than as a CHECK constraint. `unit`, `amount` and `amount_source` do the
+    same: null all three when the user did not say how much, and adherence
+    writes the prescribed amount.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -124,9 +126,13 @@ class PerformedItem(BaseModel):
     exercise_id: str = Field(
         description="The exercise's id, character for character as the catalog has it."
     )
-    unit: Literal["reps", "seconds"]
-    amount: int = Field(ge=1)
-    amount_source: Provenance
+    unit: Literal["reps", "seconds"] | None = None
+    amount: int | None = Field(
+        default=None,
+        ge=1,
+        description="Reps or seconds of one round, and null when the user did not say.",
+    )
+    amount_source: Provenance | None = None
     load_kg: float | None = Field(
         default=None,
         ge=0,
@@ -135,10 +141,14 @@ class PerformedItem(BaseModel):
     load_kg_source: Provenance | None = None
 
     @model_validator(mode="after")
-    def _load_and_its_source(self) -> PerformedItem:
+    def _each_number_with_its_source(self) -> PerformedItem:
         if (self.load_kg is None) != (self.load_kg_source is None):
             raise ValueError(
                 "a load and its provenance are written together or not at all"
+            )
+        if len({self.unit is None, self.amount is None, self.amount_source is None}) > 1:
+            raise ValueError(
+                "a unit, an amount and its provenance are written together or not at all"
             )
         return self
 
@@ -154,21 +164,30 @@ class PerformedBlock(BaseModel):
     `rpe` carries no `_source` and is never asked for. If the user says it, it
     is recorded; if they do not, it stays empty -- so `assumed` and `asked`
     cannot arise for it and a provenance column would have one legal value.
+
+    `rounds` and `rest` are null, with their sources, when the user did not
+    say them: adherence writes the prescribed ones.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     items: list[PerformedItem] = Field(min_length=1)
-    rounds: int = Field(ge=1, description="How many times the block was performed.")
-    rounds_source: Provenance
-    rest: int = Field(
+    rounds: int | None = Field(
+        default=None,
+        ge=1,
+        description="How many times the block was performed, and null when the user did not say.",
+    )
+    rounds_source: Provenance | None = None
+    rest: int | None = Field(
+        default=None,
         ge=0,
         description=(
             "Seconds rested after each round -- 90 means a minute and a half. "
-            "Seconds, never milliseconds and never minutes."
+            "Seconds, never milliseconds and never minutes. Null when the user "
+            "did not say."
         ),
     )
-    rest_source: Provenance
+    rest_source: Provenance | None = None
     rpe: float | None = Field(
         default=None,
         ge=1,
@@ -178,6 +197,18 @@ class PerformedBlock(BaseModel):
             "It is never asked for."
         ),
     )
+
+    @model_validator(mode="after")
+    def _each_number_with_its_source(self) -> PerformedBlock:
+        for name, value, source in (
+            ("rounds", self.rounds, self.rounds_source),
+            ("rest", self.rest, self.rest_source),
+        ):
+            if (value is None) != (source is None):
+                raise ValueError(
+                    f"{name} and its provenance are written together or not at all"
+                )
+        return self
 
 
 class ProposedExclusion(BaseModel):
@@ -361,6 +392,7 @@ def validate(
     _nothing_assumed_without_a_prescription(performed)
     _every_id_in_the_catalog(connection, performed)
     _the_workout_it_reports_against(connection, performed)
+    _nothing_left_out_that_nothing_prescribes(connection, performed)
     _nothing_assumed_the_prescription_does_not_say(connection, performed)
     _the_exclusion_it_proposes(connection, performed, today)
 
@@ -494,6 +526,58 @@ def _the_workout_it_reports_against(
         workouts.reportable(connection, performed.workout_id)
     except workouts.WorkoutError as error:
         raise LogRejected(str(error)) from error
+
+
+def _left_out(
+    connection: sqlite3.Connection, performed: PerformedWorkout
+) -> list[str]:
+    """Every null in the document that no prescribed number stands behind."""
+    prescribed = (
+        () if performed.workout_id is None
+        else workouts.prescribed(connection, performed.workout_id)
+    )
+    found: list[str] = []
+    for position, (block, index) in enumerate(
+        _paired(prescribed, performed.blocks), start=1
+    ):
+        planned = (
+            set() if index is None
+            else {item.exercise_id for item in prescribed[index].block.items}
+        )
+        if block.rounds is None and index is None:
+            found.append(f"block {position}: rounds")
+        if block.rest is None and index is None:
+            found.append(f"block {position}: rest")
+        found.extend(
+            f"block {position}: {item.exercise_id}'s amount"
+            for item in block.items
+            if item.amount is None and item.exercise_id not in planned
+        )
+    return found
+
+
+def _nothing_left_out_that_nothing_prescribes(
+    connection: sqlite3.Connection, performed: PerformedWorkout
+) -> None:
+    """A null is filled from the prescription, so it needs one behind it.
+
+    A substitute, a block nobody prescribed, a workout nobody planned: there
+    is no number to fill in. Whether to ask the user or to write a reading of
+    the report marked `assumed` is the agent's call, and the refusal offers
+    both.
+    """
+    found = _left_out(connection, performed)
+    if found:
+        raise LogRejected(
+            "nothing prescribes these, so they cannot be left out:\n"
+            + "\n".join(f"  {where}" for where in found)
+            + (
+                "\nAsk the user for them."
+                if performed.workout_id is None
+                else "\nAsk the user for them, or write the number you read in "
+                "the report, marked `assumed`."
+            )
+        )
 
 
 def _nothing_assumed_the_prescription_does_not_say(
@@ -775,7 +859,7 @@ def to_performed(
     every one of those numbers says which it is.
     """
     if performed.workout_id is None:
-        return tuple(_reported(block) for block in performed.blocks)
+        return tuple(_reported(block, None) for block in performed.blocks)
 
     prescribed = workouts.prescribed(connection, performed.workout_id)
     accounted = {
@@ -790,7 +874,9 @@ def to_performed(
             matched.add(index)
             filled = _assumed_items(prescribed[index], accounted)
             accounted.update(item.exercise_id for item in filled)
-        blocks.append(_reported(reported, filled))
+        blocks.append(
+            _reported(reported, None if index is None else prescribed[index], filled)
+        )
 
     # Whatever the report never touched, in the order it was prescribed. A
     # block whose exercises turned up inside some *other* reported block is
@@ -857,33 +943,69 @@ def _paired(
 
 
 def _reported(
-    block: PerformedBlock, filled: tuple[workouts.PerformedItem, ...] = ()
+    block: PerformedBlock,
+    source: workouts.PrescribedBlock | None,
+    filled: tuple[workouts.PerformedItem, ...] = (),
 ) -> workouts.PerformedBlock:
     """One block the user talked about, with its unmentioned siblings after it.
+
+    A number the document left null is the prescribed one from `source`, the
+    block `_paired` matched it to, marked `assumed`. `validate` has refused a
+    null with nothing behind it, so reaching one here is a caller that skipped
+    it.
 
     The filled items go last rather than in the prescribed order: the reported
     ones are what the user said they did, and reading them first is reading
     the report.
     """
+    planned = (
+        {} if source is None
+        else {item.exercise_id: item for item in _assumed_items(source, set())}
+    )
+
+    def said(value: int | None, provenance: str | None, prescribed: int | None) -> tuple[int, str]:
+        if value is not None and provenance is not None:
+            return value, provenance
+        if prescribed is None:
+            raise LogRejected("a value left out has no prescription to be filled from")
+        return prescribed, "assumed"
+
+    def item_of(item: PerformedItem) -> workouts.PerformedItem:
+        if item.unit is not None and item.amount is not None and item.amount_source is not None:
+            return workouts.PerformedItem(
+                exercise_id=item.exercise_id,
+                unit=item.unit,
+                amount=item.amount,
+                amount_source=item.amount_source,
+                load_kg=item.load_kg,
+                load_kg_source=item.load_kg_source,
+            )
+        was = planned.get(item.exercise_id)
+        if was is None:
+            raise LogRejected(
+                f"{item.exercise_id}'s amount was left out and nothing prescribes it"
+            )
+        return workouts.PerformedItem(
+            exercise_id=item.exercise_id,
+            unit=was.unit,
+            amount=was.amount,
+            amount_source="assumed",
+            load_kg=item.load_kg,
+            load_kg_source=item.load_kg_source,
+        )
+
+    rounds, rounds_source = said(
+        block.rounds, block.rounds_source, None if source is None else source.block.rounds
+    )
+    rest, rest_source = said(
+        block.rest, block.rest_source, None if source is None else source.block.rest
+    )
     return workouts.PerformedBlock(
-        items=(
-            *(
-                workouts.PerformedItem(
-                    exercise_id=item.exercise_id,
-                    unit=item.unit,
-                    amount=item.amount,
-                    amount_source=item.amount_source,
-                    load_kg=item.load_kg,
-                    load_kg_source=item.load_kg_source,
-                )
-                for item in block.items
-            ),
-            *filled,
-        ),
-        rounds=block.rounds,
-        rounds_source=block.rounds_source,
-        rest=block.rest,
-        rest_source=block.rest_source,
+        items=(*(item_of(item) for item in block.items), *filled),
+        rounds=rounds,
+        rounds_source=rounds_source,
+        rest=rest,
+        rest_source=rest_source,
         rpe=block.rpe,
     )
 

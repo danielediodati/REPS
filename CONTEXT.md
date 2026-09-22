@@ -52,7 +52,7 @@ _Avoid_: cardio, which is a catalog `category`.
 
 **Report**: what the user says about a workout they performed, in their own words.
 
-**Adherence**: the assumption that anything a report does not mention was done as prescribed. It holds inside one report only.
+**Adherence**: the assumption that anything a report does not mention was done as prescribed: a block it never names, or a number inside a named block that the user did not give (ADR-0009). It holds inside one report only.
 
 **Deviation**: the difference between what was prescribed and what was done. It is all a report has to carry.
 

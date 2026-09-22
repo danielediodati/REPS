@@ -2645,7 +2645,7 @@ def test_log_reports_a_file_that_is_not_a_performed_workout_as_a_shape_error(
 
     assert result.exit_code != 0
     assert "that is not a performed workout" in result.output
-    assert "rest_source" in result.output
+    assert "blocks.0.items" in result.output
     assert "Traceback" not in result.output
 
 
@@ -2743,14 +2743,17 @@ def logged(
 
     The same seam as the planner's: `trainer log` runs the logger graph on
     whatever `models.chat` answers, which is what makes both commands one
-    thing with two prompts.
+    thing with two prompts. The document is emitted on every attempt, so a
+    refused one is refused to the end.
     """
     from langchain_core.messages import AIMessage
+
+    from trainer.coach import logger
 
     return scripted_graph(
         monkeypatch,
         turns=list(turns or [AIMessage(content="tutto chiaro")]),
-        raw=[emitted.model_dump_json()],
+        raw=[emitted.model_dump_json()] * logger.ATTEMPTS,
     )
 
 

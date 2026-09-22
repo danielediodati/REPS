@@ -53,7 +53,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from trainer import tools
 from trainer import plan as plans
-from trainer.coach import models, planner
+from trainer.coach import checkpoints, models, planner
 from trainer.coach import record as run_record
 from trainer.engine import admissible, catalog, database, duration, home, muscle_groups
 
@@ -717,7 +717,9 @@ def run(
     evening takes. The records this suite keeps are its own, under `records`.
     """
     where = records if records is not None else records_path()
-    graph = planner.build(on, budget=budget, checkpointer=InMemorySaver())
+    graph = planner.build(
+        on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared())
+    )
     return measured(
         [situation.name for situation in chosen],
         repetitions,

@@ -67,7 +67,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from trainer import evaluation, log, log_set, tools
-from trainer.coach import logger, models
+from trainer.coach import checkpoints, logger, models
 from trainer.coach import record as run_record
 from trainer.engine import database, workouts
 
@@ -379,7 +379,9 @@ def _counts(counts: dict[str, int] | None) -> str:
     return ", ".join(f"{name} {rounds}" for name, rounds in sorted(counts.items()))
 
 
-_UNWRITABLE = (log.LogError, workouts.WorkoutError, ValueError, sqlite3.Error)
+_UNWRITABLE = (
+    log.LogError, log.LogRejected, workouts.WorkoutError, ValueError, sqlite3.Error
+)
 """What a document nobody could cost comes back as.
 
 An exercise id nothing in the catalog answers to is the reachable one --
@@ -535,7 +537,7 @@ def _wrote(
     failures = []
     if record.refused is not None:
         failures.append((evaluation.VALIDATOR, record.refused))
-    difference = _difference(row.expects, record.document, where.today)
+    difference = _difference(where, row.expects, record.document)
     if difference is not None:
         failures.append((DOCUMENT, difference))
 
@@ -560,9 +562,17 @@ def _wrote(
 
 
 def _difference(
-    expected: log.PerformedWorkout, got: log.PerformedWorkout, today: str
+    where: Fixture, expected: log.PerformedWorkout, got: log.PerformedWorkout
 ) -> str | None:
-    """Field by field, and every difference rather than the first.
+    """Field by field on the workout that would be written, every difference rather than the first.
+
+    Compared after `to_performed`, so the form of the emission is not scored:
+    an untouched block written out with nothing said in it resolves to what
+    leaving it out resolves to. What is scored is every number and where it
+    came from -- a `reported` on a number nobody said is still a difference.
+
+    Blocks are matched by the exercises in them, not by position: the order
+    of a resolved workout is adherence's, reported blocks first.
 
     **Two fields are not compared by equality**, because the set says they are
     not: `proposed_exclusion.retest_date` is checked only for being after
@@ -576,26 +586,50 @@ def _difference(
         )
     if got.report != expected.report:
         said.append(f"report is not the user's own words: {got.report!r}")
-    if len(got.blocks) != len(expected.blocks):
-        said.append(
-            f"{len(got.blocks)} blocks, expected {len(expected.blocks)}"
-        )
+    try:
+        wanted = _by_exercises(log.to_performed(where.connection, expected))
+    except _UNWRITABLE as error:
+        # `verify` refuses such a set before a pass starts; this is for a
+        # caller that scores without it.
+        said.append(f"the expected document cannot be resolved: {error}")
+        return "; ".join(said)
+    try:
+        have = _by_exercises(log.to_performed(where.connection, got))
+    except _UNWRITABLE as error:
+        said.append(f"it cannot be resolved: {error}")
     else:
-        for position, (wanted, have) in enumerate(
-            zip(expected.blocks, got.blocks), start=1
-        ):
-            said.extend(f"block {position}: {why}" for why in _block(wanted, have))
-    said.extend(_exclusion(expected.proposed_exclusion, got.proposed_exclusion, today))
+        for named in wanted.keys() - have.keys():
+            said.append(f"block {named} is not in it")
+        for named in have.keys() - wanted.keys():
+            said.append(f"block {named} is in it and was not expected")
+        for named in sorted(wanted.keys() & have.keys()):
+            said.extend(
+                f"block {named}: {why}" for why in _block(wanted[named], have[named])
+            )
+    said.extend(
+        _exclusion(expected.proposed_exclusion, got.proposed_exclusion, where.today)
+    )
     return "; ".join(said) or None
 
 
-def _block(wanted: log.PerformedBlock, have: log.PerformedBlock) -> list[str]:
+def _by_exercises(
+    blocks: tuple[workouts.PerformedBlock, ...],
+) -> dict[str, workouts.PerformedBlock]:
+    """Each resolved block under the exercises in it, as a reader names it."""
+    return {
+        " + ".join(sorted(item.exercise_id for item in block.items)): block
+        for block in blocks
+    }
+
+
+def _block(
+    wanted: workouts.PerformedBlock, have: workouts.PerformedBlock
+) -> list[str]:
     """One block against another. Its exercises are compared as a set.
 
     Order inside a block carries nothing -- a superset's two exercises are
     performed together, and the order they are written in is not a claim the
-    document makes. The order of the *blocks* is compared, because two blocks
-    are a sequence and *"poi"* in a report is what puts one after the other.
+    document makes.
     """
     said = []
     for field, mine, theirs in (
@@ -610,11 +644,7 @@ def _block(wanted: log.PerformedBlock, have: log.PerformedBlock) -> list[str]:
 
     mine_items = {item.exercise_id: item for item in wanted.items}
     their_items = {item.exercise_id: item for item in have.items}
-    for missing in sorted(set(mine_items) - set(their_items)):
-        said.append(f"{missing} is not in it")
-    for extra in sorted(set(their_items) - set(mine_items)):
-        said.append(f"{extra} is in it and was not expected")
-    for exercise_id in sorted(set(mine_items) & set(their_items)):
+    for exercise_id in sorted(mine_items):
         said.extend(
             f"{exercise_id} {why}"
             for why in _item(mine_items[exercise_id], their_items[exercise_id])
@@ -622,7 +652,9 @@ def _block(wanted: log.PerformedBlock, have: log.PerformedBlock) -> list[str]:
     return said
 
 
-def _item(wanted: log.PerformedItem, have: log.PerformedItem) -> list[str]:
+def _item(
+    wanted: workouts.PerformedItem, have: workouts.PerformedItem
+) -> list[str]:
     return [
         f"{field} {theirs!r}, expected {mine!r}"
         for field, mine, theirs in (
@@ -684,7 +716,9 @@ def run(
     evenings somebody had.
     """
     into = records if records is not None else evaluation.records_path()
-    graph = logger.build(on, budget=budget, checkpointer=InMemorySaver())
+    graph = logger.build(
+        on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared())
+    )
     return evaluation.measured(
         [row.name for row in chosen],
         repetitions,

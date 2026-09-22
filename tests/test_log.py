@@ -490,6 +490,33 @@ def test_a_proposed_exclusion_that_is_neither_granularity_is_refused(
     assert "never an exercise id" in str(refused.value)
 
 
+def test_a_refused_exclusion_names_what_the_catalog_would_accept(
+    connection: sqlite3.Connection,
+) -> None:
+    """*"vertical squat"* is refused, and the refusal lists this catalog's
+    patterns and joints so whoever wrote it can pick one."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            workout_id=identifier,
+            proposed_exclusion={
+                "value": "vertical squat",
+                "retest_date": "2026-10-01",
+                "why": "il ginocchio",
+            },
+        )
+    )
+
+    with pytest.raises(log.LogRejected) as refused:
+        log.validate(connection, parsed, TODAY)
+
+    said = str(refused.value)
+    for pattern in ("squat", "vertical push", "horizontal push", "isolation"):
+        assert pattern in said
+    for joint in ("hip", "knee", "ankle", "shoulder", "elbow"):
+        assert joint in said
+
+
 def test_a_proposed_exclusion_at_either_granularity_is_accepted(
     connection: sqlite3.Connection,
 ) -> None:
@@ -752,6 +779,78 @@ def test_a_mentioned_block_keeps_its_unmentioned_sibling(
         ("Plank", 45, "assumed"),
     ]
     assert press.rounds == 2
+
+
+def test_a_value_nobody_gave_is_left_empty_and_filled_as_prescribed(
+    connection: sqlite3.Connection,
+) -> None:
+    """*"di militari solo 2 serie"*: the rounds are said, the reps and the rest
+    are not. The document leaves them null, and adherence writes the
+    prescribed ones, marked as the numbers nobody said."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(
+                item("Standing_Military_Press", unit=None, amount=None, amount_source=None),
+                rounds=2,
+                rest=None,
+                rest_source=None,
+            ),
+            workout_id=identifier,
+        )
+    )
+
+    log.validate(connection, parsed, TODAY)
+    blocks = log.to_performed(connection, parsed)
+
+    press = next(entry for entry in blocks if len(entry.items) == 2)
+    assert (press.rounds, press.rounds_source) == (2, "reported")
+    assert (press.rest, press.rest_source) == (90, "assumed")
+    assert [
+        (entry.exercise_id, entry.unit, entry.amount, entry.amount_source)
+        for entry in press.items
+    ] == [
+        ("Standing_Military_Press", "reps", 10, "assumed"),
+        ("Plank", "seconds", 45, "assumed"),
+    ]
+
+
+def test_a_value_left_empty_with_no_prescription_behind_it_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """A substitute has no prescribed line to fill from, so an empty amount on
+    it is a number nobody has -- and the refusal says to ask for it."""
+    identifier = prescribe(connection)
+    parsed = log.parse(
+        document(
+            block(
+                item("Dumbbell_Bench_Press", unit=None, amount=None, amount_source=None),
+                rest=None,
+                rest_source=None,
+            ),
+            workout_id=identifier,
+        )
+    )
+
+    with pytest.raises(log.LogRejected, match="Ask the user") as refused:
+        log.validate(connection, parsed, TODAY)
+
+    assert "Dumbbell_Bench_Press's amount" in str(refused.value)
+    assert "block 1: rest" in str(refused.value)
+
+
+def test_a_value_left_empty_with_no_workout_behind_it_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    parsed = log.parse(document(block(item("Barbell_Squat"), rounds=None, rounds_source=None)))
+
+    with pytest.raises(log.LogRejected, match="block 1: rounds"):
+        log.validate(connection, parsed, TODAY)
+
+
+def test_a_number_and_its_provenance_are_left_out_together() -> None:
+    with pytest.raises(log.LogError, match="together"):
+        log.parse(document(block(item("Barbell_Squat", amount=None))))
 
 
 def test_a_report_that_mentions_nothing_is_the_whole_workout_assumed(

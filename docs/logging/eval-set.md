@@ -39,10 +39,13 @@ agent must emit the user's own words exactly; the runner reads them off the
 blockquote rather than from a copy, because two copies of the same sentence in
 one row is one copy that can be edited without the other.
 
-**Only the deviations are written.** Adherence is the engine's job: what the
-report does not mention was performed as prescribed and is filled in by
-`log.to_performed` with a provenance of `assumed`. An expected document that
-restates the unchanged parts is wrong about what the agent should emit.
+**Only what the user said is written.** Adherence is the engine's job: a block
+the report does not mention, and a number inside a mentioned block that the
+user did not give, are left out (`null`) and filled in by `log.to_performed`
+from the prescription, with a provenance of `assumed`. A document carries
+`assumed` only where the prescription is silent (U6). The scorer compares the
+resolved workout, so writing an untouched block out with nothing said in it is
+not a failure.
 
 **Volume is rounds performed**, over the *resolved* workout — what the report
 said plus everything adherence filled in, which is what gets written and what
@@ -155,7 +158,8 @@ second candidate to vary it with.
 *Note.* "fatto come sta scritto" states no deviation at all, and logging is by
 deviation: the empty `blocks` is the whole answer, and adherence fills in all
 three prescribed blocks as `assumed`. A document that restates the prescription
-is the commonest wrong answer here.
+as `reported` is the wrong answer here; restated with nothing said in it, it
+resolves to the same workout.
 
 ### U2 — fewer rounds — P1
 
@@ -168,16 +172,11 @@ is the commonest wrong answer here.
     {
       "items": [
         {
-          "exercise_id": "Standing_Military_Press",
-          "unit": "reps",
-          "amount": 10,
-          "amount_source": "assumed"
+          "exercise_id": "Standing_Military_Press"
         }
       ],
       "rounds": 2,
-      "rounds_source": "reported",
-      "rest": 120,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": null
@@ -189,8 +188,8 @@ is the commonest wrong answer here.
 
 *Note.* "solo 2 serie" is *sets*, which in this engine are **rounds** — 2 of the
 prescribed 3, not 2 reps. "panca bene" is not a deviation and must not appear in
-the document. The 10 reps nobody mentioned are `assumed` at the prescribed
-value, which is the only value `assumed` is allowed to carry.
+the document. The 10 reps and the rest nobody mentioned are left out, and
+adherence writes the prescribed ones as `assumed`.
 
 ### U3 — more rounds — P2
 
@@ -203,16 +202,11 @@ value, which is the only value `assumed` is allowed to carry.
     {
       "items": [
         {
-          "exercise_id": "Barbell_Curl",
-          "unit": "reps",
-          "amount": 12,
-          "amount_source": "assumed"
+          "exercise_id": "Barbell_Curl"
         }
       ],
       "rounds": 4,
-      "rounds_source": "reported",
-      "rest": 60,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": null
@@ -238,17 +232,12 @@ deviation like any other.
       "items": [
         {
           "exercise_id": "Barbell_Bench_Press_-_Medium_Grip",
-          "unit": "reps",
-          "amount": 8,
-          "amount_source": "assumed",
           "load_kg": 70,
           "load_kg_source": "reported"
         }
       ],
       "rounds": 4,
-      "rounds_source": "reported",
-      "rest": 150,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": null
@@ -277,17 +266,10 @@ not part of either axis.
       "items": [
         {
           "exercise_id": "Barbell_Squat",
-          "unit": "reps",
-          "amount": 5,
-          "amount_source": "assumed",
           "load_kg": 110,
           "load_kg_source": "reported"
         }
-      ],
-      "rounds": 4,
-      "rounds_source": "assumed",
-      "rest": 180,
-      "rest_source": "assumed"
+      ]
     }
   ],
   "proposed_exclusion": null
@@ -435,16 +417,9 @@ superset. `log.flags` adds *this reports no prescribed workout*.
     {
       "items": [
         {
-          "exercise_id": "Pullups",
-          "unit": "reps",
-          "amount": 6,
-          "amount_source": "assumed"
+          "exercise_id": "Pullups"
         }
       ],
-      "rounds": 4,
-      "rounds_source": "assumed",
-      "rest": 150,
-      "rest_source": "assumed",
       "rpe": 9
     }
   ],
@@ -457,8 +432,8 @@ superset. `log.flags` adds *this reports no prescribed workout*.
 
 *Note.* "rpe 9" is volunteered, so it is recorded; it carries no `_source` and is
 never asked for. Nothing else deviated — "il resto normale" — so every other
-value on the block is the prescription's, `assumed`. RPE is not volume and moves
-no figure.
+value on the block is left out and adherence writes the prescription's. RPE is
+not volume and moves no figure.
 
 ### U10 — timed work reported in seconds — P4
 
@@ -476,11 +451,7 @@ no figure.
           "amount": 60,
           "amount_source": "reported"
         }
-      ],
-      "rounds": 3,
-      "rounds_source": "assumed",
-      "rest": 60,
-      "rest_source": "assumed"
+      ]
     }
   ],
   "proposed_exclusion": null
@@ -506,32 +477,22 @@ figure that grew with the seconds would be counting the wrong thing.
     {
       "items": [
         {
-          "exercise_id": "Barbell_Squat",
-          "unit": "reps",
-          "amount": 5,
-          "amount_source": "assumed"
+          "exercise_id": "Barbell_Squat"
         }
       ],
       "rounds": 3,
-      "rounds_source": "reported",
-      "rest": 180,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     },
     {
       "items": [
         {
           "exercise_id": "Romanian_Deadlift",
-          "unit": "reps",
-          "amount": 8,
-          "amount_source": "assumed",
           "load_kg": 60,
           "load_kg_source": "reported"
         }
       ],
       "rounds": 3,
-      "rounds_source": "reported",
-      "rest": 120,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": null
@@ -562,11 +523,7 @@ never mentioned and come back whole and `assumed`.
           "amount": 8,
           "amount_source": "reported"
         }
-      ],
-      "rounds": 3,
-      "rounds_source": "assumed",
-      "rest": 60,
-      "rest_source": "assumed"
+      ]
     }
   ],
   "proposed_exclusion": null
@@ -594,16 +551,11 @@ prescribed one.
     {
       "items": [
         {
-          "exercise_id": "Barbell_Bench_Press_-_Medium_Grip",
-          "unit": "reps",
-          "amount": 8,
-          "amount_source": "assumed"
+          "exercise_id": "Barbell_Bench_Press_-_Medium_Grip"
         }
       ],
       "rounds": 2,
-      "rounds_source": "reported",
-      "rest": 150,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": {
@@ -634,16 +586,11 @@ id. "solo 2 serie" is the training deviation, separate from the exclusion.
     {
       "items": [
         {
-          "exercise_id": "Standing_Military_Press",
-          "unit": "reps",
-          "amount": 10,
-          "amount_source": "assumed"
+          "exercise_id": "Standing_Military_Press"
         }
       ],
       "rounds": 1,
-      "rounds_source": "reported",
-      "rest": 120,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": {
@@ -674,16 +621,11 @@ granularity is read off the sentence rather than defaulted to one of the two.
     {
       "items": [
         {
-          "exercise_id": "Barbell_Squat",
-          "unit": "reps",
-          "amount": 5,
-          "amount_source": "assumed"
+          "exercise_id": "Barbell_Squat"
         }
       ],
       "rounds": 2,
-      "rounds_source": "reported",
-      "rest": 180,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": {
@@ -714,16 +656,11 @@ a deviation, so neither appears in the document.
     {
       "items": [
         {
-          "exercise_id": "Romanian_Deadlift",
-          "unit": "reps",
-          "amount": 8,
-          "amount_source": "assumed"
+          "exercise_id": "Romanian_Deadlift"
         }
       ],
       "rounds": 1,
-      "rounds_source": "reported",
-      "rest": 120,
-      "rest_source": "assumed"
+      "rounds_source": "reported"
     }
   ],
   "proposed_exclusion": {
@@ -761,11 +698,7 @@ excluding the pattern the deadlift happens to belong to.
           "load_kg": 30,
           "load_kg_source": "reported"
         }
-      ],
-      "rounds": 3,
-      "rounds_source": "assumed",
-      "rest": 90,
-      "rest_source": "assumed"
+      ]
     }
   ],
   "proposed_exclusion": null
@@ -790,14 +723,9 @@ rounds and not a total to be divided. Both numbers are the user's, so both are
     {
       "items": [
         {
-          "exercise_id": "Barbell_Squat",
-          "unit": "reps",
-          "amount": 5,
-          "amount_source": "assumed"
+          "exercise_id": "Barbell_Squat"
         }
       ],
-      "rounds": 4,
-      "rounds_source": "assumed",
       "rest": 240,
       "rest_source": "reported"
     }
