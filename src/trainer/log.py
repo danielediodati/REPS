@@ -45,7 +45,7 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -140,6 +140,19 @@ class PerformedItem(BaseModel):
     )
     load_kg_source: Provenance | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _nothing_said_about_a_number_nobody_gave(cls, raw: Any) -> Any:
+        """A unit or a provenance beside a null number claims nothing, so it is dropped.
+
+        Constrained decoding lets each field be null on its own; a model that
+        leaves `unit` beside a null amount has said nothing, and refusing it
+        sent a local model round the same refusal three times.
+        """
+        return _without_companions(
+            raw, (("amount", ("unit", "amount_source")), ("load_kg", ("load_kg_source",)))
+        )
+
     @model_validator(mode="after")
     def _each_number_with_its_source(self) -> PerformedItem:
         if (self.load_kg is None) != (self.load_kg_source is None):
@@ -198,6 +211,14 @@ class PerformedBlock(BaseModel):
         ),
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _nothing_said_about_a_number_nobody_gave(cls, raw: Any) -> Any:
+        """A provenance beside a null number claims nothing, so it is dropped."""
+        return _without_companions(
+            raw, (("rounds", ("rounds_source",)), ("rest", ("rest_source",)))
+        )
+
     @model_validator(mode="after")
     def _each_number_with_its_source(self) -> PerformedBlock:
         for name, value, source in (
@@ -209,6 +230,21 @@ class PerformedBlock(BaseModel):
                     f"{name} and its provenance are written together or not at all"
                 )
         return self
+
+
+def _without_companions(
+    raw: Any, pairs: tuple[tuple[str, tuple[str, ...]], ...]
+) -> Any:
+    """`raw` with the companions of every null number cleared."""
+    if not isinstance(raw, dict):
+        return raw
+    cleared = dict(raw)
+    for number, companions in pairs:
+        if cleared.get(number) is None:
+            for companion in companions:
+                if companion in cleared:
+                    cleared[companion] = None
+    return cleared
 
 
 class ProposedExclusion(BaseModel):

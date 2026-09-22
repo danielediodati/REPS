@@ -47,8 +47,8 @@ Not in scope: the asking half (A rows) beyond what the prompt rewrite does; the 
 - [x] A refused exclusion names the catalog's patterns and joints, and a test reads them from a fixture catalog rather than from a list.
 - [x] `trainer eval --suite log` refuses to start if `verify` fails; the rewritten set passes it.
 - [x] The 2026-09-21 records of U1, U2 and U9 that failed on form alone would be scored as held by the new `_difference`: checked by rescoring them, not by reading the code.
-- [ ] `trainer eval --suite log --only U1 U2 U9 U15 A8` on Ollama, run and the number written in 05 next to the first pass.
-- [ ] The checkpoint warning is gone from that pass.
+- [x] `trainer eval --suite log --only U1 U2 U9 U15 A8` on Ollama, run and the number written in 05 next to the first pass.
+- [x] The checkpoint warning is gone from that pass.
 - [x] Full test suite and mypy green.
 
 ## Comments
@@ -56,3 +56,5 @@ Not in scope: the asking half (A rows) beyond what the prompt rewrite does; the 
 - Rescored with the new `_difference`, the 50 valid determined runs of the 2026-09-21 pass hold **12** (7 before). U1 3/3, U2-3 and U9-3 now hold; U2-1 and U2-2 still fail, correctly: they mark 10 reps nobody said as `reported`.
 - The checkpoint warning came from the evals' `InMemorySaver()` on LangGraph's default serializer; both evals now use `checkpoints.Declared`, as the bot does.
 - `/code-review`: one finding, the expected document resolved unguarded in `_difference`; guarded, with a test.
+- The targeted pass held 3 of 15. Five runs never produced a document: the model left `unit` or a source beside a null number, the shape refused it, and it repeated the same thing three times. A companion of a null number is now dropped rather than refused.
+- The rest failed on provenance: U9 3/3, U2-3 and U15 wrote every number of a block they touched as `reported`, where the contract now lets them leave it null. Whether that is `gpt-oss:20b` or the contract is what the same five rows on Groq separate.

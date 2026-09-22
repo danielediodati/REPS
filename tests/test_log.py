@@ -848,9 +848,29 @@ def test_a_value_left_empty_with_no_workout_behind_it_is_refused(
         log.validate(connection, parsed, TODAY)
 
 
-def test_a_number_and_its_provenance_are_left_out_together() -> None:
+def test_a_provenance_without_its_number_is_ignored_not_refused() -> None:
+    """Constrained decoding lets each field be null on its own, and a local
+    model left `unit` and `amount_source` beside a null amount on three
+    attempts running. With no number there is no claim, so there is nothing
+    to refuse."""
+    parsed = log.parse(
+        document(
+            block(
+                item("Barbell_Squat", amount=None, load_kg=None, load_kg_source="reported"),
+                rest=None,
+            )
+        )
+    )
+
+    (said,) = parsed.blocks[0].items
+    assert (said.unit, said.amount, said.amount_source) == (None, None, None)
+    assert said.load_kg_source is None
+    assert (parsed.blocks[0].rest, parsed.blocks[0].rest_source) == (None, None)
+
+
+def test_a_number_without_its_provenance_is_refused() -> None:
     with pytest.raises(log.LogError, match="together"):
-        log.parse(document(block(item("Barbell_Squat", amount=None))))
+        log.parse(document(block(item("Barbell_Squat", amount_source=None))))
 
 
 def test_a_report_that_mentions_nothing_is_the_whole_workout_assumed(
