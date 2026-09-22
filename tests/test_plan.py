@@ -7,6 +7,7 @@ is an agent to come out of it.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -950,3 +951,87 @@ def test_only_one_place_in_the_code_assembles_a_request() -> None:
 
     assert building <= allowed, sorted(str(m) for m in building - allowed)
 
+
+
+# -- a mesocycle: a workout for each slot, checked as that slot ---------------
+
+
+def squat_day() -> dict[str, Any]:
+    return {"blocks": [block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}})]}
+
+
+def press_day() -> dict[str, Any]:
+    return {
+        "blocks": [
+            block({"exercise_id": "Standing_Military_Press", "prescription": {"unit": "reps", "amount": 8}})
+        ]
+    }
+
+
+def mesocycle(*workouts: dict[str, Any], cycles: int = 4, why: str = "four cycles to settle the loads") -> str:
+    return json.dumps({"workouts": list(workouts), "cycles": cycles, "why": why})
+
+
+def test_a_mesocycle_is_asked_as_one_request_per_slot(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    asked = plans.mesocycle_requested(connection, TODAY)
+
+    assert [slot.groups for slot in asked.slots] == [("legs",), ("shoulders",)]
+    assert {slot.budget_min for slot in asked.slots} == {45}
+
+
+def test_a_mesocycle_that_fits_every_slot_breaks_nothing(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    asked = plans.mesocycle_requested(connection, TODAY)
+    parsed = plans.parse_mesocycle(mesocycle(squat_day(), press_day()))
+
+    assert plans.validate_mesocycle(connection, parsed, asked) == ()
+
+
+def test_a_workout_that_breaks_a_rule_is_named_by_its_slot(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """The press is admissible for shoulders and not for legs: the same
+    workout is right in one slot and wrong in the other."""
+    asked = plans.mesocycle_requested(connection, TODAY)
+    parsed = plans.parse_mesocycle(mesocycle(press_day(), press_day()))
+
+    violations = plans.validate_mesocycle(connection, parsed, asked)
+
+    assert violations
+    assert all(violation.says.startswith("workout 1: ") for violation in violations)
+
+
+def test_a_mesocycle_is_one_workout_per_slot(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    asked = plans.mesocycle_requested(connection, TODAY)
+    parsed = plans.parse_mesocycle(mesocycle(squat_day()))
+
+    (violation,) = plans.validate_mesocycle(connection, parsed, asked)
+
+    assert "1 workout" in violation.says and "2" in violation.says
+
+
+@pytest.mark.parametrize(
+    ("cycles", "why", "field"), [(0, "because", "cycles"), (4, "   ", "why")]
+)
+def test_a_mesocycle_says_how_long_and_why(cycles: int, why: str, field: str) -> None:
+    with pytest.raises(plans.PlanError, match=field):
+        plans.parse_mesocycle(mesocycle(squat_day(), cycles=cycles, why=why))
+
+
+def test_a_mesocycle_already_turned_down_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    parsed = plans.parse_mesocycle(mesocycle(squat_day(), press_day()))
+    asked = plans.mesocycle_requested(connection, TODAY)
+    asked = dataclasses.replace(
+        asked, refusals=plans.mesocycle_turned_down(asked.refusals, parsed, "no")
+    )
+
+    (violation,) = plans.validate_mesocycle(connection, parsed, asked)
+
+    assert violation.rule == plans.REFUSED

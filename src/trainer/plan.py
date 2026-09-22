@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from trainer.engine import admissible, budget, catalog, config, constraints, duration
 from trainer.engine import exclusions as exclusion_state
@@ -45,6 +45,7 @@ ADMISSIBLE = "admissible"
 BUDGET = "budget"
 PREFERENCES = "preferences"
 REFUSED = "refused"
+SLOTS = "slots"
 
 
 # -- the shape ----------------------------------------------------------------
@@ -175,6 +176,28 @@ class WorkoutPlan(BaseModel):
     """
 
 
+class Mesocycle(BaseModel):
+    """A workout for each slot of the cycle, how many cycles it is repeated for, and why (ADR-0008)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workouts: list[WorkoutPlan] = Field(
+        min_length=1,
+        description="One workout per slot of the cycle, in the split's order.",
+    )
+    cycles: int = Field(ge=1, description="How many times the whole cycle is repeated.")
+    why: str = Field(
+        min_length=1, description="Why this many cycles, in one sentence."
+    )
+
+    @field_validator("why")
+    @classmethod
+    def _said(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("why is blank; say why this many cycles")
+        return value
+
+
 @dataclass(frozen=True)
 class Refusal:
     """A plan the user turned down, and what they said turning it down.
@@ -240,6 +263,37 @@ class Request:
     refusals: tuple[Refusal, ...] = ()
     """Every plan this negotiation has already turned down, oldest first. The
     new one has to differ from each of them; how is the agent's business."""
+
+
+@dataclass(frozen=True)
+class MesocycleRefusal:
+    """A mesocycle the user turned down: the newest whole, earlier ones as their ids per slot."""
+
+    because: str
+    exercise_ids: tuple[tuple[str, ...], ...]
+    mesocycle: Mesocycle | None = None
+
+
+@dataclass(frozen=True)
+class MesocycleRequest:
+    """One `Request` per slot of the cycle, in the split's order, and what the negotiation turned down."""
+
+    slots: tuple[Request, ...]
+    refusals: tuple[MesocycleRefusal, ...] = ()
+
+
+def mesocycle_turned_down(
+    refusals: Sequence[MesocycleRefusal], mesocycle: Mesocycle, because: str
+) -> tuple[MesocycleRefusal, ...]:
+    """The negotiation's refusals with this one on the end, the earlier ones narrowed to their ids."""
+    return (
+        *(dataclasses.replace(refusal, mesocycle=None) for refusal in refusals),
+        MesocycleRefusal(
+            because=because,
+            exercise_ids=tuple(exercise_ids(workout) for workout in mesocycle.workouts),
+            mesocycle=mesocycle,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -336,6 +390,25 @@ def requested(
             preferences=_preferred(connection, asked.avoid),
         ),
         rotation=turn.where,
+    )
+
+
+def mesocycle_requested(
+    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
+) -> MesocycleRequest:
+    """One request per slot, each the one that slot would get asked on its own.
+
+    A mesocycle needs the split, so with no `training.toml` that is the state
+    reported, naming the example file.
+    """
+    declared = config.load()
+    return MesocycleRequest(
+        slots=tuple(
+            requested(
+                connection, today, dataclasses.replace(asked, workout=slot, groups=())
+            ).request
+            for slot in range(1, declared.cycle_length + 1)
+        )
     )
 
 
@@ -481,6 +554,18 @@ def parse(text: str) -> WorkoutPlan:
         raise PlanError(_shape(error)) from error
 
 
+def parse_mesocycle(text: str) -> Mesocycle:
+    """A mesocycle out of JSON, or a shape error naming the field it choked on."""
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise PlanError(f"that is not JSON: {error}") from error
+    try:
+        return Mesocycle.model_validate(raw)
+    except ValidationError as error:
+        raise PlanError(_shape(error).replace("a plan", "a mesocycle", 1)) from error
+
+
 def _shape(error: ValidationError) -> str:
     lines = ["that is not a plan:"]
     for problem in error.errors():
@@ -560,6 +645,56 @@ def validate(
         )
         if broken is not None
     )
+    return tuple(found)
+
+
+def validate_mesocycle(
+    connection: sqlite3.Connection, mesocycle: Mesocycle, request: MesocycleRequest
+) -> tuple[Violation, ...]:
+    """Every rule the mesocycle breaks: each workout against its own slot, then the whole.
+
+    A workout is checked as the plan for its slot would be (`validate`), and
+    its violations say which slot. Across the mesocycle only the count of
+    workouts and a refusal already made; how many cycles and why is the
+    agent's, and the shape already refuses none and a blank reason (ADR-0001).
+    """
+    wanted, given = len(request.slots), len(mesocycle.workouts)
+    if given != wanted:
+        return (
+            Violation(
+                SLOTS,
+                f"the mesocycle has {given} workout{'s' if given != 1 else ''} and "
+                f"the cycle has {wanted} slots: one workout per slot, in the "
+                "split's order",
+            ),
+        )
+    found: list[Violation] = []
+    for slot, (workout, asked) in enumerate(zip(mesocycle.workouts, request.slots), start=1):
+        try:
+            broken = validate(connection, to_blocks(workout), asked, workout)
+        except PlanError as error:
+            broken = (Violation(SHAPE, str(error)),)
+        found.extend(
+            Violation(violation.rule, f"workout {slot}: {violation.says}")
+            for violation in broken
+        )
+    for refused in request.refusals:
+        same = (
+            mesocycle == refused.mesocycle
+            if refused.mesocycle is not None
+            else tuple(exercise_ids(workout) for workout in mesocycle.workouts)
+            == refused.exercise_ids
+        )
+        if same:
+            found.append(
+                Violation(
+                    REFUSED,
+                    "this is a mesocycle the user has already turned down. "
+                    "Propose a different one: they said no, and saying it "
+                    "again is not an answer",
+                )
+            )
+            break
     return tuple(found)
 
 
