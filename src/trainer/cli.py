@@ -719,7 +719,7 @@ def _plan_suite(
     to find out.
     """
     chosen = _chosen(evaluation.situations(connection), only, "situation")
-    on = models.chat()
+    on = models.planner()
     models.ready(on)
     with evaluation.pointed_at_the_database(), memory.sampling(on) as sampled:
         report = evaluation.run(
@@ -758,7 +758,7 @@ def _log_suite(
     chosen = _chosen(holds.rows, only, "report")
     with log_evaluation.prepared(connection, holds) as where:
         _refuse(log_evaluation.verify(where, holds))
-        on = models.chat()
+        on = models.logger()
         models.ready(on)
         report = log_evaluation.run(
             where,
@@ -846,12 +846,14 @@ def bot_command() -> None:
         # file rather than in whatever terminal happened to be attached.
         log_file = logfile.start((bot.TOKEN_ENV, bot.OWNER_ENV))
         declared = bot.settings()
-        on = models.chat()
+        on = models.planner()
         models.ready(on)
         context = models.context_length(on)
-        # Both models, because both are asked for on the first message: the
-        # entrance answers the turn and the subgraph does the work, and a
-        # model nobody pulled is knowable now rather than mid-conversation.
+        # Every model, because every one is asked for in the conversation: the
+        # entrance answers the turn and a subgraph does the work, and a model
+        # nobody pulled is knowable now rather than mid-conversation.
+        logs = models.logger()
+        models.ready(logs)
         front = models.entrance()
         models.ready(front)
         name = bot.identified(declared)
@@ -862,6 +864,7 @@ def bot_command() -> None:
         with checkpoints.saver() as saver:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.name}")
+            click.echo(f"logger:      {logs.name}")
             click.echo(f"entrance:    {front.name} on {front.provider}")
             click.echo(
                 f"context:     {context} tokens"
@@ -880,7 +883,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, front, on, saver)
+            bot.serve(declared, front, on, logs, saver)
 
 
 @main.group("runs")
@@ -1528,7 +1531,7 @@ def _ran(
     record_path: Path | None,
 ) -> tuple[plan.WorkoutPlan | plan.Mesocycle, dict[str, Any]]:
     """The planner graph run once and resumed as accepted, and the run's record."""
-    on = models.chat()
+    on = models.planner()
     models.ready(on)
     with checkpoints.saver() as saver:
         archive = run_record.archive()
@@ -1735,7 +1738,7 @@ def _read(
     is raised: it is what you open to find out why the model emitted what it
     did, and a refusal is exactly the case you want it for.
     """
-    on = models.chat()
+    on = models.logger()
     models.ready(on)
     if not said:
         said = str(click.prompt("What did you do", type=str))

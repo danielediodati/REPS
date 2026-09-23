@@ -3463,7 +3463,7 @@ def healthy_bot(
     monkeypatch.setattr(Bot, "get_me", known)
     polled: list[object] = []
     monkeypatch.setattr(
-        bot, "serve", lambda declared, front, on, saver: polled.append(declared)
+        bot, "serve", lambda declared, front, on, logs, saver: polled.append(declared)
     )
     return polled
 

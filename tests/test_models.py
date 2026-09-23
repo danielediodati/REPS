@@ -409,3 +409,196 @@ def test_a_limit_per_minute_is_not_the_day_running_out() -> None:
 
 def test_any_other_failure_is_not_a_spent_quota() -> None:
     assert models.spent(ConnectionError("the server went away")) is None
+
+
+# -- OpenRouter ----------------------------------------------------------------
+
+
+def routing(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
+    """What OpenRouter answers when asked for its models, without a network."""
+    monkeypatch.setattr(models, "openrouter_models", lambda key: set(names))
+
+
+def openrouter_chat(name: str) -> models.Chat:
+    return models.Chat(cast(BaseChatModel, object()), models.OPENROUTER, name)
+
+
+def test_the_openrouter_chat_says_which_provider_and_model_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "openrouter")
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.OPENROUTER_MODEL_ENV, "anthropic/claude-haiku-4.5")
+
+    chat = models.chat()
+
+    assert chat.provider == models.OPENROUTER
+    assert chat.name == "anthropic/claude-haiku-4.5"
+    assert chat.setting == models.OPENROUTER_MODEL_ENV
+
+
+def test_openrouter_is_asked_only_for_hosts_that_honour_the_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that ignores `response_format` would make the strict schema a suggestion."""
+    monkeypatch.setenv(models.BACKEND_ENV, "openrouter")
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+
+    built = cast(Any, models.chat().model)
+
+    assert built.openai_api_base == models.OPENROUTER_URL
+    assert built.extra_body == {"provider": {"require_parameters": True}}
+
+
+def test_openrouter_with_no_key_is_a_state_with_the_way_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "openrouter")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.chat()
+
+    assert models.OPENROUTER_KEY_ENV in str(raised.value)
+    assert ".env" in str(raised.value)
+
+
+def test_the_entrance_can_talk_on_openrouter_while_the_planner_stays_local(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.ENTRANCE_BACKEND_ENV, "openrouter")
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+    monkeypatch.delenv(models.ENTRANCE_MODEL_ENV, raising=False)
+
+    front = models.entrance()
+
+    assert front.provider == models.OPENROUTER
+    assert front.name == models.DEFAULT_OPENROUTER_MODEL
+    assert models.chat().provider == models.OLLAMA
+
+
+def test_a_model_openrouter_does_not_route_to_names_the_line_that_chose_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routing(monkeypatch, models.DEFAULT_OPENROUTER_MODEL)
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+    chat = models.Chat(
+        cast(BaseChatModel, object()),
+        models.OPENROUTER,
+        "a/model-nobody-routes",
+        models.ENTRANCE_MODEL_ENV,
+    )
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(chat)
+
+    said = str(raised.value)
+    assert "a/model-nobody-routes" in said
+    assert models.ENTRANCE_MODEL_ENV in said
+    assert models.DEFAULT_OPENROUTER_MODEL in said
+    assert said.isascii()
+
+
+def test_a_model_openrouter_routes_to_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routing(monkeypatch, models.DEFAULT_OPENROUTER_MODEL)
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+
+    models.ready(openrouter_chat(models.DEFAULT_OPENROUTER_MODEL))
+
+
+def test_an_unreachable_openrouter_is_a_state_naming_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def offline(key: str) -> set[str]:
+        raise ConnectionError("no route to host")
+
+    monkeypatch.setattr(models, "openrouter_models", offline)
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(openrouter_chat(models.DEFAULT_OPENROUTER_MODEL))
+
+    assert "OpenRouter cannot be reached" in str(raised.value)
+
+
+def test_openrouter_out_of_credits_is_a_spent_quota() -> None:
+    """A paid key does not run out by the day; it runs out of credit, answered 402."""
+    import httpx2
+    import openai
+
+    response = httpx2.Response(
+        402, request=httpx2.Request("POST", models.OPENROUTER_URL + "/chat/completions")
+    )
+    refused = openai.APIStatusError(
+        "Insufficient credits", response=response, body=None
+    )
+
+    spent = models.spent(refused)
+
+    assert spent is not None
+    assert "credits" in str(spent)
+    assert str(spent).isascii()
+
+
+# -- a model per subgraph ------------------------------------------------------
+
+
+def test_each_subgraph_takes_the_model_its_own_variable_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, "openrouter")
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.PLANNER_MODEL_ENV, "openai/gpt-oss-120b")
+    monkeypatch.setenv(models.LOGGER_MODEL_ENV, "anthropic/claude-haiku-4.5")
+
+    planner, logger = models.planner(), models.logger()
+
+    assert (planner.name, planner.setting) == (
+        "openai/gpt-oss-120b",
+        models.PLANNER_MODEL_ENV,
+    )
+    assert (logger.name, logger.setting) == (
+        "anthropic/claude-haiku-4.5",
+        models.LOGGER_MODEL_ENV,
+    )
+    assert planner.provider == logger.provider == models.OPENROUTER
+
+
+def test_a_subgraph_that_names_no_model_runs_on_the_coachs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One variable still moves both, for an installation that set neither."""
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.GROQ_MODEL_ENV, "openai/gpt-oss-20b")
+    monkeypatch.delenv(models.PLANNER_MODEL_ENV, raising=False)
+    monkeypatch.delenv(models.LOGGER_MODEL_ENV, raising=False)
+
+    for chat in (models.planner(), models.logger()):
+        assert (chat.name, chat.setting) == ("openai/gpt-oss-20b", models.GROQ_MODEL_ENV)
+
+
+def test_a_subgraph_model_groq_does_not_serve_names_its_own_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    serving(monkeypatch, models.DEFAULT_GROQ_MODEL)
+    monkeypatch.setenv(models.BACKEND_ENV, "groq")
+    monkeypatch.setenv(models.API_KEY_ENV, "a-stand-in")
+    monkeypatch.setenv(models.LOGGER_MODEL_ENV, "a/model-nobody-serves")
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(models.logger())
+
+    assert models.LOGGER_MODEL_ENV in str(raised.value)
+
+
+def test_a_local_subgraph_model_is_asked_to_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the entrance talks without reasoning; both subgraphs plan or extract."""
+    monkeypatch.setenv(models.BACKEND_ENV, "ollama")
+    monkeypatch.setenv(models.PLANNER_MODEL_ENV, "gpt-oss:120b")
+
+    assert cast(Any, models.planner().model).reasoning == models.REASONING

@@ -71,10 +71,13 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 |---|---|
 | `ollama` (default) | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
+| `openrouter` | `OPENROUTER_API_KEY`. `OPENROUTER_MODEL` overrides the default, `qwen/qwen3.8-27b`. |
+
+`PLANNER_MODEL` and `LOGGER_MODEL` give each subgraph a model of its own on that provider; empty, both run on the provider's model.
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
-**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Both models are checked before the bot starts.
+**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq, `OPENROUTER_MODEL`'s on OpenRouter — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Both models are checked before the bot starts.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 

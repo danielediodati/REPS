@@ -8,9 +8,11 @@ from dataclasses import dataclass
 
 import groq
 import ollama
+import openai
 from langchain_core.language_models import BaseChatModel
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 BACKEND_ENV = "LLM_BACKEND"
@@ -21,6 +23,10 @@ BASE_URL_ENV = "OLLAMA_BASE_URL"
 GROQ_MODEL_ENV = "GROQ_MODEL"
 API_KEY_ENV = "GROQ_API_KEY"
 MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
+
+OPENROUTER_MODEL_ENV = "OPENROUTER_MODEL"
+OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
 ENTRANCE_BACKEND_ENV = "ENTRANCE_BACKEND"
 ENTRANCE_MODEL_ENV = "ENTRANCE_MODEL"
@@ -33,9 +39,17 @@ points the planner at Groq. Either of them empty falls back to what the coach
 runs on, so a fresh clone still has one provider to think about.
 """
 
+PLANNER_MODEL_ENV = "PLANNER_MODEL"
+LOGGER_MODEL_ENV = "LOGGER_MODEL"
+"""Each subgraph's own model, on the provider `LLM_BACKEND` names.
+
+Empty falls back to that provider's model, so one variable still moves both.
+"""
+
 OLLAMA = "ollama"
 GROQ = "groq"
-BACKENDS = (OLLAMA, GROQ)
+OPENROUTER = "openrouter"
+BACKENDS = (OLLAMA, GROQ, OPENROUTER)
 """What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
 
 DEFAULT_MODEL = "gpt-oss:20b"
@@ -72,6 +86,13 @@ about 5600 the request is refused whole -- 8000 tokens per minute, input
 included. A default that only works on a paid tier is not a default.
 """
 
+DEFAULT_OPENROUTER_MODEL = "qwen/qwen3.8-27b"
+"""The OpenRouter model, when `OPENROUTER_MODEL` does not name one.
+
+Groq's default, so moving provider holds the model fixed and an eval run
+measures the provider and nothing else.
+"""
+
 DEFAULT_MAX_TOKENS = 1000
 """How much the model may write in one turn, by default.
 
@@ -98,6 +119,11 @@ Left to the SDK this arrives as a 401 after a network round-trip, or as a
 connection error on a machine that is offline -- neither of which names the
 thing that is actually missing.
 """
+
+NO_OPENROUTER_CREDENTIALS = (
+    f"no OpenRouter credentials: set {OPENROUTER_KEY_ENV} in .env (copy "
+    ".env.example) or in the environment"
+)
 
 REASONING = "low"
 """How hard `gpt-oss` reasons before it answers.
@@ -132,6 +158,11 @@ def spent(error: BaseException) -> QuotaSpent | None:
     """
     if isinstance(error, QuotaSpent):
         return error
+    if isinstance(error, openai.APIStatusError) and error.status_code == 402:
+        return QuotaSpent(
+            "OpenRouter's credits are spent; top up at "
+            "https://openrouter.ai/settings/credits"
+        )
     said = str(error)
     if not isinstance(error, groq.RateLimitError) or not _PER_DAY.search(said):
         return None
@@ -188,10 +219,39 @@ def _built(variable: str, named: str) -> str:
 
 
 def chat() -> Chat:
-    """The chat model the environment names, on either provider."""
+    """The chat model the environment names, on whichever provider it names."""
     if backend() == GROQ:
         return Chat(groq_model(), GROQ, groq_model_name(), GROQ_MODEL_ENV)
+    if backend() == OPENROUTER:
+        return Chat(
+            openrouter_model(),
+            OPENROUTER,
+            openrouter_model_name(),
+            OPENROUTER_MODEL_ENV,
+        )
     return Chat(ollama_model(), OLLAMA, model_name(), MODEL_ENV)
+
+
+def planner() -> Chat:
+    """The model the planner reasons on: `PLANNER_MODEL`, or the coach's."""
+    return _subgraph(PLANNER_MODEL_ENV)
+
+
+def logger() -> Chat:
+    """The model the logger extracts on: `LOGGER_MODEL`, or the coach's."""
+    return _subgraph(LOGGER_MODEL_ENV)
+
+
+def _subgraph(setting: str) -> Chat:
+    named = os.environ.get(setting)
+    if not named:
+        return chat()
+    on = backend()
+    if on == GROQ:
+        return Chat(groq_model(named), GROQ, named, setting)
+    if on == OPENROUTER:
+        return Chat(openrouter_model(named), OPENROUTER, named, setting)
+    return Chat(ollama_model(named), OLLAMA, named, setting)
 
 
 def entrance() -> Chat:
@@ -205,6 +265,9 @@ def entrance() -> Chat:
     if entrance_backend() == GROQ:
         named = os.environ.get(ENTRANCE_MODEL_ENV) or groq_model_name()
         return Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
+    if entrance_backend() == OPENROUTER:
+        named = os.environ.get(ENTRANCE_MODEL_ENV) or openrouter_model_name()
+        return Chat(openrouter_model(named), OPENROUTER, named, ENTRANCE_MODEL_ENV)
     named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
     return Chat(
         ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV
@@ -219,6 +282,11 @@ def model_name() -> str:
 def groq_model_name() -> str:
     """The Groq model the environment names."""
     return os.environ.get(GROQ_MODEL_ENV) or DEFAULT_GROQ_MODEL
+
+
+def openrouter_model_name() -> str:
+    """The OpenRouter model the environment names."""
+    return os.environ.get(OPENROUTER_MODEL_ENV) or DEFAULT_OPENROUTER_MODEL
 
 
 def max_tokens() -> int:
@@ -272,6 +340,22 @@ def groq_model(named: str | None = None) -> ChatGroq:
     )
 
 
+def openrouter_model(named: str | None = None) -> ChatOpenAI:
+    """The OpenRouter chat model the environment names, or another it routes to."""
+    key = os.environ.get(OPENROUTER_KEY_ENV)
+    if not key:
+        raise ModelError(NO_OPENROUTER_CREDENTIALS)
+    return ChatOpenAI(
+        model=named or openrouter_model_name(),
+        api_key=SecretStr(key),
+        base_url=OPENROUTER_URL,
+        # Routed only to hosts that honour every parameter sent. Without it a
+        # host that ignores `response_format` can serve the emission, and the
+        # strict schema is a suggestion again.
+        extra_body={"provider": {"require_parameters": True}},
+    )
+
+
 def ready(on: Chat) -> None:
     """Stop with the fix when the provider cannot answer the run that is about to start.
 
@@ -283,6 +367,9 @@ def ready(on: Chat) -> None:
     """
     if on.provider == GROQ:
         _groq_ready(on)
+        return
+    if on.provider == OPENROUTER:
+        _openrouter_ready(on)
         return
     if on.provider != OLLAMA:
         # A provider nobody built has no state of its own to be in. Written as
@@ -334,6 +421,31 @@ def _groq_ready(on: Chat) -> None:
             f"Groq does not serve {on.name}; set {on.setting or GROQ_MODEL_ENV} to "
             f"{DEFAULT_GROQ_MODEL}, or leave it empty for the same, or pick "
             f"another of: {', '.join(sorted(served))}"
+        )
+
+
+def openrouter_models(key: str) -> set[str]:
+    """Every model OpenRouter routes to, as it names them; the seam the suite stands in for."""
+    listed = openai.OpenAI(api_key=key, base_url=OPENROUTER_URL).models.list()
+    return {model.id for model in listed.data}
+
+
+def _openrouter_ready(on: Chat) -> None:
+    """The model OpenRouter routes to under that name, or the state that says it does not."""
+    key = os.environ.get(OPENROUTER_KEY_ENV)
+    if not key:
+        raise ModelError(NO_OPENROUTER_CREDENTIALS)
+    try:
+        served = openrouter_models(key)
+    except Exception as error:
+        raise ModelError(f"OpenRouter cannot be reached ({error})") from error
+    if on.name not in served:
+        # Hundreds of names, so the page is the way out rather than the list.
+        raise ModelError(
+            f"OpenRouter does not route to {on.name}; set "
+            f"{on.setting or OPENROUTER_MODEL_ENV} to one listed at "
+            f"https://openrouter.ai/models, or leave it empty for "
+            f"{DEFAULT_OPENROUTER_MODEL}"
         )
 
 

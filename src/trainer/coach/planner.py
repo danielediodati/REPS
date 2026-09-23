@@ -867,4 +867,4 @@ def studio() -> Planner:
     whose runs `trainer runs` cannot read -- while debugging the graph, which
     is the only reason to be in Studio at all.
     """
-    return build(models.chat(), archive=records.archive())
+    return build(models.planner(), archive=records.archive())

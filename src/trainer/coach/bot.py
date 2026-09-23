@@ -1383,19 +1383,20 @@ def _drafting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Draft:
 def graphs(
     front: models.Chat,
     on: models.Chat,
+    logs: models.Chat,
     saver: BaseCheckpointSaver[Any],
     archive: Path,
 ) -> Graphs:
     """The three graphs, each on the model that answers it (ADR-0006, item 3).
 
-    `front` is the entrance's and `on` is the one `LLM_BACKEND` names, which
-    both subgraphs keep: the entrance is the node latency is felt on and the
-    planner is the one that has to reason.
+    `front` is the entrance's, `on` the planner's and `logs` the logger's: the
+    entrance is the node latency is felt on, the planner is the one that has
+    to reason, and the logger the one that has to extract.
     """
     return Graphs(
         entrance=entrance.build(front, checkpointer=saver, archive=archive),
         planner=planner.build(on, checkpointer=saver, archive=archive),
-        logger=logger_graph.build(on, checkpointer=saver, archive=archive),
+        logger=logger_graph.build(logs, checkpointer=saver, archive=archive),
         archive=archive,
     )
 
@@ -1404,6 +1405,7 @@ def serve(
     declared: Settings,
     front: models.Chat,
     on: models.Chat,
+    logs: models.Chat,
     saver: BaseCheckpointSaver[Any],
 ) -> None:
     """Long-poll until interrupted, holding the models, the checkpointer and the graphs.
@@ -1417,7 +1419,7 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    built = graphs(front, on, saver, run_record.archive())
+    built = graphs(front, on, logs, saver, run_record.archive())
     coach = Turns(
         owner_id=declared.owner_id,
         run=talking(built),
