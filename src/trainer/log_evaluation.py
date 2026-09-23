@@ -56,7 +56,7 @@ import tempfile
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -795,6 +795,25 @@ def _invoked(
         questions=tuple(final.get("questions", ())),
         refused=final["refused"],
         seconds=time.monotonic() - started,
+    )
+
+
+def barred(report: evaluation.Report, holds: log_set.LogSet) -> evaluation.Report:
+    """The pass measured against the two bars the set declares, one per half."""
+    return replace(
+        report,
+        halves=(
+            evaluation.Half(
+                "unambiguous",
+                frozenset(row.name for row in holds.unambiguous),
+                holds.bar_unambiguous,
+            ),
+            evaluation.Half(
+                "must ask",
+                frozenset(row.name for row in holds.must_ask),
+                holds.bar_must_ask,
+            ),
+        ),
     )
 
 

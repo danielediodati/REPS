@@ -291,6 +291,22 @@ def test_an_assumed_value_is_fine_when_there_is_a_prescription(
     log.validate(connection, parsed, TODAY)
 
 
+def test_an_exercise_reported_in_two_blocks_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """Measured 2026-09-23: U9 wrote its one Pullups block twice, and the
+    second, paired with nothing, doubled vertical pull."""
+    identifier = prescribe(connection)
+    twice = block(item("Barbell_Squat", amount_source="assumed"))
+    parsed = log.parse(document(twice, twice, workout_id=identifier))
+
+    with pytest.raises(log.LogRejected) as refused:
+        log.validate(connection, parsed, TODAY)
+
+    assert "more blocks than prescribed: Barbell_Squat" in str(refused.value)
+    assert "rounds" in str(refused.value)
+
+
 def test_an_assumed_amount_the_prescription_does_not_say_is_refused(
     connection: sqlite3.Connection,
 ) -> None:

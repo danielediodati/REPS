@@ -112,6 +112,10 @@ class LogSet:
     history_load_kg: float
     prescriptions: tuple[Prescription, ...]
     rows: tuple[Row, ...]
+    bar_unambiguous: int
+    """The percentage the unambiguous half must hold, as the set declares it."""
+    bar_must_ask: int
+    """The percentage the must-ask half must hold, false confidence counted double."""
 
     @property
     def unambiguous(self) -> tuple[Row, ...]:
@@ -153,6 +157,9 @@ _UNCERTAIN = re.compile(r"\s*`\?`\s*$")
 _NAMES_A_PRESCRIPTION = re.compile(r"^P\d+$")
 _TODAY = re.compile(r"`today`\s+is\s+`(\d{4}-\d{2}-\d{2})`")
 _HISTORY = re.compile(r"`([A-Za-z0-9_\-']+)`\s+last recorded at\s+\*\*([\d.]+) kg\*\*")
+_BAR = re.compile(
+    r"unambiguous half holds at (\d+)%,\s+the must-ask half at (\d+)%"
+)
 _PRESCRIBED = re.compile(r"^(\d+)\s+(reps|seconds)$")
 _COUNTED = re.compile(r"^(.*?)\s+(\d+)$")
 
@@ -180,10 +187,11 @@ def parse(text: str) -> LogSet:
     """
     today = _today(text)
     exercise_id, load_kg = _history(text)
+    bar = _bar(text)
     reader = _Reader(today)
     for line in text.splitlines():
         reader.line(line)
-    return reader.finished(today, exercise_id, load_kg)
+    return reader.finished(today, exercise_id, load_kg, bar)
 
 
 @dataclass
@@ -296,7 +304,9 @@ class _Reader:
         elif open.section in (_UNAMBIGUOUS, _MUST_ASK):
             self.rows.append(_row(open, self.today))
 
-    def finished(self, today: str, exercise_id: str, load_kg: float) -> LogSet:
+    def finished(
+        self, today: str, exercise_id: str, load_kg: float, bar: tuple[int, int]
+    ) -> LogSet:
         self._close()
         if not self.prescriptions:
             raise LogSetError("the set holds no prescriptions")
@@ -320,6 +330,8 @@ class _Reader:
             history_load_kg=load_kg,
             prescriptions=tuple(self.prescriptions),
             rows=tuple(self.rows),
+            bar_unambiguous=bar[0],
+            bar_must_ask=bar[1],
         )
 
 
@@ -546,6 +558,21 @@ def _today(text: str) -> str:
             "section states it as `today` is `YYYY-MM-DD`"
         )
     return found.group(1)
+
+
+def _bar(text: str) -> tuple[int, int]:
+    found = _BAR.search(text)
+    if found is None:
+        raise LogSetError(
+            "the set does not say what rate it must hold; the runner's section "
+            "states it as the unambiguous half holds at N%, the must-ask half at N%"
+        )
+    unambiguous, must_ask = int(found.group(1)), int(found.group(2))
+    if not (0 < unambiguous <= 100 and 0 < must_ask <= 100):
+        raise LogSetError(
+            f"the set's bar is {unambiguous}% and {must_ask}%; each is 1 to 100"
+        )
+    return unambiguous, must_ask
 
 
 def _history(text: str) -> tuple[str, float]:

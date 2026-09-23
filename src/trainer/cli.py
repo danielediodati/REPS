@@ -678,7 +678,8 @@ def eval_command(
     sockets and no credentials, and the checks are covered there against
     recorded runs instead.
 
-    The bar is 100%, and the command exits non-zero below it.
+    The plan suite's bar is 100%; the log suite's are the two its set declares.
+    The command exits non-zero below either.
     """
     with _opened() as connection:
         _require_enrichment(connection)
@@ -768,6 +769,7 @@ def _log_suite(
             records=records,
             budget=call_budget,
         )
+    report = log_evaluation.barred(report, holds)
     return log_evaluation.render(report, chosen), report
 
 

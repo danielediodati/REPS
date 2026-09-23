@@ -60,6 +60,7 @@ SET = """\
 ## What the runner has to set up
 
 - **`today` is `2026-09-10`** for every row.
+- **The bar: the unambiguous half holds at 80%, the must-ask half at 60%**.
 - **One prior performed workout supplies the load history**:
   `Barbell_Squat` last recorded at **80 kg**.
 
@@ -940,3 +941,47 @@ def test_a_spent_quota_stops_the_log_pass_too(
     assert model.calls == 1
     assert report.total == 6 and report.held == 0
     assert report.stopped is not None
+
+
+def barred_report(*outcomes: evaluation.Outcome) -> evaluation.Report:
+    return log_evaluation.barred(evaluation.Report(outcomes), log_set.parse(SET))
+
+
+def test_a_pass_at_the_declared_bars_passes_below_100() -> None:
+    """Four of five unambiguous runs is the set's 80%; one of two must-ask is 50%."""
+    held = [evaluation.Outcome("U1", n) for n in range(1, 5)]
+    failed = evaluation.Outcome("U2", 1, failures=((log_evaluation.DOCUMENT, "x"),))
+    asked = evaluation.Outcome("A1", 1)
+
+    assert barred_report(*held, failed, asked).passed
+
+    missed = evaluation.Outcome("A1", 2, failures=((log_evaluation.ASKED, "x"),))
+    report = barred_report(*held, failed, asked, missed)
+
+    assert not report.passed, "one of two must-ask runs is 50%, under 60%"
+    printed = "\n".join(evaluation.totals(report, "held"))
+    assert "unambiguous: 4 of 5 -- 80%, the bar is 80%" in printed
+    assert "must ask: 1 of 2 -- 50%, the bar is 60%" in printed
+    assert "Below the bar the set declares." in printed
+    assert "100%" not in printed
+
+
+def test_false_confidence_counts_double_against_the_must_ask_bar() -> None:
+    """Three held and one confident failure is 3 of 5, which is the bar and no more."""
+    held = [evaluation.Outcome("A1", n) for n in range(1, 4)]
+    confident = evaluation.Outcome(
+        "A1", 4, failures=((log_evaluation.CONFIDENT, "x"),), weight=2
+    )
+
+    assert barred_report(*held, confident).passed
+    assert not barred_report(
+        *held[:2],
+        confident,
+        evaluation.Outcome("A1", 5, failures=((log_evaluation.CONFIDENT, "x"),), weight=2),
+    ).passed
+
+
+def test_a_half_with_no_runs_is_not_held_against_the_pass() -> None:
+    """`--only U1` measures one half; the other has nothing to fall short with."""
+    assert barred_report(evaluation.Outcome("U1", 1)).passed
+    assert not barred_report().passed, "an empty pass is not a pass"

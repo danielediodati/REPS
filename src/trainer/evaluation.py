@@ -588,10 +588,21 @@ class Outcome:
 
 
 @dataclass(frozen=True)
+class Half:
+    """Rows scored together against a bar their set declares."""
+
+    name: str
+    cases: frozenset[str]
+    bar: int
+
+
+@dataclass(frozen=True)
 class Report:
     outcomes: tuple[Outcome, ...] = field(default_factory=tuple)
     stopped: str | None = None
     """The state that ended the pass early, when one did."""
+    halves: tuple[Half, ...] = ()
+    """Declared bars, each over its own rows; none means every run must hold."""
 
     @property
     def total(self) -> int:
@@ -621,8 +632,19 @@ class Report:
 
     @property
     def passed(self) -> bool:
-        """100%, and at least one run. An empty pass is not a pass."""
-        return self.total > 0 and self.held == self.total
+        """Every declared bar, or 100% without one; and at least one run."""
+        if not self.halves:
+            return self.total > 0 and self.held == self.total
+        return self.total > 0 and all(
+            100 * self.of(half).held >= half.bar * self.of(half).against
+            for half in self.halves
+        )
+
+    def of(self, half: Half) -> Report:
+        """The runs of one half, as a report of their own."""
+        return Report(
+            tuple(outcome for outcome in self.outcomes if outcome.case in half.cases)
+        )
 
     @property
     def calls(self) -> int:
@@ -1013,6 +1035,13 @@ def totals(report: Report, held: str) -> list[str]:
         f"{report.held} of {report.total} runs {held} "
         f"-- {math.floor(report.percentage)}%{counted}"
     )
+    for half in report.halves:
+        part = report.of(half)
+        if part.total:
+            lines.append(
+                f"  {half.name}: {part.held} of {part.total} -- "
+                f"{math.floor(part.percentage)}%, the bar is {half.bar}%"
+            )
     lines.append(
         f"cost: {report.calls} tool calls, {report.input_tokens} tokens in, "
         f"{report.output_tokens} out"
@@ -1021,6 +1050,9 @@ def totals(report: Report, held: str) -> list[str]:
         skipped = sum(1 for outcome in report.outcomes if outcome.skipped)
         lines.append("")
         lines.append(f"Stopped with {skipped} runs not made: {report.stopped}.")
+    elif report.halves and not report.passed:
+        lines.append("")
+        lines.append("Below the bar the set declares.")
     elif not report.passed:
         lines.append("")
         lines.append("The bar is 100%. Anything below it is a bug, not a knob.")

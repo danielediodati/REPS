@@ -2223,6 +2223,7 @@ LOG_SET = """# A log set, for the command's own tests
 ## What the runner has to set up
 
 - **`today` is `2026-09-10`** for every row.
+- **The bar: the unambiguous half holds at 80%, the must-ask half at 60%**.
 - **One prior performed workout supplies the load history**:
   `Barbell_Squat` last recorded at **80 kg**.
 

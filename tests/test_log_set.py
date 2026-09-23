@@ -28,6 +28,7 @@ SET = """\
 ## What the runner has to set up
 
 - **`today` is `2026-09-10`** for every row.
+- **The bar: the unambiguous half holds at 80%, the must-ask half at 60%**.
 - **One prior performed workout supplies the load history** row U2 needs:
   `Barbell_Squat` last recorded at **80 kg**.
 
@@ -123,6 +124,7 @@ def test_the_two_halves_are_read_off_the_sections() -> None:
     assert [row.name for row in holds.must_ask] == ["A1"]
     assert holds.today == "2026-09-10"
     assert (holds.history_exercise, holds.history_load_kg) == ("Barbell_Squat", 80.0)
+    assert (holds.bar_unambiguous, holds.bar_must_ask) == (80, 60)
 
 
 def test_a_row_carries_its_report_and_what_it_is_about() -> None:
@@ -230,6 +232,8 @@ def test_a_block_listed_again_after_another_is_refused() -> None:
         (SET.replace("— P1\n\n> in panca", "— P9\n\n> in panca"), "does not prescribe"),
         (SET.replace("`today` is `2026-09-10`", "today is soon"), "what day it is"),
         (SET.replace("last recorded at **80 kg**", "recorded heavy"), "load history"),
+        (SET.replace("holds at 80%", "holds well"), "what rate it must hold"),
+        (SET.replace("half at 60%", "half at 0%"), "each is 1 to 100"),
         (SET.replace('"amount": 8,', '"amount": 0,'), "could emit"),
         (SET.replace("| 8 reps |", "| 8 times |"), "reps or seconds"),
     ],

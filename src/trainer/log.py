@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -428,6 +429,7 @@ def validate(
     _nothing_assumed_without_a_prescription(performed)
     _every_id_in_the_catalog(connection, performed)
     _the_workout_it_reports_against(connection, performed)
+    _no_exercise_reported_twice(connection, performed)
     _nothing_left_out_that_nothing_prescribes(connection, performed)
     _nothing_assumed_the_prescription_does_not_say(connection, performed)
     _the_exclusion_it_proposes(connection, performed, today)
@@ -562,6 +564,36 @@ def _the_workout_it_reports_against(
         workouts.reportable(connection, performed.workout_id)
     except workouts.WorkoutError as error:
         raise LogRejected(str(error)) from error
+
+
+def _no_exercise_reported_twice(
+    connection: sqlite3.Connection, performed: PerformedWorkout
+) -> None:
+    """An exercise in more blocks than the prescription gives it is counted twice.
+
+    The second copy pairs with nothing and reads as extra work, so its rounds
+    land on both volume axes again. More done is more rounds in the one block.
+    """
+    if performed.workout_id is None:
+        return
+    prescribed = workouts.prescribed(connection, performed.workout_id)
+    planned = Counter(
+        item.exercise_id for block in prescribed for item in block.block.items
+    )
+    reported = Counter(
+        item.exercise_id for block in performed.blocks for item in block.items
+    )
+    twice = sorted(
+        exercise
+        for exercise, count in reported.items()
+        if count > 1 and count > planned[exercise]
+    )
+    if twice:
+        raise LogRejected(
+            "reported in more blocks than prescribed: "
+            + ", ".join(twice)
+            + ". Write each once; if the user did more, raise that block's rounds."
+        )
 
 
 def _left_out(

@@ -75,6 +75,10 @@ figure below was computed from the rounds and each exercise's own
   scored only as *a date strictly after `today`* — which day the agent picks is
   a judgement the document does not constrain. `proposed_exclusion.why` is free
   prose. Everything else in the document is equality.
+- **The bar: the unambiguous half holds at 80%, the must-ask half at 60%**,
+  false confidence counted double. Below either, `trainer eval --suite log`
+  exits non-zero. Set on 2026-09-23 against `qwen/qwen3.8-27b`, after the rows
+  and without changing any of them; raised here when the model changes.
 
 ---
 

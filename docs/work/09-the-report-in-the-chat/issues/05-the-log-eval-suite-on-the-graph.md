@@ -28,8 +28,9 @@ What the 2026-09-23 pass leaves for this ticket:
 
 - **A8 never asks** (3 / 3), which failed 3 / 3 on `gpt-oss:20b` too. `done_reading` and the rule *a number not mentioned is not a question* took every unneeded question away; whether they took the needed one with it is what the A rows of the full pass measure.
 - **Provenance invented on a value nobody gave**: U2 #2 marks an unsaid rest `asked` with no question asked, U15 #1 marks it `reported`.
-- **A block emitted twice**: U9 #2 writes the Pullups block twice and the engine accepts it, doubling vertical pull. A validator gap, not only a model error.
-- **Output tokens are ten times Groq's.** Nothing caps them on OpenRouter; Qwen reasons at length.
+- **A block emitted twice**: U9 #2 wrote the Pullups block twice and the engine accepted it, doubling vertical pull. Now refused (`log._no_exercise_reported_twice`), and the refusal goes back to the model.
+- **Output tokens are ten times Groq's**, ~5.6k a run: Qwen reasons at length and nothing caps it. Left uncapped: at `:nitro` speed it is seconds a run, and about $2 for the full pass. OpenRouter's `reasoning` parameter would cap it, but under `require_parameters` it makes a model without reasoning unroutable.
+- **The bar is declared** (ADR-0010): 80% unambiguous, 60% must ask, in `eval-set.md`.
 
 What the first pass says, by cluster (counted by hand, a run can sit in two):
 
@@ -52,4 +53,4 @@ What the first pass says, by cluster (counted by hand, a run can sit in two):
 - [x] `trainer eval --suite log` has been **run** against a real provider, and the number is written down here.
 - [ ] The suite passes at the rate the set declares, and a drop is reported per row rather than as one number.
 - [x] A report whose expectation is a clarifying question is measured on the `interrupt()` -- verified by a pass, not by reading the code (02 wired it).
-- [ ] The full test suite and mypy are green.
+- [x] The full test suite and mypy are green: 1584, mypy clean.
