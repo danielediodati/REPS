@@ -439,7 +439,9 @@ def _openrouter_ready(on: Chat) -> None:
         served = openrouter_models(key)
     except Exception as error:
         raise ModelError(f"OpenRouter cannot be reached ({error})") from error
-    if on.name not in served:
+    # A routing suffix such as `:nitro` is not in the listing; the model it
+    # routes is.
+    if on.name not in served and on.name.rsplit(":", 1)[0] not in served:
         # Hundreds of names, so the page is the way out rather than the list.
         raise ModelError(
             f"OpenRouter does not route to {on.name}; set "

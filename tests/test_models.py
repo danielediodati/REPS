@@ -508,6 +508,19 @@ def test_a_model_openrouter_routes_to_is_ready(
     models.ready(openrouter_chat(models.DEFAULT_OPENROUTER_MODEL))
 
 
+def test_a_routing_suffix_is_ready_when_its_model_is_routed_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`:nitro` picks the fastest host; the listing names only the model."""
+    routing(monkeypatch, models.DEFAULT_OPENROUTER_MODEL)
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+
+    models.ready(openrouter_chat(f"{models.DEFAULT_OPENROUTER_MODEL}:nitro"))
+
+    with pytest.raises(models.ModelError):
+        models.ready(openrouter_chat("a/model-nobody-routes:nitro"))
+
+
 def test_an_unreachable_openrouter_is_a_state_naming_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
