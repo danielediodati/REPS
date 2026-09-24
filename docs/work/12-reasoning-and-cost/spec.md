@@ -9,7 +9,7 @@ The first full log pass on OpenRouter (2026-09-24, `qwen/qwen3.8-27b:nitro`) cos
 | What varies | The model, and how hard it reasons (`none`/`low`/`medium`/`high`, where the model has the setting). One provider: OpenRouter. |
 | What is measured | The existing suites, unchanged: `--suite log` against the set's bars (ADR-0010), `--suite plan` at 100%. Plus cost and wall time per interaction, read from the provider, never from a price typed here. |
 | How it is chosen | Per subgraph, the **cheapest configuration that clears its bar**; wall time breaks a tie. Written down with the table, so the next model change is one more row. |
-| How much it may spend | Screening at `--repetitions 1`; only the finalists at 3. Each ticket states its spend before it runs and reports it after. |
+| How much it may spend | **$6 per matrix, hard.** Screening on a minimal set of the rows where the reference fails, at `--repetitions 1`; one finalist at 3, then once on the whole set against the bar. Each ticket states its spend before it runs and reports it after. |
 | Not measured | The entrance: it has no suite. It keeps the fastest model the logger's screening shows can call tools, and a suite of its own is a later session's. |
 
 ## Tickets

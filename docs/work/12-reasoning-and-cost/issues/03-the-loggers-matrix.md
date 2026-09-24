@@ -22,20 +22,28 @@ Earlier passes, for the record: 2026-09-21 `gpt-oss:20b` on Ollama 24 / 90 (~2.6
 
 ## What to do
 
-1. **Screen** every candidate on the whole set at `--repetitions 1` (30 runs each):
+**Budget: $6 in total, hard.** The reference row costs about $0.04 a report; every estimate below uses that as the ceiling.
 
-   | Model | Efforts |
-   |---|---|
-   | `qwen/qwen3.8-27b` | none, low, high |
-   | `openai/gpt-oss-20b` | low, high |
-   | `openai/gpt-oss-120b` | low, high |
-   | `anthropic/claude-haiku-4.5` | none, low |
+**The minimal set: 10 rows**, picked where the reference fails, so they tell the candidates apart. One easy row to catch a model that cannot log at all.
 
-   Add a model only with a reason written beside it. Pin the host per model (01) so the row is one machine.
-2. **Confirm** the two cheapest configurations that clear both bars (ADR-0010) at `--repetitions 3`.
-3. **Write the table here**: per row, unambiguous %, must-ask %, $ per report, s per report, host.
+| Kind | Rows |
+|---|---|
+| Must ask | A3, A6, A8, A10, A11 |
+| Unambiguous | U1 (control), U4, U6, U8, U11 |
 
-**Budget**: state the estimate from the screening's first row before running the rest; stop and ask above $15 in total.
+The reference is **not re-run**: its per-row results on these 10 are the ones above.
+
+| Step | What | Runs | Estimate |
+|---|---|---|---|
+| 1. Screen | each candidate on the 10 rows, `--only`, `--repetitions 1` | 40 | ~$1.6 |
+| 2. Confirm | the cheapest candidate no worse than the reference on the 10 rows, at `--repetitions 3` | 30 | ~$1.2 |
+| 3. Check the bar | the same one on the whole set, `--repetitions 1`, against both bars (ADR-0010) | 30 | ~$1.2 |
+
+Candidates, one effort each: `qwen/qwen3.8-27b` low, `openai/gpt-oss-20b` low, `openai/gpt-oss-120b` low, `anthropic/claude-haiku-4.5` none. `high` is left out: the reference already reasons at length, and the question is whether less loses anything. Pin the host per model (01).
+
+- After the first candidate, compare its real cost (02) with the estimate. Above $0.06 a report, stop and ask.
+- If the winner fails the bar in step 3, stop: the second candidate is not run without asking.
+- Write the table here: per row, unambiguous and must-ask on the 10, $ and s per report, host, and the spend so far.
 
 ## References
 
@@ -44,6 +52,7 @@ Earlier passes, for the record: 2026-09-21 `gpt-oss:20b` on Ollama 24 / 90 (~2.6
 
 ## Acceptance criteria
 
-- [ ] Every row of the screening run and written, with its spend.
-- [ ] Two finalists confirmed at three repetitions.
+- [ ] The four candidates screened on the 10 rows and written, with their spend.
+- [ ] The winner confirmed at three repetitions, and checked against both bars on the whole set.
 - [ ] The chosen row named, with the rule that chose it.
+- [ ] Total spend at or under $6.
