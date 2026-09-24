@@ -381,7 +381,7 @@ class EntranceState(TypedDict, total=False):
 
     spent: int
     budget: int
-    timings: list[tuple[str, str, str, float]]
+    timings: list[tuple[str, str, str, float, str, str]]
 
     relaying: str
     """The situation this turn was opened to say, and empty when the user spoke."""

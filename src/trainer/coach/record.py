@@ -142,7 +142,14 @@ def timing(on: models.Chat) -> Callable[[str, Node], Node]:
             return produced | {
                 "timings": [
                     *state.get("timings", []),
-                    (node, on.name, on.provider, spent),
+                    (
+                        node,
+                        on.name,
+                        on.provider,
+                        spent,
+                        on.reasoning,
+                        ", ".join(_hosts(produced.get("messages", ()))),
+                    ),
                 ]
             }
 
@@ -310,15 +317,24 @@ def _answered_by(record: Mapping[str, Any]) -> str:
     ticket on there is no one model to read there: the entrance and the two
     subgraphs run on models of their own (ADR-0006).
     """
-    named: list[str] = []
+    hosts: dict[str, list[str]] = {}
     for node in record.get("nodes", ()):
         model, provider = node.get("model", ""), node.get("provider", "")
         if not model and not provider:
             continue
         answered_by = f"{model} on {provider}"
-        if answered_by not in named:
-            named.append(answered_by)
-    return ", ".join(named) if named else "nobody on record"
+        if node.get("reasoning"):
+            answered_by += f" at {node['reasoning']} effort"
+        seen = hosts.setdefault(answered_by, [])
+        for host in str(node.get("host", "")).split(", "):
+            if host and host not in seen:
+                seen.append(host)
+    if not hosts:
+        return "nobody on record"
+    return ", ".join(
+        named + (f" via {', '.join(served)}" if served else "")
+        for named, served in hosts.items()
+    )
 
 
 def _node(entry: Sequence[Any]) -> dict[str, Any]:
@@ -330,13 +346,22 @@ def _node(entry: Sequence[Any]) -> dict[str, Any]:
     """
     if len(entry) == 2:
         node, seconds = entry
-        return {"node": node, "model": "", "provider": "", "seconds": round(seconds, 3)}
-    node, model, provider, seconds = entry
+        return {
+            "node": node,
+            "model": "",
+            "provider": "",
+            "seconds": round(seconds, 3),
+            "reasoning": "",
+            "host": "",
+        }
+    node, model, provider, seconds, *rest = entry
     return {
         "node": node,
         "model": model,
         "provider": provider,
         "seconds": round(seconds, 3),
+        "reasoning": rest[0] if rest else "",
+        "host": rest[1] if len(rest) > 1 else "",
     }
 
 
@@ -366,6 +391,16 @@ def _calls(messages: Sequence[AnyMessage]) -> list[dict[str, Any]]:
         if isinstance(message, AIMessage)
         for call in message.tool_calls
     ]
+
+
+def _hosts(messages: Sequence[AnyMessage]) -> list[str]:
+    """The hosts that answered the model's turns, as OpenRouter named them, in the order they first did."""
+    found: list[str] = []
+    for message in messages:
+        host = message.response_metadata.get("host") if isinstance(message, AIMessage) else None
+        if host and host not in found:
+            found.append(str(host))
+    return found
 
 
 def _tokens(messages: Sequence[AnyMessage]) -> dict[str, int]:

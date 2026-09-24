@@ -414,9 +414,17 @@ def test_any_other_failure_is_not_a_spent_quota() -> None:
 # -- OpenRouter ----------------------------------------------------------------
 
 
-def routing(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
-    """What OpenRouter answers when asked for its models, without a network."""
-    monkeypatch.setattr(models, "openrouter_models", lambda key: set(names))
+def routing(
+    monkeypatch: pytest.MonkeyPatch,
+    *names: str,
+    entries: dict[str, dict[str, Any]] | None = None,
+) -> None:
+    """What OpenRouter answers when asked for its models, without a network; `entries` by model name."""
+
+    def listed(key: str) -> dict[str, dict[str, Any]]:
+        return {name: (entries or {}).get(name, {}) for name in names}
+
+    monkeypatch.setattr(models, "openrouter_listing", listed)
 
 
 def openrouter_chat(name: str) -> models.Chat:
@@ -524,16 +532,158 @@ def test_a_routing_suffix_is_ready_when_its_model_is_routed_to(
 def test_an_unreachable_openrouter_is_a_state_naming_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def offline(key: str) -> set[str]:
+    def offline(key: str) -> dict[str, dict[str, Any]]:
         raise ConnectionError("no route to host")
 
-    monkeypatch.setattr(models, "openrouter_models", offline)
+    monkeypatch.setattr(models, "openrouter_listing", offline)
     monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
 
     with pytest.raises(models.ModelError) as raised:
         models.ready(openrouter_chat(models.DEFAULT_OPENROUTER_MODEL))
 
     assert "OpenRouter cannot be reached" in str(raised.value)
+
+
+def openrouter_logger(monkeypatch: pytest.MonkeyPatch, **env: str) -> models.Chat:
+    """The logger's model on OpenRouter, built under `env`."""
+    monkeypatch.setenv(models.BACKEND_ENV, "openrouter")
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    return models.logger()
+
+
+def test_the_loggers_effort_reaches_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = openrouter_logger(monkeypatch, LOGGER_REASONING="low")
+
+    built = cast(Any, chat.model)
+    assert built.extra_body["reasoning"] == {"effort": "low"}
+    assert chat.reasoning == "low"
+    assert chat.reasoning_setting == models.LOGGER_REASONING_ENV
+
+
+def test_no_effort_sends_nothing_and_leaves_the_models_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+
+    assert "reasoning" not in built.extra_body
+
+
+def test_each_node_reads_its_own_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    openrouter_logger(
+        monkeypatch, PLANNER_REASONING="high", ENTRANCE_REASONING="none", LOGGER_REASONING="low"
+    )
+
+    assert models.planner().reasoning == "high"
+    assert models.entrance().reasoning == "none"
+    assert models.logger().reasoning == "low"
+
+
+def test_an_effort_nobody_built_is_refused_by_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(models.ModelError) as raised:
+        openrouter_logger(monkeypatch, LOGGER_REASONING="lots")
+
+    said = str(raised.value)
+    assert models.LOGGER_REASONING_ENV in said and "none, low, medium, high" in said
+    assert said.isascii()
+
+
+def test_a_pinned_host_is_the_only_one_asked(monkeypatch: pytest.MonkeyPatch) -> None:
+    built = cast(Any, openrouter_logger(monkeypatch, OPENROUTER_PROVIDER="groq").model)
+
+    assert built.extra_body["provider"] == {
+        "require_parameters": True,
+        "order": ["groq"],
+        "allow_fallbacks": False,
+    }
+
+
+def test_a_model_with_no_reasoning_is_refused_its_effort_by_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routing(
+        monkeypatch,
+        "anthropic/claude-haiku-4.5",
+        entries={"anthropic/claude-haiku-4.5": {"supported_parameters": ["tools", "response_format"]}},
+    )
+    chat = openrouter_logger(
+        monkeypatch, LOGGER_MODEL="anthropic/claude-haiku-4.5", LOGGER_REASONING="low"
+    )
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(chat)
+
+    said = str(raised.value)
+    assert models.LOGGER_REASONING_ENV in said and "anthropic/claude-haiku-4.5" in said
+    assert said.isascii()
+
+
+def test_an_effort_the_model_does_not_list_is_refused_by_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    routing(
+        monkeypatch,
+        "openai/gpt-oss-20b",
+        entries={
+            "openai/gpt-oss-20b": {
+                "supported_parameters": ["reasoning", "tools"],
+                "reasoning": {"supported_efforts": ["low", "medium", "high"]},
+            }
+        },
+    )
+    chat = openrouter_logger(
+        monkeypatch, LOGGER_MODEL="openai/gpt-oss-20b", LOGGER_REASONING="none"
+    )
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(chat)
+
+    assert "low, medium, high" in str(raised.value)
+
+
+def test_a_model_that_takes_the_effort_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    routing(
+        monkeypatch,
+        models.DEFAULT_OPENROUTER_MODEL,
+        entries={models.DEFAULT_OPENROUTER_MODEL: {"supported_parameters": ["reasoning"]}},
+    )
+
+    models.ready(openrouter_logger(monkeypatch, LOGGER_REASONING="low"))
+
+
+def test_an_effort_off_openrouter_is_refused_by_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = models.Chat(
+        cast(BaseChatModel, object()),
+        models.GROQ,
+        models.DEFAULT_GROQ_MODEL,
+        models.GROQ_MODEL_ENV,
+        reasoning="low",
+        reasoning_setting=models.PLANNER_REASONING_ENV,
+    )
+
+    with pytest.raises(models.ModelError) as raised:
+        models.ready(chat)
+
+    assert models.PLANNER_REASONING_ENV in str(raised.value)
+
+
+def test_the_host_that_answered_is_kept_on_the_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenRouter names it at the top of the response; the stock client drops it."""
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    response = {
+        "id": "gen-1",
+        "model": "qwen/qwen3.8-27b",
+        "provider": "Groq",
+        "choices": [
+            {"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+        ],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+    }
+
+    result = built._create_chat_result(response)
+
+    assert result.generations[0].message.response_metadata["host"] == "Groq"
 
 
 def test_openrouter_out_of_credits_is_a_spent_quota() -> None:

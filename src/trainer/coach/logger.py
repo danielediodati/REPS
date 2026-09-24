@@ -259,7 +259,7 @@ class LoggerState(TypedDict, total=False):
     """Whether the exclusion the document proposes is the user's. False until
     they say so, and nothing writes one before that (ADR-0004)."""
 
-    timings: list[tuple[str, str, str, float]]
+    timings: list[tuple[str, str, str, float, str, str]]
 
 
 def starting(

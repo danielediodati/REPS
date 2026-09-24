@@ -472,8 +472,8 @@ class PlannerState(TypedDict, total=False):
     an attempt of the run at ten.
     """
 
-    timings: list[tuple[str, str, str, float]]
-    """Node, model, provider and seconds, per node run, for this run only."""
+    timings: list[tuple[str, str, str, float, str, str]]
+    """Node, model, provider, seconds, effort and host, per node run, for this run only."""
 
     plan: plans.WorkoutPlan | plans.Mesocycle | None
     accepted: bool

@@ -45,6 +45,12 @@ Candidates, one effort each: `qwen/qwen3.8-27b` low, `openai/gpt-oss-20b` low, `
 - If the winner fails the bar in step 3, stop: the second candidate is not run without asking.
 - Write the table here: per row, unambiguous and must-ask on the 10, $ and s per report, host, and the spend so far.
 
+## Left by 01
+
+- **Effort**: `LOGGER_REASONING` / `PLANNER_REASONING`. A model whose listing takes no effort refuses every value, `none` included: for *Haiku none*, check its listing and leave the variable empty if it has no `reasoning`.
+- **Host**: `OPENROUTER_PROVIDER` takes the slug (`deepinfra`); the record names it as the response does (`DeepInfra`).
+- **Groq no longer serves `qwen/qwen3.8-27b`** (2026-09-24): pinned there, the request is a 404 mid-run, not a state before it. `deepinfra` serves it (bf16): 46 tokens in, 18 out, 1.7 s at `low`. Check each candidate's hosts on its model page before pinning.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`

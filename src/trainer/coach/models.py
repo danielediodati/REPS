@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import re
 from dataclasses import dataclass
+from typing import Any
 
 import groq
 import ollama
 import openai
 from langchain_core.language_models import BaseChatModel
+from langchain_core.outputs import ChatResult
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
@@ -45,6 +48,16 @@ LOGGER_MODEL_ENV = "LOGGER_MODEL"
 
 Empty falls back to that provider's model, so one variable still moves both.
 """
+
+PLANNER_REASONING_ENV = "PLANNER_REASONING"
+LOGGER_REASONING_ENV = "LOGGER_REASONING"
+ENTRANCE_REASONING_ENV = "ENTRANCE_REASONING"
+"""How hard each node's model reasons, on OpenRouter; empty is the model's default."""
+
+EFFORTS = ("none", "low", "medium", "high")
+
+OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
+"""The one host OpenRouter may route to, by its slug; empty keeps OpenRouter's routing."""
 
 OLLAMA = "ollama"
 GROQ = "groq"
@@ -197,6 +210,12 @@ class Chat:
     answered with *set `GROQ_MODEL`* sends the reader to the planner's line.
     """
 
+    reasoning: str = ""
+    """The effort asked of the model, or empty for its default."""
+
+    reasoning_setting: str = ""
+    """Which variable asked for that effort."""
+
 
 def backend() -> str:
     """Which provider the coach runs on, and a state for one nobody built."""
@@ -234,24 +253,36 @@ def chat() -> Chat:
 
 def planner() -> Chat:
     """The model the planner reasons on: `PLANNER_MODEL`, or the coach's."""
-    return _subgraph(PLANNER_MODEL_ENV)
+    return _subgraph(PLANNER_MODEL_ENV, PLANNER_REASONING_ENV)
 
 
 def logger() -> Chat:
     """The model the logger extracts on: `LOGGER_MODEL`, or the coach's."""
-    return _subgraph(LOGGER_MODEL_ENV)
+    return _subgraph(LOGGER_MODEL_ENV, LOGGER_REASONING_ENV)
 
 
-def _subgraph(setting: str) -> Chat:
+def _subgraph(setting: str, reasoning_setting: str) -> Chat:
     named = os.environ.get(setting)
+    effort = effort_of(reasoning_setting)
     if not named:
-        return chat()
-    on = backend()
-    if on == GROQ:
-        return Chat(groq_model(named), GROQ, named, setting)
-    if on == OPENROUTER:
-        return Chat(openrouter_model(named), OPENROUTER, named, setting)
-    return Chat(ollama_model(named), OLLAMA, named, setting)
+        found = chat()
+        if effort and found.provider == OPENROUTER:
+            found = dataclasses.replace(found, model=openrouter_model(found.name, effort))
+    elif backend() == GROQ:
+        found = Chat(groq_model(named), GROQ, named, setting)
+    elif backend() == OPENROUTER:
+        found = Chat(openrouter_model(named, effort), OPENROUTER, named, setting)
+    else:
+        found = Chat(ollama_model(named), OLLAMA, named, setting)
+    return dataclasses.replace(found, reasoning=effort, reasoning_setting=reasoning_setting)
+
+
+def effort_of(variable: str) -> str:
+    """The effort a variable asks for, or empty; any value outside `EFFORTS` is refused by name."""
+    asked = os.environ.get(variable, "")
+    if asked and asked not in EFFORTS:
+        raise ModelError(f"{variable} is {asked!r}; it is one of {', '.join(EFFORTS)}, or empty")
+    return asked
 
 
 def entrance() -> Chat:
@@ -262,16 +293,17 @@ def entrance() -> Chat:
     on Ollama a smaller model than the planner's, because this is the node the
     user waits on.
     """
+    effort = effort_of(ENTRANCE_REASONING_ENV)
     if entrance_backend() == GROQ:
         named = os.environ.get(ENTRANCE_MODEL_ENV) or groq_model_name()
-        return Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
-    if entrance_backend() == OPENROUTER:
+        found = Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
+    elif entrance_backend() == OPENROUTER:
         named = os.environ.get(ENTRANCE_MODEL_ENV) or openrouter_model_name()
-        return Chat(openrouter_model(named), OPENROUTER, named, ENTRANCE_MODEL_ENV)
-    named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
-    return Chat(
-        ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV
-    )
+        found = Chat(openrouter_model(named, effort), OPENROUTER, named, ENTRANCE_MODEL_ENV)
+    else:
+        named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
+        found = Chat(ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV)
+    return dataclasses.replace(found, reasoning=effort, reasoning_setting=ENTRANCE_REASONING_ENV)
 
 
 def model_name() -> str:
@@ -340,19 +372,41 @@ def groq_model(named: str | None = None) -> ChatGroq:
     )
 
 
-def openrouter_model(named: str | None = None) -> ChatOpenAI:
+class OpenRouterChat(ChatOpenAI):
+    """`ChatOpenAI` on OpenRouter, keeping the host that answered on each reply."""
+
+    def _create_chat_result(
+        self, response: dict[str, Any] | openai.BaseModel, generation_info: dict[str, Any] | None = None
+    ) -> ChatResult:
+        result = super()._create_chat_result(response, generation_info)
+        body = response if isinstance(response, dict) else response.model_dump()
+        host = body.get("provider")
+        if host:
+            for generation in result.generations:
+                generation.message.response_metadata["host"] = str(host)
+        return result
+
+
+def openrouter_model(named: str | None = None, reasoning: str = "") -> ChatOpenAI:
     """The OpenRouter chat model the environment names, or another it routes to."""
     key = os.environ.get(OPENROUTER_KEY_ENV)
     if not key:
         raise ModelError(NO_OPENROUTER_CREDENTIALS)
-    return ChatOpenAI(
+    # Routed only to hosts that honour every parameter sent. Without it a
+    # host that ignores `response_format` can serve the emission, and the
+    # strict schema is a suggestion again.
+    provider: dict[str, Any] = {"require_parameters": True}
+    pinned = os.environ.get(OPENROUTER_PROVIDER_ENV)
+    if pinned:
+        provider |= {"order": [pinned], "allow_fallbacks": False}
+    body: dict[str, Any] = {"provider": provider}
+    if reasoning:
+        body["reasoning"] = {"effort": reasoning}
+    return OpenRouterChat(
         model=named or openrouter_model_name(),
         api_key=SecretStr(key),
         base_url=OPENROUTER_URL,
-        # Routed only to hosts that honour every parameter sent. Without it a
-        # host that ignores `response_format` can serve the emission, and the
-        # strict schema is a suggestion again.
-        extra_body={"provider": {"require_parameters": True}},
+        extra_body=body,
     )
 
 
@@ -365,6 +419,11 @@ def ready(on: Chat) -> None:
     and on Groq the 404 is a model that was retired between releases, which
     reads as *the run is broken* rather than *this name is gone*.
     """
+    if on.reasoning and on.provider != OPENROUTER:
+        raise ModelError(
+            f"{on.reasoning_setting} is {on.reasoning!r}, and an effort is sent only "
+            f"on OpenRouter; leave it empty on {on.provider}"
+        )
     if on.provider == GROQ:
         _groq_ready(on)
         return
@@ -424,30 +483,47 @@ def _groq_ready(on: Chat) -> None:
         )
 
 
-def openrouter_models(key: str) -> set[str]:
-    """Every model OpenRouter routes to, as it names them; the seam the suite stands in for."""
+def openrouter_listing(key: str) -> dict[str, dict[str, Any]]:
+    """Every model OpenRouter routes to, by name, with its listing entry; the seam the suite stands in for."""
     listed = openai.OpenAI(api_key=key, base_url=OPENROUTER_URL).models.list()
-    return {model.id for model in listed.data}
+    return {model.id: model.model_dump() for model in listed.data}
 
 
 def _openrouter_ready(on: Chat) -> None:
-    """The model OpenRouter routes to under that name, or the state that says it does not."""
+    """The model OpenRouter routes to under that name, taking the effort asked, or the state that says otherwise."""
     key = os.environ.get(OPENROUTER_KEY_ENV)
     if not key:
         raise ModelError(NO_OPENROUTER_CREDENTIALS)
     try:
-        served = openrouter_models(key)
+        served = openrouter_listing(key)
     except Exception as error:
         raise ModelError(f"OpenRouter cannot be reached ({error})") from error
     # A routing suffix such as `:nitro` is not in the listing; the model it
     # routes is.
-    if on.name not in served and on.name.rsplit(":", 1)[0] not in served:
+    entry = served.get(on.name, served.get(on.name.rsplit(":", 1)[0]))
+    if entry is None:
         # Hundreds of names, so the page is the way out rather than the list.
         raise ModelError(
             f"OpenRouter does not route to {on.name}; set "
             f"{on.setting or OPENROUTER_MODEL_ENV} to one listed at "
             f"https://openrouter.ai/models, or leave it empty for "
             f"{DEFAULT_OPENROUTER_MODEL}"
+        )
+    if on.reasoning:
+        _takes(on, entry)
+
+
+def _takes(on: Chat, entry: dict[str, Any]) -> None:
+    """Refuse an effort the model's listing says it does not take, naming the variable."""
+    if "reasoning" not in (entry.get("supported_parameters") or ()):
+        raise ModelError(
+            f"{on.name} takes no reasoning effort; leave {on.reasoning_setting} empty"
+        )
+    efforts = (entry.get("reasoning") or {}).get("supported_efforts")
+    if efforts and on.reasoning not in efforts:
+        raise ModelError(
+            f"{on.name} takes {', '.join(efforts)} as an effort, not {on.reasoning!r}; "
+            f"set {on.reasoning_setting} to one of them"
         )
 
 

@@ -14,9 +14,10 @@ from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.runnables import RunnableConfig
@@ -38,7 +39,7 @@ from test_planner import (
 )
 from trainer import tools
 from trainer import plan as plans
-from trainer.coach import checkpoints, planner, runs
+from trainer.coach import checkpoints, models, planner, runs
 from trainer.coach import record as run_record
 from trainer.engine import catalog, database, migrations
 
@@ -418,7 +419,7 @@ def test_a_state_written_before_a_run_had_a_name_still_reads_back() -> None:
     )
 
     assert written["nodes"] == [
-        {"node": "planner", "model": "", "provider": "", "seconds": 1.25}
+        {"node": "planner", "model": "", "provider": "", "seconds": 1.25, "reasoning": "", "host": ""}
     ]
     assert written["negotiation"] == ""
     assert written["ending"] == ""
@@ -547,3 +548,54 @@ def test_a_negotiation_the_user_opened_says_nothing_about_who(
 
     assert not negotiation.unasked
     assert "machine" not in runs.line(negotiation)
+
+
+# -- which effort was asked, and which host answered (12.1) --------------------
+
+
+def test_a_node_is_timed_with_the_effort_its_model_was_asked(tmp_path: Path) -> None:
+    on = models.Chat(
+        cast(BaseChatModel, object()), "openrouter", "qwen/qwen3.8-27b", reasoning="low"
+    )
+
+    produced = run_record.timing(on)("planner", lambda state: {})({})
+
+    (entry,) = produced["timings"]
+    assert run_record.of({"timings": [entry]}, 12)["nodes"][0]["reasoning"] == "low"
+
+
+def test_a_node_is_timed_with_the_host_that_answered_it() -> None:
+    on = models.Chat(cast(BaseChatModel, object()), "openrouter", "qwen/qwen3.8-27b")
+    reply = AIMessage(content="ok", response_metadata={"host": "Groq"})
+
+    produced = run_record.timing(on)("planner", lambda state: {"messages": [reply]})({})
+
+    (entry,) = produced["timings"]
+    assert run_record.of({"timings": [entry]}, 12)["nodes"][0]["host"] == "Groq"
+
+
+def test_each_model_is_named_with_the_host_that_answered_it() -> None:
+    """Two nodes on two hosts: which answered which is not left to the reader."""
+    state = {
+        "timings": [
+            ("entrance", "llama", "openrouter", 1.0, "", "Cerebras"),
+            ("planner", "qwen/qwen3.8-27b", "openrouter", 1.0, "low", "Groq"),
+            ("emit", "qwen/qwen3.8-27b", "openrouter", 1.0, "low", ""),
+        ],
+    }
+
+    first = run_record.summary(run_record.of(state, 12))[0]
+
+    assert first.startswith(
+        "llama on openrouter via Cerebras, qwen/qwen3.8-27b on openrouter at low effort via Groq --"
+    )
+    assert first.isascii()
+
+
+def test_a_record_from_before_efforts_reads_as_the_models_default() -> None:
+    state = {"timings": [("planner", "qwen/qwen3.8-27b", "openrouter", 1.0)]}
+
+    written = run_record.of(state, 12)
+
+    assert (written["nodes"][0]["reasoning"], written["nodes"][0]["host"]) == ("", "")
+    assert run_record.summary(written)[0].startswith("qwen/qwen3.8-27b on openrouter --")

@@ -70,9 +70,9 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 |---|---|
 | `ollama` (default) | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
-| `openrouter` | `OPENROUTER_API_KEY`. `OPENROUTER_MODEL` overrides the default, `qwen/qwen3.8-27b`. |
+| `openrouter` | `OPENROUTER_API_KEY`. `OPENROUTER_MODEL` overrides the default, `qwen/qwen3.8-27b`. `OPENROUTER_PROVIDER` pins one host, with no fallback. |
 
-`PLANNER_MODEL` and `LOGGER_MODEL` give each subgraph a model of its own on that provider; empty, both run on the provider's model.
+`PLANNER_MODEL` and `LOGGER_MODEL` give each subgraph a model of its own on that provider; empty, both run on the provider's model. On OpenRouter, `PLANNER_REASONING`, `LOGGER_REASONING` and `ENTRANCE_REASONING` set how hard each node's model reasons (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; `trainer runs show` names the effort and the host beside each model.
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
