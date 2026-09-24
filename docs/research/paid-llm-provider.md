@@ -116,7 +116,7 @@ The fastest model that clears a stated capability bar for that agent's actual jo
 | Entrance | short conversational turns, tool routing decision, ADR-0006's latency budget | none codified — a wrong routing decision is cheap to correct in the next turn | `llama-3.1-8b` on Groq | TTFT 0.81 s (AA), 560 tok/s (Groq primary) | not BFCL-scored at 8B-instruct-1.1 tier in this fetch; Llama-3.2-3B (smaller sibling) scores 21.95%/4.00% FC — a floor, not this model's number |
 | Logger | structured extraction must validate against a schema (ADR-0009) | BFCL FC multi-turn, since a log report is a multi-step "read, ask, emit" tool loop | Claude Haiku 4.5 | 89.0–92.4 tok/s, TTFT 0.68 s (AA) | **68.70% overall / 53.62% multi-turn BFCL v4 (primary)** — beats every open model measured above by 10-45 points |
 | Planner | multi-turn tool loop with refusal feedback (ADR-0007), heaviest reasoning | BFCL FC multi-turn, tau2/tau-bench agent-loop score | Claude Sonnet 4.5 as the closest *measured* proxy for Sonnet 5 (not yet benchmarked) | 41.5–72.3 tok/s depending on reasoning config (AA) | 73.24% overall / 61.37% multi-turn BFCL v4; leads tau-bench Retail at 0.862 (both primary/independent, Sonnet 4.5) |
-| Supervisor (future, offline) | reads the trajectory, not the agent's prose (ROADMAP session 14); latency-insensitive | any — it runs between workouts | Gemini 3.6/3.8 Flash | 212–350 tok/s (AA) | tau2-bench Airline leadership sits with sibling Gemini 3.7 Flash at 80.6% (independent) |
+| Supervisor (future, offline) | reads the trajectory, not the agent's prose (ROADMAP session 15); latency-insensitive | any — it runs between workouts | Gemini 3.6/3.8 Flash | 212–350 tok/s (AA) | tau2-bench Airline leadership sits with sibling Gemini 3.7 Flash at 80.6% (independent) |
 
 `gpt-oss-120b` on Cerebras is the fastest model examined (1,724–1,728 tok/s) but has no BFCL/tau2 score in this pass — it is a strong *speed* candidate for any agent once its capability is actually measured, not before.
 
@@ -129,7 +129,7 @@ One OpenRouter API key. Each agent's model is one environment variable, the same
 | Entrance | `meta-llama/llama-3.1-8b-instruct` | `:nitro` or pinned to Groq | Fastest TTFT measured anywhere in this research (0.81 s); already the exact model REPS's local entrance runs, so behaviour is validated against the same weights | ~$0.02 |
 | Logger | `anthropic/claude-haiku-4.5` | `Exacto` (tool-calling accuracy) or pinned to Anthropic direct | Best measured multi-turn tool-calling score of any candidate (53.62% BFCL v4), still one of the cheapest frontier-tier models ($1/$5) | ~$0.55-1.55 |
 | Planner | `anthropic/claude-sonnet-5` | `Exacto` | Same provider/package as the logger; strongest measured agent-loop numbers among Claude models (Sonnet 4.5's 61.37% BFCL multi-turn, 0.862 tau-bench Retail, as the closest proxy); prompt caching (Anthropic-native, reachable through OpenRouter) offsets the repeated-tool-definition cost the on-device doc already measured as expensive | ~$0.07-3.10 |
-| Supervisor (future) | `google/gemini-3.6-flash` | `Floor` (offline, cost-sensitive) | Different provider from both agents above — trivially satisfies "a different model" (ROADMAP session 14); offline/batch-tolerant workload | negligible |
+| Supervisor (future) | `google/gemini-3.6-flash` | `Floor` (offline, cost-sensitive) | Different provider from both agents above — trivially satisfies "a different model" (ROADMAP session 15); offline/batch-tolerant workload | negligible |
 
 ## Measuring on REPS's own evals, through the one router
 
@@ -169,7 +169,7 @@ Roughly the same 40-60 lines estimated in the first pass of this research, once 
 - REPS: `docs/work/10-the-mesocycle/issues/01-the-planner-emits-a-mesocycle.md`
 - REPS: `docs/work/10-the-mesocycle/issues/05-the-plan-eval-suite-on-a-mesocycle.md`
 - REPS: `docs/work/09-the-report-in-the-chat/issues/05-the-log-eval-suite-on-the-graph.md`
-- REPS: `ROADMAP.md` (session 14, supervisor)
+- REPS: `ROADMAP.md` (session 15, supervisor)
 - REPS: `docs/research/on-device-llm-android.md` (local-model throughput baseline)
 - OpenRouter FAQ (fees, BYOK): https://openrouter.ai/docs/faq
 - OpenRouter provider routing (Balanced/Nitro/Floor/Exacto): https://openrouter.ai/docs/guides/routing/provider-selection

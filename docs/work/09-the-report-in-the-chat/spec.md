@@ -16,8 +16,8 @@
 **Out of scope**:
 - the mesocycle, and the next one prepared unasked: session 10 (ADR-0008);
 - a plan worth doing, the methodology and the time floor: session 11 (its tickets 02 and 03 are already cut);
-- onboarding, memory, triage: session 12;
-- hypotheses and trials: session 13. What a refusal leaves behind is *kept* here (ADR-0007 item 4) and promoted to a conclusion there.
+- onboarding, memory, triage: session 13;
+- hypotheses and trials: session 14. What a refusal leaves behind is *kept* here (ADR-0007 item 4) and promoted to a conclusion there.
 
 ## Facts the tickets rely on
 

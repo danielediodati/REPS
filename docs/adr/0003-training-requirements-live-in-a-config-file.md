@@ -4,7 +4,7 @@ The user **declares** five things: cycle length, duration cap, split, volume den
 
 The dividing line is a file you read and edit by hand, against rows you query. A declaration is visible without a query; the same value in SQLite would sit beside measurements, with nothing to tell the two apart.
 
-It is not *who writes the value*, which was the line until session 8. Onboarding (session 12) fills the file by talking to the user, so the system writes it too; until the agent chooses the split itself, the user declares it, and after that they still read it back and change it.
+It is not *who writes the value*, which was the line until session 8. Onboarding (session 13) fills the file by talking to the user, so the system writes it too; until the agent chooses the split itself, the user declares it, and after that they still read it back and change it.
 
 **The file lives in `TRAINER_HOME`, not in the repository** (session 8). It held the user's own cap, split and equipment in a repository meant to be published, and anyone cloning it got the author's declarations. The `git diff` on it was training history -- *when did the cycle change* -- and losing that is the accepted cost of the move. `src/trainer/data/training.example.toml` stays committed as the example the missing-config state names, until onboarding writes the file itself.
 

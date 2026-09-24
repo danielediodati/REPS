@@ -54,7 +54,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 1. **Logging to a file the bot owns**, rotated. Every state and every exception, recorded where the person who can act on it is sitting; the token and the owner id never in it. `BLOCKED` and `FAILED` then name the log instead of *«dove gira il bot»*. — **done** `35340d2`
 
    **Nothing raised leaves the machine**, and this is where it goes instead. Session 7 made those two lines generic on purpose: the engine's states carry absolute paths — the file to copy, the directory to copy it into — and quoted into Telegram they leave this installation's account name and disk layout on a third party's servers, for a path nobody can act on from a phone. Until this lands, the only record is the bot's own stderr.
-2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 12, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
+2. **One directory for everything the machine writes.** `TRAINER_HOME` holds the training database, the checkpointer, `eval-runs/` and the logs; the per-artifact variables stay as overrides. `training.toml` goes in with them: onboarding writes it from session 13, and in the repository it published the user’s own declarations. The files that exist are **moved, not recreated**. — **done** `3d6f5ce`
 3. **The checkpoint's types are registered.** `plan.Request`, `plan.Violation` and `plan.WorkoutPlan` are written into checkpoints by a serializer that now warns it will stop reading them back. Today a warning; on the LangGraph upgrade, every conversation on disk is unreadable. — **done** `be457c6`
 4. **The run record can be read back.** Session 6 item 3 already puts it in the graph state — attempts, tool calls, tokens, wall time per node — and nothing has ever read it. Without this, *control* means only *I have logs*. — **done** `edd866d`
 
@@ -89,9 +89,19 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 In this order. Measuring first is what stops the methodology being written against a cause nobody confirmed, and the floor is last because on its own it buys nothing: given a floor and no methodology, the cheapest way to fill the time is a tenth exercise in the circuit.
 
-1. **The measurement that separates the causes.** The same request on Groq, on a large model at full reasoning. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
+1. **The measurement that separates the causes.** The same request on a large model at full reasoning; session 12 item 4 runs it. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
 2. **What a workout is, written down.** Needs the user's methodology: how many exercises a group gets, what a working set is, which rest goes with which intent, and when a superset or a circuit is the right answer rather than the cheap one.
 3. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 of 45 minutes and every rule passed it.
+
+## Session 12 — `0.12.0` — How much the model thinks, and what it costs
+
+**Demo**: one table per subgraph, each row a model at a reasoning effort: held against its bar, dollars and seconds per interaction. The configuration shipped is the row the rule picked.
+
+1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both.
+2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run.
+3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
+4. **The planner's matrix**, the same on the plan suite and one mesocycle each. It is also 11.1's measurement.
+5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
 
 ## Later sessions
 
@@ -99,11 +109,11 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 12 | `0.12.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
-| 13 | `0.13.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
-| 14 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
+| 13 | `0.13.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 14 | `0.14.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
+| 15 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 
-**Portfolio-ready** is session 14. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
+**Portfolio-ready** is session 15. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
