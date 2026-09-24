@@ -24,6 +24,7 @@ Each of these was learned by getting it wrong once.
 - **Vocabulary that exists in the data is read from the data**, never copied into a constant. A hand-copied equipment list was wrong in three places.
 - **A missing precondition is reported as a state, not as a user error.** Check the state and name the fix, e.g. *run `trainer db import` first*. Against an empty catalog, a correct `--equipment dumbbell` was once rejected as a typo.
 - **Tests derive the expected schema version from the migration set**, never from a hardcoded number.
+- **Nothing that spends credits runs without the user's approval.** Every call to a paid model and every test or eval run that reaches one is asked for first, with an estimate of its cost; run it only once approved.
 - **Every agent measurement runs against a fixture named in the environment (`TRAINER_DB`).** The tools open their own connection, so a fixture that nothing points at is invisible to the agent.
 
 ## Closing a ticket
