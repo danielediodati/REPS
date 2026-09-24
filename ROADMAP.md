@@ -66,7 +66,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 2. **The logger subgraph, on the same tools.** The clarifying question and the exclusion confirmation are interrupts. The old loop, the `QUESTION:` marker and the hand-written Groq adapter are deleted with it -- a deletion is the second half of the work that makes it possible, not an issue of its own -- and the Groq settings move into `coach/models.py`, including the default model name that answers with a 404 today. — **done** `af6a6f2`
 3. **The entrance talks** (ADR-0006). A chat model holds the conversation and reaches the planner and logger as tools, on a small fast model of its own: a router would classify into three branches that each answer from constants, which is today's woodenness times three. Five of the bot's seven fixed lines go; `BLOCKED` and `FAILED` stay. It carries the per-node model with it, which issue 1 has already moved into the record's nodes. `bot.Coach` is renamed here: it is the turn-taking, and the word is needed for the node that coaches. — **done** `d8f7fc9`
 4. ~~**The next plan is prepared asynchronously.**~~ **Withdrawn** (ADR-0008): planning after every workout re-plans a programme that should hold for several cycles. It returns as session 10 item 4.
-5. **The log eval suite runs against the graph.**
+5. **The log eval suite runs against the graph.** — **done** `b4ba690`
 6. **The logger writes only what was said.** A value the user did not give is left empty and the engine fills it; a refusal goes back to the model; an exclusion's vocabulary comes from the catalog. The first pass held 24 of 90, and 7 of 50 determined runs on the document against 30 on what would be written. — **done** `632f5ae`
 
 ## Session 10 — `0.10.0` — The mesocycle
