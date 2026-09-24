@@ -974,6 +974,8 @@ def test_false_confidence_counts_double_against_the_must_ask_bar() -> None:
     )
 
     assert barred_report(*held, confident).passed
+    printed = "\n".join(evaluation.totals(barred_report(*held, confident), "held"))
+    assert "must ask: 3 of 4 (5 counted) -- 60%" in printed
     assert not barred_report(
         *held[:2],
         confident,

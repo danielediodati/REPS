@@ -1038,8 +1038,11 @@ def totals(report: Report, held: str) -> list[str]:
     for half in report.halves:
         part = report.of(half)
         if part.total:
+            doubled = (
+                "" if part.against == part.total else f" ({part.against} counted)"
+            )
             lines.append(
-                f"  {half.name}: {part.held} of {part.total} -- "
+                f"  {half.name}: {part.held} of {part.total}{doubled} -- "
                 f"{math.floor(part.percentage)}%, the bar is {half.bar}%"
             )
     lines.append(
