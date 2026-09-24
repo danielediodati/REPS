@@ -73,7 +73,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: you ask for a mesocycle and accept it once. On each of the next workouts the bot answers at once with the next one from it, the last load beside each exercise. After the last cycle the next mesocycle is waiting in the chat.
 
-1. **The planner emits a mesocycle** (ADR-0008): a workout per slot of the cycle, how many cycles it lasts, and why. Each workout validated as one is today. Accepted, it is kept in SQLite.
+1. **The planner emits a mesocycle** (ADR-0008): a workout per slot of the cycle, how many cycles it lasts, and why. Each workout validated as one is today. Accepted, it is kept in SQLite. — **done** `cbce01c`
 2. **Today's workout is read, not planned.** The rotation's slot off the mesocycle, no model call, the last performed load beside each exercise. It is prescribed when served. — **done** `ea736ea`
 3. **A change and an adaptation.** A change rewrites the mesocycle for the cycles left; an adaptation plans today from the mesocycle's workout and leaves it alone. The entrance tells them apart, and asks when it cannot. — **done** `a706cba`
 4. **The next mesocycle is prepared when the last cycle ends**, and waits in the chat. What ticket 9.4 established still holds:
