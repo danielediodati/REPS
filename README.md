@@ -1,6 +1,6 @@
 # REPS
 
-> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on a local model or on Groq.
+> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on a local model, Groq or OpenRouter.
 
 REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end of the workout have cost three missed workouts, and the system changes the plan.
 
@@ -10,15 +10,14 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.8.0` makes a run something you can look at afterwards.** On top of `0.7.0`'s bot (the planner graph on the phone, the graph's progress streamed into the chat, a plan with three buttons, today's inputs off `training.toml` and the rotation), it has:
-- one directory for everything the machine writes, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation;
-- a rotating log the bot owns, holding every state and every exception and never the token or the owner id, named by the two chat lines that point at it;
-- a checkpointer that declares the types it writes, so the threads on disk survive the LangGraph version that stops constructing undeclared ones;
-- `trainer runs list` and `trainer runs show`, which read a run back: what it called, what the validator refused, what it cost, and for one cut mid-flight what it had reached.
+**`0.9.0` puts the report in the chat.** On top of `0.8.0` (one home directory, the bot's log, `trainer runs`), it has:
+- an entrance that holds the conversation on a model of its own and starts the planner or the logger when you ask for one (ADR-0006);
+- the logger as a subgraph on the same tools, asking with a message and confirming an exclusion with two buttons; it writes only what you said, and the engine fills in the rest as prescribed (ADR-0009);
+- a run as a document written when it ends, so a plan turned down is kept beside the one that followed (ADR-0007);
+- the log eval suite on the graph, against bars its set declares (ADR-0010): 83% of the reports that determine their answer, 62% of those that must make it ask, on `qwen/qwen3.8-27b` through OpenRouter;
+- OpenRouter as a provider, with a model per subgraph.
 
-Every message still asks for today's workout: the entrance that talks is session 9 (ADR-0006).
-
-**Session 9** puts the report in the chat: the logger as a subgraph on the same tools, an entrance that holds the conversation, and the next plan prepared before it is asked for.
+Part of session 10 is in as well: a mesocycle planned once, today's workout read off it, a change and an adaptation. **Next**: session 10's prepared mesocycle and its eval, and session 12, which measures what reasoning buys and what it costs.
 
 ## Architecture (target)
 
@@ -65,7 +64,7 @@ uv run trainer runs list                                      # every negotiatio
 uv run trainer runs show 20260918-190412-3f9a                 # its runs: what each called, spent and reached
 ```
 
-**Choosing the provider.** `trainer plan` and `trainer eval --suite plan` run the planner graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
+**Choosing the provider.** `trainer plan`, `trainer log` and `trainer eval` run their graph on whichever provider `LLM_BACKEND` names, and copying `.env.example` to `.env` is where that is set.
 
 | `LLM_BACKEND` | what it needs |
 |---|---|
@@ -77,7 +76,7 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
-**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq, `OPENROUTER_MODEL`'s on OpenRouter — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Both models are checked before the bot starts.
+**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq, `OPENROUTER_MODEL`'s on OpenRouter — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Every model is checked before the bot starts.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
