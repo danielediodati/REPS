@@ -81,7 +81,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
    - left unanswered it reads *waiting*, with how long, never *abandoned* (ADR-0007 item 8);
    - it runs outside the turn-taking queue, so a message arriving meanwhile is answered, and it opens no draft;
    - it starts its run with `planner.starting` alone, on `bot.under(thread, PLANNING)`, so a user request while it waits gets the prepared one and never a second.
-5. **The plan eval suite on a mesocycle**, with its wall time on the local model: several plans' worth of minutes is the risk this session carries.
+5. **The plan eval suite on a mesocycle**, with its wall time. On the local model a mesocycle is ten minutes; on OpenRouter it was 17 seconds.
 
 ## Session 11 — `0.11.0` — A plan worth doing
 
