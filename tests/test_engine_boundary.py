@@ -274,6 +274,10 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # against, the same read `trainer log` opens with. The next test is
         # what says it does not write.
         "coach/bot.py",
+        # Session 10: the next mesocycle's request carries what was performed
+        # in the last one, so the checkpoint has to read those blocks back.
+        # It names the two types to register them and calls nothing.
+        "coach/checkpoints.py",
         # Session 10: a mesocycle's slots are `PrescribedBlock`s, templates
         # the engine keeps and reads; it writes no workout.
         "engine/mesocycles.py",

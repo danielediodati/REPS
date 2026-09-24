@@ -355,3 +355,52 @@ def test_served_after_an_adaptation_it_reads_as_the_adapted_workout(
     found, _ = mesocycles.record_served(connection, TODAY)
 
     assert found.blocks == slot("Plank", reps=None, seconds=20)
+
+
+def test_a_mesocycle_still_running_has_not_finished(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    accepted(connection, cycles=1)
+    _, served = mesocycles.record_served(connection, TODAY)
+    performed(connection, served)
+
+    assert mesocycles.finished(connection) is None
+
+
+def test_the_report_that_completes_its_last_cycle_finishes_it(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    """With what was performed against it, slot by slot, and nothing past its end."""
+    performed(connection)
+    identifier = accepted(connection, cycles=1)
+    for _ in range(2):
+        _, served = mesocycles.record_served(connection, TODAY)
+        performed(connection, served)
+
+    ended = mesocycles.finished(connection)
+
+    assert ended is not None
+    assert ended.mesocycle.id == identifier
+    assert [trained.slot for trained in ended.trained] == [2, 1]
+    assert all(trained.performed_on == TODAY for trained in ended.trained)
+    assert ended.trained[0].blocks[0].items[0].exercise_id == "Plank"
+    assert ended.past == 0
+
+
+def test_a_workout_performed_after_its_end_is_counted_past_it(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    """Which is what tells the report that finished it from every one after."""
+    accepted(connection, cycles=1)
+    for _ in range(3):
+        performed(connection)
+
+    ended = mesocycles.finished(connection)
+
+    assert ended is not None
+    assert ended.past == 1
+    assert len(ended.trained) == 2
+
+
+def test_with_none_accepted_nothing_has_finished(connection: sqlite3.Connection) -> None:
+    assert mesocycles.finished(connection) is None

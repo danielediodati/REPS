@@ -532,6 +532,12 @@ class Graphs:
     flight is already talking on -- two invocations, one checkpoint.
     """
 
+    preparing: set[str] = field(default_factory=set)
+    """The chat threads whose next mesocycle is being prepared right now."""
+
+    background: set[asyncio.Task[None]] = field(default_factory=set)
+    """The preparations in flight, held so the loop does not drop them."""
+
 
 def talking(graphs: Graphs) -> Run:
     """One message, answered by the entrance, which may hand it on to a subgraph.
@@ -558,6 +564,8 @@ def talking(graphs: Graphs) -> Run:
         handoff = str(final.get("handoff", ""))
         if handoff == entrance.TODAYS_WORKOUT:
             await _serving(thread, chat)
+        elif handoff == entrance.PREPARED:
+            await _reoffered(graphs, thread, chat)
         elif handoff in (entrance.PLAN_MESOCYCLE, *entrance.CHECKED):
             await _planning(graphs, thread, final, chat)
         elif handoff == entrance.LOG_WORKOUT:
@@ -1034,6 +1042,110 @@ async def reported(
         return
     await asyncio.to_thread(_written, final)
     await _relay(graphs, thread, entrance.LOGGED, chat)
+    await _preparing(graphs, thread, chat)
+
+
+def prepared(plans_on: planner.Planner, preparing: set[str]) -> Callable[[str], bool]:
+    """Whether a chat thread's next mesocycle is being prepared, or waits unanswered."""
+
+    def waiting(thread: str) -> bool:
+        if thread in preparing:
+            return True
+        held = plans_on.get_state(_reading(under(thread, PLANNING)))
+        return bool(held.interrupts) and bool(held.values.get("unasked"))
+
+    return waiting
+
+
+def _next() -> plans.MesocycleRequest | None:
+    """The next mesocycle's request, when the report just written ended the last cycle."""
+    with tools.reported(), tools.opened() as connection:
+        ended = mesocycles.finished(connection)
+        if ended is None or ended.past:
+            return None
+        return plans.next_requested(connection, date.today().isoformat())
+
+
+async def _preparing(graphs: Graphs, thread: str, chat: Chat) -> None:
+    """The next mesocycle, planned in the background when the last cycle has just ended (ADR-0008 item 5).
+
+    A task and not a turn: the queue in `Turns` is released once the report is
+    answered, so a message arriving while the planner works is answered.
+    """
+    if thread in graphs.preparing or await asyncio.to_thread(_asked_for, graphs, thread):
+        return
+    try:
+        request = await asyncio.to_thread(_next)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot prepare the next mesocycle: %s", thread, state, exc_info=True)
+        return
+    if request is None:
+        return
+    graphs.preparing.add(thread)
+    task = asyncio.create_task(_prepare(graphs, thread, request, chat))
+    graphs.background.add(task)
+    task.add_done_callback(graphs.background.discard)
+
+
+def _asked_for(graphs: Graphs, thread: str) -> bool:
+    """Whether a new mesocycle is already offered on this thread and unanswered.
+
+    That one is the next mesocycle, and preparing another would supersede it.
+    A pending adaptation or change is not: the day and the mesocycle it was
+    for have just ended.
+    """
+    held = graphs.planner.get_state(_reading(under(thread, PLANNING)))
+    request = held.values.get("request")
+    return (
+        bool(held.interrupts)
+        and isinstance(request, plans.MesocycleRequest)
+        and request.changing is None
+    )
+
+
+async def _unseen(text: str) -> None:
+    """The draft of a run nobody is waiting on: nothing is sent."""
+
+
+async def _prepare(
+    graphs: Graphs, thread: str, request: plans.MesocycleRequest, chat: Chat
+) -> None:
+    """One planning run nobody asked for, on the thread a requested one uses, and its offer."""
+    quiet = Chat(say=chat.say, offer=chat.offer, draft=_unseen)
+    try:
+        settled = await _ending(
+            graphs.planner,
+            planner.starting(request, unasked=True),
+            under(thread, PLANNING),
+            quiet,
+            graphs.archive,
+            progress.Progress(progress.PLAN),
+        )
+        if settled.get("__interrupt__"):
+            await _relay(graphs, thread, entrance.NEXT_MESOCYCLE, chat)
+        await told(graphs, settled, thread, quiet)
+    except Exception:
+        logger.exception("preparing the next mesocycle on %s failed", thread)
+        with contextlib.suppress(Exception):
+            await chat.say(FAILED)
+    finally:
+        graphs.preparing.discard(thread)
+
+
+async def _reoffered(graphs: Graphs, thread: str, chat: Chat) -> None:
+    """The prepared mesocycle offered again, with the buttons of the one already waiting.
+
+    While it is still being prepared there is nothing to offer yet: it arrives
+    by itself, which is what the entrance has already said.
+    """
+    if thread in graphs.preparing:
+        return
+    held = await asyncio.to_thread(
+        graphs.planner.get_state, _reading(under(thread, PLANNING))
+    )
+    if not held.interrupts:
+        return
+    await told(graphs, {**held.values, "__interrupt__": held.interrupts}, thread, chat)
 
 
 async def _asked(waiting: Any, thread: str, chat: Chat) -> None:
@@ -1393,11 +1505,19 @@ def graphs(
     entrance is the node latency is felt on, the planner is the one that has
     to reason, and the logger the one that has to extract.
     """
+    plans_on = planner.build(on, checkpointer=saver, archive=archive)
+    preparing: set[str] = set()
     return Graphs(
-        entrance=entrance.build(front, checkpointer=saver, archive=archive),
-        planner=planner.build(on, checkpointer=saver, archive=archive),
+        entrance=entrance.build(
+            front,
+            checkpointer=saver,
+            archive=archive,
+            prepared=prepared(plans_on, preparing),
+        ),
+        planner=plans_on,
         logger=logger_graph.build(logs, checkpointer=saver, archive=archive),
         archive=archive,
+        preparing=preparing,
     )
 
 

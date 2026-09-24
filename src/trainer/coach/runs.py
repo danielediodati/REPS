@@ -11,7 +11,7 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ class Run:
     ended: str
     ending: str
     document: Mapping[str, Any]
+    unasked: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class Live:
     moved: str
     waiting: bool
     state: Mapping[str, Any]
+    unasked: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,13 @@ class Negotiation:
     negotiation: str
     runs: tuple[Run, ...]
     live: Live | None = None
+
+    @property
+    def unasked(self) -> bool:
+        """Whether the machine opened it rather than the user."""
+        return any(run.unasked for run in self.runs) or (
+            self.live is not None and self.live.unasked
+        )
 
     @property
     def moved(self) -> str:
@@ -136,6 +145,7 @@ def kept(archive: Path) -> list[Run]:
                 ended=str(held.get("ended", "")),
                 ending=str(held.get("ending", "")),
                 document=held,
+                unasked=bool(held.get("unasked", False)),
             )
         )
     return sorted(found, key=lambda run: (instant(run.began), run.run))
@@ -192,7 +202,10 @@ def run_named(held: Negotiation, name: str) -> Run | None:
     return next((run for run in held.runs if run.run == name), None)
 
 
-def line(held: Negotiation, width: int = 0) -> str:
+UNASKED = "opened by the machine"
+
+
+def line(held: Negotiation, width: int = 0, now: datetime | None = None) -> str:
     """One negotiation, on one line of ASCII, for the terminal.
 
     `width` is the widest negotiation name it is being listed beside; zero
@@ -201,12 +214,27 @@ def line(held: Negotiation, width: int = 0) -> str:
     """
     outcome = held.outcome
     if held.open and held.live is not None and held.live.waiting:
-        outcome = f"{WAITING} since {moment(held.since)}"
+        since = instant(held.since)
+        waited = (now or datetime.now(timezone.utc)) - since
+        outcome = f"{WAITING} since {moment(held.since)} ({lasted(waited)})"
     runs = len(held.runs) + (1 if held.open else 0)
     counted = f"{runs} run" if runs == 1 else f"{runs} runs"
     if width:
         counted = counted.ljust(len("00 runs"))
-    return f"{held.negotiation.ljust(width)}  {moment(held.moved)}  {counted}  {outcome}"
+    shown = f"{held.negotiation.ljust(width)}  {moment(held.moved)}  {counted}  {outcome}"
+    return f"{shown}  {UNASKED}" if held.unasked else shown
+
+
+def lasted(span: timedelta) -> str:
+    """How long, to the two largest units that say it: 2d 3h, 5h 10m, 12m."""
+    minutes = max(0, int(span.total_seconds() // 60))
+    days, minutes = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
 
 
 def instant(stamp: str) -> datetime:
@@ -248,6 +276,7 @@ def _live(thread: str, held: CheckpointTuple) -> Live:
         moved=str(held.checkpoint["ts"]),
         waiting=any(channel == INTERRUPT for _, channel, _ in held.pending_writes or ()),
         state=values,
+        unasked=bool(values.get("unasked", False)),
     )
 
 

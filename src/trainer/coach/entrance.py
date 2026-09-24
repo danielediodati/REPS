@@ -18,6 +18,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.config import get_config
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -149,6 +150,16 @@ NO_MESOCYCLE = (
     "one has run all its cycles. Tell them so and offer to plan one. Call "
     "`plan_mesocycle` only once they say yes."
 )
+
+WAITING_MESOCYCLE = (
+    "Their mesocycle has run all its cycles, and the next one was prepared "
+    "without them asking: it is in the chat, or arriving shortly. Tell them "
+    "so, and that they accept it or turn it down there. Do not offer to plan "
+    "another."
+)
+
+PREPARED = "prepared"
+"""The handoff a turn takes instead when the next mesocycle is already waiting: it is offered again."""
 
 UNREADABLE = (
     "Today's workout cannot be read: something on the machine needs fixing, "
@@ -318,13 +329,29 @@ LOGGED = (
     "recorded."
 )
 
+NEXT_MESOCYCLE = (
+    "That workout was the last of their mesocycle's cycles, and you have "
+    "planned the next one without being asked: it follows this message. Tell "
+    "them so, and say nothing about what is in it."
+)
+
 NOT_LOGGED = (
     "What they reported could not be turned into a workout the engine will "
     "accept, so nothing was written. Tell them it did not go through and ask "
     "them to tell you again in their own words."
 )
 
-SITUATIONS = (HELLO, QUEUED, PRESCRIBED, KEPT, SUPERSEDED, NO_PLAN, LOGGED, NOT_LOGGED)
+SITUATIONS = (
+    HELLO,
+    QUEUED,
+    PRESCRIBED,
+    KEPT,
+    SUPERSEDED,
+    NO_PLAN,
+    LOGGED,
+    NOT_LOGGED,
+    NEXT_MESOCYCLE,
+)
 """Everything the machine can ask the entrance to say.
 
 Enumerated so a test can put each of them to a stand-in: every one of them was
@@ -427,10 +454,12 @@ def build(
     archive: Path | None = None,
     today: Callable[[], str] | None = None,
     checking: Callable[[str, Mapping[str, Any]], str | None] | None = None,
+    prepared: Callable[[str], bool] | None = None,
 ) -> Entrance:
     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
 
     `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
+    `prepared` says whether the next mesocycle is waiting, or being prepared, on a thread.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
     about what has been trained; everything else is handed to a subgraph, which
@@ -517,6 +546,11 @@ def build(
         asked: dict[str, Any] = {}
         answers: list[AnyMessage] = []
         spent = 0
+
+        def waiting() -> bool:
+            thread = get_config().get("configurable", {}).get("thread_id")
+            return prepared is not None and thread is not None and prepared(str(thread))
+
         for call in reply.tool_calls:
             name = call["name"]
             if name not in HANDED:
@@ -527,6 +561,10 @@ def build(
                 said = ONE_AT_A_TIME
             elif name == TODAYS_WORKOUT:
                 said, taken = looked_up(), name
+                if said == NO_MESOCYCLE and waiting():
+                    said, taken = WAITING_MESOCYCLE, PREPARED
+            elif name == PLAN_MESOCYCLE and waiting():
+                said, taken = WAITING_MESOCYCLE, PREPARED
             elif name not in CHECKED:
                 said, taken = STARTED[name], name
             elif state.get("spent", 0) + spent >= budget:
@@ -535,6 +573,8 @@ def build(
                 refused = checked(name, call["args"])
                 if refused is None:
                     said, taken, asked = STARTED[name], name, dict(call["args"])
+                elif refused == NO_MESOCYCLE and waiting():
+                    said, taken = WAITING_MESOCYCLE, PREPARED
                 else:
                     said, spent = refused, spent + 1
             answers.append(ToolMessage(said, tool_call_id=answered(call), name=name))

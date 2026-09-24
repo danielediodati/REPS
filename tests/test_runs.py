@@ -13,6 +13,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -492,3 +493,57 @@ def test_a_run_cut_mid_flight_is_read_back_against_the_budget_it_had(
 
     assert written["budget"] == 2
     assert "1 of 2 tool calls" in run_record.summary(written)[0]
+
+
+# -- a negotiation nobody asked for (ADR-0008 item 5) --------------------------
+
+
+def test_a_negotiation_the_machine_opened_is_told_apart_and_waits_with_how_long(
+    catalogued: sqlite3.Connection, archive: Path, tmp_path: Path
+) -> None:
+    """Waiting, never abandoned: an absence is not an event (ADR-0007 item 8)."""
+    path = tmp_path / "checkpoints.sqlite"
+    with checkpoints.saver(path) as saver:
+        graph = graph_of(
+            Scripted(documents=[plan_of("Barbell_Squat")]),
+            checkpointer=saver,
+            archive=archive,
+        )
+        graph.invoke(planner.starting(BARBELL_45, unasked=True), THREAD)
+
+    with checkpoints.saver(path) as saver:
+        (negotiation,) = runs.negotiations(runs.kept(archive), runs.live(saver))
+    later = runs.instant(negotiation.since) + timedelta(days=2, hours=3)
+
+    shown = runs.line(negotiation, now=later)
+    assert negotiation.unasked
+    assert "opened by the machine" in shown
+    assert "waiting since" in shown and "(2d 3h)" in shown
+    assert "abandoned" not in shown
+    assert shown.isascii()
+
+
+def test_a_negotiation_the_machine_opened_stays_its_once_its_runs_are_closed(
+    catalogued: sqlite3.Connection, archive: Path
+) -> None:
+    graph = negotiating(archive, plan_of("Barbell_Squat"), plan_of("Barbell_Squat", rounds=2))
+    graph.invoke(planner.starting(BARBELL_45, unasked=True), THREAD)
+    graph.invoke(Command(resume=planner.refused("no")), THREAD)
+
+    (negotiation,) = runs.negotiations(runs.kept(archive), ())
+
+    assert negotiation.unasked
+    assert "opened by the machine" in runs.line(negotiation)
+
+
+def test_a_negotiation_the_user_opened_says_nothing_about_who(
+    catalogued: sqlite3.Connection, archive: Path
+) -> None:
+    graph = negotiating(archive, plan_of("Barbell_Squat"), plan_of("Barbell_Squat", rounds=2))
+    graph.invoke(planner.starting(BARBELL_45), THREAD)
+    graph.invoke(Command(resume=planner.refused("no")), THREAD)
+
+    (negotiation,) = runs.negotiations(runs.kept(archive), ())
+
+    assert not negotiation.unasked
+    assert "machine" not in runs.line(negotiation)

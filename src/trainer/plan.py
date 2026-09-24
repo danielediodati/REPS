@@ -304,12 +304,21 @@ class Changing:
 
 
 @dataclass(frozen=True)
+class Continuing:
+    """The mesocycle whose cycles have all been performed, and what was performed in them."""
+
+    ended: Mesocycle
+    trained: tuple[mesocycles.Trained, ...]
+
+
+@dataclass(frozen=True)
 class MesocycleRequest:
     """One `Request` per slot of the cycle, in the split's order, and what the negotiation turned down."""
 
     slots: tuple[Request, ...]
     refusals: tuple[MesocycleRefusal, ...] = ()
     changing: Changing | None = None
+    continuing: Continuing | None = None
 
 
 def mesocycle_turned_down(
@@ -500,6 +509,26 @@ def change_requested(
                 why=active.why,
             ),
             said=said,
+        ),
+    )
+
+
+def next_requested(connection: sqlite3.Connection, today: str) -> MesocycleRequest:
+    """A mesocycle's request carrying the one that has run all its cycles and what was done in it."""
+    ended = mesocycles.finished(connection)
+    if ended is None:
+        raise mesocycles.MesocycleError(
+            "the active mesocycle has not finished its cycles, or none was accepted"
+        )
+    return dataclasses.replace(
+        mesocycle_requested(connection, today),
+        continuing=Continuing(
+            ended=Mesocycle(
+                workouts=[from_prescribed(slot) for slot in ended.mesocycle.slots],
+                cycles=ended.mesocycle.cycles,
+                why=ended.mesocycle.why,
+            ),
+            trained=ended.trained,
         ),
     )
 

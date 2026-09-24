@@ -17,7 +17,7 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 - the log eval suite on the graph, against bars its set declares (ADR-0010): 83% of the reports that determine their answer, 62% of those that must make it ask, on `qwen/qwen3.8-27b` through OpenRouter;
 - OpenRouter as a provider, with a model per subgraph.
 
-Part of session 10 is in as well: a mesocycle planned once, today's workout read off it, a change and an adaptation. **Next**: session 10's prepared mesocycle and its eval, and session 12, which measures what reasoning buys and what it costs.
+Part of session 10 is in as well: a mesocycle planned once, today's workout read off it, a change and an adaptation, and the next mesocycle prepared in the chat when the report of the last cycle arrives. **Next**: session 10's eval, and session 12, which measures what reasoning buys and what it costs.
 
 ## Architecture (target)
 
@@ -86,7 +86,7 @@ An unreachable server, a model nobody pulled, a missing key and a model Groq has
 
 **Every run can be read back.** A *run* is one proposal pursued, from the request being assembled to your answer; turning a plan down ends it and the plan that follows belongs to another. One ask and all its runs are a *negotiation* (ADR-0007). A run that ends is written into `runs/` in the home the moment it ends, so the evidence of an evening survives the checkpointer, which keeps only the run that is alive.
 
-The log says why a run stopped; `trainer runs` says what it was doing. `trainer runs list` names every negotiation with when it last moved, how many runs it took and what it came to — accepted, turned down, refused by the validator, fallen over, *cut*, or *waiting since* the day it asked. `trainer runs show NAME` takes a negotiation or one of its runs and prints each one's record: the tools it called, the attempts the validator refused, the tokens, the seconds each node cost, and the words you turned it down with. `--json` gives the documents whole, which is what `trainer plan --record` copies. It reads documents and nothing else — no provider, no graph, no model — because it is the tool you reach for when the provider is what is wrong.
+The log says why a run stopped; `trainer runs` says what it was doing. `trainer runs list` names every negotiation with when it last moved, how many runs it took and what it came to — accepted, turned down, refused by the validator, fallen over, *cut*, or *waiting since* the day it asked and for how long. One the bot opened without being asked, the next mesocycle, says *opened by the machine*. `trainer runs show NAME` takes a negotiation or one of its runs and prints each one's record: the tools it called, the attempts the validator refused, the tokens, the seconds each node cost, and the words you turned it down with. `--json` gives the documents whole, which is what `trainer plan --record` copies. It reads documents and nothing else — no provider, no graph, no model — because it is the tool you reach for when the provider is what is wrong.
 
 ## Development
 

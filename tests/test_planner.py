@@ -1396,3 +1396,103 @@ def test_an_accepted_change_replaces_the_mesocycle_and_keeps_its_count(
     assert kept is not None and kept.id == final["mesocycle"] != old
     assert kept.accepted_after == before.accepted_after
     assert kept.slots[0][0].block.rounds == 2
+
+
+# -- the next mesocycle, prepared (ADR-0008 item 5) ----------------------------
+
+
+def squatted(connection: sqlite3.Connection, load_kg: float, on: str = "2026-09-22") -> None:
+    """One workout reported: squats at `load_kg`."""
+    workouts.record_performed(
+        connection,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id="Barbell_Squat",
+                        unit="reps",
+                        amount=5,
+                        amount_source="reported",
+                        load_kg=load_kg,
+                        load_kg_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on=on,
+        report="squat",
+    )
+
+
+def ran_out(connection: sqlite3.Connection, two_slots: plans.MesocycleRequest) -> None:
+    """A one-cycle mesocycle accepted and both its workouts reported."""
+    offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=1)
+    graph, thread = pausing(Scripted(raw=[offered.model_dump_json()]))
+    graph.invoke(planner.starting(two_slots), thread)
+    graph.invoke(Command(resume=planner.accepted()), thread)
+    squatted(connection, 100)
+    squatted(connection, 102.5)
+
+
+def test_the_next_mesocycle_needs_the_last_one_finished(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    keeping(connection, two_slots)
+
+    with pytest.raises(mesocycles.MesocycleError, match="not finished"):
+        plans.next_requested(connection, "2026-09-22")
+
+
+def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_what_was_done(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    ran_out(connection, two_slots)
+    asked = plans.next_requested(connection, "2026-09-22")
+    model = Scripted(documents=[mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))])
+    graph, thread = pausing(model)
+
+    graph.invoke(planner.starting(asked, unasked=True), thread)
+
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "has run all 1 of its cycles" in briefed
+    assert '"Standing_Military_Press"' in briefed, "the mesocycle that ended, whole"
+    assert "Barbell_Squat 3x5 reps at 102.5 kg" in briefed, "what was performed against it"
+
+
+def test_a_run_nobody_asked_for_says_so_in_its_record(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    ran_out(connection, two_slots)
+    asked = plans.next_requested(connection, "2026-09-22")
+    graph, thread = pausing(
+        Scripted(
+            turns=[AIMessage(content="planned"), AIMessage(content="another")],
+            documents=[
+                mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")),
+                mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=2),
+            ],
+        )
+    )
+
+    graph.invoke(planner.starting(asked, unasked=True), thread)
+    first = record.of(graph.get_state(thread).values, tools.CALL_BUDGET)
+    graph.invoke(Command(resume=planner.refused("no")), thread)
+    second = record.of(graph.get_state(thread).values, tools.CALL_BUDGET)
+
+    assert first["unasked"] is True
+    assert second["unasked"] is True, "a refusal's next run is still one nobody asked for"
+    assert second["negotiation"] == first["negotiation"]
+
+
+def test_a_run_the_user_asked_for_is_not_unasked(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    graph, thread = pausing(Scripted(documents=[mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))]))
+
+    graph.invoke(planner.starting(two_slots), thread)
+
+    assert record.of(graph.get_state(thread).values, tools.CALL_BUDGET)["unasked"] is False

@@ -247,6 +247,8 @@ def graphs_of(
     """
     kept = archive if archive is not None else run_record.archive()
     held = saver if saver is not None else InMemorySaver()
+    plans_on = plan if plan is not None else graph_of(Scripted(), checkpointer=held)
+    preparing: set[str] = set()
     return bot.Graphs(
         entrance=entrance.build(
             models.Chat(
@@ -256,10 +258,12 @@ def graphs_of(
             ),
             checkpointer=held,
             archive=kept,
+            prepared=bot.prepared(plans_on, preparing),
         ),
-        planner=plan if plan is not None else graph_of(Scripted(), checkpointer=held),
+        planner=plans_on,
         logger=log if log is not None else logger_graph_of(Scripted(), checkpointer=held),
         archive=kept,
+        preparing=preparing,
     )
 
 
@@ -2430,3 +2434,283 @@ def test_a_change_is_offered_accepted_and_kept_counting_on(
     assert after is not None and after.id != before.id
     assert after.accepted_after == before.accepted_after
     assert after.slots[0][0].block.rounds == 2
+
+
+# -- the next mesocycle, prepared (ADR-0008 item 5) ----------------------------
+
+
+NEXT = mesocycle_of(plan_of("Barbell_Squat", rounds=2), plan_of("Standing_Military_Press"), cycles=3)
+"""What the planner prepares once the last cycle is performed."""
+
+
+def performed_once(
+    catalogued: sqlite3.Connection, exercise_id: str, workout_id: int | None = None
+) -> None:
+    """One workout reported, against `workout_id` when there is one."""
+    workouts.record_performed(
+        catalogued,
+        (
+            workouts.PerformedBlock(
+                items=(
+                    workouts.PerformedItem(
+                        exercise_id=exercise_id,
+                        unit="reps",
+                        amount=5,
+                        amount_source="reported",
+                        load_kg=100,
+                        load_kg_source="reported",
+                    ),
+                ),
+                rounds=3,
+                rounds_source="reported",
+                rest=120,
+                rest_source="reported",
+            ),
+        ),
+        on=date.today().isoformat(),
+        report=exercise_id,
+        workout_id=workout_id,
+    )
+
+
+def on_its_last_workout(catalogued: sqlite3.Connection) -> int:
+    """A one-cycle mesocycle with its first workout performed and its last one served."""
+    mesocycles.record_mesocycle(
+        catalogued,
+        tuple(
+            tuple(
+                workouts.PrescribedBlock(block=block, reason=shape.reason)
+                for shape, block in zip(workout.blocks, plans.to_blocks(workout), strict=True)
+            )
+            for workout in A_MESOCYCLE.workouts
+        ),
+        cycles=1,
+        why=A_MESOCYCLE.why,
+        on=date.today().isoformat(),
+    )
+    _, first = mesocycles.record_served(catalogued, date.today().isoformat())
+    performed_once(catalogued, "Barbell_Squat", first)
+    _, last = mesocycles.record_served(catalogued, date.today().isoformat())
+    return last
+
+
+def finishing(
+    catalogued: sqlite3.Connection,
+    planned: Scripted,
+    front: Talking | None = None,
+    saver: BaseCheckpointSaver[Any] | None = None,
+    archive: Path | None = None,
+) -> bot.Graphs:
+    """A chat about to report the workout that completes its mesocycle's last cycle."""
+    last = on_its_last_workout(catalogued)
+    held = saver if saver is not None else InMemorySaver()
+    return graphs_of(
+        graph_of(planned, checkpointer=held),
+        front=front if front is not None else Talking(handoff=entrance.LOG_WORKOUT),
+        log=logger_graph_of(
+            scripted(AIMessage(content="chiaro"), emits=report(workout_id=last, report="press")),
+            checkpointer=held,
+            archive=archive,
+        ),
+        saver=held,
+        archive=archive,
+    )
+
+
+async def reported_and_prepared(graphs: bot.Graphs, watched: Channels) -> int:
+    """The report, then the preparation it started; how many drafts the report alone left."""
+    await turns_of(graphs).arriving(OWNER, CHAT, "fatto il press", watched.chat)
+    drafted = len(watched.drafts)
+    await asyncio.gather(*graphs.background)
+    return drafted
+
+
+def told_the_entrance(graphs: bot.Graphs) -> list[str]:
+    return [
+        message.text
+        for message in graphs.entrance.get_state(
+            {"configurable": {"thread_id": bot.thread_for(CHAT)}}
+        ).values["messages"]
+    ]
+
+
+def test_the_report_that_completes_the_last_cycle_prepares_the_next_mesocycle(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    planned = Scripted(documents=[NEXT])
+    graphs = finishing(catalogued, planned)
+    watched = Channels()
+
+    drafted = asyncio.run(reported_and_prepared(graphs, watched))
+
+    assert watched.said == [SAYS, entrance.LOGGED, entrance.NEXT_MESOCYCLE]
+    ((text, buttons),) = watched.offers
+    assert "3 cicli" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert len(watched.drafts) == drafted, "the preparation opens no draft"
+    state = graphs.planner.get_state(planning_on()).values
+    assert state["unasked"] is True
+    assert state["request"].continuing is not None, "briefed with the mesocycle that ended"
+    assert len(planned.seen) == 1, "one planning run, and only one"
+
+
+def test_a_report_that_does_not_complete_the_last_cycle_prepares_nothing(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    identifier = prescribe(catalogued)
+    graphs = graphs_of(
+        graph_of(Scripted(documents=[NEXT]), checkpointer=InMemorySaver()),
+        front=Talking(handoff=entrance.LOG_WORKOUT),
+        log=logger_graph_of(
+            scripted(AIMessage(content="chiaro"), emits=report(workout_id=identifier, report="squat")),
+            checkpointer=InMemorySaver(),
+        ),
+    )
+    watched = Channels()
+
+    asyncio.run(reported_and_prepared(graphs, watched))
+
+    assert watched.said == [SAYS, entrance.LOGGED]
+    assert watched.offers == []
+    assert graphs.planner.get_state(planning_on()).values == {}
+
+
+def test_only_the_report_that_ends_it_prepares_the_next(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """Every report after it is past the end, and prepares nothing again."""
+    last = on_its_last_workout(catalogued)
+    assert bot._next() is None, "one workout still to go"
+
+    performed_once(catalogued, "Standing_Military_Press", last)
+    assert bot._next() is not None
+
+    performed_once(catalogued, "Barbell_Squat")
+    assert bot._next() is None
+
+
+def test_a_message_while_it_is_prepared_is_answered_and_gets_no_second(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """Outside the queue: the preparation is not a turn, so nothing waits behind it.
+    Asking for a mesocycle meanwhile is told it is on its way, and plans nothing."""
+
+    class Blocking(Scripted):
+        went_on: Any = None
+
+        def _generate(self, messages: Any, *args: Any, **kwargs: Any) -> Any:
+            assert self.went_on.wait(5), "the loop never ran while the model worked"
+            return super()._generate(messages, *args, **kwargs)
+
+    went_on = threading.Event()
+    planned = Blocking(went_on=went_on, documents=[NEXT])
+    front = Talking(handoff=entrance.LOG_WORKOUT)
+    graphs = finishing(catalogued, planned, front)
+
+    async def scenario() -> tuple[Channels, Channels]:
+        reporting_chat, asking_chat = Channels(), Channels()
+        coach = turns_of(graphs)
+        await coach.arriving(OWNER, CHAT, "fatto il press", reporting_chat.chat)
+        await asyncio.sleep(0.05)
+        assert graphs.preparing, "the preparation is under way"
+        front.handoff = entrance.PLAN_MESOCYCLE
+        await coach.arriving(OWNER, CHAT, "preparami un mesociclo", asking_chat.chat)
+        went_on.set()
+        await asyncio.gather(*graphs.background)
+        return reporting_chat, asking_chat
+
+    reporting_chat, asking_chat = asyncio.run(scenario())
+
+    assert asking_chat.said == [SAYS], "answered, not queued"
+    assert asking_chat.offers == [], "on its way: nothing offered twice"
+    assert entrance.WAITING_MESOCYCLE in told_the_entrance(graphs)
+    assert len(reporting_chat.offers) == 1
+    assert len(planned.seen) == 1, "never a second planning run"
+
+
+def test_asking_for_a_mesocycle_while_one_waits_gets_the_prepared_one(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    planned = Scripted(documents=[NEXT, A_MESOCYCLE])
+    front = Talking(handoff=entrance.LOG_WORKOUT)
+    graphs = finishing(catalogued, planned, front)
+    prepared = Channels()
+    asyncio.run(reported_and_prepared(graphs, prepared))
+
+    front.handoff = entrance.PLAN_MESOCYCLE
+    again = asking(graphs, "preparami un mesociclo")
+
+    assert again.offers == prepared.offers, "the same mesocycle, the same buttons"
+    assert len(planned.seen) == 1, "never a second planning run"
+    ((_, buttons),) = again.offers
+    said, say = spoken()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
+    assert said == [entrance.KEPT]
+    kept = mesocycles.active(catalogued)
+    assert kept is not None and kept.cycles == 3
+
+
+def test_todays_workout_after_the_last_cycle_points_at_the_one_waiting(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    front = Talking(handoff=entrance.LOG_WORKOUT)
+    graphs = finishing(catalogued, Scripted(documents=[NEXT]), front)
+    asyncio.run(reported_and_prepared(graphs, Channels()))
+
+    front.handoff = entrance.TODAYS_WORKOUT
+    watched = asking(graphs)
+
+    assert entrance.WAITING_MESOCYCLE in told_the_entrance(graphs)
+    assert entrance.NO_MESOCYCLE not in told_the_entrance(graphs)
+    assert len(watched.offers) == 1, "the prepared one, again"
+
+
+def test_an_adaptation_after_the_last_cycle_points_at_the_one_waiting(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    front = Talking(handoff=entrance.LOG_WORKOUT)
+    planned = Scripted(documents=[NEXT])
+    graphs = finishing(catalogued, planned, front)
+    asyncio.run(reported_and_prepared(graphs, Channels()))
+
+    front.handoff = ""
+    front.turns = [calling(entrance.ADAPT_TODAY, said="solo 30 minuti", minutes=30)]
+    asking(graphs, "solo 30 minuti oggi")
+
+    assert entrance.WAITING_MESOCYCLE in told_the_entrance(graphs)
+    assert len(planned.seen) == 1
+
+
+def test_the_prepared_negotiation_reads_as_the_machines_and_waiting(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    from trainer.coach import runs
+
+    path = tmp_path / "checkpoints.sqlite"
+    archive = tmp_path / "runs"
+    with checkpoints.saver(path) as saver:
+        graphs = finishing(catalogued, Scripted(documents=[NEXT]), saver=saver, archive=archive)
+        asyncio.run(reported_and_prepared(graphs, Channels()))
+        held = runs.negotiations(runs.kept(archive), runs.live(saver))
+
+    (prepared,) = [one for one in held if one.unasked]
+    assert prepared.outcome == runs.WAITING
+    assert "opened by the machine" in runs.line(prepared)
+
+
+def test_a_mesocycle_the_user_asked_for_and_has_not_answered_is_not_prepared_over(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """It already is the next one: preparing another would supersede it, and be a second."""
+    planned = Scripted(documents=[A_MESOCYCLE, NEXT])
+    front = Talking(handoff=entrance.PLAN_MESOCYCLE)
+    graphs = finishing(catalogued, planned, front)
+    asked = asking(graphs, "preparami un mesociclo")
+
+    front.handoff = entrance.LOG_WORKOUT
+    watched = Channels()
+    asyncio.run(reported_and_prepared(graphs, watched))
+
+    assert watched.offers == []
+    assert len(planned.seen) == 1, "never a second planning run"
+    assert graphs.planner.get_state(planning_on()).interrupts[0].id in asked.offers[0][1][0][0]

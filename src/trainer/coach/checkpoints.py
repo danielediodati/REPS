@@ -16,7 +16,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from trainer import log as logs
 from trainer import plan as plans
-from trainer.engine import database, home
+from trainer.engine import database, home, mesocycles, workouts
 from trainer.engine.exclusions import Exclusion
 
 
@@ -46,6 +46,10 @@ DECLARED: tuple[type, ...] = (
     plans.Mesocycle,
     plans.Adapting,
     plans.Changing,
+    plans.Continuing,
+    mesocycles.Trained,
+    workouts.PerformedBlock,
+    workouts.PerformedItem,
     logs.PerformedWorkout,
     Exclusion,
 )

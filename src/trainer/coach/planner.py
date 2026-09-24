@@ -237,6 +237,27 @@ def changed(changing: plans.Changing) -> str:
     )
 
 
+def continued(continuing: plans.Continuing) -> str:
+    """The mesocycle that ended and what was performed in it, as what the next one follows."""
+    lines = [
+        f"The mesocycle below has run all {continuing.ended.cycles} of its cycles, "
+        "and this one follows it. Nobody asked for it yet: it will be waiting "
+        "for them when they next write.",
+        "The mesocycle that ended:\n" + continuing.ended.model_dump_json(indent=1),
+        "What they performed while it ran, oldest first:",
+    ]
+    for trained in continuing.trained:
+        done = "; ".join(
+            f"{item.exercise_id} {block.rounds}x{item.amount} {item.unit}"
+            + ("" if item.load_kg is None else f" at {item.load_kg:g} kg")
+            + ("" if block.rpe is None else f" (RPE {block.rpe:g})")
+            for block in trained.blocks
+            for item in block.items
+        )
+        lines.append(f"- workout {trained.slot}, {trained.performed_on}: {done or 'nothing reported'}")
+    return "\n".join(lines)
+
+
 def mesocycle_brief(request: plans.MesocycleRequest) -> str:
     """Every slot's request, in words, for the model to plan the mesocycle against."""
     lines = [f"The cycle has {len(request.slots)} workouts. Plan one for each, in this order."]
@@ -265,6 +286,8 @@ def mesocycle_brief(request: plans.MesocycleRequest) -> str:
         )
     if request.changing is not None:
         lines.append(changed(request.changing))
+    if request.continuing is not None:
+        lines.append(continued(request.continuing))
     if request.refusals:
         lines.append(
             f"You have proposed {len(request.refusals)} mesocycle(s) already and "
@@ -458,17 +481,27 @@ class PlannerState(TypedDict, total=False):
     mesocycle: int | None
     """The mesocycle this run's acceptance kept, when a mesocycle was asked for."""
 
+    unasked: bool
+    """The machine opened this negotiation, and nobody asked for it (ADR-0008 item 5)."""
 
-def starting(request: plans.Request | plans.MesocycleRequest) -> PlannerState:
+
+def starting(
+    request: plans.Request | plans.MesocycleRequest, unasked: bool = False
+) -> PlannerState:
     """The input that starts a negotiation: its first run, following nothing."""
-    return _beginning(request, negotiation=records.negotiation_id(), follows=None)
+    return _beginning(
+        request, negotiation=records.negotiation_id(), follows=None, unasked=unasked
+    )
 
 
 def following(
-    request: plans.Request | plans.MesocycleRequest, negotiation: str, follows: str
+    request: plans.Request | plans.MesocycleRequest,
+    negotiation: str,
+    follows: str,
+    unasked: bool = False,
 ) -> PlannerState:
     """The run a refusal gives birth to: the same ask, carrying which run it follows."""
-    return _beginning(request, negotiation=negotiation, follows=follows)
+    return _beginning(request, negotiation=negotiation, follows=follows, unasked=unasked)
 
 
 def _beginning(
@@ -476,6 +509,7 @@ def _beginning(
     *,
     negotiation: str,
     follows: str | None,
+    unasked: bool,
 ) -> PlannerState:
     """The input that starts a run, with whatever a previous one left cleared.
 
@@ -492,6 +526,7 @@ def _beginning(
     return {
         "request": request,
         **records.identity(negotiation, follows),  # type: ignore[typeddict-item]
+        "unasked": unasked,
         "accepted": False,
         "workout": None,
         "mesocycle": None,
@@ -730,6 +765,7 @@ def build(
                     ),
                     state["negotiation"],
                     follows=state["run"],
+                    unasked=state.get("unasked", False),
                 )
             )
         assert isinstance(offered, plans.WorkoutPlan) and isinstance(request, plans.Request)
@@ -747,7 +783,12 @@ def build(
         # `dict(...)` because a node contributes a plain mapping, while
         # `following` is typed as the state so it can also be a run's input.
         return dict(
-            following(again, state["negotiation"], follows=state["run"])
+            following(
+                again,
+                state["negotiation"],
+                follows=state["run"],
+                unasked=state.get("unasked", False),
+            )
         )
 
     def prescribe(state: PlannerState) -> dict[str, Any]:

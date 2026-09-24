@@ -220,6 +220,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         "ended": str(state.get("ended", "")),
         "ending": str(state.get("ending", "")),
         "because": str(state.get("because", "")),
+        "unasked": bool(state.get("unasked", False)),
         "attempts": [
             {
                 "violations": [
