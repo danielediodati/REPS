@@ -39,26 +39,17 @@ class AdmissibleError(RuntimeError):
 
 
 def muscles_of(groups: Sequence[str]) -> tuple[str, ...]:
-    """The catalog's own muscles that these groups cover.
+    """The catalog's own muscles that a slot's groups and muscles cover.
 
     Read from the committed mapping rather than from a copy: the six names and
     the seventeen assignments live in `muscle-groups.md` and nowhere else.
     """
     try:
-        mapping = muscle_groups.committed()
+        return muscle_groups.committed().muscles_in(groups)
     except muscle_groups.MuscleGroupError as error:
         raise AdmissibleError(f"the muscle groups cannot be read: {error}") from error
-
-    known = mapping.groups
-    for group in groups:
-        if group not in known:
-            raise AdmissibleError(
-                f"{group!r} is not a muscle group; they are {', '.join(known)}"
-            )
-    wanted = set(groups)
-    return tuple(
-        muscle for muscle, group in mapping.by_muscle if group in wanted
-    )
+    except ValueError as error:
+        raise AdmissibleError(str(error)) from error
 
 
 def admissible_set(

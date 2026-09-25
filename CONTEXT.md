@@ -26,7 +26,7 @@ _Avoid_: programme, routine, and counting it in weeks.
 **Muscle group**: one of the six units a workout's time is divided among: chest, back, shoulders, arms, legs, core. Each is a curated grouping of the catalog's seventeen muscles, defined only in `src/trainer/data/muscle-groups.md`. It allocates time and nothing else; volume is never counted on it.
 _Avoid_: muscle, which means one of the seventeen raw values.
 
-**Split**: how the muscle groups are distributed across the workouts of a cycle. It is chosen, with a reason, and never computed.
+**Split**: how the muscle groups, or single muscles, are distributed across the workouts of a cycle. It is chosen, with a reason, and never computed.
 _Avoid_: routine, programme.
 
 **Allocation**: how one workout's minutes are divided among its groups. Chosen per workout; there are no fixed ratios.

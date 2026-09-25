@@ -215,9 +215,9 @@ def admissible_set(
     `equipment` names the catalog's own values (`barbell`, `body only`) and
     must hold at least one. `budget_min` over the cap declared in
     `training.toml` is refused rather than answered, because a workout that
-    long is one the declaration says never happens. `muscle_groups` names the
-    groups this workout trains, from `chest`, `back`, `shoulders`, `arms`,
-    `legs`, `core`: give them, because the whole space is several times larger
+    long is one the declaration says never happens. `muscle_groups` names what
+    this workout trains, as the brief gives it: groups (`arms`) or muscles
+    (`biceps`). Give them, because the whole space is several times larger
     than any one workout needs and every exercise you are handed you are also
     paying to re-read on every later turn.
     """
@@ -259,7 +259,7 @@ def remaining_budget(partial_plan: list[dict[str, Any]], budget_min: int) -> int
 def allocate(minutes: int, proportions: dict[str, float]) -> dict[str, int]:
     """Divide a workout's minutes among the muscle groups it trains.
 
-    `proportions` maps a muscle group to its share of the whole, **as a
+    `proportions` maps a group or muscle of this workout to its share of the whole, **as a
     decimal number**: `{"chest": 0.49, "arms": 0.51}`. Never as a fraction. An
     observed run wrote `{"chest": 22/45, "arms": 23/45}` -- the minutes this
     brief had just handed it, over the budget -- and JSON has no arithmetic,
@@ -269,8 +269,8 @@ def allocate(minutes: int, proportions: dict[str, float]) -> dict[str, int]:
 
     They have to sum to 1, and are refused rather than normalised, because
     scaling a typo produces a different plan that runs the full time and
-    trains something else. The group names are the six in the committed
-    mapping.
+    trains something else. The names are the ones the brief gives for
+    this workout.
     """
     with reported():
         return budget.allocate(minutes, proportions)

@@ -1923,16 +1923,30 @@ def test_admissible_narrows_to_the_groups_asked_for(
     assert "Dumbbell Bicep Curl" not in legs.output
 
 
-def test_admissible_rejects_a_muscle_where_a_group_belongs(
+def test_admissible_narrows_to_a_muscle_as_well_as_a_group(
     runner: CliRunner, enriched: Path
 ) -> None:
     result = runner.invoke(
         main,
-        ["admissible", "--equipment", "dumbbell", "--time", "45", "--group", "quadriceps"],
+        ["admissible", "--equipment", "dumbbell", "--time", "45", "--group", "biceps"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Dumbbell Bicep Curl" in result.output
+    assert "Dumbbell Squat" not in result.output
+
+
+def test_admissible_rejects_a_misspelt_muscle_naming_the_valid_ones(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(
+        main,
+        ["admissible", "--equipment", "dumbbell", "--time", "45", "--group", "quadricep"],
     )
 
     assert result.exit_code != 0
-    assert "not a muscle group" in result.output
+    assert "not a muscle group or a muscle" in result.output
+    assert "quadriceps" in result.output
 
 
 def test_plan_checks_a_hand_written_plan_against_what_today_trains(

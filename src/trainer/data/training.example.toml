@@ -17,15 +17,16 @@ duration_cap_min = 60
 # trains; it is written down rather than assumed because it is the user's call.
 volume_denominator = "cycle"
 
-# Which muscle groups each workout of the cycle trains, in order -- one entry
-# per workout, so this list is exactly `cycle_length` long. The six group names
-# are the ones in `src/trainer/data/muscle-groups.md`; anything else is refused
-# with the six listed.
+# What each workout of the cycle trains, in order -- one entry per workout, so
+# this list is exactly `cycle_length` long. An entry names muscle groups
+# (`arms`) or single muscles (`triceps`), as `src/trainer/data/muscle-groups.md`
+# spells them; `trainer config --muscle-groups` lists both. A group covers all
+# its muscles, so name one or the other, not both.
 split = [
-    ["chest", "shoulders", "arms"],  # push
-    ["back", "arms"],                # pull
-    ["legs", "core"],                # lower
-    ["chest", "back", "shoulders"],  # upper
+    ["chest", "shoulders", "triceps"],  # push
+    ["back", "biceps"],                 # pull
+    ["legs", "core"],                   # lower
+    ["chest", "back", "shoulders"],     # upper
 ]
 
 # What you have to train with, spelled the way the catalog spells it: run

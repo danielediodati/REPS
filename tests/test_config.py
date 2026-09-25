@@ -142,11 +142,47 @@ def test_the_valid_groups_come_from_the_mapping_and_not_from_a_copy() -> None:
         "equipment": ["dumbbell"],
         "goal": "hypertrophy",
     }
+    fish = muscle_groups.parse(
+        "| muscle | group | why |\n|---|---|---|\n| `pectoral fin` | `fins` | swims |\n"
+    )
 
-    assert config.parse(raw, valid_groups=("fins",)).split == (("fins",),)
+    assert config.parse(raw, mapping=fish).split == (("fins",),)
 
     with pytest.raises(config.ConfigError, match="not a muscle group"):
         config.parse(raw)
+
+
+def _one_slot(*names: str) -> dict[str, object]:
+    return {
+        "cycle_length": 1,
+        "duration_cap_min": 30,
+        "volume_denominator": "cycle",
+        "split": [list(names)],
+        "equipment": ["dumbbell"],
+        "goal": "hypertrophy",
+    }
+
+
+def test_a_slot_may_name_muscles_beside_groups() -> None:
+    assert config.parse(_one_slot("chest", "biceps")).split == (("chest", "biceps"),)
+
+
+def test_a_misspelt_muscle_is_refused_naming_the_valid_ones() -> None:
+    with pytest.raises(config.ConfigError, match="workout 1 of the split") as raised:
+        config.parse(_one_slot("chest", "bicep"))
+
+    for name in muscle_groups.committed().names:
+        assert name in str(raised.value)
+
+
+def test_neck_is_refused_with_the_reason() -> None:
+    with pytest.raises(config.ConfigError, match="'neck' is a muscle in no group"):
+        config.parse(_one_slot("neck"))
+
+
+def test_a_group_beside_one_of_its_own_muscles_is_refused() -> None:
+    with pytest.raises(config.ConfigError, match="'arms' and 'biceps' both train 'biceps'"):
+        config.parse(_one_slot("arms", "biceps"))
 
 
 @pytest.mark.parametrize("cap", ["0", "-15"])
@@ -281,7 +317,7 @@ def test_a_split_that_is_not_a_list_of_lists_is_refused(tmp_path: Path) -> None:
         "volume_denominator = 'cycle'\nsplit = ['chest']\nequipment = ['bands']\n"
     )
 
-    with pytest.raises(config.ConfigError, match="list of one group list"):
+    with pytest.raises(config.ConfigError, match="list of one list of groups or muscles"):
         config.load(written(tmp_path, text))
 
 

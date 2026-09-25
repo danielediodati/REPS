@@ -1071,8 +1071,8 @@ def _print_muscle_groups(mapping: muscle_groups.MuscleGroups) -> None:
     "groups",
     metavar="GROUP",
     multiple=True,
-    help="A muscle group this workout trains; repeat for more than one. "
-    "Left out, the whole admissible space is answered.",
+    help="A muscle group or a muscle this workout trains; repeat for more "
+    "than one. Left out, the whole admissible space is answered.",
 )
 def admissible_command(
     equipment: tuple[str, ...],
@@ -1147,8 +1147,8 @@ def admissible_command(
     "workout",
     metavar="N",
     type=click.IntRange(min=1),
-    help="Which workout of the declared rotation this is. Its muscle groups "
-    "come from the split in training.toml, and the time divides over them.",
+    help="Which workout of the declared rotation this is. Its groups and "
+    "muscles come from the split in training.toml, and the time divides over them.",
 )
 @click.option(
     "--exclude",
@@ -1162,8 +1162,8 @@ def admissible_command(
     "groups",
     metavar="GROUP",
     multiple=True,
-    help="A muscle group this workout trains; repeat for more than one. Left "
-    "out, the groups come from where the rotation is; --workout names a "
+    help="A muscle group or a muscle this workout trains; repeat for more than "
+    "one. Left out, they come from where the rotation is; --workout names a "
     "position in the split instead.",
 )
 @click.option(

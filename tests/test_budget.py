@@ -299,11 +299,13 @@ def test_allocate_reads_the_six_from_the_mapping() -> None:
     assert sum(allocated.values()) == 60
 
 
-def test_a_muscle_is_not_a_muscle_group() -> None:
-    """`biceps` is one of the catalog's seventeen, not one of the six. Time is
-    allocated on the coarse axis; volume is counted on the fine one."""
+def test_a_slot_s_muscles_may_be_allocated_like_its_groups() -> None:
+    assert budget.allocate(30, {"chest": 0.5, "biceps": 0.5}) == {"chest": 15, "biceps": 15}
+
+
+def test_a_misspelt_name_is_not_a_muscle_group() -> None:
     with pytest.raises(budget.BudgetError, match="not a muscle group"):
-        budget.allocate(30, {"biceps": 1.0})
+        budget.allocate(30, {"bicep": 1.0})
 
 
 def test_an_unreadable_mapping_still_fails_as_a_budget_error(
@@ -315,10 +317,10 @@ def test_an_unreadable_mapping_still_fails_as_a_budget_error(
     uncaught `MuscleGroupError` the day the packaged mapping cannot be read.
     """
 
-    def unreadable() -> tuple[str, ...]:
+    def unreadable() -> muscle_groups.MuscleGroups:
         raise muscle_groups.MuscleGroupError("no muscle group mapping at /nowhere")
 
-    monkeypatch.setattr(muscle_groups, "groups", unreadable)
+    monkeypatch.setattr(muscle_groups, "committed", unreadable)
 
     with pytest.raises(budget.BudgetError, match="cannot be read"):
         budget.allocate(40, {"chest": 1.0})

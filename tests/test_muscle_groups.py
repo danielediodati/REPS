@@ -187,3 +187,50 @@ def test_prose_beginning_with_a_pipe_is_still_not_a_row() -> None:
     )
 
     assert parsed.muscles == ("chest",)
+
+
+SMALL = muscle_groups.parse(
+    "| muscle | group | why |\n"
+    "|---|---|---|\n"
+    "| `biceps` | `arms` | elbow flexion |\n"
+    "| `triceps` | `arms` | elbow extension |\n"
+    "| `chest` | `chest` | the group is named for it |\n"
+    "| `neck` | `-` | no group |\n"
+)
+
+
+def test_a_slot_may_name_the_groups_and_every_muscle_in_one() -> None:
+    assert SMALL.names == ("arms", "biceps", "chest", "triceps")
+
+
+def test_a_group_covers_its_muscles_and_a_muscle_covers_itself() -> None:
+    assert SMALL.muscles_in(["arms"]) == ("biceps", "triceps")
+    assert SMALL.muscles_in(["chest", "biceps"]) == ("biceps", "chest")
+
+
+def test_a_misspelt_name_is_refused_naming_the_valid_ones() -> None:
+    with pytest.raises(ValueError, match="not a muscle group or a muscle") as raised:
+        SMALL.muscles_in(["bicep"])
+
+    for name in SMALL.names:
+        assert name in str(raised.value)
+
+
+def test_a_muscle_in_no_group_is_refused_with_the_reason() -> None:
+    with pytest.raises(ValueError, match="in no group"):
+        SMALL.muscles_in(["neck"])
+
+
+def test_a_group_named_beside_one_of_its_own_muscles_is_refused() -> None:
+    with pytest.raises(ValueError, match="'arms' and 'biceps' both train 'biceps'"):
+        SMALL.muscles_in(["arms", "biceps"])
+    with pytest.raises(ValueError, match="'biceps' and 'arms' both train 'biceps'"):
+        SMALL.muscles_in(["biceps", "arms"])
+
+
+def test_the_committed_names_are_the_six_and_the_sixteen_grouped_muscles() -> None:
+    mapping = muscle_groups.committed()
+    grouped = {m for m, g in mapping.by_muscle if g is not None}
+
+    assert set(mapping.names) == set(mapping.groups) | grouped
+    assert "neck" not in mapping.names

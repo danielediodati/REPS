@@ -333,12 +333,19 @@ def test_the_filter_reads_primary_muscles_not_secondary(
         assert set(found.primary_muscles) & set(admissible.muscles_of(["legs"]))
 
 
-def test_a_muscle_is_not_a_muscle_group(connection: sqlite3.Connection) -> None:
-    """`quadriceps` is a muscle the catalog names; the six groups are the
-    project's own vocabulary, and confusing them silently would answer a
-    different question."""
-    with pytest.raises(admissible.AdmissibleError, match="not a muscle group"):
-        admissible.admissible_set(connection, [], ["barbell"], 45, ["quadriceps"])
+def test_a_muscle_narrows_the_day_to_itself(connection: sqlite3.Connection) -> None:
+    """`["chest", "biceps"]` is chest with biceps: nothing that trains only the triceps."""
+    found = admissible.admissible_set(connection, [], EVERYTHING, 45, ["chest", "biceps"])
+
+    assert found
+    for exercise in found:
+        assert set(exercise.primary_muscles) & {"chest", "biceps"}
+    assert any("biceps" in e.primary_muscles for e in found)
+
+
+def test_a_misspelt_muscle_names_the_valid_ones(connection: sqlite3.Connection) -> None:
+    with pytest.raises(admissible.AdmissibleError, match="not a muscle group or a muscle"):
+        admissible.admissible_set(connection, [], ["barbell"], 45, ["quadricep"])
 
 
 def test_the_six_groups_are_read_from_the_committed_mapping() -> None:

@@ -21,6 +21,7 @@ started.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -68,6 +69,41 @@ class MuscleGroups:
         order rows happen to sit in the file is a diff nobody asked for.
         """
         return tuple(sorted({group for _, group in self.by_muscle if group is not None}))
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        """What a slot of the split may name: the groups and every muscle that is in one, alphabetically."""
+        grouped = {muscle for muscle, group in self.by_muscle if group is not None}
+        return tuple(sorted(set(self.groups) | grouped))
+
+    def muscles_in(self, names: Sequence[str]) -> tuple[str, ...]:
+        """The muscles a slot's names cover, in mapping order; `ValueError` for a name no slot may hold."""
+        covered: dict[str, str] = {}
+        for name in dict.fromkeys(names):
+            if name in self.groups:
+                muscles = [m for m, group in self.by_muscle if group == name]
+            elif name in self.names:
+                muscles = [name]
+            elif name in self.muscles:
+                raise ValueError(
+                    f"{name!r} is a muscle in no group; {MUSCLE_GROUPS_PATH.name} "
+                    "keeps it out of every split"
+                )
+            else:
+                raise ValueError(
+                    f"{name!r} is not a muscle group or a muscle; the groups are "
+                    f"{', '.join(self.groups)}, and a muscle is any of "
+                    f"{', '.join(n for n in self.names if n not in self.groups)}"
+                )
+            for muscle in muscles:
+                if muscle in covered:
+                    # `chest` is a group and its own muscle; the pair is one name, never an overlap.
+                    raise ValueError(
+                        f"{covered[muscle]!r} and {name!r} both train {muscle!r}; "
+                        "name the group or the muscle, not both"
+                    )
+                covered[muscle] = name
+        return tuple(m for m in self.muscles if m in covered)
 
     def group_of(self, muscle: str) -> str | None:
         """The group this muscle is allocated under, or `None` for one that is

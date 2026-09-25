@@ -86,10 +86,10 @@ def allocate(minutes: int, proportions: Mapping[str, float]) -> dict[str, int]:
 
     The proportions are the caller's, over any number of groups; this function
     carries none of its own and never invents one for a group that was left
-    out. The *names* are not the caller's: each has to be one of the six
-    muscle groups, read from the mapping that ships with the package
-    (`muscle_groups.MUSCLE_GROUPS_PATH`) rather than from a copy of the six
-    kept here. Ticket 02 shipped without this check because the
+    out. The *names* are not the caller's: each has to be a name a slot of the
+    split may hold -- one of the six groups or a muscle in one -- read from the
+    mapping that ships with the package (`muscle_groups.MUSCLE_GROUPS_PATH`)
+    rather than from a copy kept here. Ticket 02 shipped without this check because the
     vocabulary did not exist anywhere a function could read it, and a mapping
     keyed by a typo returns minutes nobody can look up -- the caller who wrote
     `Chest` gets a `KeyError` on `allocated["chest"]` a long way from the
@@ -116,15 +116,11 @@ def allocate(minutes: int, proportions: Mapping[str, float]) -> dict[str, int]:
     # otherwise be handed an uncaught `MuscleGroupError` the day the packaged
     # mapping cannot be read.
     try:
-        known = muscle_groups.groups()
+        muscle_groups.committed().muscles_in(list(proportions))
     except muscle_groups.MuscleGroupError as error:
         raise BudgetError(f"the muscle groups cannot be read: {error}") from error
-
-    for group in proportions:
-        if group not in known:
-            raise BudgetError(
-                f"{group!r} is not a muscle group; they are {', '.join(known)}"
-            )
+    except ValueError as error:
+        raise BudgetError(str(error)) from error
 
     for group, proportion in proportions.items():
         if proportion <= 0:

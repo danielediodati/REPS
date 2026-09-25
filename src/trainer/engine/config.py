@@ -185,17 +185,17 @@ def load(path: Path | None = None) -> TrainingConfig:
 def parse(
     raw: dict[str, object],
     *,
-    valid_groups: tuple[str, ...] | None = None,
+    mapping: muscle_groups.MuscleGroups | None = None,
     valid_goals: tuple[str, ...] | None = None,
 ) -> TrainingConfig:
     """Validate a decoded configuration.
 
-    `valid_groups` defaults to the six read from the committed mapping, and
+    `mapping` defaults to the committed muscle groups, and
     `valid_goals` to the methodology's columns. They are parameters so a test
     can drive the unknown-value errors against a vocabulary it controls, never
     so a caller can bring one of its own.
     """
-    groups = muscle_groups.groups() if valid_groups is None else valid_groups
+    groups = muscle_groups.committed() if mapping is None else mapping
     goals = methodology.goals() if valid_goals is None else valid_goals
 
     unknown = sorted(set(raw) - set(_KEYS))
@@ -279,12 +279,12 @@ def _equipment(value: object) -> tuple[str, ...]:
 
 
 def _split(
-    value: object, cycle_length: int, groups: tuple[str, ...]
+    value: object, cycle_length: int, groups: muscle_groups.MuscleGroups
 ) -> tuple[tuple[str, ...], ...]:
     if not isinstance(value, list) or any(not isinstance(item, list) for item in value):
         raise ConfigError(
-            "split is a list of one group list per workout, "
-            'e.g. [["chest", "arms"], ["back", "core"]]'
+            "split is a list of one list of groups or muscles per workout, "
+            'e.g. [["chest", "triceps"], ["back", "core"]]'
         )
     if len(value) != cycle_length:
         raise ConfigError(
@@ -299,7 +299,7 @@ def _split(
         if any(not isinstance(name, str) for name in entry):
             raise ConfigError(
                 f"workout {position} of the split holds something that is not a "
-                "group name"
+                "group or muscle name"
             )
         names = tuple(str(name) for name in entry)
         if not names:
@@ -313,11 +313,9 @@ def _split(
                 f"workout {position} of the split names {', '.join(twice)} "
                 "more than once"
             )
-        for name in names:
-            if name not in groups:
-                raise ConfigError(
-                    f"workout {position} of the split names {name!r}, which is "
-                    f"not a muscle group; they are {', '.join(groups)}"
-                )
+        try:
+            groups.muscles_in(names)
+        except ValueError as error:
+            raise ConfigError(f"workout {position} of the split: {error}") from error
         workouts.append(names)
     return tuple(workouts)
