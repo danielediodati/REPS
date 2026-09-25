@@ -244,6 +244,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         "spent": int(state.get("spent", 0)),
         "budget": int(state.get("budget", budget)),
         "nodes": [_node(entry) for entry in state.get("timings", ())],
+        "emitted": list(state.get("emitted", ())),
         "questions": [list(said) for said in state.get("questions", ())],
         "plan": None if emitted is None else emitted.model_dump(),
         "performed": None if document is None else document.model_dump(),

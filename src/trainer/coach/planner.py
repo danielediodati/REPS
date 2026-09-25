@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import operator
 import sqlite3
@@ -502,6 +503,9 @@ class PlannerState(TypedDict, total=False):
     timings: list[tuple[str, str, str, float, str, str]]
     """Node, model, provider, seconds, effort and host, per node run, for this run only."""
 
+    emitted: list[str]
+    """The text of every emission in this run, readable or not, in order."""
+
     plan: plans.WorkoutPlan | plans.Mesocycle | None
     accepted: bool
     workout: int | None
@@ -567,6 +571,7 @@ def _beginning(
         "violations": (),
         "refusals": [],
         "timings": [],
+        "emitted": [],
         "plan": None,
     }
 
@@ -724,7 +729,22 @@ def build(
         )
         emitted = structured.invoke([*state["messages"], asked])
         assert isinstance(emitted, dict)
-        return {"messages": [asked, emitted["raw"]]}
+        raw = emitted["raw"]
+        written = [*state.get("emitted", []), raw.text]
+        try:
+            json.loads(raw.text)
+        except ValueError as error:
+            # Under a strict schema the host's decoder writes the JSON, so
+            # text that is not JSON is the provider failing, not the model
+            # deciding: asked again, it costs no attempt (REJECTIONS).
+            refused = state.get("rejections", 0) + 1
+            if refused > REJECTIONS:
+                raise models.ProviderFailed(
+                    f"{on.name} emitted text that is not JSON {refused} times running: {error}"
+                ) from error
+            logger.warning("the emission was not JSON (%d): %s", refused, error)
+            return {"rejections": refused, "emitted": written}
+        return {"messages": [asked, raw], "rejections": 0, "emitted": written}
 
     def validate(state: PlannerState) -> dict[str, Any]:
         document = state["messages"][-1]
@@ -887,6 +907,9 @@ def build(
             return "planner"
         return "emit"
 
+    def after_emit(state: PlannerState) -> Literal["validate", "emit"]:
+        return "emit" if state.get("rejections", 0) else "validate"
+
     def after_tools(state: PlannerState) -> Literal["planner", "emit"]:
         return "emit" if state.get("spent", 0) >= budget else "planner"
 
@@ -912,7 +935,7 @@ def build(
     graph.add_edge(START, "planner")
     graph.add_conditional_edges("planner", after_planner)
     graph.add_conditional_edges("tools", after_tools)
-    graph.add_edge("emit", "validate")
+    graph.add_conditional_edges("emit", after_emit)
     graph.add_conditional_edges(
         "validate",
         after_validate,

@@ -474,13 +474,40 @@ def test_an_emission_that_is_not_a_plan_at_all_is_refused_and_recorded_as_none(
     everything downstream has to read `plan: null` rather than an empty one --
     *nothing prescribed* would hold every invariant about what was
     prescribed."""
-    model = Scripted(raw=["I would start with squats."] * planner.ATTEMPTS)
+    model = Scripted(raw=['{"blocks": "squats"}'] * planner.ATTEMPTS)
 
     final = graph_of(model).invoke({"request": BARBELL_45})
 
     assert final["plan"] is None
     assert [violation.rule for violation in final["violations"]] == [plans.SHAPE]
     assert record.of(final, tools.CALL_BUDGET)["plan"] is None
+
+
+def test_an_emission_that_is_not_json_is_asked_again_without_spending_an_attempt(
+    connection: sqlite3.Connection,
+) -> None:
+    """Under a strict schema the host writes the JSON, so broken text is its fault, not the plan's."""
+    model = Scripted(raw=["", "I would start with squats."], documents=[plan_of("Barbell_Squat")])
+
+    final = graph_of(model).invoke({"request": BARBELL_45})
+
+    assert final["plan"] == plan_of("Barbell_Squat")
+    assert final["attempts"] == 1
+    assert final["rejections"] == 0
+    assert record.of(final, tools.CALL_BUDGET)["emitted"] == [
+        "",
+        "I would start with squats.",
+        plan_of("Barbell_Squat").model_dump_json(),
+    ]
+
+
+def test_emissions_that_are_never_json_end_the_run_as_a_provider_failure(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(raw=[""] * (planner.REJECTIONS + 1))
+
+    with pytest.raises(models.ProviderFailed, match=f"not JSON {planner.REJECTIONS + 1} times running"):
+        graph_of(model).invoke({"request": BARBELL_45})
 
 
 def test_a_plan_the_block_vocabulary_cannot_express_is_refused_on_shape(

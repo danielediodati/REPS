@@ -775,7 +775,7 @@ def test_a_setup_run_with_no_plan_is_not_measured_as_the_situation(
 
     (refusal,) = [s for s in evaluation.situations(connection) if s.after_a_refusal]
     on = models.Chat(
-        Scripted(raw=["I would start with squats."] * 10), "scripted", "a-stand-in"
+        Scripted(raw=['{"workouts": "squats"}'] * 10), "scripted", "a-stand-in"
     )
 
     report = evaluation.run(
