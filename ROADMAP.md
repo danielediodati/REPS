@@ -92,7 +92,7 @@ In this order. Measuring first is what stops the methodology being written again
 1. **The measurement that separates the causes.** The same request on a large model at full reasoning; session 12 item 4 runs it. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
 2. **What a workout is, written down.** [`methodology.md`](src/trainer/data/methodology.md): ranges per goal and principles the planner reasons with, never a template. The goal is declared in `training.toml`, one per mesocycle. — **done** `e92dc9e`
 3. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 of 45 minutes and every rule passed it. — **done** `a3974a2`
-4. **A slot of the split names muscles**, not only groups: `arms` cannot tell biceps from triceps.
+4. **A slot of the split names muscles**, not only groups: `arms` cannot tell biceps from triceps. — **done** `530ebd6`
 
 ## Session 12 — `0.12.0` — How much the model thinks, and what it costs
 
