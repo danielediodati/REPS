@@ -373,7 +373,7 @@ def groq_model(named: str | None = None) -> ChatGroq:
 
 
 class OpenRouterChat(ChatOpenAI):
-    """`ChatOpenAI` on OpenRouter, keeping the host that answered on each reply."""
+    """`ChatOpenAI` on OpenRouter, keeping the host that answered and what it cost on each reply."""
 
     def _create_chat_result(
         self, response: dict[str, Any] | openai.BaseModel, generation_info: dict[str, Any] | None = None
@@ -381,9 +381,12 @@ class OpenRouterChat(ChatOpenAI):
         result = super()._create_chat_result(response, generation_info)
         body = response if isinstance(response, dict) else response.model_dump()
         host = body.get("provider")
-        if host:
-            for generation in result.generations:
+        cost = (body.get("usage") or {}).get("cost")
+        for generation in result.generations:
+            if host:
                 generation.message.response_metadata["host"] = str(host)
+            if cost is not None:
+                generation.message.response_metadata["cost"] = float(cost)
         return result
 
 
@@ -399,7 +402,7 @@ def openrouter_model(named: str | None = None, reasoning: str = "") -> ChatOpenA
     pinned = os.environ.get(OPENROUTER_PROVIDER_ENV)
     if pinned:
         provider |= {"order": [pinned], "allow_fallbacks": False}
-    body: dict[str, Any] = {"provider": provider}
+    body: dict[str, Any] = {"provider": provider, "usage": {"include": True}}
     if reasoning:
         body["reasoning"] = {"effort": reasoning}
     return OpenRouterChat(

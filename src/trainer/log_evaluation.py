@@ -438,6 +438,11 @@ class Read:
     def output_tokens(self) -> int:
         return int(self.record["tokens"]["output"])
 
+    @property
+    def dollars(self) -> float | None:
+        dollars = self.record.get("dollars")
+        return None if dollars is None else float(dollars)
+
 
 # -- scoring one run ----------------------------------------------------------
 

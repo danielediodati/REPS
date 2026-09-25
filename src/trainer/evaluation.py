@@ -270,6 +270,11 @@ class Ran:
     def output_tokens(self) -> int:
         return int(self.record["tokens"]["output"])
 
+    @property
+    def dollars(self) -> float | None:
+        dollars = self.record.get("dollars")
+        return None if dollars is None else float(dollars)
+
 
 # -- the six invariants -------------------------------------------------------
 
@@ -541,6 +546,12 @@ class Costed(Protocol):
     @property
     def output_tokens(self) -> int: ...
 
+    @property
+    def dollars(self) -> float | None: ...
+
+    @property
+    def seconds(self) -> float: ...
+
 
 @dataclass(frozen=True)
 class Outcome:
@@ -674,6 +685,17 @@ class Report:
     @property
     def output_tokens(self) -> int:
         return sum(r.output_tokens for o in self.outcomes for r in o.records)
+
+    @property
+    def runs(self) -> tuple[Costed, ...]:
+        """Every run that was paid for, measured or not."""
+        return tuple(r for o in self.outcomes for r in o.records)
+
+    @property
+    def dollars(self) -> float | None:
+        """What the priced runs cost, or `None` when the provider priced none."""
+        priced = [r.dollars for r in self.runs if r.dollars is not None]
+        return sum(priced) if priced else None
 
 
 def check(
@@ -1025,6 +1047,22 @@ def failures(report: Report, about: Mapping[str, str] | None = None) -> list[str
     return lines
 
 
+def _money(report: Report) -> str:
+    """Dollars in all and a run, as the provider priced them, and seconds a run. ASCII."""
+    runs = report.runs
+    seconds = f"{sum(r.seconds for r in runs) / len(runs):.1f}s a run"
+    if report.dollars is None:
+        return f"dollars not reported by the provider, {seconds}"
+    priced = sum(1 for r in runs if r.dollars is not None)
+    spent = (
+        f"${report.dollars:.4f} in all"
+        if priced == len(runs)
+        else f"${report.dollars:.4f} over {priced} of {len(runs)} runs "
+        f"({len(runs) - priced} not reported)"
+    )
+    return f"{spent}, ${report.dollars / priced:.4f} a run, {seconds}"
+
+
 def totals(report: Report, held: str) -> list[str]:
     """The number, what it cost, and the bar it is measured against.
 
@@ -1061,6 +1099,8 @@ def totals(report: Report, held: str) -> list[str]:
         f"cost: {report.calls} tool calls, {report.input_tokens} tokens in, "
         f"{report.output_tokens} out"
     )
+    if report.runs:
+        lines.append(f"      {_money(report)}")
     if report.stopped is not None:
         skipped = sum(1 for outcome in report.outcomes if outcome.skipped)
         lines.append("")

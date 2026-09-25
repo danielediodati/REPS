@@ -149,6 +149,7 @@ def timing(on: models.Chat) -> Callable[[str, Node], Node]:
                         spent,
                         on.reasoning,
                         ", ".join(_hosts(produced.get("messages", ()))),
+                        _dollars(produced.get("messages", ())),
                     ),
                 ]
             }
@@ -239,6 +240,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         ],
         "calls": _calls(messages),
         "tokens": _tokens(messages),
+        "dollars": _dollars(messages),
         "spent": int(state.get("spent", 0)),
         "budget": int(state.get("budget", budget)),
         "nodes": [_node(entry) for entry in state.get("timings", ())],
@@ -298,6 +300,10 @@ def summary(record: Mapping[str, Any]) -> list[str]:
         lines.append(f"  {asked} question(s) asked")
     counted = record.get("tokens", {"input": 0, "output": 0})
     lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
+    dollars = record.get("dollars")
+    lines.append(
+        "  cost not reported by the provider" if dollars is None else f"  ${dollars:.4f}"
+    )
     spent_on = _seconds(record)
     if spent_on:
         lines.append(f"  {spent_on}")
@@ -353,6 +359,7 @@ def _node(entry: Sequence[Any]) -> dict[str, Any]:
             "seconds": round(seconds, 3),
             "reasoning": "",
             "host": "",
+            "dollars": None,
         }
     node, model, provider, seconds, *rest = entry
     return {
@@ -362,16 +369,23 @@ def _node(entry: Sequence[Any]) -> dict[str, Any]:
         "seconds": round(seconds, 3),
         "reasoning": rest[0] if rest else "",
         "host": rest[1] if len(rest) > 1 else "",
+        "dollars": rest[2] if len(rest) > 2 else None,
     }
 
 
 def _seconds(record: Mapping[str, Any]) -> str:
-    """What each node cost, summed over the times it ran. ASCII, one line."""
+    """What each node cost in seconds, and in dollars where priced, summed over the times it ran. ASCII, one line."""
     totals: dict[str, float] = {}
+    priced: dict[str, float] = {}
     for node in record.get("nodes", ()):
         name = str(node["node"])
         totals[name] = totals.get(name, 0.0) + float(node["seconds"])
-    return ", ".join(f"{node} {seconds:.1f}s" for node, seconds in totals.items())
+        if node.get("dollars") is not None:
+            priced[name] = priced.get(name, 0.0) + float(node["dollars"])
+    return ", ".join(
+        f"{node} {seconds:.1f}s" + (f" ${priced[node]:.4f}" if node in priced else "")
+        for node, seconds in totals.items()
+    )
 
 
 def _calls(messages: Sequence[AnyMessage]) -> list[dict[str, Any]]:
@@ -401,6 +415,16 @@ def _hosts(messages: Sequence[AnyMessage]) -> list[str]:
         if host and host not in found:
             found.append(str(host))
     return found
+
+
+def _dollars(messages: Sequence[AnyMessage]) -> float | None:
+    """What the model's turns cost, as the provider priced them; `None` when none was priced."""
+    priced = [
+        float(message.response_metadata["cost"])
+        for message in messages
+        if isinstance(message, AIMessage) and message.response_metadata.get("cost") is not None
+    ]
+    return sum(priced) if priced else None
 
 
 def _tokens(messages: Sequence[AnyMessage]) -> dict[str, int]:

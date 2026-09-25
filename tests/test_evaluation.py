@@ -101,11 +101,15 @@ def one(*items: plans.PlanItem, rounds: int = 8, rest: int = 150) -> plans.PlanB
 
 
 def spoke(
-    input_tokens: int = 0, output_tokens: int = 0, calls: tuple[str, ...] = ()
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    calls: tuple[str, ...] = (),
+    dollars: float | None = None,
 ) -> AIMessage:
     """One turn of the model, as the record reads it back."""
     return AIMessage(
         content="",
+        response_metadata={} if dollars is None else {"cost": dollars},
         tool_calls=[
             {"name": name, "args": {}, "id": f"call_{name}", "type": "tool_call"}
             for name in calls
@@ -499,6 +503,49 @@ def test_the_report_says_what_the_pass_cost(connection: sqlite3.Connection) -> N
     assert "1 tool calls" in printed
     assert "1200 tokens in" in printed
     assert "90 out" in printed
+
+
+def test_the_pass_says_what_it_cost_in_dollars_and_seconds_a_run(
+    connection: sqlite3.Connection,
+) -> None:
+    runs = [
+        ran(one(item("Plank")), messages=[spoke(dollars=0.03)], seconds=10.0),
+        ran(one(item("Plank")), messages=[spoke(dollars=0.01)], seconds=30.0),
+    ]
+    report = evaluation.Report(
+        tuple(evaluation.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
+    )
+
+    printed = rendered(report)
+
+    assert report.dollars == pytest.approx(0.04)
+    assert "$0.0400 in all, $0.0200 a run, 20.0s a run" in printed
+
+
+def test_a_pass_no_run_priced_says_not_reported(connection: sqlite3.Connection) -> None:
+    run = ran(one(item("Plank")), messages=[spoke()], seconds=5.0)
+    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+
+    printed = rendered(report)
+
+    assert report.dollars is None
+    assert "dollars not reported by the provider, 5.0s a run" in printed
+
+
+def test_a_pass_partly_priced_names_the_runs_it_could_not_price(
+    connection: sqlite3.Connection,
+) -> None:
+    runs = [
+        ran(one(item("Plank")), messages=[spoke(dollars=0.02)]),
+        ran(one(item("Plank")), messages=[spoke()]),
+    ]
+    report = evaluation.Report(
+        tuple(evaluation.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
+    )
+
+    printed = rendered(report)
+
+    assert "$0.0200 over 1 of 2 runs (1 not reported), $0.0200 a run" in printed
 
 
 # -- what the planner itself cost ---------------------------------------------

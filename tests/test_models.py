@@ -455,7 +455,14 @@ def test_openrouter_is_asked_only_for_hosts_that_honour_the_schema(
     built = cast(Any, models.chat().model)
 
     assert built.openai_api_base == models.OPENROUTER_URL
-    assert built.extra_body == {"provider": {"require_parameters": True}}
+    assert built.extra_body["provider"] == {"require_parameters": True}
+
+
+def test_openrouter_is_asked_what_each_request_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dollars are read from the provider, never from a price typed here."""
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+
+    assert built.extra_body["usage"] == {"include": True}
 
 
 def test_openrouter_with_no_key_is_a_state_with_the_way_out(
@@ -684,6 +691,39 @@ def test_the_host_that_answered_is_kept_on_the_reply(monkeypatch: pytest.MonkeyP
     result = built._create_chat_result(response)
 
     assert result.generations[0].message.response_metadata["host"] == "Groq"
+
+
+def openrouter_reply(usage: dict[str, Any]) -> dict[str, Any]:
+    """A chat completion as OpenRouter sends it, with `usage` as given."""
+    return {
+        "id": "gen-1",
+        "model": "qwen/qwen3.8-27b",
+        "choices": [
+            {"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+        ],
+        "usage": usage,
+    }
+
+
+def test_the_cost_the_provider_reports_is_kept_on_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    usage = {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4, "cost": 0.00123}
+
+    result = built._create_chat_result(openrouter_reply(usage))
+
+    assert result.generations[0].message.response_metadata["cost"] == 0.00123
+
+
+def test_a_reply_with_no_cost_carries_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Absent is not zero: a provider that says nothing has not said the call was free."""
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    usage = {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4}
+
+    result = built._create_chat_result(openrouter_reply(usage))
+
+    assert "cost" not in result.generations[0].message.response_metadata
 
 
 def test_openrouter_out_of_credits_is_a_spent_quota() -> None:

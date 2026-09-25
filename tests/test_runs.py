@@ -419,7 +419,7 @@ def test_a_state_written_before_a_run_had_a_name_still_reads_back() -> None:
     )
 
     assert written["nodes"] == [
-        {"node": "planner", "model": "", "provider": "", "seconds": 1.25, "reasoning": "", "host": ""}
+        {"node": "planner", "model": "", "provider": "", "seconds": 1.25, "reasoning": "", "host": "", "dollars": None}
     ]
     assert written["negotiation"] == ""
     assert written["ending"] == ""
@@ -599,3 +599,73 @@ def test_a_record_from_before_efforts_reads_as_the_models_default() -> None:
 
     assert (written["nodes"][0]["reasoning"], written["nodes"][0]["host"]) == ("", "")
     assert run_record.summary(written)[0].startswith("qwen/qwen3.8-27b on openrouter --")
+
+
+# -- what each run cost, as the provider said (12.2) ---------------------------
+
+
+def test_a_node_is_timed_with_what_its_replies_cost() -> None:
+    on = models.Chat(cast(BaseChatModel, object()), "openrouter", "qwen/qwen3.8-27b")
+    replies = [
+        AIMessage(content="a", response_metadata={"cost": 0.001}),
+        AIMessage(content="b", response_metadata={"cost": 0.002}),
+    ]
+
+    produced = run_record.timing(on)("planner", lambda state: {"messages": replies})({})
+
+    (entry,) = produced["timings"]
+    assert run_record.of({"timings": [entry]}, 12)["nodes"][0]["dollars"] == pytest.approx(0.003)
+
+
+def test_a_node_whose_replies_name_no_cost_has_none() -> None:
+    on = models.Chat(cast(BaseChatModel, object()), "groq", "qwen/qwen3.8-27b")
+
+    produced = run_record.timing(on)("planner", lambda state: {"messages": [AIMessage("a")]})({})
+
+    (entry,) = produced["timings"]
+    assert run_record.of({"timings": [entry]}, 12)["nodes"][0]["dollars"] is None
+
+
+def test_the_run_costs_what_its_replies_cost() -> None:
+    state = {
+        "messages": [
+            AIMessage(content="a", response_metadata={"cost": 0.01}),
+            AIMessage(content="b", response_metadata={"cost": 0.02}),
+        ]
+    }
+
+    written = run_record.of(state, 12)
+
+    assert written["dollars"] == pytest.approx(0.03)
+    assert "  $0.0300" in run_record.summary(written)
+
+
+def test_a_run_no_reply_priced_says_so_rather_than_zero() -> None:
+    written = run_record.of({"messages": [AIMessage("a")]}, 12)
+
+    assert written["dollars"] is None
+    said = run_record.summary(written)
+    assert "  cost not reported by the provider" in said
+    assert all("$" not in line for line in said)
+
+
+def test_a_record_from_before_costs_reads_as_not_reported() -> None:
+    state = {"timings": [("planner", "qwen/qwen3.8-27b", "openrouter", 1.0, "low", "Groq")]}
+
+    written = run_record.of(state, 12)
+
+    assert written["nodes"][0]["dollars"] is None
+    assert run_record.summary({k: v for k, v in written.items() if k != "dollars"})
+
+
+def test_each_node_says_what_it_cost_beside_its_seconds() -> None:
+    state = {
+        "timings": [
+            ("planner", "q", "openrouter", 2.0, "", "", 0.004),
+            ("validate", "q", "openrouter", 0.1, "", "", None),
+        ]
+    }
+
+    said = run_record.summary(run_record.of(state, 12))
+
+    assert "  planner 2.0s $0.0040, validate 0.1s" in said
