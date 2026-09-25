@@ -81,7 +81,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
    - left unanswered it reads *waiting*, with how long, never *abandoned* (ADR-0007 item 8);
    - it runs outside the turn-taking queue, so a message arriving meanwhile is answered, and it opens no draft;
    - it starts its run with `planner.starting` alone, on `bot.under(thread, PLANNING)`, so a user request while it waits gets the prepared one and never a second.
-5. **The plan eval suite on a mesocycle**, with its wall time. On the local model a mesocycle is ten minutes; on OpenRouter it was 17 seconds.
+5. **The plan eval suite on a mesocycle**, with its wall time. It replaces the single workout: no door asks for one alone. On the local model a mesocycle is ten minutes; on OpenRouter it was 17 seconds.
 
 ## Session 11 — `0.11.0` — A plan worth doing
 
@@ -101,7 +101,7 @@ In this order. Measuring first is what stops the methodology being written again
 1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both. — **done** `85bfd35`
 2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run. — **done** `38c774f`
 3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
-4. **The planner's matrix**, the same on the plan suite and one mesocycle each. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises.
+4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises.
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
 
 ## Later sessions

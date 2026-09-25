@@ -2,11 +2,11 @@
 
 Status: ready-for-agent
 
-Blocked by: 01, 02.
+Blocked by: 01, 02, 10.5.
 
-The planner's bar is 100% on six invariants (ADR-0010), and it also has to write a mesocycle (10.1, 10.5). A plan is longer than a log document, and its tool loop longer, so effort may matter differently here.
+The planner's bar is 100% on six invariants (ADR-0010), measured on mesocycles: after 10.5 every situation of `--suite plan` asks for one, and there is no single-workout pass to screen on. A plan is longer than a log document, and its tool loop longer, so effort may matter differently here.
 
-**Budget: $6 in total, hard.** No plan-suite run has been costed yet: the first candidate's real cost (02) is the estimate for the rest. One mesocycle on `openai/gpt-oss-120b:nitro` was 93k tokens in and 21k out (10.1).
+**Budget: $6 in total, hard; the estimates below are for single workouts and are now low.** A mesocycle run is about five workouts' worth of tokens, so steps 1 and 2 are to be re-estimated from 10.5's first costed run, and the budget confirmed with the user before step 1. No plan-suite run has been costed yet: the first candidate's real cost (02) is the estimate for the rest. One mesocycle on `openai/gpt-oss-120b:nitro` was 93k tokens in and 21k out (10.1).
 
 ## What to do
 
@@ -16,8 +16,7 @@ The same four candidates as 03, one effort each: `qwen/qwen3.8-27b` low, `openai
 |---|---|---|---|
 | 1. Screen | each candidate on `trainer eval --suite plan --repetitions 1` (6 situations, *refused* plans twice) | 28 | ~$1.5 |
 | 2. Confirm | the cheapest candidate at 100%, at `--repetitions 3` | 21 | ~$1 |
-| 3. A mesocycle | the same one, `trainer plan --mesocycle`, with its seconds and cost | 1 | ~$0.1 |
-| 4. 11.1's measurement | the session-7 request (chest and arms, 45 minutes, body weight and bands) on `anthropic/claude-sonnet-5` at high, and on the chosen row | 2 | ~$0.6 |
+| 3. 11.1's measurement | the session-7 request (chest and arms, 45 minutes, body weight and bands) on `anthropic/claude-sonnet-5` at high, and on the chosen row | 2 | ~$0.6 |
 
 Sonnet is the large-model reference for 11.1 only, not a screening candidate: its one run is the most expensive line here.
 
@@ -43,6 +42,17 @@ No plan-suite pass without the methodology was kept, so there is no *before* to 
 - `no-equipment` asks for 15 minutes, so its floor is 10; `contradictory` asks for 30 over six groups.
 - A situation that cannot be met with the floor is a finding about the request or the model, written here. It is not a reason to lower the floor.
 
+**Left by 10.5**, the first costed mesocycle run of the suite: 2026-09-25, `no-history`, `--repetitions 1`, `openai/gpt-oss-120b`, no effort, **no host pinned**.
+
+| Held | Attempts | Tool calls | Tokens | Cost | Time | Hosts |
+|---|---|---|---|---|---|---|
+| 6 of 6 invariants, both workouts | 2 | 4 | 47k in, 8.4k out | **$0.0031** | **207 s** | DeepInfra (planner), CoreWeave and DekaLLM (emit) |
+
+- **This is the estimate for step 1**, and it is far under the table's: at ~$0.003 a situation, the screening's 28 runs are cents on this model. A pinned `:nitro` host is the other end: 10.1's one mesocycle there was 17 s and about ten times the tokens' price.
+- **207 s is the router, not the model**: a single emit took 23 s on CoreWeave and 51 s on DekaLLM. Pin the host per candidate (01), or the seconds column measures the router's choice.
+- **The first attempt was refused on two rules**, both workouts: under the time floor (24 and 20 of 30 minutes, 11.3), and `despite` rows naming exercises the user never refused. The second attempt held. Expect both among the screening's refusals.
+- The suite's two slots are `evaluation.SPLIT`, lower and upper, so a run is two workouts, not five.
+
 ## References
 
 - ADR-0001, ADR-0008, ADR-0010
@@ -51,7 +61,7 @@ No plan-suite pass without the methodology was kept, so there is no *before* to 
 ## Acceptance criteria
 
 - [ ] The four candidates screened and written, with their spend.
-- [ ] The winner confirmed at three repetitions, and one mesocycle from it, timed and costed.
+- [ ] The winner confirmed at three repetitions, with seconds and cost per mesocycle.
 - [ ] The two session-7 plans written here, and neither is a circuit of same-muscle exercises like the one above (11.2).
 - [ ] The chosen row named, with the rule that chose it, holding the six invariants at 100% with 11.3's floor in.
 - [ ] Total spend at or under $6.

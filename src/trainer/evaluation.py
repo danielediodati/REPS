@@ -2,6 +2,8 @@
 
 `trainer eval` runs TRAINER.md's six hand-written, deliberately nasty
 situations against the real agent and checks six properties over every run.
+Each situation asks for a mesocycle, and the invariants hold on every workout
+in it (ticket 10.5).
 Not *good plan / bad plan* -- properties that must hold always, **decided by
 code**. For a decidable constraint a validator always beats an agent judge:
 it costs nothing, it is not persuadable, and it catches all of them rather
@@ -44,6 +46,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -55,7 +58,15 @@ from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, models, planner
 from trainer.coach import record as run_record
-from trainer.engine import admissible, catalog, database, duration, home, muscle_groups
+from trainer.engine import (
+    admissible,
+    catalog,
+    constraints,
+    database,
+    duration,
+    home,
+    muscle_groups,
+)
 
 REPETITIONS = 3
 """How many times each situation runs, unless told otherwise.
@@ -93,7 +104,7 @@ def records_path() -> Path:
     return home.inside(DEFAULT_RECORDS_NAME)
 
 TURNED_DOWN_BECAUSE = "I don't feel like it"
-"""What the user says when they turn down the first plan of the after-a-refusal situation."""
+"""What the user says when they turn down the first mesocycle of the after-a-refusal situation."""
 
 
 @dataclass(frozen=True)
@@ -108,81 +119,89 @@ class Situation:
 
     name: str
     describes: str
-    request: plans.Request
+    slots: tuple[plans.Request, ...]
+    """One request per workout of the cycle, as a door would send them."""
+
     after_a_refusal: bool = False
     """Situation 5. The measured run is the second: the first exists only to
     have something to turn down, and its cost counts towards the pass."""
+
+    @property
+    def request(self) -> plans.MesocycleRequest:
+        """The mesocycle this situation asks for."""
+        return plans.MesocycleRequest(slots=self.slots)
 
 
 GOAL = "hypertrophy"
 """The goal every situation plans for; a door always sends the one `training.toml` declares."""
 
 
+SPLIT = (("legs", "core"), ("chest", "back"))
+"""The cycle every situation plans, unless it is about the groups: two workouts, lower and upper."""
+
+
 def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
-    """The six, built against this catalog.
+    """The six, each a mesocycle over `SPLIT`, built against this catalog.
 
     A seventh is a row here. The two that read the catalog do so rather than
     naming ids in the source: a hand-written list of sixty exercises is a
     vocabulary copy, and this project has been wrong that way once already.
     """
-    everything = muscle_groups.groups()
-    bodyweight = plans.Request(equipment=("body only",), budget_min=15, goal=GOAL)
+    body = ("body only",)
 
+    def split(minutes: int, preferences: tuple[str, ...] = ()) -> tuple[plans.Request, ...]:
+        return tuple(
+            plans.Request(
+                equipment=body,
+                budget_min=minutes,
+                groups=groups,
+                goal=GOAL,
+                preferences=preferences,
+            )
+            for groups in SPLIT
+        )
+
+    everything = plans.Request(
+        equipment=body, budget_min=30, groups=muscle_groups.groups(), goal=GOAL
+    )
     return (
         Situation(
             name="no-equipment",
             describes="15 minutes, no equipment",
-            request=bodyweight,
+            slots=split(15),
         ),
         Situation(
             name="half-refused",
             describes="half the catalog out on stated preferences",
-            request=plans.Request(
-                equipment=("body only",),
-                budget_min=30,
-                goal=GOAL,
-                groups=("core",),
-                preferences=_half_of(connection, ("body only",), 30, ("core",)),
+            slots=split(
+                30,
+                tuple(
+                    exercise_id
+                    for groups in SPLIT
+                    for exercise_id in _half_of(connection, body, 30, groups)
+                ),
             ),
         ),
         Situation(
             name="contradictory",
             describes="30 minutes, but I want to train everything",
-            request=plans.Request(
-                equipment=("body only",), budget_min=30, groups=everything, goal=GOAL
-            ),
+            slots=(everything, everything),
         ),
         Situation(
             name="no-history",
             describes="the previous report ambiguous or missing",
-            request=plans.Request(
-                equipment=("body only",),
-                budget_min=30,
-                groups=("legs", "core"),
-                goal=GOAL,
-            ),
+            slots=split(30),
         ),
         Situation(
             name="refused",
-            describes="the user refuses the plan and it proposes again",
-            request=plans.Request(
-                equipment=("body only",),
-                budget_min=30,
-                groups=("legs", "core"),
-                goal=GOAL,
-            ),
+            describes="the user refuses the mesocycle and it proposes again",
+            slots=split(30),
             after_a_refusal=True,
         ),
         Situation(
             name="preference-against-the-split",
             describes="a preference in conflict with what the workout must train",
-            request=plans.Request(
-                equipment=("body only",),
-                budget_min=30,
-                goal=GOAL,
-                groups=("legs",),
-                preferences=_half_of(connection, ("body only",), 30, ("legs",)),
-            ),
+            slots=split(30, _half_of(connection, body, 30, ("legs",))),
         ),
     )
 
@@ -222,13 +241,13 @@ class Ran:
     """
 
     record: Mapping[str, Any]
-    request: plans.Request
-    """What the graph planned against: the situation's request with today's
+    request: plans.MesocycleRequest
+    """What the graph planned against: the situation's slots with today's
     standing exclusions and the declared cap folded in, which is the space the
     model was actually shown."""
 
-    plan: plans.WorkoutPlan | None
-    """`None` when nothing it emitted parses as a plan at all."""
+    plan: plans.Mesocycle | None
+    """`None` when nothing it emitted parses as a mesocycle at all."""
 
     spent: int
     """What the run actually paid, which is not the budget: a turn's calls are
@@ -283,10 +302,11 @@ class Ran:
 class Invariant:
     name: str
     holds: Callable[
-        [sqlite3.Connection, Situation, Ran, tuple[plans.Violation, ...]],
+        [sqlite3.Connection, plans.Request, plans.WorkoutPlan, tuple[plans.Violation, ...]],
         str | None,
     ]
-    """`None` when it holds, and the sentence saying how it failed otherwise.
+    """Checked on one workout against its slot: `None` when it holds, and the
+    sentence saying how it failed otherwise.
 
     The violations are handed in rather than asked for: they cost three
     queries and a costing pass, and every invariant that reads them would
@@ -294,19 +314,18 @@ class Invariant:
     """
 
 
-def _terminates(
-    connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
-    violations: tuple[plans.Violation, ...],
-) -> str | None:
-    """A plan came out, inside the bounds the graph runs under.
+TERMINATES = "terminates"
+"""The one invariant about the run as a whole; the others hold on each workout."""
+
+
+def _terminates(ran: Ran, slots: int) -> str | None:
+    """A mesocycle came out, one workout per slot, inside the bounds the graph runs under.
 
     **A run that never returned is not measured here.** It has no record to
     read, so it arrives as `Outcome.error`, shows in the *not run* column and
     counts against the metric there. What this checks is a run that did
-    return: that it emitted a plan with something in it, and that it stopped
-    where it was built to stop.
+    return: that it emitted a mesocycle with something in every workout, and
+    that it stopped where it was built to stop.
 
     **The call budget is reported rather than checked**, and that moved here
     from the old loop deliberately. Tools stop being offered the moment the
@@ -317,32 +336,36 @@ def _terminates(
     spent beside every run.
     """
     if ran.plan is None:
-        return "it emitted nothing that parses as a plan"
-    if not ran.plan.blocks:
-        return "it emitted a plan with no blocks in it"
+        return "it emitted nothing that parses as a mesocycle"
+    given = len(ran.plan.workouts)
+    if given != slots:
+        return f"it emitted {given} workouts for {slots} slots"
+    empty = [
+        str(slot)
+        for slot, workout in enumerate(ran.plan.workouts, start=1)
+        if not workout.blocks
+    ]
+    if empty:
+        return f"workout {', '.join(empty)}: a plan with no blocks in it"
     if ran.attempts > planner.ATTEMPTS:
         return (
-            f"it emitted {ran.attempts} plans against a bound of "
+            f"it emitted {ran.attempts} mesocycles against a bound of "
             f"{planner.ATTEMPTS} attempts"
         )
     return None
 
 
 def violations_of(
-    connection: sqlite3.Connection, situation: Situation, ran: Ran
+    connection: sqlite3.Connection, asked: plans.Request, workout: plans.WorkoutPlan
 ) -> tuple[plans.Violation, ...]:
-    """Every rule this run's plan breaks, decided once for all the invariants that read one.
+    """Every rule one workout breaks against its slot, decided once for all the invariants that read one.
 
     The rules themselves, not a second reading of them: read twice, the day
     the two disagree the run is measured against whichever one is wrong.
     """
-    if ran.plan is None:
-        return (
-            plans.Violation(plans.SHAPE, "it emitted nothing that parses as a plan"),
-        )
     try:
-        blocks = plans.to_blocks(ran.plan)
-        return plans.validate(connection, blocks, situation.request, ran.plan)
+        blocks = plans.to_blocks(workout)
+        return plans.validate(connection, blocks, asked, workout)
     except (plans.PlanError, duration.DurationError) as error:
         return (plans.Violation(plans.SHAPE, f"it cannot be costed: {error}"),)
 
@@ -357,8 +380,8 @@ def _says(violations: tuple[plans.Violation, ...], *rules: str) -> str | None:
 
 def _respects_the_time(
     connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
+    asked: plans.Request,
+    workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Estimated duration inside the declared budget. Never trimmed to fit.
@@ -372,8 +395,8 @@ def _respects_the_time(
 
 def _respects_the_constraints(
     connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
+    asked: plans.Request,
+    workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing outside the admissible set.
@@ -387,8 +410,8 @@ def _respects_the_constraints(
 
 def _respects_the_preferences(
     connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
+    asked: plans.Request,
+    workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Nothing the user refused -- and if it proposes one again, it says so.
@@ -402,8 +425,8 @@ def _respects_the_preferences(
 
 def _todays_equipment_only(
     connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
+    asked: plans.Request,
+    workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """Every exercise is one today's equipment reaches.
@@ -412,9 +435,9 @@ def _todays_equipment_only(
     it: this is its own invariant in TRAINER.md, and a fault in the filter
     would otherwise pass both.
     """
-    allowed = set(situation.request.equipment)
+    allowed = set(asked.equipment)
     wrong = []
-    for exercise_id in sorted(_prescribed(ran)):
+    for exercise_id in sorted(_prescribed(workout)):
         found = catalog.exercise(connection, exercise_id)
         if found is None:
             wrong.append(f"{exercise_id} (no such exercise)")
@@ -427,8 +450,8 @@ def _todays_equipment_only(
 
 def _does_not_degenerate(
     connection: sqlite3.Connection,
-    situation: Situation,
-    ran: Ran,
+    asked: plans.Request,
+    workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
     """It uses the space it was given.
@@ -460,8 +483,8 @@ def _does_not_degenerate(
     measurement whose bar is 100%, an invariant that can be wrong is worse than
     one that is weak.
     """
-    request = situation.request
-    prescribed = _prescribed(ran)
+    request = asked
+    prescribed = _prescribed(workout)
 
     available = admissible.admissible_set(
         connection,
@@ -510,7 +533,6 @@ def _does_not_degenerate(
 
 
 INVARIANTS = (
-    Invariant("terminates", _terminates),
     Invariant("time", _respects_the_time),
     Invariant("constraints", _respects_the_constraints),
     Invariant("preferences", _respects_the_preferences),
@@ -519,11 +541,9 @@ INVARIANTS = (
 )
 
 
-def _prescribed(ran: Ran) -> set[str]:
-    """Every exercise the plan names, and nothing at all when there is no plan to read."""
-    if ran.plan is None:
-        return set()
-    return {item.exercise_id for block in ran.plan.blocks for item in block.items}
+def _prescribed(workout: plans.WorkoutPlan) -> set[str]:
+    """Every exercise the workout names."""
+    return {item.exercise_id for block in workout.blocks for item in block.items}
 
 
 # -- running them -------------------------------------------------------------
@@ -707,12 +727,19 @@ def check(
     breaks one, and stopping at the first would hide the difference behind an
     identical line in the matrix.
     """
-    failures = []
-    violations = violations_of(connection, situation, ran)
-    for invariant in INVARIANTS:
-        why = invariant.holds(connection, situation, ran, violations)
-        if why is not None:
-            failures.append((invariant.name, why))
+    ended = _terminates(ran, len(situation.slots))
+    if ran.plan is None or len(ran.plan.workouts) != len(situation.slots):
+        # Nothing to pair with the slots, so nothing else can be read.
+        return ((TERMINATES, str(ended)),)
+    failures = [] if ended is None else [(TERMINATES, ended)]
+    for slot, (workout, asked) in enumerate(
+        zip(ran.plan.workouts, situation.slots, strict=True), start=1
+    ):
+        violations = violations_of(connection, asked, workout)
+        for invariant in INVARIANTS:
+            why = invariant.holds(connection, asked, workout, violations)
+            if why is not None:
+                failures.append((invariant.name, f"workout {slot}: {why}"))
     return tuple(failures)
 
 
@@ -825,7 +852,7 @@ def _once(
     budget: int,
     records: Path,
 ) -> Outcome:
-    request = situation.request
+    request = _today(connection, situation.request)
     also: list[Ran] = []
     try:
         if situation.after_a_refusal:
@@ -848,7 +875,7 @@ def _once(
                 )
             request = dataclasses.replace(
                 request,
-                refusals=plans.turned_down((), first.plan, TURNED_DOWN_BECAUSE),
+                refusals=plans.mesocycle_turned_down((), first.plan, TURNED_DOWN_BECAUSE),
             )
         ran = _invoked(graph, request, budget)
     except Exception as error:
@@ -863,12 +890,12 @@ def _once(
 
     written = write(records, f"{situation.name}-{attempt}", ran.document)
 
-    # Checked against the request the graph actually planned against, not the
-    # one the situation declared: `constraining_today` folds the standing
-    # exclusions and the declared cap into it on the first turn, and measuring
-    # the other one would measure a space the model was never shown.
+    # Checked against the slots the graph actually planned against, not the
+    # ones the situation declared: `_today` folded the standing exclusions and
+    # the declared cap into them, and measuring the others would measure a
+    # space the model was never shown.
     failures = check(
-        connection, dataclasses.replace(situation, request=ran.request), ran
+        connection, dataclasses.replace(situation, slots=ran.request.slots), ran
     )
     if ran.refused and not failures:
         # The validator refused a plan every invariant says is fine. The two
@@ -879,7 +906,34 @@ def _once(
     return Outcome(situation.name, attempt, failures, ran, written, also=tuple(also))
 
 
-def _invoked(graph: planner.Planner, request: plans.Request, budget: int) -> Ran:
+def _today(
+    connection: sqlite3.Connection, request: plans.MesocycleRequest
+) -> plans.MesocycleRequest:
+    """Every slot with today's standing exclusions and the declared cap folded in, as a door's are."""
+    today = date.today().isoformat()
+    folded = []
+    for asked in request.slots:
+        found = constraints.constraining_today(
+            connection,
+            today,
+            budget_min=asked.budget_min,
+            groups=asked.groups,
+            given=asked.exclusions,
+        )
+        folded.append(
+            dataclasses.replace(
+                asked,
+                exclusions=found.exclusions,
+                budget_min=found.budget_min,
+                groups=found.groups,
+            )
+        )
+    return dataclasses.replace(request, slots=tuple(folded))
+
+
+def _invoked(
+    graph: planner.Planner, request: plans.MesocycleRequest, budget: int
+) -> Ran:
     """One run of the graph, and the wall time somebody waited for it.
 
     The clock is read around the whole invocation rather than summed from the
@@ -921,7 +975,7 @@ def render(report: Report, chosen: Sequence[Situation]) -> list[str]:
     about the two that did run, and blanking their verdicts would hide real
     failures behind an unrelated transport error.
     """
-    columns = [invariant.name for invariant in INVARIANTS] + [VALIDATOR, NOT_RUN]
+    columns = [TERMINATES, *(invariant.name for invariant in INVARIANTS), VALIDATOR, NOT_RUN]
     cases = [situation.name for situation in chosen]
     return [
         *matrix(report, cases, columns),

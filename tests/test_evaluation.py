@@ -29,7 +29,8 @@ from trainer import evaluation, tools
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
-from trainer.engine import catalog, database, methodology, migrations
+from trainer.engine import catalog, database, exclusions, methodology, migrations
+from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
     make_exercise(
@@ -127,20 +128,20 @@ def ran(
     despite: list[plans.Acknowledgement] | None = None,
     refusals: list[tuple[plans.Violation, ...]] | None = None,
     messages: list[AIMessage] | None = None,
-    plan: plans.WorkoutPlan | None | EllipsisType = ...,
+    plan: plans.Mesocycle | None | EllipsisType = ...,
     request: plans.Request = LEGS_AND_CORE,
     **overrides: Any,
 ) -> evaluation.Ran:
-    """One run of the graph, in the terms the checks read.
+    """One run of the graph, in the terms the checks read: a one-workout mesocycle.
 
     The record is built by `coach.record` out of a state, so what these tests
     assert against is the shape the graph actually produces. `plan` is left
     out to build one from `blocks`, and given as `None` for the run whose
-    emission never parsed as a plan at all.
+    emission never parsed as a mesocycle at all.
     """
-    emitted: plans.WorkoutPlan | None
+    emitted: plans.Mesocycle | None
     if isinstance(plan, EllipsisType):
-        emitted = plans.WorkoutPlan(blocks=list(blocks), despite=despite or [])
+        emitted = cycle_of(plans.WorkoutPlan(blocks=list(blocks), despite=despite or []))
     else:
         emitted = plan
     attempts = refusals if refusals is not None else [()]
@@ -153,7 +154,7 @@ def ran(
     }
     base: dict[str, Any] = {
         "record": run_record.of(state, tools.CALL_BUDGET),
-        "request": request,
+        "request": plans.MesocycleRequest(slots=(request,)),
         "plan": emitted,
         "spent": 2,
         "seconds": 1.0,
@@ -162,8 +163,12 @@ def ran(
     return evaluation.Ran(**base)
 
 
-def situation(request: plans.Request) -> evaluation.Situation:
-    return evaluation.Situation(name="a-situation", describes="one", request=request)
+def cycle_of(*workouts: plans.WorkoutPlan) -> plans.Mesocycle:
+    return plans.Mesocycle(workouts=list(workouts), cycles=4, why="settle the loads")
+
+
+def situation(*slots: plans.Request) -> evaluation.Situation:
+    return evaluation.Situation(name="a-situation", describes="one", slots=slots)
 
 
 def failing(
@@ -194,7 +199,8 @@ def test_every_situation_plans_for_a_goal_the_methodology_has(
 ) -> None:
     """A request from a door always carries the declared goal, so the suite measures one that does."""
     for found in evaluation.situations(connection):
-        assert found.request.goal in methodology.goals(), found.name
+        for asked in found.slots:
+            assert asked.goal in methodology.goals(), found.name
 
 
 def test_exactly_one_situation_measures_the_second_plan(
@@ -214,9 +220,28 @@ def test_the_preference_situations_read_the_catalog(
     hand-written list of ids -- this project has been wrong that way once."""
     (half,) = [s for s in evaluation.situations(connection) if s.name == "half-refused"]
 
-    assert half.request.preferences
-    for exercise_id in half.request.preferences:
+    preferences = half.slots[0].preferences
+    assert preferences
+    for exercise_id in preferences:
         assert catalog.exercise(connection, exercise_id) is not None
+
+
+def test_every_situation_asks_for_a_mesocycle_of_the_split(
+    connection: sqlite3.Connection,
+) -> None:
+    """No door asks for a lone workout, so neither does the suite (10.5)."""
+    for found in evaluation.situations(connection):
+        assert len(found.slots) == len(evaluation.SPLIT), found.name
+        assert isinstance(found.request, plans.MesocycleRequest)
+
+
+def test_a_situations_preferences_are_the_same_in_every_slot(
+    connection: sqlite3.Connection,
+) -> None:
+    """The mesocycle brief reads the user's preferences off the first slot,
+    so a preference set only on a later one would be one the model never saw."""
+    for found in evaluation.situations(connection):
+        assert len({asked.preferences for asked in found.slots}) == 1, found.name
 
 
 # -- each invariant, on its own -----------------------------------------------
@@ -305,7 +330,7 @@ def test_an_empty_plan_fails_termination(connection: sqlite3.Connection) -> None
     the model put anything in it."""
     run = ran(one(item("Plank")))
     assert run.plan is not None
-    run.plan.blocks.clear()
+    run.plan.workouts[0].blocks.clear()
 
     assert "terminates" in failing(connection, LEGS_AND_CORE, run)
 
@@ -720,9 +745,8 @@ def test_the_measurement_leaves_the_workout_count_unchanged(
     from test_planner import Scripted, plan_of
 
     chosen = evaluation.situations(connection)[:2]
-    on = models.Chat(
-        Scripted(documents=[plan_of("Bodyweight_Squat")] * 10), "scripted", "a-stand-in"
-    )
+    both = cycle_of(plan_of("Bodyweight_Squat"), plan_of("Bodyweight_Squat"))
+    on = models.Chat(Scripted(documents=[both] * 10), "scripted", "a-stand-in")
 
     report = evaluation.run(
         connection,
@@ -773,9 +797,8 @@ def test_every_run_leaves_the_record_the_failure_names(
     from test_planner import Scripted, plan_of
 
     chosen = evaluation.situations(connection)[:1]
-    on = models.Chat(
-        Scripted(documents=[plan_of("Bodyweight_Squat")] * 5), "scripted", "a-stand-in"
-    )
+    both = cycle_of(plan_of("Bodyweight_Squat"), plan_of("Bodyweight_Squat"))
+    on = models.Chat(Scripted(documents=[both] * 5), "scripted", "a-stand-in")
 
     report = evaluation.run(
         connection, chosen, on=on, repetitions=1, records=tmp_path / "records"
@@ -835,3 +858,95 @@ def test_a_spent_quota_stops_the_pass_and_says_so(
     assert report.stopped in printed
     assert "a bug" not in printed
     assert printed.count(report.stopped) == 1, "said once, not once per run"
+
+
+# -- a mesocycle is checked workout by workout ---------------------------------
+
+
+UPPER = plans.Request(equipment=("body only",), budget_min=45, groups=("chest",))
+
+
+def test_a_failure_names_the_workout_it_is_in(connection: sqlite3.Connection) -> None:
+    """Five workouts are five chances to break a rule, and *time failed* does
+    not say which one to go and read."""
+    good = plans.WorkoutPlan(blocks=[one(item("Bodyweight_Squat")), one(item("Plank"))])
+    over = plans.WorkoutPlan(blocks=[one(item("Plank"), rounds=99, rest=180)])
+    run = ran(plan=cycle_of(good, over))
+
+    broke = dict(evaluation.check(connection, situation(LEGS_AND_CORE, UPPER), run))
+
+    assert broke["time"].startswith("workout 2: ")
+
+
+def test_every_workout_is_checked_not_only_the_first(
+    connection: sqlite3.Connection,
+) -> None:
+    good = plans.WorkoutPlan(blocks=[one(item("Bodyweight_Squat")), one(item("Plank"))])
+    barbell = plans.WorkoutPlan(blocks=[one(item("Barbell_Curl"))])
+    run = ran(plan=cycle_of(good, barbell))
+
+    broke = dict(evaluation.check(connection, situation(LEGS_AND_CORE, UPPER), run))
+
+    assert "workout 2" in broke["equipment"]
+
+
+def test_a_workout_missing_for_a_slot_fails_termination(
+    connection: sqlite3.Connection,
+) -> None:
+    run = ran(one(item("Bodyweight_Squat")), one(item("Plank")))
+
+    broke = dict(evaluation.check(connection, situation(LEGS_AND_CORE, UPPER), run))
+
+    assert broke == {"terminates": "it emitted 1 workouts for 2 slots"}
+
+
+def test_the_refused_situation_briefs_the_mesocycle_it_turned_down(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Situation 5 on a mesocycle: the second run is told what was turned down and why."""
+    from test_planner import Scripted, plan_of
+
+    (refusal,) = [s for s in evaluation.situations(connection) if s.after_a_refusal]
+    first = cycle_of(plan_of("Bodyweight_Squat"), plan_of("Plank"))
+    second = cycle_of(plan_of("Lunge"), plan_of("Plank"))
+    model = Scripted(documents=[*[first] * 3, *[second] * 3])
+
+    report = evaluation.run(
+        connection,
+        (refusal,),
+        on=models.Chat(model, "scripted", "a-stand-in"),
+        repetitions=1,
+        records=tmp_path / "records",
+    )
+
+    (outcome,) = report.outcomes
+    assert len(outcome.also) == 1
+    briefed = "\n".join(message.text for message in model.seen[-1])
+    assert "turned each one down" in briefed
+    assert evaluation.TURNED_DOWN_BECAUSE in briefed
+
+
+def test_a_standing_exclusion_reaches_every_slot_the_model_plans(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A door folds today's exclusions into each slot; a suite that did not
+    would measure a space no user is ever planned against."""
+    from test_planner import Scripted, plan_of
+
+    exclusions.add(connection, Exclusion("pattern", "squat"), "2099-01-01")
+    connection.commit()
+    chosen = evaluation.situations(connection)[:1]
+    both = cycle_of(plan_of("Lunge"), plan_of("Plank"))
+
+    report = evaluation.run(
+        connection,
+        chosen,
+        on=models.Chat(Scripted(documents=[both] * 5), "scripted", "a-stand-in"),
+        repetitions=1,
+        records=tmp_path / "records",
+    )
+
+    (outcome,) = report.outcomes
+    assert isinstance(outcome.record, evaluation.Ran)
+    for asked in outcome.record.request.slots:
+        assert Exclusion("pattern", "squat") in asked.exclusions

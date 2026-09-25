@@ -150,7 +150,7 @@ The engine checks every choice. Nobody checks the **set** of choices, or its **d
 
 Each component is measured on its own, against fixtures named in the environment (`TRAINER_DB`).
 
-**Agent invariants.** Checked by code on every run, with a target of 100%. The agent:
+**Agent invariants.** Checked by code on every run, on each workout of the mesocycle it emits, with a target of 100%. The agent:
 1. terminates within the call budget, emitting a plan anyway;
 2. fits the declared time;
 3. stays inside the admissible set;

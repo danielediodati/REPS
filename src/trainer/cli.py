@@ -662,10 +662,10 @@ def eval_command(
 ) -> None:
     """Run a measurement against the real model, and check it by code.
 
-    `--suite plan` runs the planner graph over the six adverse situations, on
-    the provider `LLM_BACKEND` names, and checks the six invariants over every
-    run. Not *good plan / bad plan* -- properties that must hold always. It
-    also reports what the planner itself spent: attempts to a valid plan, wall
+    `--suite plan` asks the planner graph for a mesocycle in each of the six
+    adverse situations, on the provider `LLM_BACKEND` names, and checks the six
+    invariants on every workout of every run. Not *good plan / bad plan* --
+    properties that must hold always. It also reports what the planner itself spent: attempts to a valid plan, wall
     time, tool calls, and the rule still refusing a run that never got there.
 
     `--suite log` is session 5's: thirty hand-written reports, eighteen the

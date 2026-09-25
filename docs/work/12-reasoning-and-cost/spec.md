@@ -19,5 +19,5 @@ The first full log pass on OpenRouter (2026-09-24, `qwen/qwen3.8-27b:nitro`) cos
 | 01 | Reasoning effort and the host are settings | — |
 | 02 | Every run says what it cost | — |
 | 03 | The logger's matrix | 01, 02, 9.5 |
-| 04 | The planner's matrix | 01, 02 |
+| 04 | The planner's matrix | 01, 02, 10.5 |
 | 05 | The choice, written down | 03, 04 |
