@@ -99,7 +99,7 @@ In this order. Measuring first is what stops the methodology being written again
 **Demo**: one table per subgraph, each row a model at a reasoning effort: held against its bar, dollars and seconds per interaction. The configuration shipped is the row the rule picked.
 
 1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both. — **done** `85bfd35`
-2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run.
+2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run. — **done** `38c774f`
 3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
 4. **The planner's matrix**, the same on the plan suite and one mesocycle each. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises.
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
