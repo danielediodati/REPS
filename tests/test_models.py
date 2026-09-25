@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 import ollama
@@ -743,6 +744,96 @@ def test_openrouter_out_of_credits_is_a_spent_quota() -> None:
     assert spent is not None
     assert "credits" in str(spent)
     assert str(spent).isascii()
+
+
+def served_by(
+    monkeypatch: pytest.MonkeyPatch, answer: Callable[[Any], Any], **env: str
+) -> Any:
+    """The logger's OpenRouter model, talking to `answer` instead of the network."""
+    import httpx2
+
+    built = cast(Any, openrouter_logger(monkeypatch, **env).model)
+    return models.OpenRouterChat(
+        model=built.model_name,
+        api_key=built.openai_api_key,
+        base_url=built.openai_api_base,
+        extra_body=built.extra_body,
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+        max_retries=0,
+    )
+
+
+def failing_on(host: str) -> Callable[[Any], Any]:
+    """An OpenRouter that relays `host`'s error in a 200, with no choices."""
+    import httpx2
+
+    def answer(request: Any) -> Any:
+        return httpx2.Response(
+            200,
+            json={
+                "error": {
+                    "code": 502,
+                    "message": "upstream went away",
+                    "metadata": {"provider_name": host},
+                },
+                "choices": None,
+            },
+        )
+
+    return answer
+
+
+def test_openrouter_calls_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that stops answering once held a run for minutes."""
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+
+    assert built.request_timeout == models.TIMEOUT_S
+    assert built.max_retries == models.RETRIES
+
+
+def test_a_host_error_on_a_structured_emission_names_the_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It reached the matrix as "'NoneType' object is not iterable"."""
+    model = served_by(monkeypatch, failing_on("CoreWeave"))
+    schema = {
+        "title": "Said",
+        "type": "object",
+        "properties": {"said": {"type": "string"}},
+        "required": ["said"],
+        "additionalProperties": False,
+    }
+
+    with pytest.raises(models.ProviderFailed) as raised:
+        model.with_structured_output(schema, method="json_schema").invoke("hello")
+
+    assert "CoreWeave" in str(raised.value)
+    assert "upstream went away" in str(raised.value)
+    assert str(raised.value).isascii()
+
+
+def test_a_host_error_on_a_tool_turn_names_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    model = served_by(monkeypatch, failing_on("AkashML"))
+
+    with pytest.raises(models.ProviderFailed, match="AkashML"):
+        model.invoke("hello")
+
+
+def test_a_host_that_does_not_answer_is_named_with_the_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx2
+
+    def silent(request: Any) -> Any:
+        raise httpx2.ReadTimeout("timed out", request=request)
+
+    model = served_by(monkeypatch, silent, OPENROUTER_PROVIDER="deepinfra")
+
+    with pytest.raises(models.ProviderFailed) as raised:
+        model.invoke("hello")
+
+    assert "deepinfra" in str(raised.value)
+    assert f"{models.TIMEOUT_S} s" in str(raised.value)
 
 
 # -- a model per subgraph ------------------------------------------------------

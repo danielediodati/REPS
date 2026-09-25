@@ -71,11 +71,22 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 
 ## Questions to grill
 
-0. **Measure before redesigning** (agreed 2026-09-25). The evidence is four runs at one repetition, and DeepSeek reached 5 / 6 on today's single emission: the cause may be model size, not structure. Before the ADR, test steps 4 and 5 in their smallest form, both needed anyway:
-   - the per-group `allocation` in every slot of the suite's requests, as the door sends it;
-   - `exercise_id` held to each workout's own admissible ids in the emit schema, instead of the union.
+0. **Measure before redesigning** (grilled 2026-09-25). The evidence is four runs at one repetition, and DeepSeek reached 5 / 6 on one emission: the cause may be model size, not structure. Questions 1–10 wait for the number.
 
-   Then rerun `gpt-oss-120b` low on DeepInfra (~$0.02, on the user's go). A large rise from 2 / 6 confirms the structural reading and steps 1–3 are grilled with a number in hand; no rise says the model is the cause, and five steps would be much architecture for little.
+   | | Decided |
+   |---|---|
+   | On `main`, for real | a timeout on provider calls; a provider error reported as a state naming the host |
+   | On a probe branch | everything below; thrown away once steps 1–3 are decided |
+   | Suite | every slot carries its `allocation`, from `plan._divided` as the door's does |
+   | Emission | one per workout, in sequence, each seeing the ones already accepted; a last small emission writes `cycles` and `why` over all of them |
+   | Prompt | `PLANNING`, the single workout's, plus *workout N of M, and the ones before* in the message |
+   | Tools | the planner's ten, at every workout |
+   | Attempts | today's budget **per workout**; cost and calls reported beside it |
+   | Turned down | the refused mesocycle is in every workout's brief, checked at the end; identical reopens every workout |
+   | Invented `despite` | an error like any other |
+   | Measure | `gpt-oss-120b` low, DeepInfra, 3 repetitions **before** (`main`) and 3 **after** (branch): ~$0.12, on the user's go |
+   | Rule | after ≥ 4 / 6 mean and ≥ +2 on before → structural, grill steps 1–3; under +1 → model size, no steps; between → read the time and wrong-workout columns |
+   | Result | the numbers, per rule, with cost and time, go here on `main` |
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?
@@ -91,7 +102,7 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 
 - **12.4 waits for this.** Measuring models on a planner about to change measures the wrong thing. The four rows above are the *before*.
 - **12.3 (the logger's matrix) is untouched** and can run now.
-- **Also for 12.4, found in the same screening**: provider calls have no timeout (one hung minutes), and a provider error reaches the matrix as `'NoneType' object is not iterable` rather than as a state naming the host.
+- **Fixed before the measure, found in the same screening**: an OpenRouter call is bounded (`models.TIMEOUT_S`, one retry), and a host's error, or its silence, reaches the matrix as `ProviderFailed` naming the host instead of `'NoneType' object is not iterable`.
 
 ## References
 

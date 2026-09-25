@@ -372,14 +372,79 @@ def groq_model(named: str | None = None) -> ChatGroq:
     )
 
 
+TIMEOUT_S = 180
+"""How long one OpenRouter call may take before it is a host that stopped answering."""
+
+RETRIES = 1
+"""One more try after a failure, so a host that hangs costs two timeouts and not three."""
+
+
+class ProviderFailed(ModelError):
+    """The host behind OpenRouter answered with an error, or not at all, named."""
+
+
 class OpenRouterChat(ChatOpenAI):
     """`ChatOpenAI` on OpenRouter, keeping the host that answered and what it cost on each reply."""
+
+    def _generate(self, *args: Any, **kwargs: Any) -> ChatResult:
+        try:
+            return super()._generate(*args, **kwargs)
+        except openai.APITimeoutError as error:
+            raise self._silent() from error
+        except TypeError as error:
+            if (failed := self._surfaced(error)) is None:
+                raise
+            raise failed from error
+
+    async def _agenerate(self, *args: Any, **kwargs: Any) -> ChatResult:
+        try:
+            return await super()._agenerate(*args, **kwargs)
+        except openai.APITimeoutError as error:
+            raise self._silent() from error
+        except TypeError as error:
+            if (failed := self._surfaced(error)) is None:
+                raise
+            raise failed from error
+
+    def _surfaced(self, error: TypeError) -> ProviderFailed | None:
+        # A host's error can arrive in a 200 with null `choices`. On the
+        # structured-output path the SDK iterates them before langchain looks,
+        # and the run ends on "'NoneType' object is not iterable"; langchain
+        # leaves the HTTP response on the exception, and the body names the host.
+        answered = getattr(error, "response", None)
+        if answered is None:
+            return None
+        try:
+            body = answered.json()
+        except ValueError:
+            return None
+        return self._failed(body if isinstance(body, dict) else {})
+
+    def _failed(self, body: dict[str, Any]) -> ProviderFailed:
+        error = body.get("error")
+        said = error if isinstance(error, dict) else {"message": error}
+        host = (said.get("metadata") or {}).get("provider_name") or body.get("provider")
+        return ProviderFailed(
+            f"{host or self._pinned()} failed {self.model_name}: "
+            f"{said.get('message') or 'a reply with no choices'}"
+        )
+
+    def _silent(self) -> ProviderFailed:
+        return ProviderFailed(
+            f"{self._pinned()} did not answer {self.model_name} in {TIMEOUT_S} s"
+        )
+
+    def _pinned(self) -> str:
+        order = ((self.extra_body or {}).get("provider") or {}).get("order") or ()
+        return order[0] if order else "OpenRouter's host"
 
     def _create_chat_result(
         self, response: dict[str, Any] | openai.BaseModel, generation_info: dict[str, Any] | None = None
     ) -> ChatResult:
-        result = super()._create_chat_result(response, generation_info)
         body = response if isinstance(response, dict) else response.model_dump()
+        if body.get("error"):
+            raise self._failed(body)
+        result = super()._create_chat_result(response, generation_info)
         host = body.get("provider")
         cost = (body.get("usage") or {}).get("cost")
         for generation in result.generations:
@@ -410,6 +475,8 @@ def openrouter_model(named: str | None = None, reasoning: str = "") -> ChatOpenA
         api_key=SecretStr(key),
         base_url=OPENROUTER_URL,
         extra_body=body,
+        timeout=TIMEOUT_S,
+        max_retries=RETRIES,
     )
 
 
