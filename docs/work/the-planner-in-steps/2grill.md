@@ -31,7 +31,7 @@ Also found: the suite sends no per-group `allocation`, which the door does (`pla
 The user's position: the problem is structural. A small model reasons well on small questions, and today it is asked for everything in one emission. How the user would build a programme:
 
 1. **The type**, from the number of sessions in the cycle and the goal.
-2. **A style**, one concept repeated in every session: e.g. supersets, or straight sets, with short rest; reps in a band per session.
+2. **A style**: the model decides whether a style is held across the sessions, and which (e.g. supersets, or straight sets, with short rest; reps in a band per session). Not every programme has one: the methodology says volume matters more than structure, and a mandatory style would be the user's own taste made a template (the 11.2 trap).
 3. **The muscles across the sessions**, with recovery in mind: a muscle worked as a secondary is not worked as a primary the day after; a large group paired with a small one (chest with biceps).
 4. **The time across the groups**: the larger the muscle, the more exercises it needs.
 5. **The exercises**, last.
@@ -71,6 +71,11 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 
 ## Questions to grill
 
+0. **Measure before redesigning** (agreed 2026-09-25). The evidence is four runs at one repetition, and DeepSeek reached 5 / 6 on today's single emission: the cause may be model size, not structure. Before the ADR, test steps 4 and 5 in their smallest form, both needed anyway:
+   - the per-group `allocation` in every slot of the suite's requests, as the door sends it;
+   - `exercise_id` held to each workout's own admissible ids in the emit schema, instead of the union.
+
+   Then rerun `gpt-oss-120b` low on DeepInfra (~$0.02, on the user's go). A large rise from 2 / 6 confirms the structural reading and steps 1–3 are grilled with a number in hand; no rise says the model is the cause, and five steps would be much architecture for little.
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?
@@ -80,7 +85,7 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 7. **Adaptation and change (10.3).** An adaptation plans one workout: does it rerun step 5 only, inside the mesocycle's style? A change: from which step?
 8. **Is step 1 a step?** With the goal declared and the sessions counted, is "the type" a decision left to make, or already given?
 9. **The suite.** Does it grade the steps (e.g. step 3 respects recovery) or only the final mesocycle? Invariants stay legal-only (ADR-0010): a judgement is not an invariant.
-10. **The allocation gap in the suite**: fix it now, or leave it to this redesign, which replaces `_divided` anyway?
+10. **Is every step needed?** Step 1 may be given (goal and sessions are declared) and step 3 hangs on question 1; the measured errors point at 4 and 5.
 
 ## Effect on the roadmap
 
