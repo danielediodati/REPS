@@ -205,6 +205,7 @@ DECLARED_CONFIG = """\
 cycle_length = 4
 duration_cap_min = 60
 volume_denominator = "cycle"
+goal = "hypertrophy"
 split = [["chest", "arms"], ["back", "core"], ["legs"], ["shoulders", "arms"]]
 equipment = ["barbell"]
 """

@@ -740,6 +740,7 @@ duration_cap_min = 45
 volume_denominator = "cycle"
 split = [["legs"], ["shoulders"]]
 equipment = ["barbell", "body only"]
+goal = "strength"
 """
 
 
@@ -762,6 +763,7 @@ def test_a_request_nobody_filled_in_is_derived_whole(
     assert assembled.request.budget_min == 45
     assert assembled.request.groups == ("legs",)
     assert assembled.request.allocation == (("legs", 45),)
+    assert assembled.request.goal == "strength"
     assert assembled.rotation is not None
     assert assembled.rotation.position == 1
 
@@ -917,6 +919,7 @@ def test_with_no_declaration_a_door_that_names_everything_still_plans(
     )
 
     assert assembled.request.budget_min == 45
+    assert assembled.request.goal is None, "nothing declared it"
     assert assembled.rotation is None
 
 
@@ -981,6 +984,7 @@ def test_a_mesocycle_is_asked_as_one_request_per_slot(
 
     assert [slot.groups for slot in asked.slots] == [("legs",), ("shoulders",)]
     assert {slot.budget_min for slot in asked.slots} == {45}
+    assert {slot.goal for slot in asked.slots} == {"strength"}
 
 
 def test_a_mesocycle_that_fits_every_slot_breaks_nothing(

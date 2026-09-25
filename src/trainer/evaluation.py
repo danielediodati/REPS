@@ -114,6 +114,10 @@ class Situation:
     have something to turn down, and its cost counts towards the pass."""
 
 
+GOAL = "hypertrophy"
+"""The goal every situation plans for; a door always sends the one `training.toml` declares."""
+
+
 def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
     """The six, built against this catalog.
 
@@ -122,7 +126,7 @@ def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
     vocabulary copy, and this project has been wrong that way once already.
     """
     everything = muscle_groups.groups()
-    bodyweight = plans.Request(equipment=("body only",), budget_min=15)
+    bodyweight = plans.Request(equipment=("body only",), budget_min=15, goal=GOAL)
 
     return (
         Situation(
@@ -136,6 +140,7 @@ def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
             request=plans.Request(
                 equipment=("body only",),
                 budget_min=30,
+                goal=GOAL,
                 groups=("core",),
                 preferences=_half_of(connection, ("body only",), 30, ("core",)),
             ),
@@ -144,21 +149,27 @@ def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
             name="contradictory",
             describes="30 minutes, but I want to train everything",
             request=plans.Request(
-                equipment=("body only",), budget_min=30, groups=everything
+                equipment=("body only",), budget_min=30, groups=everything, goal=GOAL
             ),
         ),
         Situation(
             name="no-history",
             describes="the previous report ambiguous or missing",
             request=plans.Request(
-                equipment=("body only",), budget_min=30, groups=("legs", "core")
+                equipment=("body only",),
+                budget_min=30,
+                groups=("legs", "core"),
+                goal=GOAL,
             ),
         ),
         Situation(
             name="refused",
             describes="the user refuses the plan and it proposes again",
             request=plans.Request(
-                equipment=("body only",), budget_min=30, groups=("legs", "core")
+                equipment=("body only",),
+                budget_min=30,
+                groups=("legs", "core"),
+                goal=GOAL,
             ),
             after_a_refusal=True,
         ),
@@ -168,6 +179,7 @@ def situations(connection: sqlite3.Connection) -> tuple[Situation, ...]:
             request=plans.Request(
                 equipment=("body only",),
                 budget_min=30,
+                goal=GOAL,
                 groups=("legs",),
                 preferences=_half_of(connection, ("body only",), 30, ("legs",)),
             ),

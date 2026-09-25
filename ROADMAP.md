@@ -90,7 +90,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 In this order. Measuring first is what stops the methodology being written against a cause nobody confirmed, and the floor is last because on its own it buys nothing: given a floor and no methodology, the cheapest way to fill the time is a tenth exercise in the circuit.
 
 1. **The measurement that separates the causes.** The same request on a large model at full reasoning; session 12 item 4 runs it. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
-2. **What a workout is, written down.** `docs/methodology.md`: ranges per goal and principles the planner reasons with, never a template. The goal is declared in `training.toml`, one per mesocycle.
+2. **What a workout is, written down.** [`methodology.md`](src/trainer/data/methodology.md): ranges per goal and principles the planner reasons with, never a template. The goal is declared in `training.toml`, one per mesocycle.
 3. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 of 45 minutes and every rule passed it.
 4. **A slot of the split names muscles**, not only groups: `arms` cannot tell biceps from triceps.
 
@@ -101,7 +101,7 @@ In this order. Measuring first is what stops the methodology being written again
 1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both. — **done** `85bfd35`
 2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run.
 3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
-4. **The planner's matrix**, the same on the plan suite and one mesocycle each. It is also 11.1's measurement.
+4. **The planner's matrix**, the same on the plan suite and one mesocycle each. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises.
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
 
 ## Later sessions
@@ -110,7 +110,7 @@ Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 13 | `0.13.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments, a missing one starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
+| 13 | `0.13.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments and the goal (a changed goal starts a new mesocycle); a missing file or goal starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
 | 14 | `0.14.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
 | 15 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 

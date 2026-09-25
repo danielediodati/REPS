@@ -266,7 +266,7 @@ class Request:
 
     allocation: tuple[tuple[str, int], ...] = ()
     """Minutes per group, divided **before** the plan is built rather than cut
-    after it (ADR-0001). Offered rather than imposed, the way the rest bands
+    after it (ADR-0001). Offered rather than imposed, the way the methodology's ranges
     are: the agent has `allocate` and may divide the time differently, and
     nothing here checks that it did not."""
 
@@ -279,6 +279,9 @@ class Request:
 
     adapting: Adapting | None = None
     """Set when this is an adaptation: accepted, it is today's serving and the mesocycle stays."""
+
+    goal: str | None = None
+    """The methodology column the plan is made for; `None` when no `training.toml` declares one."""
 
 
 @dataclass(frozen=True)
@@ -427,6 +430,7 @@ def requested(
             groups=todays.groups,
             allocation=_divided(todays.budget_min, todays.groups),
             preferences=_preferred(connection, asked.avoid),
+            goal=None if declared is None else declared.goal,
         ),
         rotation=turn.where,
     )
@@ -627,7 +631,7 @@ def _named(
 def _divided(minutes: int, groups: tuple[str, ...]) -> tuple[tuple[str, int], ...]:
     """The minutes over the groups, evenly.
 
-    Offered rather than imposed, the way the rest bands are (ADR-0001): the
+    Offered rather than imposed, the way the methodology's ranges are (ADR-0001): the
     agent has `allocate` and may divide the time on any proportions it can
     argue for. Even shares because this layer has no grounds for any other
     split -- *60-40 on two groups* is what one workout might look like, not a

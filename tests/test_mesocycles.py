@@ -118,6 +118,7 @@ TWO_SLOTS = """\
 cycle_length = 2
 duration_cap_min = 45
 volume_denominator = "cycle"
+goal = "hypertrophy"
 split = [["legs"], ["core"]]
 equipment = ["barbell"]
 """

@@ -56,6 +56,7 @@ from trainer.engine import (
     exclusions,
     graph,
     mesocycles,
+    methodology,
     migrations,
     muscle_groups,
     reference_set,
@@ -83,8 +84,8 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
         raise click.ClickException(f"the graph file is unusable: {error}") from error
-    except config.NoTrainingConfig as error:
-        # Before ConfigError, which it subclasses: the state has its own
+    except (config.NoTrainingConfig, config.NoGoal) as error:
+        # Before ConfigError, which they subclass: a state has its own
         # wording and must not be dressed up as a broken file.
         raise click.ClickException(str(error)) from error
     except config.ConfigError as error:
@@ -93,6 +94,8 @@ def reported() -> Iterator[None]:
         ) from error
     except muscle_groups.MuscleGroupError as error:
         raise click.ClickException(f"the muscle group mapping is unusable: {error}") from error
+    except methodology.MethodologyError as error:
+        raise click.ClickException(f"the methodology is unusable: {error}") from error
     except exclusions.ExclusionError as error:
         raise click.ClickException(str(error)) from error
     except constraints.ConstraintError as error:
@@ -997,7 +1000,7 @@ def _negotiations() -> list[runs.Negotiation]:
     "primary muscles and the group each is allocated under.",
 )
 def config_command(show_groups: bool) -> None:
-    """Show what the user has declared: cycle, cap, split, denominator, equipment.
+    """Show what the user has declared: cycle, cap, split, denominator, equipment, goal.
 
     Read-only. Nothing in trainer writes this file; it is hand-edited until
     onboarding fills it by talking to you (ADR-0003).
@@ -1015,6 +1018,7 @@ def config_command(show_groups: bool) -> None:
     click.echo(f"duration cap: {declared.duration_cap_min} min")
     click.echo(f"volume counted per: {declared.volume_denominator}")
     click.echo(f"equipment: {', '.join(declared.equipment)}")
+    click.echo(f"goal: {declared.goal}")
     click.echo("split:")
     for position, groups in enumerate(declared.split, start=1):
         click.echo(f"  {position}. {', '.join(groups)}")

@@ -23,7 +23,7 @@ The goal is one per mesocycle. Volume is weekly in the literature and counted pe
 
 **A working set** ends within the reps in reserve of the goal. Going all the way to failure adds little or nothing [4], [10]; a warm-up set is not counted.
 
-**Volume is counted per muscle**, one of the catalog's `primary_muscles`, never per group: `arms` hides biceps and triceps, `legs` hides six muscles. The groups divide the session's time, nothing else ([muscle-groups.md](../src/trainer/data/muscle-groups.md)).
+**Volume is counted per muscle**, one of the catalog's `primary_muscles`, never per group: `arms` hides biceps and triceps, `legs` hides six muscles. The groups divide the session's time, nothing else ([muscle-groups.md](muscle-groups.md)).
 
 **A session has parts**, sized to the time; compound before isolation, larger muscles before smaller [7], and strength work early in the session [10]:
 

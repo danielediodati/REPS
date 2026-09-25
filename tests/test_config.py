@@ -13,13 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from trainer.engine import config, home, muscle_groups
+from trainer.engine import config, home, methodology, muscle_groups
 
 VALID = """\
 cycle_length = 3
 duration_cap_min = 45
 volume_denominator = "cycle"
 equipment = ["dumbbell", "bands"]
+goal = "hypertrophy"
 split = [
     ["chest", "shoulders", "arms"],
     ["back", "arms"],
@@ -41,6 +42,7 @@ def test_a_valid_configuration_reads_back_as_a_typed_shape(tmp_path: Path) -> No
     assert parsed.duration_cap_min == 45
     assert parsed.volume_denominator == "cycle"
     assert parsed.equipment == ("dumbbell", "bands")
+    assert parsed.goal == "hypertrophy"
     assert parsed.split == (
         ("chest", "shoulders", "arms"),
         ("back", "arms"),
@@ -138,6 +140,7 @@ def test_the_valid_groups_come_from_the_mapping_and_not_from_a_copy() -> None:
         "volume_denominator": "cycle",
         "split": [["fins"]],
         "equipment": ["dumbbell"],
+        "goal": "hypertrophy",
     }
 
     assert config.parse(raw, valid_groups=("fins",)).split == (("fins",),)
@@ -201,6 +204,58 @@ def test_a_group_named_twice_in_one_workout_is_refused(tmp_path: Path) -> None:
     text = VALID.replace('["back", "arms"]', '["back", "back"]')
 
     with pytest.raises(config.ConfigError, match="more than once"):
+        config.load(written(tmp_path, text))
+
+
+def test_an_unknown_goal_is_rejected_naming_the_ones_the_methodology_has(
+    tmp_path: Path,
+) -> None:
+    text = VALID.replace('goal = "hypertrophy"', 'goal = "toning"')
+
+    with pytest.raises(config.ConfigError) as raised:
+        config.load(written(tmp_path, text))
+
+    message = str(raised.value)
+    assert "'toning'" in message
+    for goal in methodology.goals():
+        assert goal in message
+
+
+def test_the_goals_come_from_the_methodology_and_not_from_a_copy() -> None:
+    raw = {
+        "cycle_length": 1,
+        "duration_cap_min": 30,
+        "volume_denominator": "cycle",
+        "split": [["chest"]],
+        "equipment": ["dumbbell"],
+        "goal": "power",
+    }
+
+    assert config.parse(raw, valid_goals=("power",)).goal == "power"
+
+    with pytest.raises(config.ConfigError, match="not a goal"):
+        config.parse(raw)
+
+
+def test_a_missing_goal_is_a_state_with_its_fix(tmp_path: Path) -> None:
+    """A file written before the goal existed is not wrong: it predates the declaration."""
+    text = VALID.replace('goal = "hypertrophy"\n', "")
+
+    with pytest.raises(config.NoGoal) as raised:
+        config.load(written(tmp_path, text))
+
+    message = str(raised.value)
+    assert "no goal declared yet" in message
+    assert 'goal = "' in message
+    for goal in methodology.goals():
+        assert goal in message
+    assert issubclass(config.NoGoal, config.ConfigError)
+
+
+def test_a_goal_that_is_not_a_string_is_refused(tmp_path: Path) -> None:
+    text = VALID.replace('goal = "hypertrophy"', "goal = 3")
+
+    with pytest.raises(config.ConfigError, match="goal"):
         config.load(written(tmp_path, text))
 
 

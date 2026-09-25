@@ -20,6 +20,7 @@ DECLARED = """\
 cycle_length = 2
 duration_cap_min = 45
 volume_denominator = "cycle"
+goal = "hypertrophy"
 split = [["legs"], ["shoulders"]]
 equipment = ["barbell"]
 """

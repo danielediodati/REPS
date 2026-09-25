@@ -282,7 +282,8 @@ def test_changing_the_cycle_length_changes_what_a_window_covers(
 
     declared_training.write_text(
         'cycle_length = 2\nduration_cap_min = 60\nvolume_denominator = "cycle"\n'
-        'split = [["chest"], ["legs"]]\nequipment = ["barbell"]\n',
+        'split = [["chest"], ["legs"]]\nequipment = ["barbell"]\n'
+        'goal = "hypertrophy"\n',
         encoding="utf-8",
     )
 
@@ -918,7 +919,8 @@ def test_the_rotation_is_as_long_as_the_declared_cycle(
 ) -> None:
     declared_training.write_text(
         'cycle_length = 2\nduration_cap_min = 60\nvolume_denominator = "cycle"\n'
-        'split = [["chest"], ["legs"]]\nequipment = ["barbell"]\n',
+        'split = [["chest"], ["legs"]]\nequipment = ["barbell"]\n'
+        'goal = "hypertrophy"\n',
         encoding="utf-8",
     )
     for day in range(1, 3):

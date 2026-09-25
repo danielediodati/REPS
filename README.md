@@ -47,7 +47,7 @@ Requires [uv](https://docs.astral.sh/uv/).
 uv sync
 uv run trainer db init && uv run trainer db import
 uv run trainer enrich derive && uv run trainer enrich curated
-cp src/trainer/data/training.example.toml ~/.reps/training.toml   # cycle, cap, split, denominator, equipment
+cp src/trainer/data/training.example.toml ~/.reps/training.toml   # cycle, cap, split, denominator, equipment, goal
 
 uv run trainer catalog --equipment dumbbell
 uv run trainer admissible --equipment "body only" --time 45 --exclude "vertical push"

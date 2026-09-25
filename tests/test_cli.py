@@ -1225,7 +1225,8 @@ def test_config_shows_what_was_declared(
     declared = tmp_path / "training.toml"
     declared.write_text(
         'cycle_length = 2\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest", "arms"], ["legs", "core"]]\nequipment = ["barbell"]\n',
+        'split = [["chest", "arms"], ["legs", "core"]]\nequipment = ["barbell"]\n'
+        'goal = "strength"\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("TRAINER_CONFIG", str(declared))
@@ -1237,8 +1238,27 @@ def test_config_shows_what_was_declared(
     assert "duration cap: 45 min" in result.output
     assert "volume counted per: cycle" in result.output
     assert "equipment: barbell" in result.output
+    assert "goal: strength" in result.output
     assert "1. chest, arms" in result.output
     assert "2. legs, core" in result.output
+
+
+def test_a_file_with_no_goal_is_reported_as_that_state(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    declared = tmp_path / "training.toml"
+    declared.write_text(
+        'cycle_length = 1\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
+        'split = [["chest"]]\nequipment = ["barbell"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
+
+    result = runner.invoke(main, ["config"])
+
+    assert result.exit_code == 1
+    assert "no goal declared yet" in result.output
+    assert "unusable" not in result.output
 
 
 def test_config_reports_the_missing_state_and_not_a_field_error(
@@ -1942,6 +1962,7 @@ SPLIT = """\
 cycle_length = 4
 duration_cap_min = 60
 volume_denominator = "cycle"
+goal = "hypertrophy"
 equipment = ["barbell"]
 split = [
     ["chest", "shoulders", "arms"],

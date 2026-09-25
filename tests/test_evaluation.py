@@ -29,7 +29,7 @@ from trainer import evaluation, tools
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, methodology, migrations
 
 CATALOG = (
     make_exercise(
@@ -183,6 +183,14 @@ def test_the_six_situations_are_declared(connection: sqlite3.Connection) -> None
     assert len({s.name for s in declared}) == 6
     for found in declared:
         assert found.describes, f"{found.name} does not say what it is for"
+
+
+def test_every_situation_plans_for_a_goal_the_methodology_has(
+    connection: sqlite3.Connection,
+) -> None:
+    """A request from a door always carries the declared goal, so the suite measures one that does."""
+    for found in evaluation.situations(connection):
+        assert found.request.goal in methodology.goals(), found.name
 
 
 def test_exactly_one_situation_measures_the_second_plan(

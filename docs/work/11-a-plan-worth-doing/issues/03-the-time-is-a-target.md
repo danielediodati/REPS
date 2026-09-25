@@ -34,3 +34,5 @@ Found by running the bot for real: two circuits, nine exercises, 25 minutes of 4
 **Again on a mesocycle, 2026-09-24** (`trainer plan --mesocycle`, `openai/gpt-oss-120b` on OpenRouter): five workouts of **10 to 14 minutes out of 45**, every block two exercises for **1 round** with 60 s rest, and the Plank and Russian Twist block in two of the five. Every invariant passed it and it was kept. A bigger model did not fix it; nothing asked it to.
 
 **A floor alone will not buy a good workout.** The same run showed why the plan was cheap: the five triceps exercises cost 14 minutes as one circuit and 32 as straight sets, because a circuit pays three rests instead of fifteen. Given a floor and no methodology, a model that wants to fill time can add exercises to a circuit rather than prescribe sets. That half is issue 02, and this ticket does not close it.
+
+**The eval moves to 12.4** (decided closing 11.2): the planner is measured once, with the methodology and this floor both in. The criterion above is met there, not by a pass of its own.

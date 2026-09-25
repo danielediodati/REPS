@@ -23,17 +23,30 @@ Sonnet is the large-model reference for 11.1 only, not a screening candidate: it
 
 - After the first candidate, compare its real cost with the estimate. Above $0.08 a run, stop and ask.
 - If no candidate reaches 100% in step 1, stop and ask before anything else runs.
-- Write the table here: per row, invariants held, attempts, $ and s per run, host, and the spend so far. Hand the two session-7 plans to 11.2.
+- Write the table here: per row, invariants held, attempts, $ and s per run, host, and the spend so far.
+
+**Carried from 11.2**, closed without spending so that the planner is measured once. Every run here already plans with [the methodology](../../../../src/trainer/data/methodology.md) in its prompt and a goal in its request (every situation plans for `hypertrophy`). The session-7 plan it is judged against, for chest and arms in 45 minutes with body weight and bands:
+
+```
+Blocco 1 · 3 giri · 90s di recupero · 10:18
+  Cross Over - With Bands, Incline Push-Up, Clock Push-Up, Push-Up Wide  -- 8 reps each
+Blocco 2 · 3 giri · 90s di recupero · 14:00
+  Band Skull Crusher, Bench Dips, Speed Band Overhead Triceps,
+  Standing Towel Triceps Extension, Body Tricep Press  -- 10 reps each
+Totale 25 min su 45
+```
+
+No plan-suite pass without the methodology was kept, so there is no *before* to set these tables against; that comparison was given up for one measurement.
 
 ## References
 
 - ADR-0001, ADR-0008, ADR-0010
-- `src/trainer/evaluation.py`, `docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md`
+- `src/trainer/evaluation.py`, `src/trainer/data/methodology.md`
 
 ## Acceptance criteria
 
 - [ ] The four candidates screened and written, with their spend.
 - [ ] The winner confirmed at three repetitions, and one mesocycle from it, timed and costed.
-- [ ] The two session-7 plans written into 11.2.
+- [ ] The two session-7 plans written here, and neither is a circuit of same-muscle exercises like the one above (11.2).
 - [ ] The chosen row named, with the rule that chose it.
 - [ ] Total spend at or under $6.

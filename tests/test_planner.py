@@ -26,7 +26,7 @@ from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, models, planner, record
 from trainer.coach import logger as coach_logger
-from trainer.engine import catalog, database, exclusions, mesocycles, migrations, workouts
+from trainer.engine import catalog, database, exclusions, mesocycles, methodology, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -616,13 +616,13 @@ def test_an_admissible_set_reaches_the_model_without_its_prose(
 ) -> None:
     """One answer must not be larger than the whole output budget, and every
     result is re-sent on every later turn. What is left is what a plan is
-    written from: the id it names, whether today's equipment reaches it, and
-    the muscles its time is divided over."""
+    written from: the id it names, whether today's equipment reaches it, the
+    muscles its time is divided over, and compound or isolation."""
     result = executed(calls("admissible_set", equipment=["barbell"], budget_min=45))
     (first, *_) = json.loads(result.content)
 
     assert result.failed is False
-    assert set(first) == {"id", "equipment", "primary_muscles"}
+    assert set(first) == {"id", "equipment", "primary_muscles", "mechanic"}
 
 
 def test_the_model_is_not_shown_the_name_it_could_write_by_mistake(
@@ -733,6 +733,37 @@ def test_the_prompt_carries_the_rules_the_validator_will_apply() -> None:
     prompt's fault rather than a finding."""
     for rule in ("admissible_set", "never trimmed to fit", "at most once", "reason"):
         assert rule.lower() in planner.PLANNING.lower(), rule
+
+
+def test_both_prompts_carry_the_methodology() -> None:
+    """A list of prohibitions never says what a workout is; a circuit was the cheapest shape that passed."""
+    read = methodology.committed().for_planner
+
+    assert read in planner.PLANNING
+    assert read in planner.MESOCYCLE_PLANNING
+
+
+def test_the_brief_names_the_goal_it_plans_for() -> None:
+    written = planner.brief(
+        plans.Request(equipment=("bands",), budget_min=45, goal="hypertrophy")
+    )
+
+    assert "hypertrophy" in written
+    assert "methodology" in written.lower()
+
+
+def test_a_request_with_no_goal_is_briefed_without_one() -> None:
+    written = planner.brief(plans.Request(equipment=("bands",), budget_min=45))
+
+    assert "goal" not in written.lower()
+
+
+def test_the_mesocycle_brief_names_the_goal_it_plans_for() -> None:
+    slot = plans.Request(equipment=("bands",), budget_min=45, goal="strength")
+
+    written = planner.mesocycle_brief(plans.MesocycleRequest(slots=(slot, slot)))
+
+    assert "strength" in written
 
 
 def test_the_brief_states_the_invariant_no_rule_will_refuse() -> None:
@@ -1169,6 +1200,7 @@ LEGS_AND_SHOULDERS = """\
 cycle_length = 2
 duration_cap_min = 45
 volume_denominator = "cycle"
+goal = "hypertrophy"
 split = [["legs"], ["shoulders"]]
 equipment = ["barbell"]
 """

@@ -1,7 +1,7 @@
 # The training configuration, hand-written.
 #
 # Copy this file to `training.toml` and edit it. ADR-0003 is why it is a file
-# and not a table: these five values are declared by the user and read back by
+# and not a table: these six values are declared by the user and read back by
 # the user, and `git diff` on them is training history. Nothing in the engine
 # writes this file -- onboarding will fill it by talking to you.
 
@@ -32,3 +32,8 @@ split = [
 # is made against when nobody says what today's equipment is, which is what
 # lets the bot answer "what am I doing today?" with no other words.
 equipment = ["body only", "dumbbell", "bands"]
+
+# What this mesocycle trains for: one of the goal columns of
+# `src/trainer/data/methodology.md`, which gives the planner its ranges.
+# Changing it is a new mesocycle.
+goal = "hypertrophy"

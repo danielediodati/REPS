@@ -31,7 +31,7 @@ from trainer import plan as plans
 from trainer.coach import models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.engine import admissible, constraints, mesocycles, workouts
+from trainer.engine import admissible, constraints, mesocycles, methodology, workouts
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +88,10 @@ should: rename the excluded tool and the planner silently gains it, with
 -- unable to say a word.
 """
 
-KEEPS = ("id", "equipment", "primary_muscles")
-"""What a plan is written from: the id it names, whether today's equipment reaches it, and the muscles its time is divided over."""
+KEEPS = ("id", "equipment", "primary_muscles", "mechanic")
+"""What a plan is written from: the id it names, whether today's equipment reaches it, the muscles its time is divided over, and compound or isolation."""
+
+METHODOLOGY = methodology.committed().for_planner
 
 PLANNING = f"""\
 You plan one strength workout, for one person, today.
@@ -108,9 +110,7 @@ The rules you are working inside, none of which you can talk your way around:
   with the rounds and reps it needs.
 - Each exercise is prescribed in reps or in seconds: its `prescription` gives
   the `unit` and the `amount`. A plank is seconds; a push-up is reps.
-- Rest is yours to prescribe and travels with the block. There are reference
-  bands -- around 3 min for heavy low-rep work, 90-120 s for hypertrophy, 60 s
-  for isolation -- and they are a reference, not a rule.
+- Rest is yours to prescribe and travels with the block.
 - Every block carries the reason it is there, in one short sentence. That is
   the part of the plan only you can supply.
 
@@ -123,7 +123,11 @@ code.
 You have a budget of tool calls. When it runs out you will be asked for the
 plan with whatever you know at that point, so spend the calls on what you
 actually need and do not explore for its own sake.
-"""
+
+The rules say what is possible; what makes the workout good is below. It gives
+ranges, not a template: where the plan lands inside them is your decision.
+
+{METHODOLOGY}"""
 
 EMIT_PLAN = "Emit the plan now, in the required shape."
 
@@ -149,7 +153,12 @@ sentence. That number is yours to choose.
 A mesocycle that breaks a rule is refused, naming the workout and the rule.
 You have {ATTEMPTS} attempts in all. You also have a budget of tool calls;
 when it runs out you will be asked for the mesocycle with what you know.
-"""
+
+The rules say what is possible; what makes each workout good is below. It
+gives ranges, not a template: where each workout lands inside them is your
+decision, and across the cycle the sets per muscle add up.
+
+{METHODOLOGY}"""
 
 EMIT_MESOCYCLE = "Emit the mesocycle now, in the required shape."
 
@@ -160,6 +169,8 @@ def brief(request: plans.Request) -> str:
         f"Equipment available today: {', '.join(request.equipment)}.",
         f"Time available: {request.budget_min} minutes.",
     ]
+    if request.goal is not None:
+        lines.append(aimed(request.goal))
     if request.groups:
         lines.append(
             f"This workout trains: {', '.join(request.groups)}. Ask "
@@ -207,6 +218,14 @@ def brief(request: plans.Request) -> str:
         )
     lines.append("Plan the workout.")
     return "\n".join(lines)
+
+
+def aimed(goal: str) -> str:
+    """The goal the plan is made for, as the methodology column to read."""
+    return (
+        f"The goal is {goal}: plan inside the {goal} column of the methodology's "
+        "ranges."
+    )
 
 
 def adapted(adapting: plans.Adapting) -> str:
@@ -272,6 +291,8 @@ def mesocycle_brief(request: plans.MesocycleRequest) -> str:
             ) + ", as a starting point."
         lines.append(line)
     first = request.slots[0] if request.slots else None
+    if first is not None and first.goal is not None:
+        lines.append(aimed(first.goal))
     if first is not None and first.exclusions:
         lines.append(
             "Excluded, and already filtered out of the admissible set: "

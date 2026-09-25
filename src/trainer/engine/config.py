@@ -1,8 +1,8 @@
 """What the user declares: the training configuration file.
 
 Cycle length, the cap on a workout's duration, the split being trained, the
-denominator volume is counted on, and the equipment the user has. ADR-0003
-carries why these five live in a file and not in SQLite: **a file you read and
+denominator volume is counted on, the equipment the user has, and the goal of
+the mesocycle. ADR-0003 carries why these six live in a file and not in SQLite: **a file you read and
 edit by hand, against rows you query.** SQLite keeps what the system measures
 -- performed workouts, accumulated volume, exclusions and their re-test dates
 -- and a declaration sitting beside them would have nothing to tell the two
@@ -27,7 +27,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from trainer.engine import home, muscle_groups
+from trainer.engine import home, methodology, muscle_groups
 
 CONFIG_ENV_VAR = "TRAINER_CONFIG"
 """Overrides the configuration's location, the way `TRAINER_DB` does for the
@@ -62,6 +62,7 @@ _KEYS = (
     "split",
     "volume_denominator",
     "equipment",
+    "goal",
 )
 """Everything the file holds, and nothing more. An unrecognised key is refused
 rather than ignored: a misspelled `cycle_lenght` that is silently skipped is a
@@ -86,14 +87,25 @@ class NoTrainingConfig(ConfigError):
             f"no training configuration yet -- there is no {path}. "
             f"Copy {EXAMPLE_CONFIG_PATH} there and edit it: it declares the "
             "cycle length, the duration cap, the split, the volume "
-            "denominator and the equipment you have."
+            "denominator, the equipment you have and your goal."
         )
         self.path = path
 
 
+class NoGoal(ConfigError):
+    """The file predates the goal: a state with its fix, not a mistake in the file."""
+
+    def __init__(self, goals: tuple[str, ...]):
+        super().__init__(
+            "no goal declared yet in training.toml. Add one line, "
+            f'e.g. goal = "{goals[0]}"; the goals are {", ".join(goals)}, '
+            "the columns of the methodology"
+        )
+
+
 @dataclass(frozen=True)
 class TrainingConfig:
-    """The five declarations, typed.
+    """The six declarations, typed.
 
     `split` is as long as `cycle_length` by construction -- the reader refuses a
     file where it is not -- so a caller indexing the split by position in the
@@ -115,6 +127,9 @@ class TrainingConfig:
     is refused where the catalog is open, by `admissible_set`, which names the
     ones that exist.
     """
+
+    goal: str
+    """One of the methodology's goal columns; changing it is a new mesocycle."""
 
     def groups_for(self, workout: int) -> tuple[str, ...]:
         """The groups the `workout`-th workout of the cycle trains, counted
@@ -167,15 +182,20 @@ def load(path: Path | None = None) -> TrainingConfig:
 
 
 def parse(
-    raw: dict[str, object], *, valid_groups: tuple[str, ...] | None = None
+    raw: dict[str, object],
+    *,
+    valid_groups: tuple[str, ...] | None = None,
+    valid_goals: tuple[str, ...] | None = None,
 ) -> TrainingConfig:
     """Validate a decoded configuration.
 
-    `valid_groups` defaults to the six read from the committed mapping. It is a
-    parameter so a test can drive the unknown-group error against a vocabulary
-    it controls, never so a caller can bring one of its own.
+    `valid_groups` defaults to the six read from the committed mapping, and
+    `valid_goals` to the methodology's columns. They are parameters so a test
+    can drive the unknown-value errors against a vocabulary it controls, never
+    so a caller can bring one of its own.
     """
     groups = muscle_groups.groups() if valid_groups is None else valid_groups
+    goals = methodology.goals() if valid_goals is None else valid_goals
 
     unknown = sorted(set(raw) - set(_KEYS))
     if unknown:
@@ -183,7 +203,7 @@ def parse(
             f"unrecognised setting(s) {', '.join(repr(key) for key in unknown)}; "
             f"the configuration holds {', '.join(_KEYS)} and nothing else"
         )
-    missing = [key for key in _KEYS if key not in raw]
+    missing = [key for key in _KEYS if key not in raw and key != "goal"]
     if missing:
         raise ConfigError(
             f"the configuration is missing {', '.join(missing)}; "
@@ -206,7 +226,20 @@ def parse(
         split=_split(raw["split"], cycle_length, groups),
         volume_denominator=str(denominator),
         equipment=_equipment(raw["equipment"]),
+        goal=_goal(raw.get("goal"), goals),
     )
+
+
+def _goal(value: object, goals: tuple[str, ...]) -> str:
+    """One of the methodology's goals; absent is `NoGoal`, since files written before 0.11 have none."""
+    if value is None:
+        raise NoGoal(goals)
+    if value not in goals:
+        raise ConfigError(
+            f"goal is {value!r}, which is not a goal of the methodology; "
+            f"the goals are {', '.join(goals)}"
+        )
+    return str(value)
 
 
 def _positive(key: str, value: object, unit: str) -> int:

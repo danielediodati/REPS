@@ -99,8 +99,8 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | LangGraph checkpointer | the live run of each thread, paused threads | graph |
 | run archive (`runs/` in the home) | every closed run, one document per run under its negotiation | graph (ADR-0007) |
 | LangGraph store | preferences, conclusions, hypotheses, observations, each with a source | agent, gated by the supervisor |
-| `training.toml` | cycle length, duration cap, split, volume denominator, equipment | user (ADR-0003) |
-| methodology document | curated literature with sources | human |
+| `training.toml` | cycle length, duration cap, split, volume denominator, equipment, goal | user (ADR-0003) |
+| [methodology](src/trainer/data/methodology.md) | ranges per goal and principles, from the literature with sources; the planner reads it | human |
 
 No store writes another's facts.
 
