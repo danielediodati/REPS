@@ -10,14 +10,14 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.9.0` puts the report in the chat.** On top of `0.8.0` (one home directory, the bot's log, `trainer runs`), it has:
-- an entrance that holds the conversation on a model of its own and starts the planner or the logger when you ask for one (ADR-0006);
-- the logger as a subgraph on the same tools, asking with a message and confirming an exclusion with two buttons; it writes only what you said, and the engine fills in the rest as prescribed (ADR-0009);
-- a run as a document written when it ends, so a plan turned down is kept beside the one that followed (ADR-0007);
-- the log eval suite on the graph, against bars its set declares (ADR-0010): 83% of the reports that determine their answer, 62% of those that must make it ask, on `qwen/qwen3.8-27b` through OpenRouter;
-- OpenRouter as a provider, with a model per subgraph.
+**`0.10.0` plans a mesocycle.** On top of `0.9.0` (the entrance, the logger in the chat, runs as documents, OpenRouter), it has:
+- a mesocycle planned and accepted once: a workout per slot of the split, repeated for several cycles, kept in SQLite (ADR-0008);
+- today's workout read off it with no model call, the last load beside each exercise;
+- a change that rewrites the mesocycle for the cycles left, and an adaptation that plans today alone;
+- the next mesocycle prepared in the chat when the last cycle ends;
+- the plan eval suite asking for mesocycles, its six invariants checked on every workout.
 
-Part of session 10 is in as well: a mesocycle planned once, today's workout read off it, a change and an adaptation, and the next mesocycle prepared in the chat when the report of the last cycle arrives. **Next**: session 10's eval, and session 12, which measures what reasoning buys and what it costs.
+Parts of sessions 11 and 12 are in as well: the planner reasons with [a methodology](src/trainer/data/methodology.md) for the goal `training.toml` declares, the declared minutes are a target within five either side, a slot of the split can name muscles, and every run reports its reasoning effort, its host and its cost. **Next**: session 12's matrices, which choose each subgraph's model by what it holds and what it costs.
 
 ## Architecture (target)
 
@@ -80,7 +80,7 @@ An unreachable server, a model nobody pulled, a missing key and a model Groq has
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
-**What the chat does with what you write.** You write in your own words and the entrance decides: a request for today's workout starts the planner, a report starts the logger, and a question about what you have trained is answered from the engine's read tools without either. Your turn is answered at once and the work goes on behind it, with the graph's progress in the draft — a plan is minutes. The plan arrives with three buttons; the logger's clarifying question is a message to reply to and the exclusion it proposes is two. Nothing the chat says is a fixed line except the two about the machine being in trouble, and neither of those quotes what went wrong: that goes to `trainer.log`.
+**What the chat does with what you write.** You write in your own words and the entrance decides: today's workout is read off the mesocycle and sent at once; a new mesocycle, a change to it or an adaptation of today starts the planner; a report starts the logger; and a question about what you have trained is answered from the engine's read tools without either. Your turn is answered at once and the planning goes on behind it, with the graph's progress in the draft — a mesocycle is minutes. A mesocycle arrives with two buttons, keep or turn down, and an adapted workout with three; the logger's clarifying question is a message to reply to and the exclusion it proposes is two. Nothing the chat says is a fixed line except the two about the machine being in trouble, and neither of those quotes what went wrong: that goes to `trainer.log`.
 
 **Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records. `trainer bot` also writes `trainer.log` there, rotated at a megabyte and four files deep, holding every state and every exception and never the token or the owner id. It has no override, because the chat names it by name when a run cannot start or falls over.
 
