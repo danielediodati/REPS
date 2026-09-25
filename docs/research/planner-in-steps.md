@@ -1,8 +1,6 @@
-# The planner in steps — to grill
+# The planner in steps: a proposal, being measured
 
-Status: needs-triage
-
-A proposal, not a decision. It is grilled first, then written as an ADR, then cut into a session placed **before 12.4**.
+Research date: 2026-09-25. A proposal, not a decision: measured first (question 0), then grilled, then an ADR and a session placed **before 12.4**.
 
 ## Where it came from
 
@@ -60,7 +58,7 @@ To go in the ADR and be checked on every node:
 
 > **A step belongs to the model if it cannot be replaced by a function without losing something.** A node that could be written in Python with the same result is ETL there: remove it or give it back to the model. Code orders the steps and checks the possible; it never fills a step and never chooses between good options.
 
-And: **a step's output is a decision in words with its reason**, inside the methodology's ranges ([methodology.md](../../../src/trainer/data/methodology.md)), never a pick from a closed menu. A field like *style: A, B or C* is a template.
+And: **a step's output is a decision in words with its reason**, inside the methodology's ranges ([methodology.md](../../src/trainer/data/methodology.md)), never a pick from a closed menu. A field like *style: A, B or C* is a template.
 
 ## Risks
 
@@ -108,10 +106,12 @@ And: **a step's output is a decision in words with its reason**, inside the meth
    | slots: wrong workout count | 2 | 0 |
    | shape: not JSON | 2 | **13** |
 
-   - **By the rule: +0.7, under +1 → model size, no five steps.**
+   - **Not conclusive.** 5 of the after's 7 failed runs were lost to an emission that is not JSON, a provider fault and not the plan: the after lies anywhere between 11 and 16 / 18. The before lost one run the same way. Measured again once that fault is a provider refusal rather than an attempt (question 0, second pass).
    - The structural errors went (wrong workout, workout count, duplicates); the time did not move, with the allocation in every brief.
-   - A failure the before barely had lost 5 of the after's 7 runs: a single-workout emission that is not JSON under the strict schema, 8 of 13 empty (`Expecting value: line 1 column 1`). It is the host or the model, not the plan.
+   - The fault: a single-workout emission that is not JSON under the strict schema, 8 of 13 empty (`Expecting value: line 1 column 1`), each still paid for. The record kept no emitted text, so its cause could not be read.
    - One workout at a time was **cheaper and faster**, not dearer: each call carries less.
+
+   **Second pass, decided 2026-09-25.** On `main` first: each attempt's emitted text in the record; an emission that is not JSON is a provider refusal, retried within `REJECTIONS`, not an attempt. Then before and after again, same model, host and repetitions (~$0.21, on the user's go), under the same rule. More than 1 run in 18 lost to a provider fault voids the pass.
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?

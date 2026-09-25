@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Blocked by: 01, 02, 10.5, and the planner in steps ([2grill](../../the-planner-in-steps/2grill.md)): measured before it, the matrix measures a planner about to change. Its first screening is written there.
+Blocked by: 01, 02, 10.5, and the planner in steps ([research](../../../research/planner-in-steps.md)): measured before it, the matrix measures a planner about to change. Its first screening is written there.
 
 The planner's bar is 100% on six invariants (ADR-0010), measured on mesocycles: after 10.5 every situation of `--suite plan` asks for one, and there is no single-workout pass to screen on. A plan is longer than a log document, and its tool loop longer, so effort may matter differently here.
 
