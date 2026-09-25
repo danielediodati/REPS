@@ -87,6 +87,31 @@ And: **a step's output is a decision in words with its reason**, inside the meth
    | Measure | `gpt-oss-120b` low, DeepInfra, 3 repetitions **before** (`main`) and 3 **after** (branch): ~$0.12, on the user's go |
    | Rule | after ≥ 4 / 6 mean and ≥ +2 on before → structural, grill steps 1–3; under +1 → model size, no steps; between → read the time and wrong-workout columns |
    | Result | the numbers, per rule, with cost and time, go here on `main` |
+
+   **Measured 2026-09-25**, `gpt-oss-120b` low, DeepInfra, 3 repetitions. Before is `87c0686` (`main`), after is `34f49e5` (`probe/planner-per-workout`).
+
+   | | Before | After |
+   |---|---|---|
+   | Runs holding every invariant | 9 / 18 (50%), 2 not run | 11 / 18 (61%) |
+   | Mean situations held | 3.0 / 6 | 3.7 / 6 |
+   | $ in all, a run | $0.132, $0.0070 | $0.077, $0.0037 |
+   | s a run | 140 | 93 |
+
+   Refusals over every attempt, by rule (a run makes several):
+
+   | Rule | Before | After |
+   |---|---|---|
+   | budget (time) | 17 | 22 |
+   | preferences (`despite`) | 13 | 10 |
+   | duplicates | 12 | 1 |
+   | admissible: wrong workout | 3, and 4 in the turned-down plans | 0 |
+   | slots: wrong workout count | 2 | 0 |
+   | shape: not JSON | 2 | **13** |
+
+   - **By the rule: +0.7, under +1 → model size, no five steps.**
+   - The structural errors went (wrong workout, workout count, duplicates); the time did not move, with the allocation in every brief.
+   - A failure the before barely had lost 5 of the after's 7 runs: a single-workout emission that is not JSON under the strict schema, 8 of 13 empty (`Expecting value: line 1 column 1`). It is the host or the model, not the plan.
+   - One workout at a time was **cheaper and faster**, not dearer: each call carries less.
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?
