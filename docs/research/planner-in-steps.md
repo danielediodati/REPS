@@ -112,6 +112,18 @@ And: **a step's output is a decision in words with its reason**, inside the meth
    - One workout at a time was **cheaper and faster**, not dearer: each call carries less.
 
    **Second pass, decided 2026-09-25.** On `main` first: each attempt's emitted text in the record; an emission that is not JSON is a provider refusal, retried within `REJECTIONS`, not an attempt. Then before and after again, same model, host and repetitions (~$0.21, on the user's go), under the same rule. More than 1 run in 18 lost to a provider fault voids the pass.
+
+   **Second pass, measured 2026-09-26**, before `c5be289`, after `d03d28f`.
+
+   | | Before | After |
+   |---|---|---|
+   | Runs holding every invariant | 7 / 18 (38%) | 8 / 18 (44%) |
+   | Lost to a provider fault | 1 | **10**: 6 never JSON, 2 at the length limit, 1 429, 1 more never JSON |
+   | $ in all, a run | $0.062, $0.0031 | $0.051, $0.0051 |
+
+   - **Void by the rule**: the after lost 10 runs. Of the 8 it ran to the end it held 7 of 8, which says nothing: every `no-history` run was among the lost.
+   - **The fault is DeepInfra not holding the strict schema** for `gpt-oss-120b`. The kept text breaks the schema's own structure, which a constrained decoder cannot write: a `prescription` object with its key missing, strings cut mid-word, empty replies, and two replies that ran to the length limit (114,507 and 16,384 completion tokens, $0.020 and $0.010 for one call). `require_parameters` routes only to hosts that *declare* `response_format`; it does not make them honour it.
+   - Before also went from 9 to 7 / 18 between passes: at 18 runs a situation's swing is two runs.
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?
