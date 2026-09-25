@@ -1,6 +1,6 @@
 # Nobody ever told the planner what a good workout is
 
-Status: needs-info
+Status: ready-for-agent
 
 The first real plan out of the bot, for chest and arms in 45 minutes with body weight and bands:
 
@@ -13,21 +13,32 @@ Blocco 2 · 3 giri · 90s di recupero · 14:00
 Totale 25 min su 45
 ```
 
-Two circuits, nine exercises, four push-up variants for chest. It passes every rule the engine has.
+It passes every rule the engine has. `PLANNING` is a list of prohibitions and never says what a workout *is*; a circuit is the cheapest shape that fits a budget, and nothing told the model otherwise. A larger model did not fix it (issue 03, comments: `gpt-oss-120b` on OpenRouter, 10–14 minutes of 45).
 
-## Why it happened, measured rather than guessed
+## The methodology
 
-- **Nothing in this project checks whether a plan is good.** `trainer eval` says so itself: *"Not good plan / bad plan -- properties that must hold always"*. The six invariants are legality. This plan is legal.
-- **The brief is a list of prohibitions.** `PLANNING` says what is admissible, what may not repeat, what may not overrun. It never says what a workout *is*. `PlanBlock.rounds` tells the model that one exercise is straight sets and more is a circuit — it describes the form and never says when to reach for which.
-- **A circuit is the cheap shape.** The same five exercises cost 14 minutes as one block and 32 as five: three rests against fifteen. Asked to fit a budget and told nothing about structure, a model finds the shape that fits.
-- **The reasoning is deliberately at its minimum.** `models.REASONING = "low"`, because on the dev laptop `high` costs 296 s against 39 s for the same prompt. That trade was made for the machine and has never been measured in plans.
+[`docs/methodology.md`](../../../../docs/methodology.md), written from the literature, sources checked on PubMed, reviewed by the user. What was settled writing it:
 
-## What is needed before this can be specified
+- **Knowledge, not a template.** Ranges per goal and principles; where a workout lands inside them is the planner's decision, from the time given and what the person says. Rules extracted from one person's plan are overfitting.
+- **Nothing personal.** The project is generic; one user's injuries, sides and schedule are memory (session 13), never the repo.
+- **What the user says in the moment is already reachable**: `Adapting.said` and `Refusal.because` carry it to the planner. What must last across sessions (*"my left side is weaker"*) waits for session 13's memory.
+- **One goal per mesocycle**, declared in `training.toml` as `goal`; changing it is a new mesocycle. Onboarding writes it from session 13.
 
-**The user's own methodology**, which is not the agent's to invent and not the engine's to hold: how many exercises a group gets, what a working set is, which rest goes with which intent, and when a superset or a circuit is the right answer rather than the cheap one. ROADMAP has *the methodology document* under **After 1.0.0**; this plan is what that deferral looks like from the outside.
+## What to build
 
-**The measurement that separates the causes**, which is issue 01. One identical request on Groq, on a large model at full reasoning. If the plan is sound, the cause is the local model and the machine. If it is the same shape, the cause is the empty brief — which is the likelier of the two and the only one a document fixes. Blocked today: the configured Groq model answers 404.
+- **The planner reads the methodology.** It goes in the brief of `PLANNING` and `MESOCYCLE_PLANNING`, with the request's goal named. It must ship with the package, so the file moves under `src/trainer/data/` beside `muscle-groups.md`, and `docs/` links to it.
+- **`goal` in `training.toml`**, a sixth declaration. Its values are the goal columns of the methodology, read from the file, never copied into a constant (CLAUDE.md § Standing rules). A missing `goal` is reported as a state with its fix.
+- **`mechanic` in the planner's `KEEPS`**, so the model can tell compound from isolation, which the methodology's parts rely on.
+
+## Acceptance criteria
+
+- [ ] The same request as above, chest and arms in 45 minutes with body weight and bands, does not come back as a circuit of same-muscle exercises.
+- [ ] `trainer eval --suite plan` reported before and after, with the invariants at 100%.
+- [ ] An unknown `goal` is rejected naming the ones the methodology has.
+- [ ] The full test suite and mypy are green.
 
 ## Comments
 
-Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
+Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, a tenth exercise in a circuit is still the cheapest way to fill the time.
+
+Issue 01's measurement (a large model at full reasoning) no longer blocks writing the methodology; it says whether the methodology is enough on the local model.
