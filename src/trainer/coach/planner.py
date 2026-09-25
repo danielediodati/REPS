@@ -103,9 +103,10 @@ The rules you are working inside, none of which you can talk your way around:
   today's request, written as the `id` that came back, character for
   character. Anything else is rejected by a deterministic check after you
   emit.
-- The plan must fit the time declared. It is never trimmed to fit: a plan that
-  runs over is rejected whole, so ask `remaining_budget` before you commit to
-  a block rather than after.
+- The plan is built to the time declared, within {plans.TOLERANCE_MIN} minutes either side:
+  45 minutes accepts 40 to 50. A plan short of that is refused as surely as
+  one over it, and neither is trimmed or padded to fit, so ask
+  `remaining_budget` before you commit to a block rather than after.
 - An exercise appears at most once in the whole plan. One line per exercise,
   with the rounds and reps it needs.
 - Each exercise is prescribed in reps or in seconds: its `prescription` gives
@@ -141,7 +142,8 @@ workout would be:
 
 - Every exercise must be in what `admissible_set` returns for that slot's
   groups, equipment and time, written as the `id` that came back.
-- It must fit that slot's time; nothing is trimmed to fit.
+- It is built to that slot's time, within {plans.TOLERANCE_MIN} minutes either side;
+  nothing is trimmed or padded to fit.
 - An exercise appears at most once in a workout. The same exercise may appear
   in two workouts if both slots train it.
 - Each exercise is prescribed in reps or in seconds, rest travels with the
@@ -167,7 +169,9 @@ def brief(request: plans.Request) -> str:
     """Today's request, in words, for the model to plan against."""
     lines = [
         f"Equipment available today: {', '.join(request.equipment)}.",
-        f"Time available: {request.budget_min} minutes.",
+        "Time available: {} minutes; the plan lands between {} and {}.".format(
+            request.budget_min, *plans.window(request.budget_min)
+        ),
     ]
     if request.goal is not None:
         lines.append(aimed(request.goal))
@@ -281,9 +285,11 @@ def mesocycle_brief(request: plans.MesocycleRequest) -> str:
     """Every slot's request, in words, for the model to plan the mesocycle against."""
     lines = [f"The cycle has {len(request.slots)} workouts. Plan one for each, in this order."]
     for slot, asked in enumerate(request.slots, start=1):
+        floor, ceiling = plans.window(asked.budget_min)
         line = (
             f"Workout {slot}: trains {', '.join(asked.groups) or 'anything admissible'}; "
-            f"{asked.budget_min} minutes; equipment {', '.join(asked.equipment)}."
+            f"{asked.budget_min} minutes, landing between {floor} and {ceiling}; "
+            f"equipment {', '.join(asked.equipment)}."
         )
         if asked.allocation:
             line += " Time divides as " + ", ".join(

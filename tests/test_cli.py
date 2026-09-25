@@ -1342,8 +1342,8 @@ def write_plan(tmp_path: Path, *blocks: dict[str, object]) -> str:
 def squat_block(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
         "items": [{"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}],
-        "rounds": 4,
-        "rest": 150,
+        "rounds": 10,
+        "rest": 210,
         "reason": "the heaviest lift while fresh",
     }
     base.update(overrides)
@@ -1361,7 +1361,7 @@ def test_plan_renders_a_valid_plan(
 
     assert result.exit_code == 0, result.output
     assert "Barbell Squat" in result.output
-    assert "4 rounds, 150s rest" in result.output
+    assert "10 rounds, 210s rest" in result.output
     assert "why: the heaviest lift while fresh" in result.output
     assert "of 45" in result.output
     assert result.output.isascii()
@@ -1523,8 +1523,8 @@ def test_plan_leaves_the_workout_it_prescribed(
         prescribed = workouts.prescribed(connection, int(row["id"]))
     (block,) = prescribed
     assert block.reason == "the heaviest lift while fresh"
-    assert block.block.rounds == 4
-    assert block.block.rest == 150
+    assert block.block.rounds == 10
+    assert block.block.rest == 210
     assert [item.exercise_id for item in block.block.items] == ["Barbell_Squat"]
 
 
@@ -1583,7 +1583,7 @@ def test_plan_still_renders_exactly_as_before(
 
     assert result.exit_code == 0, result.output
     assert "Barbell Squat" in result.output
-    assert "4 rounds, 150s rest" in result.output
+    assert "10 rounds, 210s rest" in result.output
     assert "why: the heaviest lift while fresh" in result.output
     assert "of 45" in result.output
     assert result.output.isascii()
@@ -2006,7 +2006,7 @@ def test_plan_defaults_the_time_to_the_declared_cap(
 ) -> None:
     result = runner.invoke(
         main,
-        ["plan", "--from", write_plan(tmp_path, squat_block()),
+        ["plan", "--from", write_plan(tmp_path, squat_block(rounds=14)),
          "--equipment", "barbell", "--workout", "3"],
     )
 
@@ -2477,7 +2477,7 @@ def test_log_sets_prescribed_against_performed(
 
     assert result.exit_code == 0, result.output
     assert f"prescribed (workout {identifier}):" in result.output
-    assert "block 1 -- 4 rounds, 150s rest" in result.output
+    assert "block 1 -- 10 rounds, 210s rest" in result.output
     assert "performed:" in result.output
     assert "Barbell Squat" in result.output
     assert "said: only three sets, the knee was noisy" in result.output
@@ -2528,7 +2528,7 @@ def test_log_fills_in_what_the_report_did_not_mention(
 
     assert result.exit_code == 0, result.output
     assert "8 reps (assumed)" in result.output
-    assert "4 rounds (assumed)" in result.output
+    assert "10 rounds (assumed)" in result.output
     with closing(database.connect(enriched)) as connection:
         performed = workouts.performed(connection, identifier)
     assert performed[0].items[0].amount_source == "assumed"
@@ -3181,7 +3181,7 @@ def test_state_reports_both_axes(
 def test_state_shows_the_rounds_a_shortened_workout_did_not_do(
     runner: CliRunner, enriched: Path, tmp_path: Path
 ) -> None:
-    """Four rounds prescribed, two performed: the deficit is the two nobody
+    """Ten rounds prescribed, two performed: the deficit is the eight nobody
     did, and it is the same number a substitution or a skipped workout would
     have produced."""
     performed_workout(
@@ -3193,7 +3193,7 @@ def test_state_shows_the_rounds_a_shortened_workout_did_not_do(
     result = runner.invoke(main, ["state"])
 
     squat = next(line for line in result.output.splitlines() if "  squat" in line)
-    assert squat.split() == ["squat", "2", "4", "2", "-"]
+    assert squat.split() == ["squat", "2", "10", "8", "-"]
 
 
 def test_state_says_that_the_unreported_list_is_not_windowed(
@@ -3330,7 +3330,7 @@ def test_the_workout_flag_still_overrides_the_rotation(
     """Planning the leg day again is a legitimate thing to want."""
     result = runner.invoke(
         main,
-        ["plan", "--from", write_plan(tmp_path, squat_block()),
+        ["plan", "--from", write_plan(tmp_path, squat_block(rounds=14)),
          "--equipment", "barbell", "--workout", "3"],
     )
 
@@ -4029,7 +4029,7 @@ def test_an_option_shaping_today_adapts_the_mesocycles_workout(
     kept_mesocycle(enriched, declared_training)
     with closing(database.connect(enriched)) as connection:
         before = mesocycles.active(connection)
-    model = scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat", rounds=2)])
+    model = scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)])
 
     result = runner.invoke(main, ["plan", "--time", "30"])
 
@@ -4058,7 +4058,7 @@ def test_naming_another_workout_still_plans_one_from_nothing(
     from test_planner import plan_of
 
     kept_mesocycle(enriched, declared_training)
-    model = scripted_graph(monkeypatch, documents=[plan_of("Standing_Military_Press")])
+    model = scripted_graph(monkeypatch, documents=[plan_of("Standing_Military_Press", minutes=30)])
 
     result = runner.invoke(main, ["plan", "--workout", "2", "--time", "30"])
 

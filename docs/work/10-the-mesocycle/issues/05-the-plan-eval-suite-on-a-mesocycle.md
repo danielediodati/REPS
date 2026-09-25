@@ -21,6 +21,10 @@ Blocked by: 01.
 
 - **One `trainer plan --mesocycle` on OpenRouter**, 2026-09-24, `openai/gpt-oss-120b:nitro`: 5 workouts, 4 cycles, accepted after 3 attempts. **~17 s** (planner 11.1 s, emit 6.2 s), 93k tokens in, 21k out, 6 of 12 tool calls, one of them an error. Six situations are minutes, not an hour: the risk above belongs to the local model, which the project no longer plans on. Run this suite on OpenRouter with the planner session 12 chooses, and on the local model only if a number is still wanted from it.
 
+## Left by 11.3
+
+- **Each workout is refused outside its slot's minutes ±5** (`plan.window`), under as well as over. A mesocycle run is five times as many chances to miss the floor, so expect it among the refusals.
+
 ## References
 
 - TRAINER.md § Evaluation; ADR-0008

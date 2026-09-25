@@ -9,7 +9,8 @@
 # rotation advances when a workout is performed, never when a date passes.
 cycle_length = 4
 
-# The most a single workout may run.
+# The minutes a workout is built to, give or take five, when no other time is
+# asked for; and the most that may be asked for.
 duration_cap_min = 60
 
 # What volume is counted over. `cycle` is the value that matches how the user

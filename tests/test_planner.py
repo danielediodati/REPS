@@ -26,7 +26,7 @@ from trainer import tools
 from trainer import plan as plans
 from trainer.coach import checkpoints, models, planner, record
 from trainer.coach import logger as coach_logger
-from trainer.engine import catalog, database, exclusions, mesocycles, methodology, migrations, workouts
+from trainer.engine import catalog, database, duration, exclusions, mesocycles, methodology, migrations, workouts
 from trainer.engine.exclusions import Exclusion
 
 CATALOG = (
@@ -74,8 +74,13 @@ def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
 
 
 def plan_of(
-    *exercise_ids: str, rounds: int = 3, reason: str = "it trains what today asks for"
+    *exercise_ids: str,
+    rounds: int = 3,
+    reason: str = "it trains what today asks for",
+    minutes: int = 45,
 ) -> plans.WorkoutPlan:
+    """One block per exercise, each resting long enough that the plan lasts `minutes`."""
+    share = minutes * duration.SECONDS_PER_MINUTE // len(exercise_ids)
     return plans.WorkoutPlan(
         blocks=[
             plans.PlanBlock(
@@ -86,12 +91,18 @@ def plan_of(
                     )
                 ],
                 rounds=rounds,
-                rest=120,
+                rest=_rest_for(share, exercise_id, rounds),
                 reason=reason,
             )
             for exercise_id in exercise_ids
         ]
     )
+
+
+def _rest_for(seconds: int, exercise_id: str, rounds: int) -> int:
+    """The rest that makes one 8-rep block of `rounds` last `seconds`, its setup included."""
+    setup = PATTERNS[exercise_id][4] * duration.SECONDS_PER_MINUTE if exercise_id in PATTERNS else 0
+    return max((seconds - setup) // rounds - 8 * duration.SECONDS_PER_REP, 0)
 
 
 class Scripted(BaseChatModel):
@@ -731,7 +742,7 @@ def test_the_planner_cannot_read_a_prescription_back(
 def test_the_prompt_carries_the_rules_the_validator_will_apply() -> None:
     """A model that is not told the rules is one whose refusals are the
     prompt's fault rather than a finding."""
-    for rule in ("admissible_set", "never trimmed to fit", "at most once", "reason"):
+    for rule in ("admissible_set", "trimmed or padded", "at most once", "reason"):
         assert rule.lower() in planner.PLANNING.lower(), rule
 
 
@@ -752,6 +763,15 @@ def test_the_brief_names_the_goal_it_plans_for() -> None:
     assert "methodology" in written.lower()
 
 
+def test_the_brief_says_the_plan_is_built_to_the_time() -> None:
+    """*The plan must fit the time* is satisfied by 25 minutes of 45."""
+    written = planner.brief(plans.Request(equipment=("bands",), budget_min=45))
+
+    assert "between 40 and 50" in written
+    assert f"within {plans.TOLERANCE_MIN} minutes either side" in planner.PLANNING
+    assert f"within {plans.TOLERANCE_MIN} minutes either side" in planner.MESOCYCLE_PLANNING
+
+
 def test_a_request_with_no_goal_is_briefed_without_one() -> None:
     written = planner.brief(plans.Request(equipment=("bands",), budget_min=45))
 
@@ -764,6 +784,23 @@ def test_the_mesocycle_brief_names_the_goal_it_plans_for() -> None:
     written = planner.mesocycle_brief(plans.MesocycleRequest(slots=(slot, slot)))
 
     assert "strength" in written
+
+
+def test_the_mesocycle_brief_gives_each_slot_its_window() -> None:
+    slots = (
+        plans.Request(equipment=("bands",), budget_min=45),
+        plans.Request(equipment=("bands",), budget_min=28),
+    )
+
+    written = planner.mesocycle_brief(plans.MesocycleRequest(slots=slots))
+
+    assert "between 40 and 50" in written
+    assert "between 23 and 33" in written
+
+
+def test_the_budget_tool_tells_the_model_the_window() -> None:
+    """The model reads this docstring as the tool's description; it once said only *how far over*."""
+    assert f"within {plans.TOLERANCE_MIN} minutes either side" in (tools.remaining_budget.__doc__ or "")
 
 
 def test_the_brief_states_the_invariant_no_rule_will_refuse() -> None:
@@ -1000,7 +1037,7 @@ def test_only_30_minutes_plans_again_against_the_shorter_budget(
 ) -> None:
     model = Scripted(
         turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
     )
     graph, thread = waiting(model)
     graph.invoke({"request": BARBELL_45}, thread)
@@ -1345,7 +1382,7 @@ def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
     asked = plans.adaptation_requested(
         connection, "2026-09-22", plans.Asked(minutes=30), said="solo 30 minuti oggi"
     )
-    model = Scripted(documents=[plan_of("Barbell_Squat", rounds=2)])
+    model = Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)])
     graph, thread = pausing(model)
 
     graph.invoke(planner.starting(asked), thread)
@@ -1362,7 +1399,7 @@ def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged
     keeping(connection, two_slots)
     before = mesocycles.active(connection)
     asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
-    graph, thread = pausing(Scripted(documents=[plan_of("Barbell_Squat", rounds=2)]))
+    graph, thread = pausing(Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]))
     graph.invoke(planner.starting(asked), thread)
 
     final = graph.invoke(Command(resume=planner.accepted()), thread)
@@ -1380,14 +1417,14 @@ def test_an_adaptation_turned_down_is_planned_again_from_the_same_slot(
     asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
     model = Scripted(
         turns=[AIMessage(content="planned"), AIMessage(content="another")],
-        documents=[plan_of("Barbell_Squat", rounds=2), plan_of("Barbell_Squat", rounds=1)],
+        documents=[plan_of("Barbell_Squat", rounds=2, minutes=30), plan_of("Barbell_Squat", rounds=1, minutes=30)],
     )
     graph, thread = pausing(model)
     graph.invoke(planner.starting(asked), thread)
 
     final = graph.invoke(Command(resume=planner.refused("troppo")), thread)
 
-    assert final["plan"] == plan_of("Barbell_Squat", rounds=1)
+    assert final["plan"] == plan_of("Barbell_Squat", rounds=1, minutes=30)
     assert final["request"].adapting == asked.adapting
     assert "troppo" in "\n".join(message.text for message in model.seen[-1])
 

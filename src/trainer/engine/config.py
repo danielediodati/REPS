@@ -114,6 +114,7 @@ class TrainingConfig:
 
     cycle_length: int
     duration_cap_min: int
+    """The minutes a workout is built to when no other time is asked for, give or take `plan.TOLERANCE_MIN`, and the most that may be asked for."""
     split: tuple[tuple[str, ...], ...]
     volume_denominator: str
     equipment: tuple[str, ...]

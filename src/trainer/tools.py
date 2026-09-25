@@ -247,8 +247,9 @@ def remaining_budget(partial_plan: list[dict[str, Any]], budget_min: int) -> int
 
     A plan is a list of blocks, each `{"items": [{"exercise_id": ..., "reps":
     ...} | {"exercise_id": ..., "seconds": ...}], "rounds": N, "rest": SECONDS}`.
-    Negative when the plan is already over, on purpose: how far over is what
-    the caller has to act on, and this engine never trims a plan to fit.
+    Negative when the plan is already over. A plan is accepted when this
+    lands within 5 minutes either side of zero: 45 minutes asked accepts
+    anything from 5 left to 5 over. Nothing is trimmed or padded to fit.
     """
     plan = [_block(raw) for raw in partial_plan]
     with reported(), opened() as connection:

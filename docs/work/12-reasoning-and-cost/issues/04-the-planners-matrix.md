@@ -38,6 +38,11 @@ Totale 25 min su 45
 
 No plan-suite pass without the methodology was kept, so there is no *before* to set these tables against; that comparison was given up for one measurement.
 
+**Carried from 11.3**, closed on the same terms. Every run also plans against the time as a target: a plan is refused outside `plan.window` (the minutes asked, ±5). The floor is a new way to fail the 100% bar:
+
+- `no-equipment` asks for 15 minutes, so its floor is 10; `contradictory` asks for 30 over six groups.
+- A situation that cannot be met with the floor is a finding about the request or the model, written here. It is not a reason to lower the floor.
+
 ## References
 
 - ADR-0001, ADR-0008, ADR-0010
@@ -48,5 +53,5 @@ No plan-suite pass without the methodology was kept, so there is no *before* to 
 - [ ] The four candidates screened and written, with their spend.
 - [ ] The winner confirmed at three repetitions, and one mesocycle from it, timed and costed.
 - [ ] The two session-7 plans written here, and neither is a circuit of same-muscle exercises like the one above (11.2).
-- [ ] The chosen row named, with the rule that chose it.
+- [ ] The chosen row named, with the rule that chose it, holding the six invariants at 100% with 11.3's floor in.
 - [ ] Total spend at or under $6.

@@ -19,7 +19,7 @@ Vocabulary: [CONTEXT.md](CONTEXT.md). Architecture decision: [ADR-0004](docs/adr
 
 | | the system guarantees | the agent fills in |
 |---|---|---|
-| plan | admissible ids, a valid shape, inside the budget | which exercises, how many, in what order, and why |
+| plan | admissible ids, a valid shape, within five minutes of the budget | which exercises, how many, in what order, and why |
 | hypothesis | a trial exists that discriminates it | what it hypothesizes |
 | conclusion | it has a source | what it says |
 | observation | a measure says whether it was heeded | what it observes |
@@ -72,7 +72,7 @@ models: Ollama locally, or Groq (LLM_BACKEND)
 A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py`) and also served over MCP.
 
 - **Admissible set.** The exercises allowed by equipment, time, muscle groups and exclusions, computed as one SQL query.
-- **Duration.** A plan is a sequence of blocks, and a block costs `setup + rounds × (Σ work + rest)`. The agent prescribes the rest; the bands are a reference (strength 2.5-3 min, hypertrophy 90-120 s, isolation 60 s). A plan over the budget is refused, never cut (ADR-0001, ADR-0002).
+- **Duration.** A plan is a sequence of blocks, and a block costs `setup + rounds × (Σ work + rest)`. The agent prescribes the rest; the bands are a reference (strength 2.5-3 min, hypertrophy 90-120 s, isolation 60 s). A plan is built to the budget, within five minutes either side; outside it is refused, never cut or padded (ADR-0001, ADR-0002).
 - **Volume.** Rounds performed per cycle, on two axes: movement pattern and muscle.
 - **Progression and return** (after 1.0). Increments follow the mesocycle's scheme. The ramp-in depends on days since the last workout: up to 10 none, 11-21 one workout, 22-45 two, over 45 a full calibration.
 - **Never a max-effort test.**

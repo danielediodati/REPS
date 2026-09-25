@@ -94,7 +94,7 @@ def said(exercise_id: str, why: str) -> plans.Acknowledgement:
     return plans.Acknowledgement(exercise_id=exercise_id, why=why)
 
 
-def one(*items: plans.PlanItem, rounds: int = 3, rest: int = 60) -> plans.PlanBlock:
+def one(*items: plans.PlanItem, rounds: int = 8, rest: int = 150) -> plans.PlanBlock:
     return plans.PlanBlock(
         items=list(items), rounds=rounds, rest=rest, reason="because"
     )
@@ -402,7 +402,7 @@ def test_the_ratio_of_compound_to_isolation_is_not_an_invariant(
     In a measurement whose bar is 100%, an invariant that can be wrong is worse
     than one that is weak."""
     core = plans.Request(equipment=("body only",), budget_min=45, groups=("core",))
-    all_isolation = ran(one(item("Plank")))
+    all_isolation = ran(one(item("Plank"), rounds=16))
 
     assert failing(connection, core, all_isolation) == {}
 

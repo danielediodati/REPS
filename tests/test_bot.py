@@ -1424,7 +1424,7 @@ def test_tapping_thirty_minutes_plans_against_thirty(
 ) -> None:
     model = Scripted(
         turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")],
+        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
     )
     graph, thread, final = waiting_on_a_plan(model)
     sent, offer = offered()
@@ -2394,7 +2394,7 @@ def test_an_adaptation_is_offered_accepted_and_served_and_the_mesocycle_stays(
     graphs = adapting_from(
         catalogued,
         calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
-        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2)]),
+        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
     )
     kept = mesocycles.active(catalogued)
 

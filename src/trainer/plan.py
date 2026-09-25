@@ -48,6 +48,9 @@ REFUSED = "refused"
 SLOTS = "slots"
 CYCLES = "cycles"
 
+TOLERANCE_MIN = 5
+"""How far either side of the minutes asked for a plan may land: 45 accepts 40 to 50."""
+
 
 # -- the shape ----------------------------------------------------------------
 
@@ -584,14 +587,7 @@ def _equipment(
 
 
 def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
-    """Today's budget: what was asked for, or the cap that was declared.
-
-    The cap is a ceiling and not a suggestion -- it is the one number in
-    `training.toml` that says *a workout never runs longer than this* -- so a
-    larger time is refused rather than honoured, **whether or not a workout
-    was named**. Refused and not clamped: quietly planning 60 minutes for
-    somebody who asked for 90 is the engine deciding how long they train.
-    """
+    """Today's budget: what was asked for, or the cap that was declared; asking for more than the cap is refused."""
     if declared is None:
         if asked is None:
             raise config.NoTrainingConfig(config.config_path())
@@ -972,16 +968,31 @@ def _not_a_plan_already_refused(plan: WorkoutPlan, request: Request) -> Violatio
     return None
 
 
+def window(budget_min: int) -> tuple[int, int]:
+    """The fewest and the most minutes a plan built to `budget_min` may run."""
+    return max(budget_min - TOLERANCE_MIN, 0), budget_min + TOLERANCE_MIN
+
+
 def _inside_the_budget(
     connection: sqlite3.Connection, blocks: duration.Plan, request: Request
 ) -> Violation | None:
     spent = duration.plan_duration(connection, blocks)
-    if spent > request.budget_min:
+    asked = request.budget_min
+    floor, ceiling = window(asked)
+    if spent > ceiling:
         return Violation(
             BUDGET,
-            f"the plan runs {spent} min against a budget of {request.budget_min} "
-            f"min, {spent - request.budget_min} min over. It is not cut to fit: "
-            "allocate the time first and build a shorter plan",
+            f"the plan runs {spent} min against a budget of {asked} min, "
+            f"{spent - ceiling} min over the {ceiling} it may run. It is not cut "
+            "to fit: allocate the time first and build a shorter plan",
+        )
+    if spent < floor:
+        return Violation(
+            BUDGET,
+            f"the plan runs {spent} min of the {asked} min asked for, "
+            f"{floor - spent} min under the {floor} it has to reach. A plan is "
+            f"built to the time, within {TOLERANCE_MIN} min either side: plan "
+            "the time that was given",
         )
     return None
 

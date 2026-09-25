@@ -25,6 +25,7 @@ from trainer.engine import (
     config,
     constraints,
     database,
+    duration,
     mesocycles,
     migrations,
     workouts,
@@ -70,7 +71,7 @@ def document(*blocks: dict[str, Any]) -> str:
 
 
 def block(
-    *items: dict[str, Any], rounds: int = 3, rest: int = 90, reason: str = "because"
+    *items: dict[str, Any], rounds: int = 10, rest: int = 210, reason: str = "because"
 ) -> dict[str, Any]:
     return {"items": list(items), "rounds": rounds, "rest": rest, "reason": reason}
 
@@ -282,6 +283,65 @@ def test_a_plan_over_the_budget_reports_both_numbers_and_nothing_is_cut(
     assert "45" in refused.says
     assert "over" in refused.says
     assert len(blocks[0].items) == 1 and blocks[0].rounds == 20
+
+
+def lasting(connection: sqlite3.Connection, minutes: int) -> plans.WorkoutPlan:
+    """A one-block squat plan that the engine costs at exactly `minutes`."""
+    setup = _PATTERNS["Barbell_Squat"][4] * duration.SECONDS_PER_MINUTE
+    work = 10 * duration.SECONDS_PER_REP
+    for rounds in range(1, 20):
+        rest = (minutes * duration.SECONDS_PER_MINUTE - setup) // rounds - work
+        parsed = plans.parse(
+            document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 10}}, rounds=rounds, rest=max(rest, 0)))
+        )
+        if duration.plan_duration(connection, plans.to_blocks(parsed)) == minutes:
+            return parsed
+    raise AssertionError(f"no squat plan lasts {minutes} min")
+
+
+@pytest.mark.parametrize("minutes", [40, 45, 48, 50])
+def test_a_plan_within_five_minutes_of_the_request_is_accepted(
+    connection: sqlite3.Connection, minutes: int
+) -> None:
+    parsed = lasting(connection, minutes)
+
+    assert plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed) == ()
+
+
+@pytest.mark.parametrize("minutes", [51, 53])
+def test_a_plan_over_the_tolerance_is_refused(
+    connection: sqlite3.Connection, minutes: int
+) -> None:
+    parsed = lasting(connection, minutes)
+
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert refused.rule == plans.BUDGET
+    assert f"{minutes - 50} min over" in refused.says
+
+
+@pytest.mark.parametrize("minutes", [25, 39])
+def test_a_plan_under_the_floor_is_refused_saying_how_far_under(
+    connection: sqlite3.Connection, minutes: int
+) -> None:
+    """*You asked for 45 minutes and this gives you 25* is a different mistake from running over."""
+    parsed = lasting(connection, minutes)
+
+    (refused,) = plans.validate(connection, plans.to_blocks(parsed), BARBELL_45, parsed)
+
+    assert refused.rule == plans.BUDGET
+    assert f"{minutes} min" in refused.says and "45" in refused.says
+    assert f"{40 - minutes} min under" in refused.says
+    assert "over" not in refused.says
+
+
+def test_a_request_shorter_than_the_tolerance_has_no_floor(
+    connection: sqlite3.Connection,
+) -> None:
+    parsed = lasting(connection, 4)
+    short = plans.Request(equipment=("barbell",), budget_min=plans.TOLERANCE_MIN)
+
+    assert plans.validate(connection, plans.to_blocks(parsed), short, parsed) == ()
 
 
 def test_an_exercise_written_twice_is_refused(connection: sqlite3.Connection) -> None:
@@ -695,7 +755,7 @@ def test_a_different_plan_after_a_refusal_passes(
     )
     offered = plans.parse(
         document(block({"exercise_id": "Barbell_Squat",
-                        "prescription": {"unit": "reps", "amount": 5}}, rounds=5))
+                        "prescription": {"unit": "reps", "amount": 5}}, rounds=12))
     )
     request = plans.Request(
         equipment=("barbell",),
