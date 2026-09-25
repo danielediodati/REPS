@@ -22,7 +22,7 @@ Earlier passes, for the record: 2026-09-21 `gpt-oss:20b` on Ollama 24 / 90 (~2.6
 
 ## What to do
 
-**Budget: $6 in total, hard.** The reference row costs about $0.04 a report; every estimate below uses that as the ceiling.
+**Budget: $4 in total, hard.** The candidates run cheapest first, one at a time, each with an estimate before and a report after, and the next only on the user's go ([spec](../spec.md): In what order, The report after each run, Candidates). The reference row cost about $0.04 a report on `:nitro`; U1 on default routing cost $0.0027 (02).
 
 **The minimal set: 10 rows**, picked where the reference fails, so they tell the candidates apart. One easy row to catch a model that cannot log at all.
 
@@ -33,15 +33,13 @@ Earlier passes, for the record: 2026-09-21 `gpt-oss:20b` on Ollama 24 / 90 (~2.6
 
 The reference is **not re-run**: its per-row results on these 10 are the ones above.
 
-| Step | What | Runs | Estimate |
-|---|---|---|---|
-| 1. Screen | each candidate on the 10 rows, `--only`, `--repetitions 1` | 40 | ~$1.6 |
-| 2. Confirm | the cheapest candidate no worse than the reference on the 10 rows, at `--repetitions 3` | 30 | ~$1.2 |
-| 3. Check the bar | the same one on the whole set, `--repetitions 1`, against both bars (ADR-0010) | 30 | ~$1.2 |
+| Step | What | Runs |
+|---|---|---|
+| 1. Screen | each candidate on the 10 rows, `--only`, `--repetitions 1` | 10 per candidate |
+| 2. Confirm | the cheapest candidate no worse than the reference on the 10 rows, at `--repetitions 3` | 30 |
+| 3. Check the bar | the same one on the whole set, `--repetitions 1`, against both bars (ADR-0010) | 30 |
 
-Candidates, one effort each: `qwen/qwen3.8-27b` low, `openai/gpt-oss-20b` low, `openai/gpt-oss-120b` low, `anthropic/claude-haiku-4.5` none. `high` is left out: the reference already reasons at length, and the question is whether less loses anything. Pin the host per model (01).
-
-- After the first candidate, compare its real cost (02) with the estimate. Above $0.06 a report, stop and ask.
+- Above $0.06 a report on any candidate, stop and ask.
 - If the winner fails the bar in step 3, stop: the second candidate is not run without asking.
 - Write the table here: per row, unambiguous and must-ask on the 10, $ and s per report, host, and the spend so far.
 
@@ -63,7 +61,7 @@ Candidates, one effort each: `qwen/qwen3.8-27b` low, `openai/gpt-oss-20b` low, `
 
 ## Acceptance criteria
 
-- [ ] The four candidates screened on the 10 rows and written, with their spend.
+- [ ] The candidates screened on the 10 rows, cheapest first, each reported to the user and written here with its spend.
 - [ ] The winner confirmed at three repetitions, and checked against both bars on the whole set.
 - [ ] The chosen row named, with the rule that chose it.
-- [ ] Total spend at or under $6.
+- [ ] Total spend at or under $4.

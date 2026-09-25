@@ -6,21 +6,21 @@ Blocked by: 01, 02, 10.5.
 
 The planner's bar is 100% on six invariants (ADR-0010), measured on mesocycles: after 10.5 every situation of `--suite plan` asks for one, and there is no single-workout pass to screen on. A plan is longer than a log document, and its tool loop longer, so effort may matter differently here.
 
-**Budget: $6 in total, hard; the estimates below are for single workouts and are now low.** A mesocycle run is about five workouts' worth of tokens, so steps 1 and 2 are to be re-estimated from 10.5's first costed run, and the budget confirmed with the user before step 1. No plan-suite run has been costed yet: the first candidate's real cost (02) is the estimate for the rest. One mesocycle on `openai/gpt-oss-120b:nitro` was 93k tokens in and 21k out (10.1).
+**Budget: $4 in total, hard.** The candidates run cheapest first, one at a time, each with an estimate before and a report after, and the next only on the user's go ([spec](../spec.md): In what order, The report after each run, Candidates). The first costed mesocycle run is below (Left by 10.5): $0.003 a situation on `gpt-oss-120b`.
 
 ## What to do
 
-The same four candidates as 03, one effort each: `qwen/qwen3.8-27b` low, `openai/gpt-oss-20b` low, `openai/gpt-oss-120b` low, `anthropic/claude-haiku-4.5` none. Pin the host per model (01).
+The spec's five candidates, in its order.
 
 | Step | What | Runs | Estimate |
 |---|---|---|---|
-| 1. Screen | each candidate on `trainer eval --suite plan --repetitions 1` (6 situations, *refused* plans twice) | 28 | ~$1.5 |
-| 2. Confirm | the cheapest candidate at 100%, at `--repetitions 3` | 21 | ~$1 |
-| 3. 11.1's measurement | the session-7 request (chest and arms, 45 minutes, body weight and bands) on `anthropic/claude-sonnet-5` at high, and on the chosen row | 2 | ~$0.6 |
+| 1. Screen | each candidate on `trainer eval --suite plan --repetitions 1` (6 situations, *refused* plans twice) | 7 per candidate | from list price and 10.5's tokens |
+| 2. Confirm | the cheapest candidate at 100%, at `--repetitions 3` | 21 | |
+| 3. 11.1's measurement | the session-7 request, `trainer plan --group chest --group arms --time 45 --equipment "body only" --equipment bands`, on `anthropic/claude-sonnet-5` at high, and on the chosen row | 2 | ~$0.6 |
 
-Sonnet is the large-model reference for 11.1 only, not a screening candidate: its one run is the most expensive line here.
+Sonnet is the large-model reference for 11.1 only, not a screening candidate: its one run is the most expensive line here. `--group` plans one workout from nothing, so the comparison is with the session-7 plan like for like.
 
-- After the first candidate, compare its real cost with the estimate. Above $0.08 a run, stop and ask.
+- Above $0.08 a run on any candidate, stop and ask.
 - If no candidate reaches 100% in step 1, stop and ask before anything else runs.
 - Write the table here: per row, invariants held, attempts, $ and s per run, host, and the spend so far.
 
@@ -60,8 +60,8 @@ No plan-suite pass without the methodology was kept, so there is no *before* to 
 
 ## Acceptance criteria
 
-- [ ] The four candidates screened and written, with their spend.
+- [ ] The candidates screened, cheapest first, each reported to the user and written here with its spend.
 - [ ] The winner confirmed at three repetitions, with seconds and cost per mesocycle.
 - [ ] The two session-7 plans written here, and neither is a circuit of same-muscle exercises like the one above (11.2).
 - [ ] The chosen row named, with the rule that chose it, holding the six invariants at 100% with 11.3's floor in.
-- [ ] Total spend at or under $6.
+- [ ] Total spend at or under $4.
