@@ -14,6 +14,7 @@ on passing against a record the graph no longer produces.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -787,6 +788,29 @@ def test_a_setup_run_with_no_plan_is_not_measured_as_the_situation(
     assert outcome.error is not None
     assert "nothing to refuse" in outcome.error
     assert outcome.also, "the run that was paid for is still counted"
+
+
+def test_a_run_lost_to_the_provider_keeps_what_it_emitted(
+    connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """A run that ends in `ProviderFailed` has no graph state to record, and
+    the broken text is the only thing that says why the host lost it."""
+    from test_planner import Scripted
+
+    chosen = evaluation.situations(connection)[:1]
+    on = models.Chat(
+        Scripted(raw=['{"workouts": [{"blo'] * 10), "scripted", "a-stand-in"
+    )
+
+    report = evaluation.run(
+        connection, chosen, on=on, repetitions=1, records=tmp_path / "records"
+    )
+
+    (outcome,) = report.outcomes
+    assert outcome.error is not None
+    kept = json.loads((tmp_path / "records" / f"{chosen[0].name}-1-lost.json").read_text())
+    assert kept["error"] == outcome.error
+    assert kept["emitted"] == ['{"workouts": [{"blo'] * (planner.REJECTIONS + 1)
 
 
 def test_every_run_leaves_the_record_the_failure_names(

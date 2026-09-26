@@ -39,6 +39,7 @@ agent.
 from __future__ import annotations
 
 import dataclasses
+import json
 import math
 import os
 import sqlite3
@@ -886,6 +887,9 @@ def _once(
         # away. Caught broadly on purpose -- the run lands in the *not run*
         # column and counts against the metric there, and a pass that lost its
         # other seventeen runs to one transport error would measure nothing.
+        if isinstance(error, models.ProviderFailed) and error.emitted:
+            lost = {"error": str(error), "emitted": list(error.emitted)}
+            write(records, f"{situation.name}-{attempt}-lost", json.dumps(lost, indent=2))
         return Outcome(situation.name, attempt, error=str(error), also=tuple(also))
 
     written = write(records, f"{situation.name}-{attempt}", ran.document)

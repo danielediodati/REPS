@@ -740,7 +740,8 @@ def build(
             refused = state.get("rejections", 0) + 1
             if refused > REJECTIONS:
                 raise models.ProviderFailed(
-                    f"{on.name} emitted text that is not JSON {refused} times running: {error}"
+                    f"{on.name} emitted text that is not JSON {refused} times running: {error}",
+                    emitted=written,
                 ) from error
             logger.warning("the emission was not JSON (%d): %s", refused, error)
             return {"rejections": refused, "emitted": written}

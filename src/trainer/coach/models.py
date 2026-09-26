@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -381,6 +382,10 @@ RETRIES = 1
 
 class ProviderFailed(ModelError):
     """The host behind OpenRouter answered with an error, or not at all, named."""
+
+    def __init__(self, message: str, emitted: Sequence[str] = ()) -> None:
+        super().__init__(message)
+        self.emitted = tuple(emitted)
 
 
 class OpenRouterChat(ChatOpenAI):
