@@ -116,6 +116,9 @@ class Scripted(BaseChatModel):
     it. Taken before `documents`."""
 
     schemas: list[dict[str, Any]] = []
+    strict: list[bool | None] = []
+    """Whether each emission asked for the schema to be enforced while it is written."""
+
     seen: list[list[BaseMessage]] = []
     bound: list[list[str]] = []
     """The tools it was offered, per turn, by name.
@@ -161,6 +164,7 @@ class Scripted(BaseChatModel):
     ) -> Runnable[LanguageModelInput, dict[str, Any] | BaseModel]:
         assert isinstance(schema, dict)
         self.schemas.append(schema)
+        self.strict.append(kwargs.get("strict"))
 
         def emitted(messages: Any) -> dict[str, Any]:
             written = (
@@ -499,6 +503,15 @@ def test_an_emission_that_is_not_json_is_asked_again_without_spending_an_attempt
         "I would start with squats.",
         plan_of("Barbell_Squat").model_dump_json(),
     ]
+
+
+def test_the_emission_asks_for_the_schema_to_be_enforced(connection: sqlite3.Connection) -> None:
+    """Left unsaid, langchain sends `strict: false` and the schema is a suggestion (ADR-0004)."""
+    model = Scripted(documents=[plan_of("Barbell_Squat")])
+
+    graph_of(model).invoke({"request": BARBELL_45})
+
+    assert model.strict == [True]
 
 
 def test_emissions_that_are_never_json_end_the_run_as_a_provider_failure(

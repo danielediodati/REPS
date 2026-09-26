@@ -725,7 +725,7 @@ def build(
                 else _emit_schema(connection, request)
             )
         structured = model.with_structured_output(
-            schema, method="json_schema", include_raw=True
+            schema, method="json_schema", include_raw=True, strict=True
         )
         emitted = structured.invoke([*state["messages"], asked])
         assert isinstance(emitted, dict)

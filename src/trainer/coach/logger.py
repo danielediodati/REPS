@@ -419,7 +419,7 @@ def build(
         asked = HumanMessage(EMIT_LOG)
         schema = tools.strict_schema(logs.PerformedWorkout)
         structured = model.with_structured_output(
-            schema, method="json_schema", include_raw=True
+            schema, method="json_schema", include_raw=True, strict=True
         )
         emitted = structured.invoke([*state["messages"], asked])
         assert isinstance(emitted, dict)

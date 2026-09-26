@@ -8,7 +8,7 @@ This ADR resets the agent layer. The engine and its tools stay.
 
 1. **The agent is a LangGraph graph.** Planner, logger, onboarding and supervisor are graphs or subgraphs. The engine stays a deterministic library that the graph reaches only as tools.
 2. **A refusal goes back to the planner.** `validate` is a node. It sends every violation back to the planner as feedback, up to a bounded number of attempts, and nothing invalid is ever persisted. This replaces *"no way back in"* from session 4. ADR-0001 still holds: the engine never repairs a plan, the agent does, knowing why it was refused.
-3. **The form is constrained while the model writes.** The emit schema is built per request, with `exercise_id` as an enum of today's admissible ids, so constrained decoding cannot produce an invented id. The validator keeps what a schema cannot express: budget, preferences, duplicates.
+3. **The form is constrained while the model writes.** The emit schema is built per request, with `exercise_id` as an enum of today's admissible ids, so constrained decoding cannot produce an invented id. The validator keeps what a schema cannot express: budget, preferences, duplicates. Enforcement is asked for explicitly (`strict=True`): left unsaid, langchain sends `strict: false`, and until 2026-09-26 every OpenRouter emission ran unconstrained.
 4. **Human-in-the-loop is `interrupt()`.** It covers clarifying questions, confirming an exclusion and refusing a plan. It replaces the `QUESTION:` marker and `--refused FILE`.
 5. **Each store has one owner.**
 

@@ -221,6 +221,7 @@ def test_a_run_reads_the_prescription_and_emits_a_document(
     assert final["document"].workout_id == identifier
     assert final["questions"] == [], "nothing in that sentence needed clarifying"
     assert final["spent"] == 1
+    assert model.strict == [True], "the schema is enforced while it is written"
 
 
 def test_the_brief_names_the_workout_that_is_open_and_the_words_that_were_said() -> None:
