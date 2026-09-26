@@ -124,6 +124,21 @@ And: **a step's output is a decision in words with its reason**, inside the meth
    - **Void by the rule**: the after lost 10 runs. Of the 8 it ran to the end it held 7 of 8, which says nothing: every `no-history` run was among the lost.
    - **The fault is DeepInfra not holding the strict schema** for `gpt-oss-120b`. The kept text breaks the schema's own structure, which a constrained decoder cannot write: a `prescription` object with its key missing, strings cut mid-word, empty replies, and two replies that ran to the length limit (114,507 and 16,384 completion tokens, $0.020 and $0.010 for one call). `require_parameters` routes only to hosts that *declare* `response_format`; it does not make them honour it.
    - Before also went from 9 to 7 / 18 between passes: at 18 runs a situation's swing is two runs.
+
+   **Third pass, 2026-09-26**, with `strict=True` (`303721d`), after `88fd021`.
+
+   | | Before | After |
+   |---|---|---|
+   | Runs holding every invariant | 7 / 18 | 10 / 18 |
+   | Lost to a provider fault | 3 | 8 |
+   | Held, of the runs that finished | 7 / 15 | **10 / 10** |
+   | $ a run, s a run | $0.0029, 98 | $0.0030, 68 |
+
+   - **Void by the rule** again, both sides.
+   - **Strict did not stop the broken emissions** on DeepInfra, which a constrained decoder could not write: the host does not enforce the schema for this model. Ten single emissions in a short context were valid with and without it.
+   - **The retry returned the same bytes**: every lost run failed three times at the same character. Asking again unchanged does not recover.
+   - A run lost this way leaves no record, so its text was not kept: the diagnosis misses exactly the runs it was for.
+   - Of the runs that finished, the after held every one; the before failed on time and duplicates as in every pass. Suggestive, not measured: which runs are lost is not random.
 1. **Step 3 and ADR-0003.** Does the split become the planner's, with `training.toml` declaring only what the user wants trained and how many sessions? Or does the planner work inside the declared split and decide only pairings and secondaries? What does onboarding (session 13) then write?
 2. **What each step produces**, and where it is kept: in the graph state only, in the mesocycle row, shown to the user? Is the style part of the accepted mesocycle, so a change (10.3) keeps it?
 3. **Which steps see which tools.** Does step 5 alone get `admissible_set`, per workout? Does step 4 get `remaining_budget` / `allocate`?
