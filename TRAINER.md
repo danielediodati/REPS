@@ -43,7 +43,6 @@ Vocabulary: [CONTEXT.md](CONTEXT.md). Architecture decision: [ADR-0004](docs/adr
 **Out**:
 - diagnosed pathologies and range of motion in degrees: v2; in v1 the agent recommends a doctor;
 - form checking from video;
-- generated exercise videos: nothing can check that the form shown is right;
 - nutrition;
 - multi-user.
 
