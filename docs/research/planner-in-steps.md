@@ -1,6 +1,6 @@
-# The planner in steps: a proposal, being measured
+# The planner in steps: a proposal, measured and parked
 
-Research date: 2026-09-25. A proposal, not a decision: measured first (question 0), then grilled, then an ADR and a session placed **before 12.4**.
+Research date: 2026-09-25. **Parked 2026-09-26.** Three passes could not be read: `gpt-oss-120b` loses runs to emissions it cannot write, on DeepInfra with the schema unenforced and on Groq with it enforced (*"Failed to generate JSON"*). `deepseek-v4-flash` held 5 / 6 on the single emission. The limit is the small model, not the shape of the ask, so the steps are not built. The code is on `probe/planner-per-workout`, unmerged; resume from there.
 
 ## Where it came from
 

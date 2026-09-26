@@ -2,7 +2,12 @@
 
 Status: ready-for-agent
 
-Blocked by: 01, 02, 10.5, and the planner in steps ([research](../../../research/planner-in-steps.md)): measured before it, the matrix measures a planner about to change. Its first screening is written there.
+Blocked by: 01, 02, 10.5.
+
+**Found before it ran** ([research](../../../research/planner-in-steps.md), where the first screening is written):
+- `gpt-oss-120b` cannot reliably emit the plan's schema: broken or empty JSON on DeepInfra, which does not enforce `strict`, and *"Failed to generate JSON"* on Groq, which does. Screen it, but count runs lost this way.
+- A host is chosen also for holding the schema: `require_parameters` routes to hosts that declare `response_format`, not to hosts that honour it.
+- Report runs lost to a provider fault as their own column; a run that ends in `ProviderFailed` leaves no record today, so its emitted text is lost.
 
 The planner's bar is 100% on six invariants (ADR-0010), measured on mesocycles: after 10.5 every situation of `--suite plan` asks for one, and there is no single-workout pass to screen on. A plan is longer than a log document, and its tool loop longer, so effort may matter differently here.
 
