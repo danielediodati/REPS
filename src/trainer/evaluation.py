@@ -455,82 +455,45 @@ def _does_not_degenerate(
     workout: plans.WorkoutPlan,
     violations: tuple[plans.Violation, ...],
 ) -> str | None:
-    """It uses the space it was given.
+    """It uses the space it was given, on ADR-0001's two axes, each judged against what was available.
 
-    **The definition, because this is the one invariant that is not already a
-    sentence about the admissible set or the clock.** ADR-0001 settles it: the
-    volume deficit is measured on two axes, and degeneration is what each axis
-    is for.
-
-    - **The muscle axis answers *am I touching this at all*.** Every group the
-      workout was asked to train has at least one exercise whose *primary*
-      muscles fall in it. A leg day of calf raises fails; the pattern axis
-      alone would not catch it.
-    - **The pattern axis answers *am I balanced*.** The plan uses more than one
-      movement pattern. An arm workout made entirely of curls is the case
-      ADR-0001 names, and it is invisible on the muscle axis because biceps,
-      triceps and forearms are one bucket there.
-
-    **Both halves are checked against what was actually available**, never
-    against an absolute. If the admissible set offers nothing for a group, or
-    holds only one movement pattern, then a plan that reflects that is not
-    degenerate -- it is the only honest answer, and an invariant that failed it
-    would be measuring the catalog rather than the agent. That escape clause is
-    what makes 100% a bar the agent can clear.
-
-    What is deliberately **not** here: a ratio of compound to isolation work.
-    Against this catalog the arms group is 70 isolation exercises to 12
-    compound, so any majority-compound rule fails a correct arm day -- and in a
-    measurement whose bar is 100%, an invariant that can be wrong is worse than
-    one that is weak.
+    The muscle axis is the validator's own rule, called here rather than read
+    off `violations`, which skip it when an exercise is written twice or is not
+    admissible. The pattern axis is checked here only: a plan with more than
+    one pattern on offer uses at least two.
     """
-    request = asked
-    prescribed = _prescribed(workout)
+    untrained = plans.every_group_trained(connection, workout, asked)
+    if untrained is not None:
+        return untrained.says
 
     available = admissible.admissible_set(
         connection,
-        request.exclusions,
-        request.equipment,
-        request.budget_min,
-        request.groups,
+        asked.exclusions,
+        asked.equipment,
+        asked.budget_min,
+        asked.groups,
     )
-
-    untouched = []
-    for group in request.groups:
-        muscles = set(admissible.muscles_of([group]))
-        if not any(set(e.primary_muscles) & muscles for e in available):
-            continue  # nothing today could have trained it
-        trained = any(
-            set(e.primary_muscles) & muscles
-            for e in available
-            if e.id in prescribed
-        )
-        if not trained:
-            untouched.append(group)
-    if untouched:
-        return f"it trains nothing for {', '.join(untouched)}"
-
-    offered = {
-        row["movement_pattern"]
-        for row in connection.execute(
-            "SELECT DISTINCT movement_pattern FROM exercises WHERE id IN "
-            f"({','.join('?' for _ in available)})",
-            [exercise.id for exercise in available],
-        )
-    } if available else set()
+    offered = _patterns(connection, [exercise.id for exercise in available])
     if len(offered) > 1:
-        used = {
-            row["movement_pattern"]
-            for row in connection.execute(
-                "SELECT DISTINCT movement_pattern FROM exercises WHERE id IN "
-                f"({','.join('?' for _ in prescribed)})",
-                sorted(prescribed),
-            )
-        } if prescribed else set()
+        used = _patterns(connection, sorted(_prescribed(workout)))
         if len(used) < 2:
-            only = ", ".join(sorted(str(pattern) for pattern in used)) or "nothing"
+            only = ", ".join(sorted(used)) or "nothing"
             return f"every exercise is {only}, out of {len(offered)} patterns available"
     return None
+
+
+def _patterns(connection: sqlite3.Connection, ids: Sequence[str]) -> set[str]:
+    """The distinct movement patterns of these exercises."""
+    if not ids:
+        return set()
+    return {
+        str(row["movement_pattern"])
+        for row in connection.execute(
+            "SELECT DISTINCT movement_pattern FROM exercises WHERE id IN "
+            f"({','.join('?' for _ in ids)})",
+            list(ids),
+        )
+    }
 
 
 INVARIANTS = (

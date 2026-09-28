@@ -45,6 +45,7 @@ ADMISSIBLE = "admissible"
 BUDGET = "budget"
 PREFERENCES = "preferences"
 REFUSED = "refused"
+UNTRAINED = "untrained"
 SLOTS = "slots"
 CYCLES = "cycles"
 
@@ -755,9 +756,14 @@ def validate(
         if broken is not None
     ]
     if not found:
-        costed = _inside_the_budget(connection, blocks, request)
-        if costed is not None:
-            found.append(costed)
+        found.extend(
+            broken
+            for broken in (
+                _inside_the_budget(connection, blocks, request),
+                every_group_trained(connection, plan, request),
+            )
+            if broken is not None
+        )
     found.extend(
         broken
         for broken in (
@@ -883,6 +889,34 @@ def _every_id_admissible(
         )
         lines.append(f"  {exercise_id}: {why or 'not in the admissible set'}")
     return Violation(ADMISSIBLE, "\n".join(lines))
+
+
+def every_group_trained(
+    connection: sqlite3.Connection, plan: WorkoutPlan, request: Request
+) -> Violation | None:
+    """Every group asked for has an exercise whose primary muscles are in it, unless today's admissible set has none."""
+    prescribed = set(exercise_ids(plan))
+    available = admissible.admissible_set(
+        connection,
+        request.exclusions,
+        request.equipment,
+        request.budget_min,
+        request.groups,
+    )
+    untouched = []
+    for group in request.groups:
+        muscles = set(admissible.muscles_of([group]))
+        trainable = [e for e in available if set(e.primary_muscles) & muscles]
+        if trainable and not any(e.id in prescribed for e in trainable):
+            untouched.append(group)
+    if not untouched:
+        return None
+    return Violation(
+        UNTRAINED,
+        f"it trains nothing for {', '.join(untouched)}, which today's admissible "
+        "set can train: give each group asked for at least one exercise whose "
+        "primary muscles are in it",
+    )
 
 
 def _preferences_acknowledged(plan: WorkoutPlan, request: Request) -> Violation | None:

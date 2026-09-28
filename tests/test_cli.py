@@ -1995,6 +1995,15 @@ def declared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return written
 
 
+ROLLOUT_BLOCK = squat_block(
+    items=[{"exercise_id": "Barbell_Ab_Rollout", "prescription": {"unit": "reps", "amount": 10}}],
+    rounds=3,
+    rest=60,
+    reason="core, which workout 3 asks for",
+)
+"""A core block, for a plan against workout 3 (legs and core) that must pass."""
+
+
 def test_plan_takes_its_groups_from_the_workout_of_the_split(
     runner: CliRunner, enriched: Path, declared: Path, tmp_path: Path
 ) -> None:
@@ -2020,7 +2029,7 @@ def test_plan_defaults_the_time_to_the_declared_cap(
 ) -> None:
     result = runner.invoke(
         main,
-        ["plan", "--from", write_plan(tmp_path, squat_block(rounds=14)),
+        ["plan", "--from", write_plan(tmp_path, squat_block(rounds=12), ROLLOUT_BLOCK),
          "--equipment", "barbell", "--workout", "3"],
     )
 

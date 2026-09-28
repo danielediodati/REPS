@@ -574,6 +574,47 @@ def test_an_exercise_for_another_day_is_rejected_naming_what_today_trains(
     assert "legs" in refused.says
 
 
+# -- every group asked for is trained ----------------------------------------
+
+
+SQUAT_ONLY = plans.parse(
+    document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}))
+)
+
+
+def test_a_group_asked_for_and_never_trained_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """The model is told, and gets an attempt to fix it: an eval-only check
+    let a plan with no shoulders pass at the first attempt."""
+    legs_and_core = plans.Request(
+        equipment=("barbell", "body only"), budget_min=45, groups=("legs", "core")
+    )
+
+    rules = {
+        violation.rule: violation.says
+        for violation in plans.validate(
+            connection, plans.to_blocks(SQUAT_ONLY), legs_and_core, SQUAT_ONLY
+        )
+    }
+
+    assert plans.UNTRAINED in rules
+    assert "core" in rules[plans.UNTRAINED]
+    assert "legs" not in rules[plans.UNTRAINED]
+
+
+def test_a_group_nothing_today_could_train_is_not_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    """With only a barbell, the dumbbell bench press is the catalog's one chest
+    exercise and is out: planning no chest is the honest answer."""
+    legs_and_chest = plans.Request(
+        equipment=("barbell",), budget_min=45, groups=("legs", "chest")
+    )
+
+    assert plans.every_group_trained(connection, SQUAT_ONLY, legs_and_chest) is None
+
+
 # -- the preferences, and the plan you turned down ----------------------------
 
 
