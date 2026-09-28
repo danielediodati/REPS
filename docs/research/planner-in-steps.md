@@ -13,7 +13,7 @@ On 2026-09-25 the first screening of 12.4 (the planner's matrix) ran on the meso
 | `openai/gpt-oss-120b` low, DeepInfra | 2 / 6 | 0.0032 | 211 |
 | `deepseek/deepseek-v4-flash` high, DeepInfra | 5 / 6 | 0.0069 | 497 |
 
-`deepseek-v4-flash` takes only `high` or `xhigh` as an effort. Records: the scratchpad of that session, not kept.
+`deepseek-v4-flash` takes only `high` or `xhigh` as an effort. Records: now written into 12.4, with the 09-26 reruns.
 
 The failures shared by all three models:
 
