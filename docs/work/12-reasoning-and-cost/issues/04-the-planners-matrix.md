@@ -94,7 +94,22 @@ Qwen's four 09-26 runs were interrupted before the pass printed its matrix; they
 - Those runs land in *not run*, so their ~$0.12 each is **missing from the pass's `$ in all`**: a run lost to the length limit is paid for and not counted.
 - The pass was stopped once the bar was lost. **Spent on step 2: ~$0.55; on the ticket: ~$1.05 of $4.**
 
-**Waiting on the user**: screen Haiku, or bound the emission's output before Qwen runs again.
+## Step 1 again, Haiku (09-28)
+
+`anthropic/claude-haiku-4.5`, effort `none`, host Anthropic, `--repetitions 1`: **5 / 6**, $0.744 in all, $0.106 a run, 25 to 59 s a run.
+
+| Situation | Held | $ | s |
+|---|---|---|---|
+| no-equipment | yes | 0.102 | 42 |
+| half-refused | yes | 0.130 | 59 |
+| contradictory | **no**: workout 2 trains nothing for shoulders | 0.050 | 24 |
+| no-history | yes | 0.070 | 34 |
+| refused (two runs) | yes | 0.242 | 46 |
+| preference-against-the-split | yes | 0.150 | 45 |
+
+- **The one failure was never shown to the model.** *Not degenerate* is checked by the eval only, not by `plan.validate`, so the plan passed at the first attempt with nothing sent back. DeepSeek failed on the same invariant twice on 09-26. With the rule in the validator, the run would have had two more attempts.
+- Ten times faster than Qwen: seconds, not minutes.
+- **Spent on the ticket: ~$1.79 of $4.** Confirming Haiku at three repetitions is ~$2.2 more.
 
 ## References
 
