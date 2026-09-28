@@ -10,14 +10,13 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.10.0` plans a mesocycle.** On top of `0.9.0` (the entrance, the logger in the chat, runs as documents, OpenRouter), it has:
-- a mesocycle planned and accepted once: a workout per slot of the split, repeated for several cycles, kept in SQLite (ADR-0008);
-- today's workout read off it with no model call, the last load beside each exercise;
-- a change that rewrites the mesocycle for the cycles left, and an adaptation that plans today alone;
-- the next mesocycle prepared in the chat when the last cycle ends;
-- the plan eval suite asking for mesocycles, its six invariants checked on every workout.
+**`0.11.0` plans a workout worth doing.** On top of `0.10.0` (a mesocycle planned once, today's workout read off it, a change and an adaptation, the next mesocycle waiting in the chat), it has:
+- a planner that reasons with [a methodology](src/trainer/data/methodology.md) for the goal `training.toml` declares: ranges per goal, never a template;
+- the declared minutes as a target, refused five either side;
+- a slot of the split that can name muscles, not only groups;
+- a validator that refuses a workout leaving a group it was asked for untrained, when today's exercises could train it.
 
-Parts of sessions 11 and 12 are in as well: the planner reasons with [a methodology](src/trainer/data/methodology.md) for the goal `training.toml` declares, the declared minutes are a target within five either side, a slot of the split can name muscles, and every run reports its reasoning effort, its host and its cost. **Next**: session 12's matrices, which choose each subgraph's model by what it holds and what it costs.
+Session 12 is half in: every run reports its reasoning effort, its host and its cost, and the planner's matrix has chosen `anthropic/claude-haiku-4.5` at no reasoning (18 of 18 mesocycles, ~$0.13 and ~47 s each). The defaults do not follow it yet. **Next**: the logger's matrix, then an ADR that sets the defaults and what a month costs.
 
 ## Architecture (target)
 
