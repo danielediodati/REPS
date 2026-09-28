@@ -833,7 +833,8 @@ def test_a_host_that_does_not_answer_is_named_with_the_wait(
         model.invoke("hello")
 
     assert "deepinfra" in str(raised.value)
-    assert f"{models.TIMEOUT_S} s" in str(raised.value)
+    # The client retries a timeout before it raises, so the wait is every try, not one.
+    assert f"{models.RETRIES + 1} tries of {models.TIMEOUT_S} s" in str(raised.value)
 
 
 # -- a model per subgraph ------------------------------------------------------

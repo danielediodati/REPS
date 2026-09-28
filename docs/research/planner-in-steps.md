@@ -2,6 +2,8 @@
 
 Research date: 2026-09-25. **Parked 2026-09-26.** Three passes could not be read: `gpt-oss-120b` loses runs to emissions it cannot write, on DeepInfra with the schema unenforced and on Groq with it enforced (*"Failed to generate JSON"*). `deepseek-v4-flash` held 5 / 6 on the single emission. The limit is the small model, not the shape of the ask, so the steps are not built. The code is on `probe/planner-per-workout`, unmerged; resume from there.
 
+**Settled 2026-09-28 by 12.4**: `claude-haiku-4.5` held 18 / 18 on the single emission, at ~$0.13 and ~47 s a mesocycle, once *every group trained* was a validator rule. The steps are not needed to reach the bar; they would be revisited only for a cheaper model.
+
 ## Where it came from
 
 On 2026-09-25 the first screening of 12.4 (the planner's matrix) ran on the mesocycle suite (10.5): six adverse situations, each a two-slot mesocycle (`evaluation.SPLIT`), six invariants per workout, bar 100%.
@@ -13,7 +15,7 @@ On 2026-09-25 the first screening of 12.4 (the planner's matrix) ran on the meso
 | `openai/gpt-oss-120b` low, DeepInfra | 2 / 6 | 0.0032 | 211 |
 | `deepseek/deepseek-v4-flash` high, DeepInfra | 5 / 6 | 0.0069 | 497 |
 
-`deepseek-v4-flash` takes only `high` or `xhigh` as an effort. Records: now written into 12.4, with the 09-26 reruns.
+`deepseek-v4-flash` takes only `high` or `xhigh` as an effort. The full screening, with the 09-26 reruns, is in the session-12 ADR on the choice of models.
 
 The failures shared by all three models:
 
@@ -152,8 +154,7 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 
 ## Effect on the roadmap
 
-- **12.4 waits for this.** Measuring models on a planner about to change measures the wrong thing. The four rows above are the *before*.
-- **12.3 (the logger's matrix) is untouched** and can run now.
+- **12.4 ran without it** and closed on Haiku (see the note at the top).
 - **Fixed before the measure, found in the same screening**: an OpenRouter call is bounded (`models.TIMEOUT_S`, one retry), and a host's error, or its silence, reaches the matrix as `ProviderFailed` naming the host instead of `'NoneType' object is not iterable`.
 
 ## References

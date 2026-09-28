@@ -436,7 +436,8 @@ class OpenRouterChat(ChatOpenAI):
 
     def _silent(self) -> ProviderFailed:
         return ProviderFailed(
-            f"{self._pinned()} did not answer {self.model_name} in {TIMEOUT_S} s"
+            f"{self._pinned()} did not answer {self.model_name}: "
+            f"{RETRIES + 1} tries of {TIMEOUT_S} s each"
         )
 
     def _pinned(self) -> str:

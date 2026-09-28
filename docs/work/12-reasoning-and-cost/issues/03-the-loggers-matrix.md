@@ -54,6 +54,15 @@ The reference is **not re-run**: its per-row results on these 10 are the ones ab
 - **Cost is read, not estimated**: the pass ends with `$ in all, $ a run, s a run`; each record holds `dollars` per run and per node. Report spend from those lines.
 - **U1 on default routing** (2026-09-25, `qwen/qwen3.8-27b`, no suffix, no effort, no host pinned): held, **$0.0027 and 10 s a report**, 472 tokens out, answered by Reka and Wafer within one run. The reference's ~$0.04 was `:nitro`. The host moves the price by an order of magnitude, so each candidate's row names its host, and a screen that does not pin one is measuring the router.
 
+## Left by 04
+
+- **A run that never returns is paid for and not counted.** It lands in *not run* with no record, so its dollars are missing from `$ in all`: Qwen's two runs at the 65,536-token limit cost ~$0.12 each and the pass reported $0.03. Check OpenRouter's activity page after any pass with a *not run*.
+- **An eval-only check hides a failure from the model.** Haiku failed the planner's screen on a rule the eval checked and the validator did not, so the plan passed at its first attempt; once the rule was in the validator it held. Before reading a row as the model's limit, check whether the rule that failed is one the agent is ever told.
+- **One situation, or row, per call, in the background**: a pass interrupted mid-way loses its matrix, and the records alone had to be rescored with `evaluation.check`.
+- **Before screening, give the logger's `emit` the planner's handling of an emission that is not JSON** (`c5be289`): it is the provider failing, retried within `REJECTIONS` without spending an attempt. The logger got `strict=True` but not the retry, so a host that ignores the schema costs it an attempt (code review of 12.4, declined there as the logger's).
+- `deepseek-v4-flash` takes only `high` or `xhigh`, not the spec's `low`.
+- Haiku 4.5 at `none` on Anthropic was accepted: its listing takes an effort.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`

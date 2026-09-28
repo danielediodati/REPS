@@ -22,7 +22,7 @@ The same five for both matrices, one effort each, in the order they run. Each pi
 |---|---|---|---|---|---|
 | 1 | `openai/gpt-oss-20b` | low | `coreweave` | 0.03 | 0.13 |
 | 2 | `openai/gpt-oss-120b` | low | `deepinfra` | 0.037 | 0.17 |
-| 3 | `deepseek/deepseek-v4-flash` | low | `deepinfra` | 0.09 | 0.18 |
+| 3 | `deepseek/deepseek-v4-flash` | high (it takes no `low`) | `deepinfra` | 0.09 | 0.18 |
 | 4 | `qwen/qwen3.8-27b` | low | `deepinfra` | 0.15 | 1.875 |
 | 5 | `anthropic/claude-haiku-4.5` | none | `anthropic` | 1.00 | 5.00 |
 
