@@ -128,7 +128,28 @@ The screen counts as the first repetition: its five held plans trained every gro
 
 - **18 / 18 over the three repetitions**, $2.38 in all: **~$0.13 and ~47 s a mesocycle.**
 - **`contradictory` held at the last attempt all three times.** No margin: one more refusal and it fails. It asks for six groups in 30 minutes.
-- **Spent on the ticket: ~$3.48 of $4.** Step 3 (11.1's two session-7 plans, Sonnet ~$0.6) does not fit the $0.52 left.
+- **Spent on the ticket: ~$3.48 of $4.**
+
+## Step 3, the session-7 request (09-28)
+
+`trainer plan --group chest --group arms --time 45 --equipment "body only" --equipment bands`, against a copy of the database in the scratchpad (`TRAINER_HOME`, `TRAINER_DB`).
+
+| | Haiku 4.5, none | Sonnet 5, high |
+|---|---|---|
+| Plan | Pushups 4×10 · Incline Push-Up 3×11 · Push-Up Wide 2×12 · Bench Dips 4×10 · Band Skull Crusher 3×13 · Body Tricep Press 2×12 | Pushups 4×12 · Dips (triceps) 4×10 · Incline Push-Up 3×12 · Band Skull Crusher 3×15 · Cross Over with Bands 3×15 · Standing Towel Triceps Extension 3×15 |
+| Minutes | 40 of 45 | 42 of 45 |
+| Shape | straight sets, chest then triceps, compound first | straight sets, chest and triceps alternated, compound first, a band fly for a non-pressing stimulus |
+| Tool calls, $, s | 4, $0.051, 30 | 12 (budget spent), $0.333, 142 |
+
+- **Neither is a circuit of same-muscle exercises** (11.2), and both fill the time (11.3), against the session-7 plan's two circuits and 25 of 45 minutes.
+- **11.1's question cannot be answered as asked**: the large model was meant to be measured with the old brief, and it ran with the methodology and the floor already in. What it shows is that, with them, a small model and a large one plan the same shape; the difference is in the details (a fly, the order), at six times the price.
+- **Both train triceps only for `arms`.** `--group arms` is still the bucket; 11.4's muscles apply to a slot of the split, not to an ad hoc group.
+
+**Spent on the ticket: ~$3.86 of $4.**
+
+## The chosen row
+
+**`anthropic/claude-haiku-4.5`, effort `none`, host `anthropic`**, by the spec's rule: the cheapest candidate that holds the six invariants at 100%. Qwen is cheaper a run and failed step 2; the others failed step 1.
 
 ## References
 
