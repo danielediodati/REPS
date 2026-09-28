@@ -89,7 +89,7 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 In this order. Measuring first is what stops the methodology being written against a cause nobody confirmed, and the floor is last because on its own it buys nothing: given a floor and no methodology, the cheapest way to fill the time is a tenth exercise in the circuit.
 
-1. **The measurement that separates the causes.** The same request on a large model at full reasoning; session 12 item 4 runs it. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden.
+1. **The measurement that separates the causes.** The same request on a large model at full reasoning; session 12 item 4 runs it. If the plan is sound the cause is the local model and the machine; if it is the same shape, the cause is a brief that says only what is forbidden. Ran after 11.2 and 11.3 were in, so the cause cannot be read: Sonnet 5 and Haiku 4.5 now plan the same shape, neither a circuit. — **done** `8009190`
 2. **What a workout is, written down.** [`methodology.md`](src/trainer/data/methodology.md): ranges per goal and principles the planner reasons with, never a template. The goal is declared in `training.toml`, one per mesocycle. — **done** `e92dc9e`
 3. **The declared minutes are a target, not a ceiling.** Within five minutes either side, refused on both. The first real plan out of the bot spent 25 of 45 minutes and every rule passed it. — **done** `a3974a2`
 4. **A slot of the split names muscles**, not only groups: `arms` cannot tell biceps from triceps. — **done** `530ebd6`
@@ -101,7 +101,7 @@ In this order. Measuring first is what stops the methodology being written again
 1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both. — **done** `85bfd35`
 2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run. — **done** `38c774f`
 3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
-4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises.
+4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises. — **done** `8009190`
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
 
 ## Later sessions
