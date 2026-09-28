@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from collections.abc import Mapping
@@ -171,6 +172,9 @@ EMIT_LOG = "Emit the performed workout now, in the required shape."
 ATTEMPTS = 3
 """Documents one run may emit before a refusal ends it."""
 
+REJECTIONS = 2
+"""Emissions in a row that may fail to be JSON before the run gives up on the provider."""
+
 FEEDBACK = """The validator refused that document:
 {why}
 Read the report again with this in mind. Look up what you need, ask the user
@@ -240,6 +244,12 @@ class LoggerState(TypedDict, total=False):
 
     document: logs.PerformedWorkout | None
     attempts: int
+    rejections: int
+    """Emissions in a row that were not JSON, reset by the first that is."""
+
+    emitted: list[str]
+    """The text of every emission in this run, readable or not, in order."""
+
     refusals: list[tuple[plans.Violation, ...]]
     """What each emitted document broke, in order, and nothing for one that stood: the record's `attempts`."""
 
@@ -284,6 +294,8 @@ def starting(
         "questions": [],
         "document": None,
         "attempts": 0,
+        "rejections": 0,
+        "emitted": [],
         "refusals": [],
         "refused": None,
         "finished": False,
@@ -423,7 +435,23 @@ def build(
         )
         emitted = structured.invoke([*state["messages"], asked])
         assert isinstance(emitted, dict)
-        return {"messages": [asked, emitted["raw"]]}
+        raw = emitted["raw"]
+        written = [*state.get("emitted", []), raw.text]
+        try:
+            json.loads(raw.text)
+        except ValueError as error:
+            # Under a strict schema the host's decoder writes the JSON, so
+            # text that is not JSON is the provider failing, not the model
+            # deciding: asked again, it costs no attempt (REJECTIONS).
+            refused = state.get("rejections", 0) + 1
+            if refused > REJECTIONS:
+                raise models.ProviderFailed(
+                    f"{on.name} emitted text that is not JSON {refused} times running: {error}",
+                    emitted=written,
+                ) from error
+            logger.warning("the emission was not JSON (%d): %s", refused, error)
+            return {"rejections": refused, "emitted": written}
+        return {"messages": [asked, raw], "rejections": 0, "emitted": written}
 
     def validate(state: LoggerState) -> dict[str, Any]:
         document = state["messages"][-1]
@@ -499,6 +527,9 @@ def build(
             return "emit"
         return "logger"
 
+    def after_emit(state: LoggerState) -> Literal["validate", "emit"]:
+        return "emit" if state.get("rejections", 0) else "validate"
+
     def after_validate(state: LoggerState) -> Literal["logger", "confirm", "done"]:
         performed = state.get("document")
         if state.get("refused") is not None:
@@ -516,7 +547,7 @@ def build(
     graph.add_edge(START, "logger")
     graph.add_conditional_edges("logger", after_logger)
     graph.add_conditional_edges("tools", after_tools)
-    graph.add_edge("emit", "validate")
+    graph.add_conditional_edges("emit", after_emit)
     graph.add_conditional_edges(
         "validate",
         after_validate,

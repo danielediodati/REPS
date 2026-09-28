@@ -49,6 +49,7 @@ should reach for.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -751,6 +752,9 @@ def _once(
         # -- the run lands in the *not run* column and counts against the
         # metric there, and a pass that lost its other twenty-nine rows to one
         # transport error would measure nothing.
+        if isinstance(error, models.ProviderFailed) and error.emitted:
+            lost = {"error": str(error), "emitted": list(error.emitted)}
+            evaluation.write(records, f"{row.name}-{attempt}-lost", json.dumps(lost, indent=2))
         return evaluation.Outcome(row.name, attempt, error=str(error))
 
     written = evaluation.write(records, f"{row.name}-{attempt}", read.written)

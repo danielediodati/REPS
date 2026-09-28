@@ -345,6 +345,45 @@ def test_a_spent_call_budget_goes_to_emit(connection: sqlite3.Connection) -> Non
     assert final["document"] is not None
 
 
+def test_an_emission_that_is_not_json_is_asked_again_without_spending_an_attempt(
+    connection: sqlite3.Connection,
+) -> None:
+    """Under a strict schema the host writes the JSON, so broken text is its fault, not the document's."""
+    identifier = prescribe(connection)
+    document = report(workout_id=identifier, report="fatto")
+    model = Scripted(
+        turns=[AIMessage(content="chiaro")],
+        raw=["", "Ho fatto tutto.", document.model_dump_json()],
+    )
+
+    final = until_done(
+        graph_of(model), logger.starting("fatto", TODAY, awaiting=identifier)
+    )
+
+    assert final["document"] == document
+    assert final["attempts"] == 1
+    assert final["rejections"] == 0
+    assert run_record.of(final, tools.CALL_BUDGET)["emitted"] == [
+        "",
+        "Ho fatto tutto.",
+        document.model_dump_json(),
+    ]
+
+
+def test_emissions_that_are_never_json_end_the_run_as_a_provider_failure(
+    connection: sqlite3.Connection,
+) -> None:
+    identifier = prescribe(connection)
+    model = Scripted(turns=[AIMessage(content="chiaro")], raw=[""] * (logger.REJECTIONS + 1))
+
+    with pytest.raises(
+        models.ProviderFailed, match=f"not JSON {logger.REJECTIONS + 1} times running"
+    ) as failed:
+        until_done(graph_of(model), logger.starting("fatto", TODAY, awaiting=identifier))
+
+    assert failed.value.emitted == ("",) * (logger.REJECTIONS + 1)
+
+
 # -- the clarifying question ---------------------------------------------------
 
 
