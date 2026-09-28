@@ -111,6 +111,10 @@ Qwen's four 09-26 runs were interrupted before the pass printed its matrix; they
 - Ten times faster than Qwen: seconds, not minutes.
 - **Spent on the ticket: ~$1.79 of $4.** Confirming Haiku at three repetitions is ~$2.2 more.
 
+**The rule moved** (`491f084`): *every group asked for is trained* is now the validator's `untrained`, and the eval's invariant calls it. `contradictory` again on Haiku, same settings: **held**, at the third and last attempt, $0.088, 41 s. Attempt 1 was refused on time (both workouts) and on shoulders; attempt 2 on shoulders alone; attempt 3 passed. The model fixes it once told, but it used every attempt it had.
+
+**Spent on the ticket: ~$1.88 of $4.** Step 2 for Haiku, 21 runs at ~$0.10, fits the $2.12 left with little room.
+
 ## References
 
 - ADR-0001, ADR-0008, ADR-0010
