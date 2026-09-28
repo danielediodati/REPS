@@ -81,7 +81,20 @@ Qwen's four 09-26 runs were interrupted before the pass printed its matrix; they
 - Haiku (candidate 5) is not screened: it costs more than Qwen, so it runs only if Qwen fails step 2.
 - Records, until the scratchpads are cleaned: `%TEMP%\claude\<project>\9b7445f4-…\scratchpad\runs-12.4-*` (09-25) and `…\db7b2547-…\scratchpad\{deepseek,qwen}` (09-26, 09-28).
 
-**Next, on the user's go**: step 2, Qwen at `--repetitions 3`, 21 runs, ~$1.1 at its average and up to ~$2.6 if every run costs what `contradictory` did.
+## Step 2, Qwen at three repetitions: failed, stopped (09-28)
+
+| Situation | Held | Attempts | s a run | $ |
+|---|---|---|---|---|
+| no-equipment | 3 / 3 | 1, 1, 2 | 329 | 0.076 |
+| half-refused | 3 / 3 | 1, 1, 3 | 765 | 0.179 |
+| contradictory | **1 / 3** | 1 | 354 | 0.028 reported, ~0.25 more unreported |
+| no-history, refused, preference-against-the-split | stopped, not run | | | |
+
+- **Two `contradictory` runs never returned**: one call wrote 65,536 tokens (the host's limit) without closing the plan, *"Could not parse response content as the length limit was reached"*. Only ~600 of them were reasoning. 09-26's `contradictory` ($0.126, 61k out) was the same runaway, stopping just short of the limit.
+- Those runs land in *not run*, so their ~$0.12 each is **missing from the pass's `$ in all`**: a run lost to the length limit is paid for and not counted.
+- The pass was stopped once the bar was lost. **Spent on step 2: ~$0.55; on the ticket: ~$1.05 of $4.**
+
+**Waiting on the user**: screen Haiku, or bound the emission's output before Qwen runs again.
 
 ## References
 
