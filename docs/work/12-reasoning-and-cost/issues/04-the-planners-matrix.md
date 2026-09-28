@@ -113,7 +113,22 @@ Qwen's four 09-26 runs were interrupted before the pass printed its matrix; they
 
 **The rule moved** (`491f084`): *every group asked for is trained* is now the validator's `untrained`, and the eval's invariant calls it. `contradictory` again on Haiku, same settings: **held**, at the third and last attempt, $0.088, 41 s. Attempt 1 was refused on time (both workouts) and on shoulders; attempt 2 on shoulders alone; attempt 3 passed. The model fixes it once told, but it used every attempt it had.
 
-**Spent on the ticket: ~$1.88 of $4.** Step 2 for Haiku, 21 runs at ~$0.10, fits the $2.12 left with little room.
+## Step 2, Haiku at three repetitions: held, 18 / 18 (09-28)
+
+The screen counts as the first repetition: its five held plans trained every group asked for, so `untrained` would not have fired on them, and `contradictory` is the rerun above. Two more ran, with `untrained` in the validator.
+
+| Situation | Held | Attempts | s a run | $ |
+|---|---|---|---|---|
+| no-equipment | 2 / 2 | 1, 1 | 36 | 0.214 |
+| half-refused | 2 / 2 | 1, 2 | 51 | 0.169 |
+| contradictory | 2 / 2 | **3, 3** | 65 | 0.351 |
+| no-history | 2 / 2 | 2, 2 | 49 | 0.242 |
+| refused (four runs) | 2 / 2 | 1, 2 | 39 | 0.384 |
+| preference-against-the-split | 2 / 2 | 2, 2 | 45 | 0.240 |
+
+- **18 / 18 over the three repetitions**, $2.38 in all: **~$0.13 and ~47 s a mesocycle.**
+- **`contradictory` held at the last attempt all three times.** No margin: one more refusal and it fails. It asks for six groups in 30 minutes.
+- **Spent on the ticket: ~$3.48 of $4.** Step 3 (11.1's two session-7 plans, Sonnet ~$0.6) does not fit the $0.52 left.
 
 ## References
 
