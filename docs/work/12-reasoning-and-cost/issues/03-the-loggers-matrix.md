@@ -108,6 +108,22 @@ One row per call, `--repetitions 1`. *Asked*: the value's provenance is `asked` 
 - U8 is the weak row: 5 of its 6 runs across both steps emitted nothing readable. Model or host, the records cannot say.
 - $0.014 in all. Spent on the ticket: ~$0.27 counted.
 
+## `gpt-oss-120b` at medium, the same ten rows at three (09-29)
+
+Asked for by the user, outside the rule: whether more reasoning buys a better question.
+
+| | low | medium |
+|---|---|---|
+| Must ask | **8 / 15** | 3 / 15 (A11 never ran) |
+| False confidence | 2 | 2 |
+| Unambiguous | **12 / 15** | 11 / 15 (U8 0 / 3) |
+| Lost to not JSON | 3 runs | 7 runs: all of U8 and A11 |
+| s a run | 6–54 | 9–56, mostly 25–55 |
+| $ | 0.014 | 0.018 counted |
+
+- **Medium is worse on every column**: it asks less, loses more runs to emissions that are not JSON, and is slower. More reasoning does not buy the question.
+- Spent on the ticket: ~$0.29 counted.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
