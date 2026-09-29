@@ -103,7 +103,6 @@ In this order. Measuring first is what stops the methodology being written again
 3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010). — **done** `504b1da`
 4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises. — **done** `8009190`
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs. — **done** `80d582f`
-6. **Secrets in the keychain, models in a file**: the keys leave `.env` for the OS keychain, the model settings go to a file in `TRAINER_HOME`, and the environment still overrides both.
 
 ## Later sessions
 
@@ -123,6 +122,8 @@ Their issues are cut when each session opens.
 - Level 2, a simulated user with hidden truths;
 - diagnosed pathologies;
 - an on-device feature, if a phone model ever earns one.
+- secrets out of `.env`: one file per key in a directory under `TRAINER_HOME` (Docker's `/run/secrets` layout), the environment still winning; no OS keychain, which differs per OS and is absent in a container;
+- a Docker image and a compose file for the bot, the keys passed as Docker secrets.
 
 ## Risks
 

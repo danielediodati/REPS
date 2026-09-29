@@ -161,4 +161,4 @@ And: **a step's output is a decision in words with its reason**, inside the meth
 
 - ADR-0001, ADR-0003, ADR-0004, ADR-0008, ADR-0010; TRAINER.md § State
 - `src/trainer/coach/planner.py` (`MESOCYCLE_PLANNING`, `mesocycle_brief`, `_mesocycle_schema`), `src/trainer/plan.py` (`_divided`, `validate_mesocycle`), `src/trainer/evaluation.py`
-- `docs/work/12-reasoning-and-cost/spec.md` (candidates, hosts)
+- ADR-0011 (candidates, hosts)
