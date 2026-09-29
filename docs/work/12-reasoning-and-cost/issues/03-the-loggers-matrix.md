@@ -63,6 +63,32 @@ The reference is **not re-run**: its per-row results on these 10 are the ones ab
 - `deepseek-v4-flash` takes only `high` or `xhigh`, not the spec's `low`.
 - Haiku 4.5 at `none` on Anthropic was accepted: its listing takes an effort.
 
+## Step 1, the screen (09-29)
+
+One row per call, `--repetitions 1`. *Asked*: the value's provenance is `asked` with no question put.
+
+| Row | Reference (3 reps) | `gpt-oss-20b` low, CoreWeave | `gpt-oss-120b` low, DeepInfra | `qwen3.8-27b` low, DeepInfra | Haiku 4.5 none, Anthropic |
+|---|---|---|---|---|---|
+| U1 | ok | ok | ok | ok | ok |
+| U4 | provenance invented | no: asked | ok | ok | ok |
+| U6 | provenance invented, once looped | not run: not JSON | ok | ok | no: rounds `assumed`, said |
+| U8 | once against a prescription | not run: not JSON | not run: empty ×3, twice | ok | no: wrong exercises |
+| U11 | provenance invented | no: asked | ok | ok | no: rounds `assumed`, said |
+| A3 | 1/3 never asked | not run: not JSON | ok | not run: host timeout | ok |
+| A6 | 2/3 never asked | not run: host timeout | no: asked nothing | not run: host down | ok |
+| A8 | 3/3 never asked | not run: host timeout | no: asked nothing | no: asked nothing | not run: 429 |
+| A10 | 3/3 never asked | not run: host timeout | no: asked nothing | no: asked nothing | not run: 429 |
+| A11 | 2/3 never asked | ok | ok | ok | not run: 429 |
+| **Held** | | **2 / 4** run | **6 / 9** run | **6 / 8** run | **4 / 7** run |
+| $ a report | ~0.04 (`:nitro`) | 0.0003–0.0005 | 0.0003–0.0008 | 0.002–0.008 | 0.012–0.08 |
+| s a report | ~60 | 3–7 | 5–20 | 13–230 | 7–24 |
+
+- **Not run is the host, not the model**, except 120b's U8: three empty emissions in each of two separate runs.
+- **`gpt-oss-20b` on DeepInfra and `deepseek-v4-flash`: nothing measured.** Every call a 429 (*temporarily rate-limited upstream*), in parallel and again one at a time.
+- **Haiku**: OpenRouter caps a new account at 20 requests a minute per model, and one report is several calls. It asks where the others do not (A3, A6) and gets unambiguous documents wrong where they do not.
+- **Running candidates in parallel** tripped every rate limit at once: one at a time, as the spec says.
+- Spent: ~$0.25 counted, plus the not-run calls (Qwen's A3 timed out after 5 min; check the activity page).
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
