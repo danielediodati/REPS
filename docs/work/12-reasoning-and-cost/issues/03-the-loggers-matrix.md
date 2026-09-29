@@ -151,6 +151,16 @@ Run twice, on DeepInfra and then on AkashML (same bf16 weights, 99.95% uptime ag
 - Three passes on two hosts, not one: a row's result is one run, whichever host served it.
 - Spent on the ticket: ~$0.32.
 
+**The must-ask half at three repetitions**, AkashML, to take the noise out of one run a row:
+
+| Held 3 / 3 | 2 / 3 | 0 / 3 |
+|---|---|---|
+| A1 A2 A4 A5 A7 A9 A11 | A3 | A6, A8 (writes a rest twice), A10, A12 (writes a value all three times) |
+
+- **23 / 36, 41 counted: 56%, below the 60% bar.** The reference: 25 / 36, 40 counted, 62%.
+- **The failures are fixed, not noise**: four rows at 0 / 3 and the rest nearly clean. A6, A8, A10 the reference misses too; **A12 it held**, and 120b answers it with a confident value every time.
+- **`gpt-oss-120b` low fails the bar.** Spent on the ticket: ~$0.34.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
