@@ -100,7 +100,7 @@ In this order. Measuring first is what stops the methodology being written again
 
 1. **Reasoning effort and the host are settings**, per node, sent only to a model that takes them; the run record names both. — **done** `85bfd35`
 2. **Every run says what it cost**, in dollars read from the provider, and a pass reports dollars and seconds per run. — **done** `38c774f`
-3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010).
+3. **The logger's matrix.** Models by effort on the log set, screened at one repetition, finalists at three; the cheapest that clears both bars (ADR-0010). — **done** `504b1da`
 4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises. — **done** `8009190`
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs.
 6. **Secrets in the keychain, models in a file**: the keys leave `.env` for the OS keychain, the model settings go to a file in `TRAINER_HOME`, and the environment still overrides both.
