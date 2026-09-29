@@ -173,6 +173,28 @@ On DeepInfra, with the waits of `b2da01d`: 10 of 11 rows still rate-limited past
 - $0.001–0.004 and 6–115 s a report, ~35 s typical: a tenth of the reference's price, 120b's speed at worst.
 - $0.029. Spent on the ticket: ~$0.37.
 
+## Step 2, `deepseek-v4-flash` high on Parasail at three repetitions (09-29)
+
+| Row | Held | Where it failed | $ a run | s a run |
+|---|---|---|---|---|
+| U1 | 3 / 3 | | 0.0007 | 8 |
+| U4 | 2 / 3 | rest `reported`, expected `assumed` | 0.0015 | 31 |
+| U6 | 3 / 3 | | 0.0038 | 66 |
+| U8 | 2 / 3 | once logged against workout 4 | 0.0043 | 68 |
+| U11 | 1 / 3 | once `asked` with no question; once three documents refused on shape | 0.0038 | 69 |
+| A3 | 2 / 3 | asked nothing once | 0.0026 | 56 |
+| A6 | 2 / 3 | asked nothing once | 0.0022 | 41 |
+| A8 | 3 / 3 | | 0.0018 | 37 |
+| A10 | 2 / 3 | asked nothing once | 0.0025 | 51 |
+| A11 | 3 / 3 | | 0.0030 | 69 |
+| A12 | 2 / 3 | once an exclusion on knee, unasked | 0.0014 | 31 |
+
+- **Must ask, on the five rows all three were run on (A3 A6 A8 A10 A11)**: DeepSeek **12 / 15**, 120b 8 / 15, the reference 4 / 15. All eleven: 14 / 18, 19 counted, 74%.
+- **Unambiguous**: 11 / 15 against 120b's 12 / 15; its misses are provenance and one wrong workout, where 120b's were emissions that were not JSON.
+- **Slower**: 30–70 s a report, the reference's pace. Rate-limited never, on Parasail.
+- A run whose three documents are all refused on shape lands in *not run* (`LogEvaluationError`, by design since 5.5): it is the model's failure, not the host's.
+- $0.079. Spent on the ticket: ~$0.45.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
