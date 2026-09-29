@@ -89,6 +89,25 @@ One row per call, `--repetitions 1`. *Asked*: the value's provenance is `asked` 
 - **Running candidates in parallel** tripped every rate limit at once: one at a time, as the spec says.
 - Spent: ~$0.25 counted, plus the not-run calls (Qwen's A3 timed out after 5 min; check the activity page).
 
+## Step 2, `gpt-oss-120b` low on DeepInfra at three repetitions (09-29)
+
+| Row | Held | Where it failed | $ a run | s a run |
+|---|---|---|---|---|
+| U1 | 3 / 3 | | 0.0003 | 6 |
+| U4 | 3 / 3 | | 0.0003 | 9 |
+| U6 | 2 / 3 | not run: not JSON ×3 | 0.0007 | 17 |
+| U8 | 1 / 3 | not run twice: empty emissions | 0.0023 | 54 |
+| U11 | 3 / 3 | | 0.0004 | 14 |
+| A3 | 3 / 3 | | 0.0009 | 21 |
+| A6 | 1 / 3 | asked nothing twice | 0.0004 | 11 |
+| A8 | 0 / 3 | asked nothing; once a confident rest | 0.0003 | 11 |
+| A10 | 2 / 3 | asked nothing once | 0.0004 | 10 |
+| A11 | 2 / 3 | once a confident 6 reps | 0.0004 | 14 |
+
+- **Against the reference on the same rows**: must ask **8 / 15 against 4 / 15**, false confidence 2 against 4. Unambiguous 12 / 15, and **every miss is a run lost to an emission that is not JSON**, never a wrong document.
+- U8 is the weak row: 5 of its 6 runs across both steps emitted nothing readable. Model or host, the records cannot say.
+- $0.014 in all. Spent on the ticket: ~$0.27 counted.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
