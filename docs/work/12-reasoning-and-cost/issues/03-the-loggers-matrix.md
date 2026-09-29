@@ -195,6 +195,32 @@ On DeepInfra, with the waits of `b2da01d`: 10 of 11 rows still rate-limited past
 - A run whose three documents are all refused on shape lands in *not run* (`LogEvaluationError`, by design since 5.5): it is the model's failure, not the host's.
 - $0.079. Spent on the ticket: ~$0.45.
 
+## Step 3, `deepseek-v4-flash` high on Parasail, the whole set (09-29)
+
+| Half | Held | Bar | Failed |
+|---|---|---|---|
+| Unambiguous | 15 / 18, **83%** | 80% | U7: 1 round of pushdowns, expected 3. U9, U11: a value from the plan marked `reported` |
+| Must ask | 11 / 12, **92%** | 60% | A12: no question |
+
+- **Both bars held.** The reference's full pass: 83% and 62%.
+- **$0.091 in all, $0.003 a report**: a thirteenth of the reference's ~$0.04.
+- **Time grew over the pass**: 8–63 s a report for U1–U12, then 80–200 s from U13 on, one host all along. The reference was about a minute.
+- One 429, waited out at 5 s.
+- Spent on the ticket: ~$0.54.
+
+## The choice
+
+**`deepseek/deepseek-v4-flash`, effort `high`, on Parasail.** The rule: the cheapest row that clears both bars (ADR-0010) on the whole set.
+
+| Row | Why not |
+|---|---|
+| `gpt-oss-20b` low | screened on 4 rows only (CoreWeave broke six, DeepInfra refused all ten), failing 2; its larger sibling fails the must-ask bar |
+| `gpt-oss-120b` low | must ask 56% at three repetitions |
+| `gpt-oss-120b` medium | worse than low on every column |
+| **`deepseek-v4-flash` high** | **chosen** |
+| `qwen3.8-27b` low | not needed: dearer, and 1–4 min a report |
+| Haiku 4.5 none | wrong unambiguous documents on the screen; dearest |
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
