@@ -1,6 +1,6 @@
 # REPS
 
-> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on a local model, Groq or OpenRouter.
+> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on OpenRouter, Groq or a local model.
 
 REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end of the workout have cost three missed workouts, and the system changes the plan.
 
@@ -16,7 +16,7 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 - a slot of the split that can name muscles, not only groups;
 - a validator that refuses a workout leaving a group it was asked for untrained, when today's exercises could train it.
 
-Session 12 is half in: every run reports its reasoning effort, its host and its cost, and the planner's matrix has chosen `anthropic/claude-haiku-4.5` at no reasoning (18 of 18 mesocycles, ~$0.13 and ~47 s each). The defaults do not follow it yet. **Next**: the logger's matrix, then an ADR that sets the defaults and what a month costs.
+Session 12 is nearly in: every run reports its reasoning effort, its host and its cost, and the defaults are what two matrices measured ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)).
 
 ## Architecture (target)
 
@@ -67,15 +67,25 @@ uv run trainer runs show 20260918-190412-3f9a                 # its runs: what e
 
 | `LLM_BACKEND` | what it needs |
 |---|---|
-| `ollama` (default) | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
+| `openrouter` (default) | `OPENROUTER_API_KEY`. Each node runs its measured choice (below). `OPENROUTER_MODEL` moves all three to one model, and `OPENROUTER_PROVIDER` pins one host for all, with no fallback. |
 | `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
-| `openrouter` | `OPENROUTER_API_KEY`. `OPENROUTER_MODEL` overrides the default, `qwen/qwen3.8-27b`. `OPENROUTER_PROVIDER` pins one host, with no fallback. |
+| `ollama` | Ollama running, and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` and `OLLAMA_BASE_URL` override the rest. |
 
-`PLANNER_MODEL` and `LOGGER_MODEL` give each subgraph a model of its own on that provider; empty, both run on the provider's model. On OpenRouter, `PLANNER_REASONING`, `LOGGER_REASONING` and `ENTRANCE_REASONING` set how hard each node's model reasons (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; `trainer runs show` names the effort and the host beside each model.
+On OpenRouter each node runs the cheapest configuration that cleared its suite's bar ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)):
+
+| Node | Model, effort, host | Measured |
+|---|---|---|
+| planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles, ~$0.13 and ~47 s each |
+| logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
+| entrance | `openai/gpt-oss-120b`, low, Cerebras | no suite yet; $0.001-0.002 and 0.3-1.2 s a turn |
+
+**A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
+
+`PLANNER_MODEL`, `LOGGER_MODEL` and `ENTRANCE_MODEL` give a node another model; `PLANNER_REASONING`, `LOGGER_REASONING` and `ENTRANCE_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; `PLANNER_HOST`, `LOGGER_HOST` and `ENTRANCE_HOST` another host. A model other than the choice runs at its own default effort, on OpenRouter's routing. `trainer runs show` names the effort and the host beside each model.
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
-**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something small and fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq, `OPENROUTER_MODEL`'s on OpenRouter — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Every model is checked before the bot starts.
+**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `openai/gpt-oss-120b` on OpenRouter, `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Every model is checked before the bot starts.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 

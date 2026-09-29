@@ -2,6 +2,19 @@
 
 Research date: 2026-09-22. Every claim cites its source inline. **[secondary]** marks a claim only a non-primary source supports. **[independent]** marks a measured-benchmark source (Artificial Analysis, BFCL, tau2-bench) that is neither the model vendor nor REPS's own code — exactly the kind of source the comparison below needs, since a vendor never publishes a number that makes its own model look slow. **[inference]** marks my own reasoning from cited facts. Prices, model lists and benchmark scores change; treat every number here as dated 2026-09-22.
 
+## Corrected by measurement (session 12, 2026-09-29)
+
+REPS's own suites on OpenRouter contradict parts of this note. Where they do, [ADR-0011](../adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md) holds.
+
+| This note said | Measured |
+|---|---|
+| Logger on `claude-haiku-4.5`, the best BFCL multi-turn score | Haiku failed the log screen (4 / 7 run, wrong unambiguous documents). `deepseek-v4-flash` at high cleared both bars, at ~$0.003 a report. |
+| Planner on `claude-sonnet-5` | Haiku at no reasoning held 18 / 18 mesocycles at ~$0.13; Sonnet 5 at high planned the same shape at $0.33 and 142 s. |
+| Entrance on `llama-3.1-8b`, `:nitro` or Groq | `gpt-oss-120b` at low on Cerebras: 0.3–1.2 s and $0.001–0.002 a turn. |
+| `:nitro` buys speed | `qwen3.8-27b:nitro` took ~60 s and ~$0.04 a report, most of it ~9k tokens of reasoning. The model's reasoning length, not the host, set the time. |
+| Logger ~$0.55–1.55 a month | ~$0.06 a month (20 reports). A whole month is $0.5–0.9. |
+| Host uptime tells reliability | The failures were OpenRouter's shared-pool 429s at hosts with 96–99.5% uptime. |
+
 ## The question
 
 Leave the free tiers (Groq free, local Ollama) for **one paid service**, fast enough and capable enough to finish REPS on, and decide — inside that one service — whether the entrance, planner, logger (and the future supervisor) should each run a different model.

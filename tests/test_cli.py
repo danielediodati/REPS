@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -1666,10 +1667,11 @@ def test_a_plan_the_shape_check_refuses_writes_nothing(
 
 
 def scripted_graph(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
-    """Put a scripted chat model where the planner graph builds a real one.
+    """Put a scripted chat model where the planner and logger graphs build real ones.
 
-    `models.chat` is the one seam `trainer plan` comes through, and the
-    provider and the model name travel with it into the run record.
+    `models.planner` and `models.logger` are the seams the commands come
+    through, and the provider and the model name travel with them into the
+    run record.
 
     Each scripted turn must be a message of its own. `add_messages` keys on
     the message id, so the same `AIMessage` handed back twice is read as an
@@ -1681,10 +1683,16 @@ def scripted_graph(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
     from test_planner import Scripted
 
     model = Scripted(**kwargs)  # type: ignore[arg-type]
-    monkeypatch.setattr(
-        models, "chat", lambda: models.Chat(model, "scripted", "a-stand-in")
-    )
+    stand_in(monkeypatch, lambda: models.Chat(model, "scripted", "a-stand-in"))
     return model
+
+
+def stand_in(monkeypatch: pytest.MonkeyPatch, builder: Callable[[], Any]) -> None:
+    """Every node's model built by `builder`, on any provider."""
+    from trainer.coach import models
+
+    for node in ("planner", "logger", "entrance"):
+        monkeypatch.setattr(models, node, builder)
 
 
 def test_plan_asks_a_model_when_no_file_is_given(
@@ -1840,7 +1848,7 @@ def test_plan_with_a_file_asks_no_model(
     def refuse() -> object:
         raise AssertionError("--from must not reach a model")
 
-    monkeypatch.setattr(models, "chat", refuse)
+    stand_in(monkeypatch, refuse)
 
     result = runner.invoke(
         main,
@@ -1892,7 +1900,7 @@ def test_plan_refuses_a_record_path_it_cannot_write_before_calling_a_model(
     def refuse() -> object:
         raise AssertionError("the model was called before the path was checked")
 
-    monkeypatch.setattr(models, "chat", refuse)
+    stand_in(monkeypatch, refuse)
 
     result = runner.invoke(
         main,
@@ -2788,7 +2796,7 @@ def logged(
     """A scripted logging model, holding the document it will emit.
 
     The same seam as the planner's: `trainer log` runs the logger graph on
-    whatever `models.chat` answers, which is what makes both commands one
+    whatever `models.logger` answers, which is what makes both commands one
     thing with two prompts. The document is emitted on every attempt, so a
     refused one is refused to the end.
     """
@@ -3816,6 +3824,42 @@ def test_bot_says_which_model_answers_the_entrance(
     assert result.output.isascii()
 
 
+def test_bot_starts_on_the_key_and_telegram_alone(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ticket 12.5: the defaults are the measured choices (ADR-0011), each
+    printed with the effort and the host it runs at."""
+    from telegram import Bot, User
+
+    from trainer.coach import bot
+
+    for name in ("LLM_BACKEND", "ENTRANCE_BACKEND", "OPENROUTER_MODEL", "OPENROUTER_PROVIDER",
+                 "PLANNER_MODEL", "LOGGER_MODEL", "ENTRANCE_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "a-stand-in")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
+    monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
+    monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
+    chosen = (models.PLANNER_CHOICE, models.LOGGER_CHOICE, models.ENTRANCE_CHOICE)
+    monkeypatch.setattr(
+        models, "openrouter_listing", lambda key: {c.model: {"supported_parameters": ["reasoning"]} for c in chosen}
+    )
+
+    async def known(self: Any, *args: Any, **kwargs: Any) -> User:
+        return User(id=1, is_bot=True, first_name="REPS", username="reps_coach_bot")
+
+    monkeypatch.setattr(Bot, "get_me", known)
+    monkeypatch.setattr(bot, "serve", lambda *args: None)
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert "provider:    openrouter" in result.output
+    for choice in chosen:
+        assert f"{choice.model} at {choice.effort} effort via {choice.host}" in result.output
+    assert result.output.isascii()
+
+
 def test_bot_checks_the_entrance_model_before_it_starts(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
 ) -> None:
@@ -3932,7 +3976,7 @@ def no_model(monkeypatch: pytest.MonkeyPatch) -> None:
     def refused() -> None:
         raise AssertionError("a model was asked for a workout the mesocycle holds")
 
-    monkeypatch.setattr(models, "chat", refused)
+    stand_in(monkeypatch, refused)
 
 
 def test_plan_reads_todays_workout_off_the_mesocycle_with_the_last_load(

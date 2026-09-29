@@ -1,0 +1,63 @@
+# Each node runs the cheapest configuration that clears its bar
+
+Session 12 measured models by reasoning effort and host on OpenRouter, against the suites' bars (ADR-0010) and in dollars and seconds read from the provider. Until then the default was Ollama on the laptop's CPU (ADR-0004 item 8), a mesocycle took minutes, and OpenRouter's default was a model nobody had chosen.
+
+## Decision
+
+1. **The rule**: per node, the **cheapest configuration that clears its suite's bar**; wall time breaks a tie. A configuration is a model, an effort and a host.
+2. **The choices**:
+
+   | Node | Model | Effort | Host | Bar | $ | s |
+   |---|---|---|---|---|---|---|
+   | Planner | `anthropic/claude-haiku-4.5` | none | `anthropic` | plan suite, 100% | ~0.13 a mesocycle | ~47 |
+   | Logger | `deepseek/deepseek-v4-flash` | high | `parasail` | log suite, 80% / 60% | ~0.003 a report | 8–200 |
+   | Entrance | `openai/gpt-oss-120b` | low | `cerebras` | none: no suite | 0.001–0.002 a turn | 0.3–1.2 |
+
+3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs all three choices. Ollama and Groq stay selectable.
+4. **A choice's effort and host belong to its model.** Another model named on a node's line runs at its own default effort, on OpenRouter's routing. `OPENROUTER_MODEL` moves every node off its choice, which is how a matrix row runs.
+5. **The host is pinned per node**: `PLANNER_HOST`, `LOGGER_HOST`, `ENTRANCE_HOST`, then `OPENROUTER_PROVIDER` for all, then the choice's. No fallback to another host, so the run record names one.
+6. **The next model change is one more row** in the table below, run the same way, then this rule reapplied.
+
+## The planner's matrix
+
+`--suite plan`, bar 100% on six invariants. A run is one two-slot mesocycle.
+
+| Model, effort, host | Screen (1 rep) | 3 reps | $ a mesocycle | s a mesocycle |
+|---|---|---|---|---|
+| `openai/gpt-oss-20b` low, CoreWeave / AkashML | 0 / 6; 1 / 2 run | — | 0.002 | 76–183 |
+| `openai/gpt-oss-120b` low, DeepInfra | 2 / 6 | — | 0.003 | 211 |
+| `deepseek/deepseek-v4-flash` high, DeepInfra | 5 / 6, then 3 / 6 a day later | — | 0.005–0.007 | 318–497 |
+| `qwen/qwen3.8-27b` low, DeepInfra | 6 / 6 | stopped at 8 / 9: `contradictory` 1 / 3, two calls to the 65,536-token limit | ~0.05 | 330–765 |
+| **`anthropic/claude-haiku-4.5` none, Anthropic** | 5 / 6, then 6 / 6 with `untrained` in the validator | **18 / 18** | **~0.13** | **~47** |
+
+- Haiku's one screening failure was a group left untrained that the eval checked and the validator did not; `untrained` moved into the validator (`491f084`). Rows above Haiku ran before that.
+- Sonnet 5 at high, on 11.1's request, planned the same shape as Haiku at $0.33 and 142 s. No row needs a large model.
+
+## The logger's matrix
+
+`--suite log`, bars 80% unambiguous and 60% must ask. Screened on the ten rows where the reference fails (U1 U4 U6 U8 U11, A3 A6 A8 A10 A11), plus A12.
+
+| Model, effort, host | Screen (1 rep) | 3 reps, same rows | Whole set | $ a report | s a report |
+|---|---|---|---|---|---|
+| Reference: `qwen/qwen3.8-27b:nitro`, no effort | — | — | 83% / 62% | ~0.04 | ~60 |
+| `openai/gpt-oss-20b` low, CoreWeave | 2 / 4 run, 6 lost to the host | — | — | 0.0004 | 3–7 |
+| `openai/gpt-oss-120b` low, DeepInfra / AkashML | 6 / 9 run | must ask 8 / 15 | 83% / **56%** | 0.0005 | 6–54 |
+| `openai/gpt-oss-120b` medium, DeepInfra | — | must ask 3 / 15 | — | 0.0006 | 25–55 |
+| **`deepseek/deepseek-v4-flash` high, Parasail** | 9 / 11 | must ask 12 / 15 | **83% / 92%** | **0.003** | **8–200** |
+| `qwen/qwen3.8-27b` low, DeepInfra | 6 / 8 run | — | — | 0.002–0.008 | 13–230 |
+| `anthropic/claude-haiku-4.5` none, Anthropic | 4 / 7 run, wrong unambiguous documents | — | — | 0.01–0.08 | 7–24 |
+
+- `gpt-oss-20b` was never measured properly: the hosts lost 16 of its 20 rows. It is excluded on its 2 / 4 and its larger sibling's must-ask score.
+- More reasoning did not buy better questions: 120b at medium asked less than at low, and the reference, which reasons longest, asked least.
+
+## The entrance
+
+No suite, so no bar (a later session's). It runs `gpt-oss-120b` on Cerebras, the fastest host that serves tools and `json_schema` with an effort, on a model the logger's screening shows calling tools. Five turns measured on 2026-09-29: $0.001–0.002 and 0.3–1.2 s each, every one answered by Cerebras.
+
+## Consequences
+
+- **A month costs about $0.5–0.9**: ~300 entrance turns ($0.30–0.65), ~20 reports (~$0.06), one mesocycle (~$0.13).
+- **Time is the open cost, not dollars.** The logger on Parasail went from 8–63 s a report to 80–200 s within one evening.
+- **OpenRouter's shared pool is what fails, not a host's uptime.** A 429 with `limit_source: upstream_provider_shared_pool` hit DeepInfra and AkashML at busy hours at 96–99.5% uptime. Pin a host by the run records, not by the listing.
+- **New OpenRouter accounts are held to 20 requests a minute per model.** One report is several calls.
+- **Amends ADR-0004 item 8** (the default is no longer Ollama) **and ADR-0006 item 3** (the entrance's model is this table's on OpenRouter; `llama3.1` stays Ollama's).

@@ -839,8 +839,9 @@ def bot_command() -> None:
     run on `LLM_BACKEND`'s.
 
     Everything the bot needs is checked before it starts, and only for the
-    providers selected: on Ollama the server, both models and
-    `OLLAMA_CONTEXT_LENGTH`; on Groq the key; and the token, with Telegram.
+    providers selected: on OpenRouter the key and each model's listing; on
+    Ollama the server, both models and `OLLAMA_CONTEXT_LENGTH`; on Groq the
+    key; and the token, with Telegram.
 
     What happens then goes to a rotating log in the home, never to the token or
     the owner id, and it is the file the chat names when a run cannot start or
@@ -868,9 +869,9 @@ def bot_command() -> None:
         # there, is worse than no block at all.
         with checkpoints.saver() as saver:
             click.echo(f"provider:    {on.provider}")
-            click.echo(f"model:       {on.name}")
-            click.echo(f"logger:      {logs.name}")
-            click.echo(f"entrance:    {front.name} on {front.provider}")
+            click.echo(f"model:       {on.described}")
+            click.echo(f"logger:      {logs.described}")
+            click.echo(f"entrance:    {front.described} on {front.provider}")
             click.echo(
                 f"context:     {context} tokens"
                 if context is not None

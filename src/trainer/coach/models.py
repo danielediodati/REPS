@@ -63,6 +63,11 @@ EFFORTS = ("none", "low", "medium", "high")
 OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
 """The one host OpenRouter may route to, by its slug; empty keeps OpenRouter's routing."""
 
+PLANNER_HOST_ENV = "PLANNER_HOST"
+LOGGER_HOST_ENV = "LOGGER_HOST"
+ENTRANCE_HOST_ENV = "ENTRANCE_HOST"
+"""Each node's own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
+
 OLLAMA = "ollama"
 GROQ = "groq"
 OPENROUTER = "openrouter"
@@ -103,12 +108,21 @@ about 5600 the request is refused whole -- 8000 tokens per minute, input
 included. A default that only works on a paid tier is not a default.
 """
 
-DEFAULT_OPENROUTER_MODEL = "qwen/qwen3.8-27b"
-"""The OpenRouter model, when `OPENROUTER_MODEL` does not name one.
+@dataclass(frozen=True)
+class Choice:
+    """A node's measured configuration on OpenRouter: model, effort and host (ADR-0011)."""
 
-Groq's default, so moving provider holds the model fixed and an eval run
-measures the provider and nothing else.
-"""
+    model: str
+    effort: str
+    host: str
+
+
+PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
+LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
+ENTRANCE_CHOICE = Choice("openai/gpt-oss-120b", "low", "cerebras")
+
+DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
+"""The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""
 
 DEFAULT_MAX_TOKENS = 1000
 """How much the model may write in one turn, by default.
@@ -220,10 +234,21 @@ class Chat:
     reasoning_setting: str = ""
     """Which variable asked for that effort."""
 
+    host: str = ""
+    """The one host OpenRouter may send it to, or empty for its own routing."""
+
+    @property
+    def described(self) -> str:
+        """The model with the effort and the host it runs at, for the terminal."""
+        said = self.name
+        if self.reasoning:
+            said += f" at {self.reasoning} effort"
+        return said + (f" via {self.host}" if self.host else "")
+
 
 def backend() -> str:
     """Which provider the coach runs on, and a state for one nobody built."""
-    return _built(BACKEND_ENV, os.environ.get(BACKEND_ENV) or OLLAMA)
+    return _built(BACKEND_ENV, os.environ.get(BACKEND_ENV) or OPENROUTER)
 
 
 def entrance_backend() -> str:
@@ -256,29 +281,61 @@ def chat() -> Chat:
 
 
 def planner() -> Chat:
-    """The model the planner reasons on: `PLANNER_MODEL`, or the coach's."""
-    return _subgraph(PLANNER_MODEL_ENV, PLANNER_REASONING_ENV)
+    """The model the planner reasons on: `PLANNER_MODEL`, or its choice on OpenRouter, or the coach's."""
+    return _subgraph(PLANNER_MODEL_ENV, PLANNER_REASONING_ENV, PLANNER_HOST_ENV, PLANNER_CHOICE)
 
 
 def logger() -> Chat:
-    """The model the logger extracts on: `LOGGER_MODEL`, or the coach's."""
-    return _subgraph(LOGGER_MODEL_ENV, LOGGER_REASONING_ENV)
+    """The model the logger extracts on: `LOGGER_MODEL`, or its choice on OpenRouter, or the coach's."""
+    return _subgraph(LOGGER_MODEL_ENV, LOGGER_REASONING_ENV, LOGGER_HOST_ENV, LOGGER_CHOICE)
 
 
-def _subgraph(setting: str, reasoning_setting: str) -> Chat:
+_CHOICES = {
+    PLANNER_MODEL_ENV: PLANNER_CHOICE,
+    LOGGER_MODEL_ENV: LOGGER_CHOICE,
+    ENTRANCE_MODEL_ENV: ENTRANCE_CHOICE,
+}
+
+
+def _subgraph(setting: str, reasoning_setting: str, host_setting: str, choice: Choice) -> Chat:
+    if backend() == OPENROUTER:
+        return _openrouter_node(setting, reasoning_setting, host_setting, choice)
     named = os.environ.get(setting)
     effort = effort_of(reasoning_setting)
     if not named:
         found = chat()
-        if effort and found.provider == OPENROUTER:
-            found = dataclasses.replace(found, model=openrouter_model(found.name, effort))
     elif backend() == GROQ:
         found = Chat(groq_model(named), GROQ, named, setting)
-    elif backend() == OPENROUTER:
-        found = Chat(openrouter_model(named, effort), OPENROUTER, named, setting)
     else:
         found = Chat(ollama_model(named), OLLAMA, named, setting)
     return dataclasses.replace(found, reasoning=effort, reasoning_setting=reasoning_setting)
+
+
+def _openrouter_node(
+    setting: str, reasoning_setting: str, host_setting: str, choice: Choice
+) -> Chat:
+    """A node on OpenRouter: what the environment names, or else its measured choice."""
+    own = os.environ.get(setting)
+    coachs = os.environ.get(OPENROUTER_MODEL_ENV)
+    named = own or coachs or choice.model
+    # The measured effort and host belong to the measured model; another may
+    # take neither.
+    measured = named == choice.model
+    effort = effort_of(reasoning_setting) or (choice.effort if measured else "")
+    host = (
+        os.environ.get(host_setting)
+        or os.environ.get(OPENROUTER_PROVIDER_ENV)
+        or (choice.host if measured else "")
+    )
+    return Chat(
+        openrouter_model(named, effort, host),
+        OPENROUTER,
+        named,
+        OPENROUTER_MODEL_ENV if coachs and not own else setting,
+        effort,
+        reasoning_setting,
+        host,
+    )
 
 
 def effort_of(variable: str) -> str:
@@ -292,18 +349,18 @@ def effort_of(variable: str) -> str:
 def entrance() -> Chat:
     """The model the entrance holds the conversation on, which is its own (ADR-0006).
 
-    Falls back to the coach's provider and to that provider's default model, so
-    an installation that has said nothing about the entrance still gets one --
-    on Ollama a smaller model than the planner's, because this is the node the
-    user waits on.
+    Falls back to the coach's provider and to that provider's default for it:
+    its measured choice on OpenRouter, a smaller model than the planner's on
+    Ollama, because this is the node the user waits on.
     """
+    if entrance_backend() == OPENROUTER:
+        return _openrouter_node(
+            ENTRANCE_MODEL_ENV, ENTRANCE_REASONING_ENV, ENTRANCE_HOST_ENV, ENTRANCE_CHOICE
+        )
     effort = effort_of(ENTRANCE_REASONING_ENV)
     if entrance_backend() == GROQ:
         named = os.environ.get(ENTRANCE_MODEL_ENV) or groq_model_name()
         found = Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
-    elif entrance_backend() == OPENROUTER:
-        named = os.environ.get(ENTRANCE_MODEL_ENV) or openrouter_model_name()
-        found = Chat(openrouter_model(named, effort), OPENROUTER, named, ENTRANCE_MODEL_ENV)
     else:
         named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
         found = Chat(ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV)
@@ -512,8 +569,10 @@ class OpenRouterChat(ChatOpenAI):
         return result
 
 
-def openrouter_model(named: str | None = None, reasoning: str = "") -> ChatOpenAI:
-    """The OpenRouter chat model the environment names, or another it routes to."""
+def openrouter_model(
+    named: str | None = None, reasoning: str = "", host: str | None = None
+) -> ChatOpenAI:
+    """The OpenRouter chat model the environment names, or another it routes to; `host` pins one."""
     key = os.environ.get(OPENROUTER_KEY_ENV)
     if not key:
         raise ModelError(NO_OPENROUTER_CREDENTIALS)
@@ -521,7 +580,7 @@ def openrouter_model(named: str | None = None, reasoning: str = "") -> ChatOpenA
     # host that ignores `response_format` can serve the emission, and the
     # strict schema is a suggestion again.
     provider: dict[str, Any] = {"require_parameters": True}
-    pinned = os.environ.get(OPENROUTER_PROVIDER_ENV)
+    pinned = os.environ.get(OPENROUTER_PROVIDER_ENV) if host is None else host
     if pinned:
         provider |= {"order": [pinned], "allow_fallbacks": False}
     body: dict[str, Any] = {"provider": provider, "usage": {"include": True}}
@@ -630,11 +689,12 @@ def _openrouter_ready(on: Chat) -> None:
     entry = served.get(on.name, served.get(on.name.rsplit(":", 1)[0]))
     if entry is None:
         # Hundreds of names, so the page is the way out rather than the list.
+        choice = _CHOICES.get(on.setting)
         raise ModelError(
             f"OpenRouter does not route to {on.name}; set "
             f"{on.setting or OPENROUTER_MODEL_ENV} to one listed at "
             f"https://openrouter.ai/models, or leave it empty for "
-            f"{DEFAULT_OPENROUTER_MODEL}"
+            + (choice.model if choice else "each node's measured choice")
         )
     if on.reasoning:
         _takes(on, entry)

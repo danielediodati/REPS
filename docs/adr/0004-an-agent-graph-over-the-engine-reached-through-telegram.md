@@ -57,3 +57,7 @@ This ADR resets the agent layer. The engine and its tools stay.
   - both eval sets.
 - **Superseded in TRAINER.md:** *"a graph adds nothing to a node that loops"* and *"LangGraph never persists a domain fact"*, by items 1 and 5.
 - **The roadmap is re-cut from session 6.**
+
+## Amended in session 12
+
+**Item 8's default is OpenRouter**, with a measured model, effort and host per node (ADR-0011). Ollama stays selectable with `LLM_BACKEND=ollama`, on the terms above.

@@ -32,3 +32,7 @@ This ADR replaces the router. It does not touch the engine, the planner graph or
 - **A second provider setting**, because two nodes now name two models. The run record carries the model per node from ADR-0007, which is where that becomes true.
 - **Both eval suites are unaffected.** They enter at the subgraphs, which do not change.
 - **`said` stops being write-only.** It is the conversation the entrance reads, and `planner.starting` must keep leaving it alone.
+
+## Amended in session 12
+
+**On OpenRouter the entrance runs `openai/gpt-oss-120b` at low effort on Cerebras** (ADR-0011): 0.3–1.2 s a turn, against a minute on `llama3.1` here. `llama3.1` stays the default on Ollama.

@@ -31,13 +31,13 @@ def test_the_context_length_reaches_the_model(monkeypatch: pytest.MonkeyPatch) -
 # -- which provider ------------------------------------------------------------
 
 
-def test_the_backend_defaults_to_ollama_when_nothing_names_one(
+def test_the_backend_defaults_to_openrouter_when_nothing_names_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR-0004 item 8: the default is the laptop, not the paid provider."""
+    """ADR-0011: the default is where the measured choices run."""
     monkeypatch.delenv(models.BACKEND_ENV, raising=False)
 
-    assert models.backend() == models.OLLAMA
+    assert models.backend() == models.OPENROUTER
 
 
 def test_a_backend_nobody_built_is_named_with_the_ones_that_exist(
@@ -306,6 +306,7 @@ def test_the_entrance_runs_on_a_smaller_model_than_the_planner(
 ) -> None:
     """Not `DEFAULT_MODEL`. The entrance is read and answered on every turn,
     and half a minute to say hello is worse than the silence it replaces."""
+    monkeypatch.setenv(models.BACKEND_ENV, models.OLLAMA)
     monkeypatch.delenv(models.ENTRANCE_MODEL_ENV, raising=False)
     monkeypatch.delenv(models.MODEL_ENV, raising=False)
 
@@ -319,6 +320,7 @@ def test_the_entrance_runs_on_a_smaller_model_than_the_planner(
 def test_the_entrance_takes_the_model_the_environment_names_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(models.BACKEND_ENV, models.OLLAMA)
     monkeypatch.setenv(models.ENTRANCE_MODEL_ENV, "llama3.2:3b")
 
     assert models.entrance().name == "llama3.2:3b"
@@ -378,6 +380,7 @@ def test_the_entrance_never_asks_a_local_model_to_reason(
     conversation lost. The default entrance model is one of those, and the
     entrance would not want it anyway -- the seconds spent reasoning are the
     seconds the user is looking at an empty chat."""
+    monkeypatch.setenv(models.BACKEND_ENV, models.OLLAMA)
     monkeypatch.delenv(models.ENTRANCE_MODEL_ENV, raising=False)
 
     assert cast(Any, models.entrance().model).reasoning is None
@@ -489,7 +492,7 @@ def test_the_entrance_can_talk_on_openrouter_while_the_planner_stays_local(
     front = models.entrance()
 
     assert front.provider == models.OPENROUTER
-    assert front.name == models.DEFAULT_OPENROUTER_MODEL
+    assert front.name == models.ENTRANCE_CHOICE.model
     assert models.chat().provider == models.OLLAMA
 
 
@@ -511,7 +514,7 @@ def test_a_model_openrouter_does_not_route_to_names_the_line_that_chose_it(
     said = str(raised.value)
     assert "a/model-nobody-routes" in said
     assert models.ENTRANCE_MODEL_ENV in said
-    assert models.DEFAULT_OPENROUTER_MODEL in said
+    assert models.ENTRANCE_CHOICE.model in said
     assert said.isascii()
 
 
@@ -568,14 +571,6 @@ def test_the_loggers_effort_reaches_the_request(monkeypatch: pytest.MonkeyPatch)
     assert built.extra_body["reasoning"] == {"effort": "low"}
     assert chat.reasoning == "low"
     assert chat.reasoning_setting == models.LOGGER_REASONING_ENV
-
-
-def test_no_effort_sends_nothing_and_leaves_the_models_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    built = cast(Any, openrouter_logger(monkeypatch).model)
-
-    assert "reasoning" not in built.extra_body
 
 
 def test_each_node_reads_its_own_effort(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -653,8 +648,8 @@ def test_an_effort_the_model_does_not_list_is_refused_by_ready(
 def test_a_model_that_takes_the_effort_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     routing(
         monkeypatch,
-        models.DEFAULT_OPENROUTER_MODEL,
-        entries={models.DEFAULT_OPENROUTER_MODEL: {"supported_parameters": ["reasoning"]}},
+        models.LOGGER_CHOICE.model,
+        entries={models.LOGGER_CHOICE.model: {"supported_parameters": ["reasoning"]}},
     )
 
     models.ready(openrouter_logger(monkeypatch, LOGGER_REASONING="low"))
@@ -991,6 +986,95 @@ def test_a_subgraph_model_groq_does_not_serve_names_its_own_line(
         models.ready(models.logger())
 
     assert models.LOGGER_MODEL_ENV in str(raised.value)
+
+
+def test_the_default_backend_starts_every_node_on_the_key_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ticket 12.5: an empty `.env` apart from the key runs the measured choices."""
+    monkeypatch.delenv(models.BACKEND_ENV, raising=False)
+    monkeypatch.setenv(models.OPENROUTER_KEY_ENV, "a-stand-in")
+
+    for chat, choice in (
+        (models.planner(), models.PLANNER_CHOICE),
+        (models.logger(), models.LOGGER_CHOICE),
+        (models.entrance(), models.ENTRANCE_CHOICE),
+    ):
+        built = cast(Any, chat.model)
+        assert (chat.provider, chat.name, chat.reasoning) == (
+            models.OPENROUTER,
+            choice.model,
+            choice.effort,
+        )
+        assert built.extra_body["reasoning"] == {"effort": choice.effort}
+        assert built.extra_body["provider"]["order"] == [choice.host]
+        assert built.extra_body["provider"]["allow_fallbacks"] is False
+
+
+def test_the_choices_are_the_ones_adr_0011_records() -> None:
+    assert models.PLANNER_CHOICE == models.Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
+    assert models.LOGGER_CHOICE == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
+    assert models.ENTRANCE_CHOICE == models.Choice("openai/gpt-oss-120b", "low", "cerebras")
+
+
+def test_a_node_defaulted_to_its_choice_names_its_own_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model the listing lost is fixed on the node's line, not on the coach's."""
+    openrouter_logger(monkeypatch)
+
+    assert models.planner().setting == models.PLANNER_MODEL_ENV
+    assert models.logger().setting == models.LOGGER_MODEL_ENV
+
+
+def test_a_model_other_than_the_choice_gets_no_effort_and_no_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measured effort and host belong to the measured model; on another they may not exist."""
+    chat = openrouter_logger(monkeypatch, LOGGER_MODEL="openai/gpt-oss-20b")
+
+    built = cast(Any, chat.model)
+    assert chat.reasoning == ""
+    assert "reasoning" not in built.extra_body
+    assert built.extra_body["provider"] == {"require_parameters": True}
+
+
+def test_naming_the_choice_by_hand_keeps_its_effort_and_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chat = openrouter_logger(monkeypatch, LOGGER_MODEL=models.LOGGER_CHOICE.model)
+
+    built = cast(Any, chat.model)
+    assert chat.reasoning == models.LOGGER_CHOICE.effort
+    assert built.extra_body["provider"]["order"] == [models.LOGGER_CHOICE.host]
+
+
+def test_the_coachs_model_moves_every_node_off_its_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`OPENROUTER_MODEL` is how a matrix row runs every node on one model."""
+    openrouter_logger(monkeypatch, OPENROUTER_MODEL="qwen/qwen3.8-27b")
+
+    for chat in (models.planner(), models.logger(), models.entrance()):
+        assert chat.name == "qwen/qwen3.8-27b"
+        assert chat.reasoning == ""
+        assert "order" not in cast(Any, chat.model).extra_body["provider"]
+
+
+def test_an_effort_named_wins_over_the_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    chat = openrouter_logger(monkeypatch, LOGGER_REASONING="medium")
+
+    assert chat.reasoning == "medium"
+    assert cast(Any, chat.model).extra_body["reasoning"] == {"effort": "medium"}
+
+
+def test_each_node_can_pin_a_host_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The planner's and the logger's choices live on two different hosts."""
+    openrouter_logger(monkeypatch, LOGGER_HOST="deepinfra", OPENROUTER_PROVIDER="groq")
+
+    assert cast(Any, models.logger().model).extra_body["provider"]["order"] == ["deepinfra"]
+    assert cast(Any, models.planner().model).extra_body["provider"]["order"] == ["groq"]
+    assert cast(Any, models.entrance().model).extra_body["provider"]["order"] == ["groq"]
 
 
 def test_a_local_subgraph_model_is_asked_to_reason(
