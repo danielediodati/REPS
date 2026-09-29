@@ -837,6 +837,91 @@ def test_a_host_that_does_not_answer_is_named_with_the_wait(
     assert f"{models.RETRIES + 1} tries of {models.TIMEOUT_S} s" in str(raised.value)
 
 
+def rate_limited_until(answered_on: int, calls: list[Any]) -> Callable[[Any], Any]:
+    """An OpenRouter whose pool at AkashML is full for the first `answered_on - 1` calls."""
+    import httpx2
+
+    def answer(request: Any) -> Any:
+        calls.append(request)
+        if len(calls) < answered_on:
+            return httpx2.Response(
+                429,
+                json={
+                    "error": {
+                        "message": "Provider returned error",
+                        "code": 429,
+                        "metadata": {
+                            "provider_name": "AkashML",
+                            "limit_source": "upstream_provider_shared_pool",
+                        },
+                    }
+                },
+            )
+        usage = {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4}
+        return httpx2.Response(200, json=openrouter_reply(usage))
+
+    return answer
+
+
+def test_a_rate_limited_call_waits_and_is_asked_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One quick retry lost two thirds of a pass to a shared pool that empties in seconds."""
+    waited: list[float] = []
+    monkeypatch.setattr(models, "_sleep", waited.append)
+    calls: list[Any] = []
+    model = served_by(monkeypatch, rate_limited_until(3, calls))
+
+    assert model.invoke("hello").text == "ok"
+    assert waited == list(models.BUSY_WAITS_S[:2])
+    assert len(calls) == 3
+
+
+def test_a_call_rate_limited_past_every_wait_names_the_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waited: list[float] = []
+    monkeypatch.setattr(models, "_sleep", waited.append)
+    calls: list[Any] = []
+    model = served_by(monkeypatch, rate_limited_until(99, calls))
+
+    with pytest.raises(models.ProviderFailed) as raised:
+        model.invoke("hello")
+
+    assert waited == list(models.BUSY_WAITS_S)
+    assert len(calls) == len(models.BUSY_WAITS_S) + 1
+    assert "AkashML" in str(raised.value)
+    assert str(raised.value).isascii()
+
+
+def test_a_rate_limited_call_waits_on_the_async_path_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bot calls the graph asynchronously; the eval does not."""
+    import asyncio
+
+    import httpx2
+
+    waited: list[float] = []
+
+    async def asleep(seconds: float) -> None:
+        waited.append(seconds)
+
+    monkeypatch.setattr(models, "_asleep", asleep)
+    calls: list[Any] = []
+    answer = rate_limited_until(2, calls)
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    model = models.OpenRouterChat(
+        model=built.model_name,
+        api_key=built.openai_api_key,
+        base_url=built.openai_api_base,
+        extra_body=built.extra_body,
+        http_async_client=httpx2.AsyncClient(transport=httpx2.MockTransport(answer)),
+        max_retries=0,
+    )
+
+    assert asyncio.run(model.ainvoke("hello")).text == "ok"
+    assert waited == [models.BUSY_WAITS_S[0]]
+
+
 # -- a model per subgraph ------------------------------------------------------
 
 

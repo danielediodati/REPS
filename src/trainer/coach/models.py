@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
+import logging
 import os
 import re
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -379,6 +382,13 @@ TIMEOUT_S = 180
 RETRIES = 1
 """One more try after a failure, so a host that hangs costs two timeouts and not three."""
 
+BUSY_WAITS_S = (5, 15, 45)
+"""The waits before each retry of a call refused as rate-limited, longest last."""
+
+_logged = logging.getLogger(__name__)
+_sleep = time.sleep
+_asleep = asyncio.sleep
+
 
 class ProviderFailed(ModelError):
     """The host behind OpenRouter answered with an error, or not at all, named."""
@@ -392,6 +402,28 @@ class OpenRouterChat(ChatOpenAI):
     """`ChatOpenAI` on OpenRouter, keeping the host that answered and what it cost on each reply."""
 
     def _generate(self, *args: Any, **kwargs: Any) -> ChatResult:
+        for wait in (*BUSY_WAITS_S, None):
+            try:
+                return self._answered(*args, **kwargs)
+            except openai.RateLimitError as error:
+                if wait is None:
+                    raise self._busy(error) from error
+                self._waiting(error, wait)
+                _sleep(wait)
+        raise AssertionError("unreachable")
+
+    async def _agenerate(self, *args: Any, **kwargs: Any) -> ChatResult:
+        for wait in (*BUSY_WAITS_S, None):
+            try:
+                return await self._aanswered(*args, **kwargs)
+            except openai.RateLimitError as error:
+                if wait is None:
+                    raise self._busy(error) from error
+                self._waiting(error, wait)
+                await _asleep(wait)
+        raise AssertionError("unreachable")
+
+    def _answered(self, *args: Any, **kwargs: Any) -> ChatResult:
         try:
             return super()._generate(*args, **kwargs)
         except openai.APITimeoutError as error:
@@ -401,7 +433,7 @@ class OpenRouterChat(ChatOpenAI):
                 raise
             raise failed from error
 
-    async def _agenerate(self, *args: Any, **kwargs: Any) -> ChatResult:
+    async def _aanswered(self, *args: Any, **kwargs: Any) -> ChatResult:
         try:
             return await super()._agenerate(*args, **kwargs)
         except openai.APITimeoutError as error:
@@ -410,6 +442,23 @@ class OpenRouterChat(ChatOpenAI):
             if (failed := self._surfaced(error)) is None:
                 raise
             raise failed from error
+
+    def _waiting(self, error: openai.RateLimitError, wait: float) -> None:
+        # OpenRouter's pool at a cheap host fills at busy hours and empties in
+        # seconds; one quick retry lost two thirds of a pass to it (12.3).
+        _logged.warning("%s is rate-limited, again in %s s: %s", self._host(error), wait, error)
+
+    def _busy(self, error: openai.RateLimitError) -> ProviderFailed:
+        return ProviderFailed(
+            f"{self._host(error)} kept {self.model_name} rate-limited: "
+            f"{len(BUSY_WAITS_S) + 1} tries over {sum(BUSY_WAITS_S)} s"
+        )
+
+    def _host(self, error: openai.APIStatusError) -> str:
+        body = error.body if isinstance(error.body, dict) else {}
+        said = body.get("error", body)
+        metadata = (said.get("metadata") if isinstance(said, dict) else None) or {}
+        return str(metadata.get("provider_name") or self._pinned())
 
     def _surfaced(self, error: TypeError) -> ProviderFailed | None:
         # A host's error can arrive in a 200 with null `choices`. On the
