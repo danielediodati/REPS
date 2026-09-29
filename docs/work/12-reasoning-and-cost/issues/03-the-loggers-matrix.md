@@ -161,6 +161,18 @@ Run twice, on DeepInfra and then on AkashML (same bf16 weights, 99.95% uptime ag
 - **The failures are fixed, not noise**: four rows at 0 / 3 and the rest nearly clean. A6, A8, A10 the reference misses too; **A12 it held**, and 120b answers it with a confident value every time.
 - **`gpt-oss-120b` low fails the bar.** Spent on the ticket: ~$0.34.
 
+## Step 1 again, `deepseek-v4-flash` high (09-29)
+
+On DeepInfra, with the waits of `b2da01d`: 10 of 11 rows still rate-limited past 65 s. On **Parasail** (fp8 as DeepInfra, 99.9% uptime, $0.14 / $0.28), the ten rows plus A12, which failed 120b:
+
+| Held | Failed |
+|---|---|
+| U1 U4 U6 U8, **A3 A6 A8 A10** A11 | U11: rounds `assumed`, said. A12: no question |
+
+- **9 / 11**, and the first candidate to hold A6, A8 and A10, which the reference and 120b miss every time. U8 held.
+- $0.001–0.004 and 6–115 s a report, ~35 s typical: a tenth of the reference's price, 120b's speed at worst.
+- $0.029. Spent on the ticket: ~$0.37.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
