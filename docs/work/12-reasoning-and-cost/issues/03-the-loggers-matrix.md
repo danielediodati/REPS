@@ -124,6 +124,20 @@ Asked for by the user, outside the rule: whether more reasoning buys a better qu
 - **Medium is worse on every column**: it asks less, loses more runs to emissions that are not JSON, and is slower. More reasoning does not buy the question.
 - Spent on the ticket: ~$0.29 counted.
 
+## Step 3, `gpt-oss-120b` low on the whole set (09-29): not conclusive
+
+Run twice, on DeepInfra and then on AkashML (same bf16 weights, 99.95% uptime against DeepInfra's 96.5% that day). **Each lost two thirds of its rows to 429**, and the second says why: `limit_source: upstream_provider_shared_pool`, `queue_timeout`. OpenRouter's shared pool at the host is full, whichever cheap host; the client retries once (`RETRIES = 1`), within a second.
+
+| Row | DeepInfra | AkashML |
+|---|---|---|
+| Held | U1 U2 U3 U4 U11 U12 U13, A4 | U1 U2 U9 U15 U16 U17 U18, A1 A2 A4 A5 A11 |
+| Failed | U5: rounds `reported`, expected `assumed`. A5: no question, an exclusion on shoulder | U14: rest `reported`, expected `assumed`. A8: no question, a confident rest. A10: no question |
+| Not run | 20 | 16 |
+
+- **Measured on neither**: U6 U7 U8 U10, A3 A6 A7 A9 A12.
+- Unambiguous, both passes together: 12 held of 14 measured; the bar needs 15 of 18. Must ask: nothing to read yet.
+- $0.012 and $0.006 counted. Spent on the ticket: ~$0.31.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
