@@ -10,13 +10,12 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.11.0` plans a workout worth doing.** On top of `0.10.0` (a mesocycle planned once, today's workout read off it, a change and an adaptation, the next mesocycle waiting in the chat), it has:
-- a planner that reasons with [a methodology](src/trainer/data/methodology.md) for the goal `training.toml` declares: ranges per goal, never a template;
-- the declared minutes as a target, refused five either side;
-- a slot of the split that can name muscles, not only groups;
-- a validator that refuses a workout leaving a group it was asked for untrained, when today's exercises could train it.
+**`0.12.0` knows what each model costs and runs the cheapest one that is good enough.** On top of `0.11.0` (a planner that reasons with a methodology for the declared goal, the minutes as a target, a split that names muscles), it has:
+- reasoning effort and host as settings per node, sent only to a model that takes them;
+- every run reporting its effort, its host and the dollars the provider charged, and every eval pass its dollars and seconds a run;
+- defaults picked by two measured matrices, one per subgraph: the cheapest configuration that clears the suite's bar ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)).
 
-Session 12 is nearly in: every run reports its reasoning effort, its host and its cost, and the defaults are what two matrices measured ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)).
+Session 13 opens next: an onboarding interview that writes `training.toml` and ends in a first mesocycle.
 
 ## Architecture (target)
 
