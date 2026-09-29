@@ -138,6 +138,19 @@ Run twice, on DeepInfra and then on AkashML (same bf16 weights, 99.95% uptime ag
 - Unambiguous, both passes together: 12 held of 14 measured; the bar needs 15 of 18. Must ask: nothing to read yet.
 - $0.012 and $0.006 counted. Spent on the ticket: ~$0.31.
 
+**The nine, again on AkashML after `b2da01d`** (a 429 now waits 5, 15, 45 s): none rate-limited. U6 U7 U10 A7 A9 held; U8 not JSON again; A3 A6 A12 asked nothing.
+
+**Stitched**, one result a row, AkashML's where it has one:
+
+| Half | Held | Bar | |
+|---|---|---|---|
+| Unambiguous | 15 / 18, **83%** | 80% | held. U5, U14: a value from the plan marked `reported`; U8: not JSON |
+| Must ask | 7 / 12, A8 counted double: 7 / 13, **54%** | 60% | **below**. A3 A6 A10 A12 asked nothing; A8 wrote a rest |
+
+- **Below the must-ask bar by one question**: at one repetition each row is 8 points. The reference cleared it at 62%.
+- Three passes on two hosts, not one: a row's result is one run, whichever host served it.
+- Spent on the ticket: ~$0.32.
+
 ## References
 
 - ADR-0009, ADR-0010, `docs/logging/eval-set.md`
