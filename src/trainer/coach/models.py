@@ -445,13 +445,15 @@ class OpenRouterChat(ChatOpenAI):
 
     def _waiting(self, error: openai.RateLimitError, wait: float) -> None:
         # OpenRouter's pool at a cheap host fills at busy hours and empties in
-        # seconds; one quick retry lost two thirds of a pass to it (12.3).
+        # seconds; one quick retry lost two thirds of a pass to it (12.3). The
+        # SDK's own `max_retries` still runs inside each of these.
         _logged.warning("%s is rate-limited, again in %s s: %s", self._host(error), wait, error)
 
     def _busy(self, error: openai.RateLimitError) -> ProviderFailed:
         return ProviderFailed(
             f"{self._host(error)} kept {self.model_name} rate-limited: "
-            f"{len(BUSY_WAITS_S) + 1} tries over {sum(BUSY_WAITS_S)} s"
+            f"{(len(BUSY_WAITS_S) + 1) * ((self.max_retries or 0) + 1)} calls "
+            f"over at least {sum(BUSY_WAITS_S)} s"
         )
 
     def _host(self, error: openai.APIStatusError) -> str:

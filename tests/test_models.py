@@ -747,7 +747,10 @@ def test_openrouter_out_of_credits_is_a_spent_quota() -> None:
 
 
 def served_by(
-    monkeypatch: pytest.MonkeyPatch, answer: Callable[[Any], Any], **env: str
+    monkeypatch: pytest.MonkeyPatch,
+    answer: Callable[[Any], Any],
+    retries: int = 0,
+    **env: str,
 ) -> Any:
     """The logger's OpenRouter model, talking to `answer` instead of the network."""
     import httpx2
@@ -759,7 +762,7 @@ def served_by(
         base_url=built.openai_api_base,
         extra_body=built.extra_body,
         http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
-        max_retries=0,
+        max_retries=retries,
     )
 
 
@@ -890,6 +893,22 @@ def test_a_call_rate_limited_past_every_wait_names_the_host(
     assert len(calls) == len(models.BUSY_WAITS_S) + 1
     assert "AkashML" in str(raised.value)
     assert str(raised.value).isascii()
+
+
+def test_the_rate_limit_message_counts_the_sdk_retries_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The client retries a 429 itself inside each wait; code review of 12.3."""
+    monkeypatch.setattr(models, "_sleep", lambda seconds: None)
+    calls: list[Any] = []
+    model = served_by(
+        monkeypatch, rate_limited_until(99, calls), retries=models.RETRIES
+    )
+
+    with pytest.raises(models.ProviderFailed) as raised:
+        model.invoke("hello")
+
+    assert f"{len(calls)} calls" in str(raised.value)
 
 
 def test_a_rate_limited_call_waits_on_the_async_path_too(
