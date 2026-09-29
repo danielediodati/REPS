@@ -37,3 +37,4 @@ Hosts differ in what they support: five of `deepseek-v4-flash`'s sixteen take no
 | 03 | The logger's matrix | 01, 02, 9.5 |
 | 04 | The planner's matrix | 01, 02, 10.5 |
 | 05 | The choice, written down | 03, 04 |
+| 06 | Secrets in the keychain, models in a file | 05 |
