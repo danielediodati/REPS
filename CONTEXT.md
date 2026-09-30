@@ -92,7 +92,7 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 
 **Admissible set**: the exercises compatible with the exclusions, today's equipment, the time available and the muscle groups. The agent chooses inside it and never widens it.
 
-**Triage**: the interview about movements, never about symptoms. It produces exclusions, not diagnoses.
+**Triage**: what the agent asks about aches, in its own words from a prompt, never a scripted interview. It asks about movements, never symptoms, and its only outcome is an exclusion proposed through a tool.
 
 ## What the system learns
 

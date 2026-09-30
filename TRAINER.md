@@ -89,7 +89,7 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 - Formulates hypotheses and designs the trials that test them.
 - Picks one primary goal during onboarding (the others become constraints), and the progression scheme at a mesocycle boundary.
 
-**Medical trigger.** The agent asks about health at every workout. Escalation reads what has accumulated (conclusions, trials that did not remove a niggle), never a pain score. There is no pain scale: pain is prose, and its only structured outcome is an exclusion the user confirms.
+**Pain.** No pain scale, no health check-in, no referral to a doctor. Pain is prose, and its only structured outcome is an exclusion the user confirms.
 
 ### Stores
 
@@ -114,8 +114,8 @@ This loop handles what is not decidable: why someone skips workouts, why *«lung
 
 ## Memory
 
-- **Admission.** Only what has a source gets in: a sentence from the user, or a trial outcome. Never the agent's inference (*«responds well to high volume»*). The check is code.
-- **What to remember is judged every turn.**
+- **Admission.** Only what has a source gets in: a sentence from the user, or a trial outcome. Never the agent's inference (*«responds well to high volume»*). The check is code: a conclusion carries the user's sentence verbatim, and is refused unless that sentence appears in one of the user's messages.
+- **What to remember is judged every turn**, by the node already reading it (onboarding, entrance, logger) through a `remember` tool. No node of its own, so no extra model call.
 
   | sentence | keep? |
   |---|---|
@@ -186,7 +186,7 @@ The interface is Telegram, and it is asynchronous.
 - **Logging is by deviation.** *«panca bene, solo 3 serie di military perché la spalla tirava»*: whatever is not mentioned was done as prescribed.
 - **A prescribed workout with no report is unreported**, never assumed done.
 - **The next plan is prepared** as soon as a report arrives.
-- **Onboarding** is one conversation of ten to twelve questions, goal first and aches last, and ends in a week 1 plan.
+- **Onboarding** is one conversation the agent leads in its own words, with no script. Code holds only that it cannot end while a field of `training.toml` is missing. It ends in a first mesocycle.
 
 ## Appendix: catalog and enrichment
 

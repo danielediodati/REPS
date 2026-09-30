@@ -104,13 +104,22 @@ In this order. Measuring first is what stops the methodology being written again
 4. **The planner's matrix**, the same on the plan suite, which after 10.5 plans mesocycles. It is also 11.1's measurement, and 11.2's: the session-7 request must not come back as a circuit of same-muscle exercises. — **done** `8009190`
 5. **The choice, written down**: an ADR with both tables, the defaults that follow it, and what a month costs. — **done** `80d582f`
 
+## Session 13 — `0.13.0` — Onboarding and memory
+
+**Demo**: an onboarding conversation, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds.
+
+1. **Memory with a source.** Conclusions in the LangGraph store through a `remember` tool; admitted only when the user's verbatim sentence is in one of their messages. The planner reads them.
+2. **The onboarding conversation.** Led by the agent from a prompt, one question per interrupt, resumed after a day; it cannot end with a field missing. Triage is a tool proposing an exclusion the user confirms. It writes `training.toml` and ends in a first mesocycle.
+3. **No configuration starts the interview**, instead of blocking the bot; `training.example.toml` goes with the state that named it.
+4. **A declaration changes through onboarding** (ADR-0012): code lists the paths open for the running mesocycle, the agent picks one, the user accepts.
+5. **The onboarding and memory eval**, and onboarding's model chosen by ADR-0011's rule.
+
 ## Later sessions
 
 Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 13 | `0.13.0` | ten onboarding questions, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds | onboarding subgraph with resume; it writes `training.toml` with its comments and the goal (a changed goal starts a new mesocycle); a missing file or goal starts the interview instead of blocking the bot, and the example file goes with the state that named it; memory in the LangGraph store behind the admission rule (a source or nothing); triage producing exclusions; the medical trigger |
 | 14 | `0.14.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
 | 15 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 | 16 | `1.1.0` | a plan in Telegram shows each exercise done: its start and end photos | the two photos free-exercise-db has for 873 of 876 exercises, sent with the plan; an exercise without photos is sent without; nothing generated |
