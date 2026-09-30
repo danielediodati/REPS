@@ -21,7 +21,6 @@ def no_home(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(home.HOME_ENV_VAR, raising=False)
     for name in (
         database.DATABASE_ENV_VAR,
-        config.CONFIG_ENV_VAR,
         checkpoints.CHECKPOINTS_ENV,
         evaluation.RECORDS_ENV_VAR,
     ):
@@ -75,15 +74,6 @@ class TestWhatLandsInIt:
         monkeypatch.setenv(checkpoints.CHECKPOINTS_ENV, str(tmp_path / "other.sqlite"))
 
         assert checkpoints.checkpoints_path() == tmp_path / "other.sqlite"
-
-    def test_the_declarations(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv(home.HOME_ENV_VAR, str(tmp_path))
-
-        assert config.config_path() == tmp_path / "training.toml"
-
-        monkeypatch.setenv(config.CONFIG_ENV_VAR, str(tmp_path / "other.toml"))
-
-        assert config.config_path() == tmp_path / "other.toml"
 
     def test_the_eval_records(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv(home.HOME_ENV_VAR, str(tmp_path))

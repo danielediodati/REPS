@@ -83,9 +83,8 @@ as a traceback that takes the door down with it -- the same job
 `cli.reported()` does for the terminal.
 
 `ConfigError` is among them because a window is counted in cycles and only
-`training.toml` says how long one is. Its own wording is kept -- it names the
-file and the example to copy -- rather than being restated as a state the
-engine invented."""
+the declarations say how long one is. Its own wording is kept -- it names the
+bot as the fix -- rather than being restated as a state the engine invented."""
 
 
 @contextmanager
@@ -213,8 +212,8 @@ def admissible_set(
     exercise id.
 
     `equipment` names the catalog's own values (`barbell`, `body only`) and
-    must hold at least one. `budget_min` over the cap declared in
-    `training.toml` is refused rather than answered, because a workout that
+    must hold at least one. `budget_min` over the declared cap is refused
+    rather than answered, because a workout that
     long is one the declaration says never happens. `muscle_groups` names what
     this workout trains, as the brief gives it: groups (`arms`) or muscles
     (`biceps`). Give them, because the whole space is several times larger

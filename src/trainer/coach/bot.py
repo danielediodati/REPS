@@ -68,7 +68,7 @@ BLOCKED = (
 )
 """A precondition the machine gets wrong, said without saying which.
 
-No `training.toml`, so there is nothing to derive today's equipment, minutes
+Nothing declared, so there is nothing to derive today's equipment, minutes
 or groups from; no database; a catalog nobody enriched. Each is a **state**
 rather than a run that fell over -- answered with `FAILED` it would read as
 the provider having dropped the plan -- and each already names itself and the
@@ -125,8 +125,8 @@ class Settings:
 def settings() -> Settings:
     """The bot's settings, from the environment.
 
-    Never from `training.toml`, which holds what the user declares about
-    their training (ADR-0003). A token is a credential and an owner id is
+    Never from the declarations, which hold what the user declares about
+    their training (ADR-0013). A token is a credential and an owner id is
     about this installation, and neither is a training requirement.
     """
     return Settings(token=_required(TOKEN_ENV), owner_id=_owner())
@@ -574,6 +574,11 @@ def talking(graphs: Graphs) -> Run:
             # state and not something the entrance is asked to work out.
             await _reporting(graphs, thread, Command(resume=text), chat)
             return
+        if await asyncio.to_thread(_undeclared):
+            # Nothing is declared, so nothing else can be answered yet: the
+            # interview is the answer, whatever the message was (ADR-0013).
+            await _onboarding(graphs, thread, text, None, chat)
+            return
         final = await _entrance(graphs, thread, entrance.heard(text))
         await _spoken(final, thread, chat)
         handoff = str(final.get("handoff", ""))
@@ -673,7 +678,7 @@ def _served() -> str | None:
             found, _ = mesocycles.record_served(connection, date.today().isoformat())
         except mesocycles.MesocycleError:
             return None
-        cap = config.load().duration_cap_min
+        cap = config.load(connection).duration_cap_min
     return served(found, cap)
 
 
@@ -761,35 +766,40 @@ async def _reporting(graphs: Graphs, thread: str, given: Any, chat: Chat) -> Non
 
 
 async def _onboarding(
-    graphs: Graphs, thread: str, text: str, final: Mapping[str, Any], chat: Chat
+    graphs: Graphs, thread: str, text: str, final: Mapping[str, Any] | None, chat: Chat
 ) -> None:
-    """The interview, behind the turn the entrance has already answered."""
+    """The interview, behind the turn the entrance has already answered; `final` is `None` when no entrance turn opened it."""
     try:
         words = await asyncio.to_thread(_vocabulary)
     except tools.ToolFailure as state:
         logger.warning("%s cannot set up: %s", thread, state, exc_info=True)
         await chat.say(BLOCKED)
         return
-    given = dict(
-        onboarding.starting(text, date.today().isoformat(), words)
-    ) | entrance.carried(final)
+    given = dict(onboarding.starting(text, date.today().isoformat(), words))
+    if final is not None:
+        given |= entrance.carried(final)
     await _interview(graphs, thread, given, chat)
+
+
+def _undeclared() -> bool:
+    """Whether nothing is declared yet, on a database that is otherwise ready."""
+    try:
+        with tools.opened() as connection:
+            return config.declared(connection) is None
+    except (tools.ToolFailure, config.ConfigError):
+        # Not ready, or declared wrongly: the entrance's turn reports either.
+        return False
 
 
 async def _changing(
     graphs: Graphs, thread: str, text: str, final: Mapping[str, Any], chat: Chat
 ) -> None:
-    """The interview on what changed, seeded from `training.toml`; with no file, the whole interview (ADR-0012)."""
+    """The interview on what changed, seeded from the declarations in force; with none, the whole interview (ADR-0012)."""
     try:
-        before = await asyncio.to_thread(onboarding.declarations)
-    except config.NoTrainingConfig:
-        await _onboarding(graphs, thread, text, final, chat)
-        return
-    except config.ConfigError as state:
-        logger.warning("%s cannot change a declaration: %s", thread, state)
-        await chat.say(BLOCKED)
-        return
-    try:
+        before = await asyncio.to_thread(_declarations)
+        if before is None:
+            await _onboarding(graphs, thread, text, final, chat)
+            return
         words = await asyncio.to_thread(_vocabulary)
     except tools.ToolFailure as state:
         logger.warning("%s cannot change a declaration: %s", thread, state, exc_info=True)
@@ -799,6 +809,14 @@ async def _changing(
         onboarding.changing(text, date.today().isoformat(), words, before)
     ) | entrance.carried(final)
     await _interview(graphs, thread, given, chat)
+
+
+def _declarations() -> dict[str, Any] | None:
+    with tools.reported(), tools.opened() as connection:
+        try:
+            return onboarding.declarations(connection)
+        except config.NoTrainingConfig:
+            return None
 
 
 def _vocabulary() -> dict[str, list[str]]:

@@ -21,7 +21,7 @@ pattern nobody has trained and a pattern with real history are three answers to
 the same query rather than three code paths.
 
 **The window is a number of cycles, and a cycle is not a length of time.**
-`cycle_length` is declared in `training.toml` and read on every call. Change it
+`cycle_length` is declared, and read on every call. Change it
 from 4 to 3 and every window moves on the next read, with no migration and
 nothing to recompute -- which is the whole reason `pattern_state` had to stop
 being a stored aggregate. The window is drawn as a **date**: the day the oldest
@@ -65,10 +65,9 @@ class StateError(RuntimeError):
     Never *«nothing is recorded»* -- that is an `Answer`, and conflating the
     two is what this module exists to prevent.
 
-    Not raised for a missing or unusable `training.toml`. That is
-    `config.ConfigError`, and it reaches the reader in the configuration's own
-    wording -- naming the file, and the line in it -- rather than in a second
-    phrasing of the same state invented here.
+    Not raised for missing or unusable declarations. That is
+    `config.ConfigError`, and it reaches the reader in its own wording rather
+    than in a second phrasing of the same state invented here.
     """
 
 
@@ -233,11 +232,10 @@ class Rotation:
 def rotation(connection: sqlite3.Connection) -> Rotation:
     """How many workouts have been performed, and where that leaves the next.
 
-    `cycle_length` is read from `training.toml` on every call. Change it and
-    the answer changes on the next read -- there is nothing stored that could
-    disagree with the file.
+    `cycle_length` is read from the declarations in force on every call, so a
+    change is in the next answer.
     """
-    length = config.load().cycle_length
+    length = config.load(connection).cycle_length
     row = connection.execute(
         "SELECT COUNT(*) AS performed FROM workouts WHERE state = 'performed'"
     ).fetchone()
@@ -275,7 +273,7 @@ def window(connection: sqlite3.Connection, cycles: int) -> Window:
     """The last `cycles` cycles, as a date to count from."""
     if cycles < 1:
         raise StateError(f"a window of {cycles} cycles asks about nothing")
-    workouts = cycles * config.load().cycle_length
+    workouts = cycles * config.load(connection).cycle_length
     row = connection.execute(
         "SELECT performed_on FROM workouts WHERE state = 'performed' "
         "ORDER BY performed_on DESC, id DESC LIMIT 1 OFFSET ?",
@@ -309,7 +307,7 @@ def volume_history(
 
     The key is checked against the catalog's own vocabulary first and the
     window computed after, so a mistyped pattern is reported as a mistyped
-    pattern even on a machine with no `training.toml` yet.
+    pattern even on a machine with nothing declared yet.
     """
     source = _source(axis)
     _require_catalog(connection)

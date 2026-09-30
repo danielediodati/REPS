@@ -1,11 +1,9 @@
-"""Onboarding: the interview that fills `training.toml`, led by the agent in its own words."""
+"""Onboarding: the interview that writes the declarations, led by the agent in its own words."""
 
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
-import tomllib
 from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
@@ -257,7 +255,7 @@ class OnboardingState(TypedDict, total=False):
     """Whether this is a change to what is declared rather than a first interview."""
 
     before: dict[str, Any]
-    """The declarations in `training.toml` when a change began."""
+    """The declarations in force when a change began."""
 
     chosen: str
     """The path a change picked for the running mesocycle, or empty when none was running."""
@@ -308,7 +306,7 @@ def starting(said: str, today: str, words: dict[str, list[str]]) -> OnboardingSt
 def changing(
     said: str, today: str, words: dict[str, list[str]], before: Mapping[str, Any]
 ) -> OnboardingState:
-    """The input that starts a change: what they said, and what `training.toml` declares now."""
+    """The input that starts a change: what they said, and the declarations in force."""
     current = {field: before[field] for field in FIELDS if field in before}
     started = starting(said, today, words)
     started["declared"] = dict(current)
@@ -317,16 +315,10 @@ def changing(
     return started
 
 
-def declarations(path: Path | None = None) -> dict[str, Any]:
-    """What `training.toml` declares, field by field, as TOML reads it; `NoTrainingConfig` when there is no file."""
-    target = path if path is not None else config.config_path()
-    if not target.is_file():
-        raise config.NoTrainingConfig(target)
-    try:
-        raw = tomllib.loads(target.read_text(encoding="utf-8-sig"))
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
-        raise config.ConfigError(f"{target.name} cannot be read: {error}") from error
-    return {field: raw[field] for field in FIELDS if field in raw}
+def declarations(connection: sqlite3.Connection) -> dict[str, Any]:
+    """The declarations in force, field by field, the way `declare` takes them; `NoTrainingConfig` when there are none."""
+    declared = config.load(connection)
+    return {field: _plain(getattr(declared, field)) for field in FIELDS}
 
 
 Opening = Callable[[Mapping[str, Any], config.TrainingConfig], tuple[str, ...]]
@@ -638,146 +630,27 @@ def refusal(declared: dict[str, Any]) -> str | None:
 
 
 def settled(declared: dict[str, Any]) -> config.TrainingConfig:
-    """The declarations as `config.load` would read them back."""
+    """The declarations as a version of them is read back."""
     return config.parse({**declared, "volume_denominator": config.DENOMINATORS[0]})
 
 
-HEADER = """\
-# The training configuration, written by onboarding on {today}.
-#
-# Yours to read and edit by hand (ADR-0003).
-"""
-
-COMMENTS = {
-    "cycle_length": (
-        "How many workouts one complete rotation holds. Not days of the week: the\n"
-        "rotation advances when a workout is performed, never when a date passes."
-    ),
-    "duration_cap_min": (
-        "The minutes a workout is built to, give or take five, when no other time is\n"
-        "asked for; and the most that may be asked for."
-    ),
-    "volume_denominator": "What volume is counted over.",
-    "split": (
-        "What each workout of the cycle trains, in order: one entry per workout.\n"
-        "`trainer config --muscle-groups` lists the groups and muscles."
-    ),
-    "equipment": (
-        "What you have to train with, as the catalog spells it: run\n"
-        "`trainer catalog --values equipment` for the list."
-    ),
-    "goal": (
-        "What this mesocycle trains for: one of the goal columns of the methodology.\n"
-        "Changing it is a new mesocycle."
-    ),
-}
-
-
-def rendered(declaration: config.TrainingConfig, today: str) -> str:
-    """The declarations as TOML, with a comment above each."""
-    parts = [HEADER.format(today=today)]
-    for key, value in _values(declaration).items():
-        comment = "\n".join(f"# {line}" for line in COMMENTS[key].splitlines())
-        parts.append(f"{comment}\n{key} = {value}\n")
-    return "\n".join(parts)
-
-
-def _values(declaration: config.TrainingConfig) -> dict[str, str]:
-    """Each declaration's value as TOML, in the file's order."""
-    return {
-        "cycle_length": str(declaration.cycle_length),
-        "duration_cap_min": str(declaration.duration_cap_min),
-        "volume_denominator": json.dumps(declaration.volume_denominator),
-        "split": "[\n"
-        + "".join(f"    {_listed(workout)},\n" for workout in declaration.split)
-        + "]",
-        "equipment": _listed(declaration.equipment),
-        "goal": json.dumps(declaration.goal),
-    }
-
-
-def _listed(names: tuple[str, ...]) -> str:
-    """A list of strings as TOML: a JSON string is a TOML basic string."""
-    return "[" + ", ".join(json.dumps(name) for name in names) + "]"
-
-
-def rewritten(text: str, after: config.TrainingConfig) -> str:
-    """`training.toml`'s text with the fields `after` changes replaced, and every other line kept."""
-    values = _values(after)
-    held = tomllib.loads(text)
-    missing = [key for key in values if key not in FIELDS and key not in held]
-    for field in (*changed(held, after), *missing):
-        found = _span(text, field)
-        if found is None:
-            text = text.rstrip("\n") + f"\n\n{field} = {values[field]}\n"
-        else:
-            start, end = found
-            text = text[:start] + values[field] + text[end:]
-    return text
-
-
-def _span(text: str, key: str) -> tuple[int, int] | None:
-    """Where the value of a top-level `key = value` starts and ends, comments and brackets allowed."""
-    found = re.search(rf"^[ \t]*{re.escape(key)}[ \t]*=[ \t]*", text, re.MULTILINE)
-    if found is None:
-        return None
-    start = at = found.end()
-    depth, quote, end = 0, "", len(text)
-    while at < len(text):
-        char = text[at]
-        if quote:
-            if char == "\\" and quote == '"':
-                at += 1
-            elif char == quote:
-                quote = ""
-        elif char in "\"'":
-            quote = char
-        elif char == "[":
-            depth += 1
-        elif char == "]":
-            depth -= 1
-        elif char == "#":
-            if depth == 0:
-                end = at
-                break
-            at = text.find("\n", at)
-            if at < 0:
-                break
-        elif char == "\n" and depth == 0:
-            end = at
-            break
-        at += 1
-    return start, start + len(text[start:end].rstrip())
-
-
-def written(final: dict[str, Any], path: Path | None = None) -> config.TrainingConfig:
-    """The interview's declarations written to `training.toml`, and its confirmed exclusions to the database.
-
-    A change rewrites only the fields it changed; a first interview writes the whole file.
-    """
+def written(final: dict[str, Any]) -> config.TrainingConfig:
+    """The interview's declarations recorded as the version in force, with its confirmed exclusions, in one transaction."""
     declaration = settled(final["declared"])
-    target = path if path is not None else config.config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if final.get("changing") and target.is_file():
-        text = rewritten(target.read_text(encoding="utf-8-sig"), declaration)
-    else:
-        text = rendered(declaration, str(final["today"]))
-    target.write_text(text, encoding="utf-8")
-    kept = final.get("exclusions", [])
-    if kept:
-        with tools.opened() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                for one in kept:
-                    exclusions.add(
-                        connection,
-                        exclusions.Exclusion(one["granularity"], one["value"]),
-                        one["retest_date"],
-                    )
-            except BaseException:
-                connection.execute("ROLLBACK")
-                raise
-            connection.execute("COMMIT")
+    with tools.opened() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            config.record(connection, declaration, str(final["today"]))
+            for one in final.get("exclusions", []):
+                exclusions.add(
+                    connection,
+                    exclusions.Exclusion(one["granularity"], one["value"]),
+                    one["retest_date"],
+                )
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+        connection.execute("COMMIT")
     return declaration
 
 

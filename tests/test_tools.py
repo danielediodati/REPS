@@ -348,14 +348,13 @@ def test_unreported_workouts_is_empty_when_nothing_is_waiting(
 
 
 def test_a_window_with_no_declared_rotation_is_the_configuration_s_own_state(
-    stocked: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    stocked: sqlite3.Connection, declared_training: Path
 ) -> None:
     """A question about cycles cannot be answered without knowing how long one
-    is, and the answer names the file to copy rather than a state the engine
-    invented."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    is, and the answer names the bot rather than a state the engine invented."""
+    declared_training.unlink()
 
-    with pytest.raises(tools.ToolFailure, match="training.example.toml"):
+    with pytest.raises(tools.ToolFailure, match="nothing declared yet"):
         tools.pattern_history(pattern="squat", cycles=1)
 
 

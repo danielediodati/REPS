@@ -1,49 +1,22 @@
-"""What the user declares: the training configuration file.
+"""What the user declares: cycle, cap, split, denominator, equipment and goal, one version per change.
 
-Cycle length, the cap on a workout's duration, the split being trained, the
-denominator volume is counted on, the equipment the user has, and the goal of
-the mesocycle. ADR-0003 carries why these six live in a file and not in SQLite: **a file you read and
-edit by hand, against rows you query.** SQLite keeps what the system measures
--- performed workouts, accumulated volume, exclusions and their re-test dates
--- and a declaration sitting beside them would have nothing to tell the two
-apart.
-
-The file lives in `TRAINER_HOME` with everything else this machine writes, and
-not in the repository: it carries one user's own cap, split and equipment.
-
-**This module reads. Nothing in `engine/` writes it.** Onboarding
-(`coach/onboarding.py`) fills it by talking to the user, and the user may edit
-it by hand.
-
-TOML, because `tomllib` is in the standard library and the file has to survive
-being edited by hand between sessions: comments stay where they were put, a
-number is a number, and a changed cycle length is a one-line diff.
+The versions are rows in the database (ADR-0013). Onboarding writes them; this
+module reads them, records one, and imports a `training.toml` left by an
+installation from before, once.
 """
 
 from __future__ import annotations
 
-import os
+import json
+import sqlite3
 import tomllib
 from dataclasses import dataclass
-from pathlib import Path
+from datetime import date
 
 from trainer.engine import home, methodology, muscle_groups
 
-CONFIG_ENV_VAR = "TRAINER_CONFIG"
-"""Overrides the configuration's location, the way `TRAINER_DB` does for the
-database -- tests point it at a throwaway file rather than the real one."""
-
-DEFAULT_CONFIG_NAME = "training.toml"
-
-EXAMPLE_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent / "data" / "training.example.toml"
-)
-"""The committed example the missing-config state tells the user to copy.
-
-Inside the package, resolved against `__file__` the way the muscle group
-mapping is: the state's message names it by absolute path, and a path that
-only exists in a source checkout would send a user running from anywhere else
-to a file that is not there."""
+LEGACY_NAME = "training.toml"
+"""The file the declarations lived in before ADR-0013, imported once from the home."""
 
 DENOMINATORS = ("cycle",)
 """What volume may be counted over.
@@ -51,9 +24,7 @@ DENOMINATORS = ("cycle",)
 Not read from data, because it is not a vocabulary anything measured: it is the
 partition the project draws, the way `catalog.STRENGTH_CATEGORY` is. One value
 today -- CONTEXT.md is explicit that a week counts days and a user who trains
-when they have time completes a rotation in a span no calendar decides. It is
-written down rather than assumed because it is the user's call, and the day a
-second denominator is actually implemented it joins this tuple.
+when they have time completes a rotation in a span no calendar decides.
 """
 
 _KEYS = (
@@ -64,42 +35,23 @@ _KEYS = (
     "equipment",
     "goal",
 )
-"""Everything the file holds, and nothing more. An unrecognised key is refused
-rather than ignored: a misspelled `cycle_lenght` that is silently skipped is a
+"""Every declaration, and nothing more. An unrecognised key is refused rather
+than ignored: a misspelled `cycle_lenght` that is silently skipped is a
 setting the user believes they changed and did not."""
 
 
 class ConfigError(RuntimeError):
-    """The training configuration is missing, or what it says is not usable."""
+    """The declarations are missing, or what they say is not usable."""
 
 
 class NoTrainingConfig(ConfigError):
-    """There is no configuration file at all.
+    """Nothing has been declared yet: a state, whose fix is the bot's interview."""
 
-    Its own class, and not a validation failure, because it is a **state**:
-    nobody has declared anything yet, and reporting that as a complaint about a
-    field nobody filled in sends the reader looking for a mistake they have not
-    made. CLAUDE.md's standing rule, in the case it was written for.
-    """
-
-    def __init__(self, path: Path):
+    def __init__(self, why: str = ""):
         super().__init__(
-            f"no training configuration yet -- there is no {path}. "
-            f"Copy {EXAMPLE_CONFIG_PATH} there and edit it: it declares the "
-            "cycle length, the duration cap, the split, the volume "
-            "denominator, the equipment you have and your goal."
-        )
-        self.path = path
-
-
-class NoGoal(ConfigError):
-    """The file predates the goal: a state with its fix, not a mistake in the file."""
-
-    def __init__(self, goals: tuple[str, ...]):
-        super().__init__(
-            "no goal declared yet in training.toml. Add one line, "
-            f'e.g. goal = "{goals[0]}"; the goals are {", ".join(goals)}, '
-            "the columns of the methodology"
+            "nothing declared yet: write to the bot, and it asks about your goal, "
+            "rotation, time and equipment"
+            + (f" ({why})" if why else "")
         )
 
 
@@ -122,9 +74,8 @@ class TrainingConfig:
     when nobody names equipment for today.
 
     Not checked against the catalog here, and that is the standing rule kept
-    rather than broken: the vocabulary lives in the imported exercises, this
-    module reads no database by design (ADR-0003), and a hand-copied list of
-    equipment values is the thing the rule exists to forbid. An unknown value
+    rather than broken: the vocabulary lives in the imported exercises, parsing
+    reads no catalog, and a hand-copied list of equipment values is the thing the rule exists to forbid. An unknown value
     is refused where the catalog is open, by `admissible_set`, which names the
     ones that exist.
     """
@@ -150,36 +101,91 @@ class TrainingConfig:
         return self.split[workout - 1]
 
 
-def config_path() -> Path:
-    override = os.environ.get(CONFIG_ENV_VAR)
-    if override:
-        return Path(override).expanduser()
-    return home.inside(DEFAULT_CONFIG_NAME)
+@dataclass(frozen=True)
+class Version:
+    """One set of declarations, and the day it was declared."""
+
+    id: int
+    declared_on: str
+    declaration: TrainingConfig
 
 
-def load(path: Path | None = None) -> TrainingConfig:
-    """Read the configuration, or say which of the ways it can be wrong it is."""
-    target = path if path is not None else config_path()
-    if not target.is_file():
-        raise NoTrainingConfig(target)
+def load(connection: sqlite3.Connection) -> TrainingConfig:
+    """The declarations in force, or `NoTrainingConfig`."""
+    return current(connection).declaration
+
+
+def declared(connection: sqlite3.Connection) -> TrainingConfig | None:
+    """The declarations in force, or `None` when nothing is declared yet."""
     try:
-        # `utf-8-sig` and not `utf-8`: Notepad writes a byte-order mark by
-        # default, and TOML reads one as part of the first key -- a correct
-        # file coming back as "Invalid statement at line 1, column 1", which
-        # names nothing anyone can act on. Plain UTF-8 decodes the same way.
-        raw = tomllib.loads(target.read_text(encoding="utf-8-sig"))
-    except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"{target.name} is not valid TOML: {error}") from error
-    except UnicodeDecodeError as error:
-        # The one file the README tells the user to hand-edit, so the editor
-        # that saved it is not this project's choice. A Windows editor writing
-        # cp1252 produces bytes TOML cannot be read from at all, and left
-        # uncaught this reaches the terminal as a traceback about a codec.
-        raise ConfigError(
-            f"{target.name} is not UTF-8 ({error.reason}); TOML files are "
-            "UTF-8, so re-save it in that encoding"
-        ) from error
-    return parse(raw)
+        return load(connection)
+    except NoTrainingConfig:
+        return None
+
+
+def current(connection: sqlite3.Connection) -> Version:
+    """The version in force, importing a legacy `training.toml` when there is none."""
+    found = versions(connection, latest=True)
+    if found:
+        return found[0]
+    return _imported(connection)
+
+
+def versions(connection: sqlite3.Connection, latest: bool = False) -> tuple[Version, ...]:
+    """Every version, newest first; only the newest when `latest`."""
+    rows = connection.execute(
+        "SELECT * FROM declarations ORDER BY id DESC" + (" LIMIT 1" if latest else "")
+    ).fetchall()
+    return tuple(
+        Version(
+            id=int(row["id"]),
+            declared_on=str(row["declared_on"]),
+            declaration=parse(
+                {
+                    "cycle_length": row["cycle_length"],
+                    "duration_cap_min": row["duration_cap_min"],
+                    "split": json.loads(row["split"]),
+                    "volume_denominator": row["volume_denominator"],
+                    "equipment": json.loads(row["equipment"]),
+                    "goal": row["goal"],
+                }
+            ),
+        )
+        for row in rows
+    )
+
+
+def record(connection: sqlite3.Connection, declaration: TrainingConfig, on: str) -> int:
+    """Add a version, in force from now; the caller holds the transaction."""
+    cursor = connection.execute(
+        "INSERT INTO declarations (declared_on, cycle_length, duration_cap_min, split, "
+        "volume_denominator, equipment, goal) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            on,
+            declaration.cycle_length,
+            declaration.duration_cap_min,
+            json.dumps(declaration.split),
+            declaration.volume_denominator,
+            json.dumps(declaration.equipment),
+            declaration.goal,
+        ),
+    )
+    assert cursor.lastrowid is not None  # an INSERT always has one
+    return cursor.lastrowid
+
+
+def _imported(connection: sqlite3.Connection) -> Version:
+    """A `training.toml` in the home, recorded as the first version; `NoTrainingConfig` without one."""
+    legacy = home.inside(LEGACY_NAME)
+    if not legacy.is_file():
+        raise NoTrainingConfig()
+    try:
+        # `utf-8-sig`: Notepad writes a byte-order mark by default.
+        declaration = parse(tomllib.loads(legacy.read_text(encoding="utf-8-sig")))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, ConfigError) as error:
+        raise NoTrainingConfig(f"{legacy} could not be imported: {error}") from error
+    on = date.today().isoformat()
+    return Version(record(connection, declaration, on), on, declaration)
 
 
 def parse(
@@ -204,7 +210,7 @@ def parse(
             f"unrecognised setting(s) {', '.join(repr(key) for key in unknown)}; "
             f"the configuration holds {', '.join(_KEYS)} and nothing else"
         )
-    missing = [key for key in _KEYS if key not in raw and key != "goal"]
+    missing = [key for key in _KEYS if key not in raw]
     if missing:
         raise ConfigError(
             f"the configuration is missing {', '.join(missing)}; "
@@ -227,14 +233,12 @@ def parse(
         split=_split(raw["split"], cycle_length, groups),
         volume_denominator=str(denominator),
         equipment=_equipment(raw["equipment"]),
-        goal=_goal(raw.get("goal"), goals),
+        goal=_goal(raw["goal"], goals),
     )
 
 
 def _goal(value: object, goals: tuple[str, ...]) -> str:
-    """One of the methodology's goals; absent is `NoGoal`, since files written before 0.11 have none."""
-    if value is None:
-        raise NoGoal(goals)
+    """One of the methodology's goals."""
     if value not in goals:
         raise ConfigError(
             f"goal is {value!r}, which is not a goal of the methodology; "

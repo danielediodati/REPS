@@ -285,7 +285,7 @@ class Request:
     """Set when this is an adaptation: accepted, it is today's serving and the mesocycle stays."""
 
     goal: str | None = None
-    """The methodology column the plan is made for; `None` when no `training.toml` declares one."""
+    """The methodology column the plan is made for; `None` when nothing is declared."""
 
 
 @dataclass(frozen=True)
@@ -348,8 +348,8 @@ class Asked:
 
     The terminal's flags and the chat's words both arrive as this, and
     `requested` turns it into a `Request`. Every field is optional because
-    every field has somewhere to come from when nobody names it: `training.toml`
-    declares the equipment and the cap, and the performed workouts say where
+    every field has somewhere to come from when nobody names it: the declarations
+    hold the equipment and the cap, and the performed workouts say where
     the rotation is. The chat names almost none of them, which is the point --
     *"what am I doing today?"* is an empty `Asked`.
     """
@@ -389,12 +389,12 @@ def requested(
     one *function*: assembled at each door, the two drift and a plan comes back
     checked against a request nobody made.
 
-    What can be derived is never asked for. Equipment falls back to what
-    `training.toml` declares, the minutes to the cap it declares, and the
-    groups to the workout the performed workouts put the rotation at. With no
-    `training.toml` there is nothing to fall back to, and that is reported as
-    the state it is -- `config.NoTrainingConfig`, naming the example file --
-    rather than as a complaint about a flag nobody typed.
+    What can be derived is never asked for. Equipment falls back to what is
+    declared, the minutes to the declared cap, and the groups to the workout
+    the performed workouts put the rotation at. With nothing declared there is
+    nothing to fall back to, and that is reported as the state it is --
+    `config.NoTrainingConfig`, naming the bot -- rather than as a complaint
+    about a flag nobody typed.
     """
     # First, and before anything is read off the catalog. Every part of a
     # request is classified against the enriched vocabulary sooner or later --
@@ -409,7 +409,7 @@ def requested(
         raise admissible.AdmissibleError(admissible.UNENRICHED_MESSAGE)
 
     if declared is None:
-        declared = _declared()
+        declared = config.declared(connection)
     if asked.workout is not None and asked.groups:
         raise PlanRejected(
             "a named workout takes its groups from the declared split, so "
@@ -453,11 +453,11 @@ def mesocycle_requested(
 ) -> MesocycleRequest:
     """One request per slot, each the one that slot would get asked on its own; `declared` defaults to the file's.
 
-    A mesocycle needs the split, so with no `training.toml` that is the state
-    reported, naming the example file.
+    A mesocycle needs the split, so with nothing declared that is the state
+    reported.
     """
     if declared is None:
-        declared = config.load()
+        declared = config.load(connection)
     return MesocycleRequest(
         slots=tuple(
             requested(
@@ -491,7 +491,7 @@ def adaptation_requested(
     if without:
         for value in without:
             catalog.check_value(connection, "equipment", value)
-        having = asked.equipment or _equipment(connection, (), _declared())
+        having = asked.equipment or _equipment(connection, (), config.declared(connection))
         left = tuple(value for value in having if value not in without)
         if not left:
             raise PlanRejected(
@@ -553,25 +553,6 @@ def next_requested(connection: sqlite3.Connection, today: str) -> MesocycleReque
     )
 
 
-def _declared() -> config.TrainingConfig | None:
-    """The training configuration, or `None` when there is not one yet.
-
-    Absent is a state rather than a failure *here*: a door that names the
-    equipment, the time and the groups has said everything a plan needs, so
-    somebody who has declared no rotation can still ask for a workout. It
-    becomes a failure the moment something is asked for that only the file can
-    answer, and then it is reported in the file's own wording rather than in a
-    second phrasing of it.
-
-    Only `NoTrainingConfig` is caught. A file that exists and is wrong is a
-    different thing entirely and must not be read as one that is not there.
-    """
-    try:
-        return config.load()
-    except config.NoTrainingConfig:
-        return None
-
-
 def _equipment(
     connection: sqlite3.Connection,
     asked: tuple[str, ...],
@@ -584,7 +565,7 @@ def _equipment(
     for.
 
     Checked against the catalog **here**, where the catalog is open, and not
-    left to the admissible set further in. A typo in `training.toml` would
+    left to the admissible set further in. A declared value the catalog lacks would
     otherwise surface from inside the graph run, where the chat can only say
     *something went wrong* -- and a declaration nobody can plan against is a
     state with a fix, in the vocabulary the data actually holds.
@@ -592,7 +573,7 @@ def _equipment(
     chosen = tuple(dict.fromkeys(asked)) if asked else None
     if chosen is None:
         if declared is None:
-            raise config.NoTrainingConfig(config.config_path())
+            raise config.NoTrainingConfig()
         chosen = declared.equipment
     for value in chosen:
         catalog.check_value(connection, "equipment", value)
@@ -603,7 +584,7 @@ def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
     """Today's budget: what was asked for, or the cap that was declared; asking for more than the cap is refused."""
     if declared is None:
         if asked is None:
-            raise config.NoTrainingConfig(config.config_path())
+            raise config.NoTrainingConfig()
         return asked
     if asked is None:
         return declared.duration_cap_min
@@ -630,7 +611,7 @@ def _named(
     if workout is None:
         return tuple(dict.fromkeys(given))
     if declared is None:
-        raise config.NoTrainingConfig(config.config_path())
+        raise config.NoTrainingConfig()
     try:
         return declared.groups_for(workout)
     except IndexError as error:

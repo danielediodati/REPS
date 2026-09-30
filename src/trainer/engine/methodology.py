@@ -2,7 +2,7 @@
 
 `src/trainer/data/methodology.md` is written by a person from the literature
 (TRAINER.md). The planner reads it whole; the engine reads only its goal
-columns, which are the vocabulary `training.toml`'s `goal` is checked against.
+columns, which are the vocabulary the declared `goal` is checked against.
 """
 
 from __future__ import annotations

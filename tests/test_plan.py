@@ -1006,12 +1006,12 @@ def test_an_unenriched_catalog_is_that_state_and_not_a_typo(
 
 
 def test_with_no_declaration_a_door_that_names_everything_still_plans(
-    connection: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    connection: sqlite3.Connection, declared_training: Path
 ) -> None:
-    """Nothing is derived without a `training.toml`, and nothing has to be:
+    """Nothing is derived without declarations, and nothing has to be:
     a door naming the equipment, the time and the groups has said everything a
     plan needs."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    declared_training.unlink()
 
     assembled = plans.requested(
         connection,
@@ -1025,16 +1025,16 @@ def test_with_no_declaration_a_door_that_names_everything_still_plans(
 
 
 def test_with_no_declaration_a_request_nobody_filled_in_is_that_state(
-    connection: sqlite3.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    connection: sqlite3.Connection, declared_training: Path
 ) -> None:
-    """Reported as the state it is, naming the example file to copy -- not as
-    a complaint about a field nobody filled in."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    """Reported as the state it is, naming the bot -- not as a complaint about
+    a field nobody filled in."""
+    declared_training.unlink()
 
     with pytest.raises(config.NoTrainingConfig) as raised:
         plans.requested(connection, TODAY)
 
-    assert "training.example.toml" in str(raised.value)
+    assert "bot" in str(raised.value)
 
 def test_only_one_place_in_the_code_assembles_a_request() -> None:
     """`Request`'s docstring says it is assembled once, and `requested` is

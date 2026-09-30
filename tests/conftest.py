@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import socket
 import sqlite3
+import tomllib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from typing import Any
 import pytest
 
 from trainer.coach import logfile
+from trainer.engine import config
 from trainer.engine.catalog import Exercise
 
 _CREDENTIAL_HINTS = ("API_KEY", "_TOKEN", "SECRET")
@@ -220,29 +222,23 @@ against when nobody names equipment for today.
 
 
 @pytest.fixture(autouse=True)
-def declared_training(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A training configuration, for every test that does not bring its own.
+def declared_training(machine_home: Path) -> Path:
+    """`DECLARED_CONFIG`, declared for every test that does not bring its own.
 
-    Autouse for the reason `no_network` is: `config.config_path()` falls back
-    to `Path.cwd() / "training.toml"`, so a developer who has declared their
-    own rotation in the checkout would have the suite read it -- and every
-    window, split and cycle assertion would be about their file rather than
-    about the code. Pointed somewhere disposable, the suite says the same thing
-    on every machine.
-
-    Overridden by any test that sets `TRAINER_CONFIG` itself, which is how the
-    absent-configuration and broken-configuration states are still exercised.
-    It is written to a directory of its own rather than to `tmp_path`, because
-    those tests point at `tmp_path / "training.toml"` to mean *there is no such
-    file* -- and a fixture that had already written one there would answer them
-    with a configuration.
+    Declared the way an installation from before ADR-0013 is: a `training.toml`
+    in the home, which the first read of any test database imports as its
+    first version. Whichever fixture builds the database, it is declared, and a
+    test rewrites this file before its first read to declare something else.
+    Deleted, nothing is declared.
     """
-    directory = tmp_path / "declared"
-    directory.mkdir(exist_ok=True)
-    path = directory / "training.toml"
+    path = machine_home / config.LEGACY_NAME
     path.write_text(DECLARED_CONFIG, encoding="utf-8")
-    monkeypatch.setenv("TRAINER_CONFIG", str(path))
     return path
+
+
+def declare(connection: sqlite3.Connection, text: str, on: str = "2026-09-01") -> None:
+    """A version of the declarations, written in TOML, recorded as the one in force."""
+    config.record(connection, config.parse(tomllib.loads(text)), on)
 
 
 @pytest.fixture(autouse=True)

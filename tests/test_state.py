@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import enrich, make_exercise
+from conftest import declare, enrich, make_exercise
 from trainer.engine import catalog, config, database, migrations, state
 
 CATALOG = (
@@ -272,19 +272,18 @@ def test_a_window_reaching_further_back_than_the_training_covers_all_of_it(
 
 
 def test_changing_the_cycle_length_changes_what_a_window_covers(
-    connection: sqlite3.Connection, declared_training: Path
+    connection: sqlite3.Connection,
 ) -> None:
-    """No migration and no recompute. `cycle_length` lives in a file the user
-    edits, and a stored aggregate would be silently wrong from the edit
-    onwards, because nothing in the engine watches that file."""
+    """No migration and no recompute: a stored aggregate would be silently
+    wrong from the change onwards."""
     four_cycles(connection)
     assert state.pattern_history(connection, "squat", 1).value.volume == 20  # type: ignore[union-attr]
 
-    declared_training.write_text(
+    declare(
+        connection,
         'cycle_length = 2\nduration_cap_min = 60\nvolume_denominator = "cycle"\n'
         'split = [["chest"], ["legs"]]\nequipment = ["barbell"]\n'
         'goal = "hypertrophy"\n',
-        encoding="utf-8",
     )
 
     assert state.pattern_history(connection, "squat", 1).value.volume == 10  # type: ignore[union-attr]
@@ -312,27 +311,26 @@ def test_a_window_of_no_cycles_is_refused(
 
 
 def test_a_mistyped_pattern_is_refused_before_the_configuration_is_read(
-    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+    connection: sqlite3.Connection, declared_training: Path
 ) -> None:
     """A typo is a typo on a machine that has not declared a rotation yet.
-    Reported the other way round, the reader is sent to write a file that has
-    nothing to do with what they got wrong."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(Path("nowhere") / "training.toml"))
+    Reported the other way round, the reader is sent to the interview, which
+    has nothing to do with what they got wrong."""
+    declared_training.unlink()
 
     with pytest.raises(state.StateError, match="no such pattern"):
         state.pattern_history(connection, "vertical yeet", 3)
 
 
 def test_a_window_needs_the_declared_rotation_and_says_so_in_its_own_words(
-    connection: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
+    connection: sqlite3.Connection, declared_training: Path
 ) -> None:
     """A question about cycles cannot be answered without knowing how long one
-    is. That is the configuration's own state, and it reaches the reader with
-    the file's name and the copy-this remedy in it, not as a `StateError`
-    re-wording it."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(Path("nowhere") / "training.toml"))
+    is. That is the declarations' own state, naming the bot, not a
+    `StateError` re-wording it."""
+    declared_training.unlink()
 
-    with pytest.raises(config.NoTrainingConfig, match="no training configuration"):
+    with pytest.raises(config.NoTrainingConfig, match="nothing declared yet"):
         state.pattern_history(connection, "squat", 1)
 
 

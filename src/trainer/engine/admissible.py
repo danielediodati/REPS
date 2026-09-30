@@ -76,8 +76,7 @@ def admissible_set(
     lift with a leg somewhere in it would be the whole catalog again.
 
     This is a constraint and not a choice of method, which is what keeps it on
-    the right side of ADR-0001: the split is declared by the user in
-    `training.toml`, so *today trains legs and core* is a fact about today in
+    the right side of ADR-0001: the split is declared by the user, so *today trains legs and core* is a fact about today in
     the same way today's equipment is. What the engine still does not decide is
     which of the admissible exercises to prescribe, in what order, or for how
     long.

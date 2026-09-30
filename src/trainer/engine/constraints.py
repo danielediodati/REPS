@@ -37,7 +37,12 @@ def constraining_today(
     given: Sequence[Exclusion] = (),
     declared: config.TrainingConfig | None = None,
 ) -> Constraints:
-    """The standing exclusions as of `today`, plus the ones this caller adds, with the time and the groups asked for."""
+    """The standing exclusions as of `today`, plus the ones this caller adds, with the time and the groups asked for.
+
+    `declared` defaults to the declarations in force.
+    """
+    if declared is None:
+        declared = config.declared(connection)
     standing = exclusion_state.active(connection, today)
     return Constraints(
         # Deduplicated: a caller that already folded the standing ones into
@@ -49,19 +54,15 @@ def constraining_today(
     )
 
 
-def within_the_cap(budget_min: int, declared: config.TrainingConfig | None = None) -> int:
-    """The minutes asked for, refused rather than clamped when a shorter cap is declared; `declared` defaults to the file's."""
+def within_the_cap(budget_min: int, declared: config.TrainingConfig | None) -> int:
+    """The minutes asked for, refused rather than clamped when a shorter cap is declared; with nothing declared there is no cap."""
     if declared is None:
-        try:
-            declared = config.load()
-        except config.NoTrainingConfig:
-            # Nobody has declared a cap, so there is no ceiling to be over.
-            return budget_min
+        return budget_min
     if budget_min > declared.duration_cap_min:
         raise ConstraintError(
             f"{budget_min} minutes is over the {declared.duration_cap_min} "
-            f"declared as the cap in {config.config_path().name}; ask for at "
-            f"most that, or raise the cap there"
+            "declared as the cap; ask for at most that, or tell the bot the cap "
+            "has changed"
         )
     return budget_min
 
@@ -93,7 +94,7 @@ def rotated(
     declared split, not the whole admissible space.
 
     Nothing is derived without a declared split -- planning with a time alone
-    and no `training.toml` gets the whole space -- and nothing is derived over
+    and nothing declared gets the whole space -- and nothing is derived over
     groups a caller has already named.
     """
     if groups or declared is None:

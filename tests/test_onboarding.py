@@ -103,8 +103,8 @@ def test_the_prompt_spells_the_declarations_in_the_datas_words(
     assert "vertical push" in prompt and "barbell" in prompt and "hypertrophy" in prompt
 
 
-def test_a_scripted_conversation_writes_a_file_config_load_reads(
-    connection: sqlite3.Connection, tmp_path: Path
+def test_a_scripted_conversation_writes_the_version_in_force(
+    connection: sqlite3.Connection,
 ) -> None:
     model = Scripted(
         turns=[
@@ -126,9 +126,8 @@ def test_a_scripted_conversation_writes_a_file_config_load_reads(
     final = answer(graph, "bilanciere, 45 minuti")
 
     assert final["finished"] and "__interrupt__" not in final
-    path = tmp_path / "written.toml"
-    onboarding.written(final, path)
-    read = config.load(path)
+    onboarding.written(final)
+    read = config.load(connection)
     assert read.cycle_length == 2
     assert read.duration_cap_min == 45
     assert read.split == (("legs",), ("shoulders",))
@@ -258,12 +257,12 @@ def test_a_proposed_exclusion_is_put_to_the_user_classified(
 
 
 def test_a_confirmed_exclusion_is_written_and_a_declined_one_is_not(
-    connection: sqlite3.Connection, tmp_path: Path
+    connection: sqlite3.Connection,
 ) -> None:
     graph = graph_of(proposing())
     begin(graph, connection)
     confirmed = answer(graph, True)
-    onboarding.written(confirmed, tmp_path / "yes.toml")
+    onboarding.written(confirmed)
 
     assert exclusions.active(connection, TODAY) == (exclusions.Exclusion("pattern", "vertical push"),)
 
@@ -271,7 +270,7 @@ def test_a_confirmed_exclusion_is_written_and_a_declined_one_is_not(
     graph = graph_of(proposing())
     begin(graph, connection)
     declined = answer(graph, False)
-    onboarding.written(declined, tmp_path / "no.toml")
+    onboarding.written(declined)
 
     assert exclusions.active(connection, TODAY) == ()
 
@@ -392,19 +391,17 @@ def test_starting_again_forgets_the_last_interview(connection: sqlite3.Connectio
     assert len(model.seen[-1]) == 2, "the system prompt and the message that asked"
 
 
-def test_the_file_it_writes_carries_a_comment_above_every_field() -> None:
-    written = onboarding.rendered(onboarding.settled(EVERYTHING), TODAY)
-
-    lines = written.splitlines()
-    for key in (*onboarding.FIELDS, "volume_denominator"):
-        at = next(n for n, line in enumerate(lines) if line.startswith(f"{key} = "))
-        assert lines[at - 1].startswith("# "), key
-
-
 # -- a declaration changed (ADR-0012) --------------------------------------------
 
-FILE = onboarding.rendered(onboarding.settled(EVERYTHING), TODAY)
-"""`EVERYTHING` as onboarding writes it: a comment above every field."""
+DECLARED = """\
+cycle_length = 2
+duration_cap_min = 45
+volume_denominator = "cycle"
+split = [["legs"], ["shoulders"]]
+equipment = ["barbell"]
+goal = "hypertrophy"
+"""
+"""`EVERYTHING`, as TOML."""
 
 
 def kept(connection: sqlite3.Connection, mesocycle: plans.Mesocycle) -> None:
@@ -427,7 +424,8 @@ def kept(connection: sqlite3.Connection, mesocycle: plans.Mesocycle) -> None:
 @pytest.fixture()
 def running(connection: sqlite3.Connection, declared_training: Path) -> sqlite3.Connection:
     """`EVERYTHING` declared, and a mesocycle legal under it running."""
-    declared_training.write_text(FILE, encoding="utf-8")
+    declared_training.write_text(DECLARED, encoding="utf-8")
+    config.load(connection)
     kept(connection, mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")))
     return connection
 
@@ -482,39 +480,6 @@ def test_with_no_mesocycle_running_there_is_nothing_to_choose(
     connection: sqlite3.Connection,
 ) -> None:
     assert onboarding.open_paths(connection, TODAY, EVERYTHING, after(equipment=["dumbbell"])) == ()
-
-
-def test_a_bought_barbell_rewrites_the_equipment_line_and_nothing_else() -> None:
-    before = onboarding.rendered(onboarding.settled(EVERYTHING | {"equipment": ["dumbbell"]}), TODAY)
-
-    rewritten = onboarding.rewritten(before, after(equipment=["dumbbell", "barbell"]))
-
-    old, new = before.splitlines(), rewritten.splitlines()
-    assert len(old) == len(new)
-    assert [(a, b) for a, b in zip(old, new, strict=True) if a != b] == [
-        ('equipment = ["dumbbell"]', 'equipment = ["dumbbell", "barbell"]')
-    ]
-
-
-def test_a_split_over_several_lines_is_replaced_whole_and_hand_comments_stay() -> None:
-    before = "# mine\n" + FILE.replace("goal = ", "# kept by hand\ngoal = ")
-
-    rewritten = onboarding.rewritten(
-        before, after(cycle_length=3, split=[["legs"], ["shoulders"], ["legs"]])
-    )
-
-    assert rewritten.startswith("# mine\n") and "# kept by hand\ngoal = " in rewritten
-    assert config.parse(tomllib.loads(rewritten)) == after(
-        cycle_length=3, split=[["legs"], ["shoulders"], ["legs"]]
-    )
-
-
-def test_a_field_missing_from_the_file_is_added_to_it() -> None:
-    before = "\n".join(line for line in FILE.splitlines() if not line.startswith("goal = "))
-
-    rewritten = onboarding.rewritten(before, after(goal="strength"))
-
-    assert config.parse(tomllib.loads(rewritten)).goal == "strength"
 
 
 def change(graph: onboarding.Onboarding, said: str) -> dict[str, Any]:
@@ -626,8 +591,8 @@ def test_with_no_mesocycle_running_a_change_finishes_without_a_choice(
     assert final["finished"] and final["chosen"] == ""
 
 
-def test_a_change_written_touches_only_what_changed(
-    running: sqlite3.Connection, declared_training: Path
+def test_a_change_written_is_a_new_version_and_the_old_one_stays(
+    running: sqlite3.Connection,
 ) -> None:
     model = Scripted(
         turns=[
@@ -639,8 +604,8 @@ def test_a_change_written_touches_only_what_changed(
     )
     final = change(graph_of(model), "ho comprato dei manubri")
 
-    onboarding.written(final, declared_training)
+    onboarding.written(final)
 
-    assert declared_training.read_text(encoding="utf-8") == FILE.replace(
-        'equipment = ["barbell"]', 'equipment = ["barbell", "dumbbell"]'
-    )
+    newest, older = config.versions(running)
+    assert newest.declaration == after(equipment=["barbell", "dumbbell"])
+    assert older.declaration == onboarding.settled(EVERYTHING)

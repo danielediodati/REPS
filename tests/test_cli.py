@@ -22,10 +22,12 @@ from trainer.cli import main
 from trainer.coach import models
 from trainer.engine import (
     catalog,
+    config,
     database,
     duration,
     exclusions,
     graph,
+    home,
     migrations,
     reference_set,
     residue,
@@ -1220,21 +1222,27 @@ def test_catalog_stats_shows_real_coverage_after_deriving(
 # -- `trainer config`: what the user declares ---------------------------------
 
 
-def test_config_shows_what_was_declared(
-    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    declared = tmp_path / "training.toml"
-    declared.write_text(
-        'cycle_length = 2\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest", "arms"], ["legs", "core"]]\nequipment = ["barbell"]\n'
-        'goal = "strength"\n',
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
+def test_config_shows_what_was_declared(runner: CliRunner, enriched: Path) -> None:
+    with closing(database.connect(enriched)) as connection:
+        config.record(
+            connection,
+            config.parse(
+                {
+                    "cycle_length": 2,
+                    "duration_cap_min": 45,
+                    "volume_denominator": "cycle",
+                    "split": [["chest", "arms"], ["legs", "core"]],
+                    "equipment": ["barbell"],
+                    "goal": "strength",
+                }
+            ),
+            "2026-10-01",
+        )
 
     result = runner.invoke(main, ["config"])
 
     assert result.exit_code == 0, result.output
+    assert "declared on: 2026-10-01" in result.output
     assert "cycle length: 2 workouts" in result.output
     assert "duration cap: 45 min" in result.output
     assert "volume counted per: cycle" in result.output
@@ -1242,54 +1250,34 @@ def test_config_shows_what_was_declared(
     assert "goal: strength" in result.output
     assert "1. chest, arms" in result.output
     assert "2. legs, core" in result.output
-
-
-def test_a_file_with_no_goal_is_reported_as_that_state(
-    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    declared = tmp_path / "training.toml"
-    declared.write_text(
-        'cycle_length = 1\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest"]]\nequipment = ["barbell"]\n',
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
-
-    result = runner.invoke(main, ["config"])
-
-    assert result.exit_code == 1
-    assert "no goal declared yet" in result.output
-    assert "unusable" not in result.output
+    assert result.output.isascii()
 
 
 def test_config_reports_the_missing_state_and_not_a_field_error(
-    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    runner: CliRunner, enriched: Path
 ) -> None:
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "training.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(main, ["config"])
 
     assert result.exit_code != 0
-    assert "no training configuration yet" in result.output
-    assert "training.example.toml" in result.output
+    assert "nothing declared yet" in result.output and "bot" in result.output
     assert "cycle_length" not in result.output
 
 
-def test_config_reports_a_broken_file_as_a_broken_file(
-    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_config_says_why_a_legacy_file_was_not_imported(
+    runner: CliRunner, enriched: Path
 ) -> None:
-    declared = tmp_path / "training.toml"
-    declared.write_text(
+    home.inside(config.LEGACY_NAME).write_text(
         'cycle_length = 3\nduration_cap_min = 45\nvolume_denominator = "cycle"\n'
-        'split = [["chest"]]\nequipment = ["barbell"]\n',
+        'split = [["chest"]]\nequipment = ["barbell"]\ngoal = "strength"\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("TRAINER_CONFIG", str(declared))
 
     result = runner.invoke(main, ["config"])
 
     assert result.exit_code != 0
-    assert "the training configuration is unusable" in result.output
+    assert "could not be imported" in result.output
     assert "1 workout(s)" in result.output and "3 workout(s)" in result.output
 
 
@@ -1996,10 +1984,9 @@ split = [
 
 
 @pytest.fixture()
-def declared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    written = tmp_path / "training.toml"
+def declared() -> Path:
+    written = home.inside(config.LEGACY_NAME)
     written.write_text(SPLIT, encoding="utf-8")
-    monkeypatch.setenv("TRAINER_CONFIG", str(written))
     return written
 
 
@@ -2079,7 +2066,7 @@ def test_plan_with_no_training_config_names_that_state(
 ) -> None:
     """Never a complaint about a missing field: nobody has declared anything
     yet, and the way out is copying the example."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(
         main,
@@ -2088,8 +2075,8 @@ def test_plan_with_no_training_config_names_that_state(
     )
 
     assert result.exit_code != 0
-    assert "no training configuration yet" in result.output
-    assert "training.example.toml" in result.output
+    assert "nothing declared yet" in result.output
+    assert "bot" in result.output
 
 
 def test_plan_refuses_a_workout_and_a_group_together(
@@ -2127,7 +2114,7 @@ def test_plan_works_with_no_training_config_when_time_is_given(
     """No declared rotation is a state, not a failure: `--time` and `--group`
     name everything a plan needs, so somebody who has not written the file yet
     can still ask for a workout."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(
         main,
@@ -3289,12 +3276,12 @@ def test_state_needs_the_declared_rotation(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A cycle is as long as the user said it is, and nothing else knows."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(main, ["state"])
 
     assert result.exit_code != 0
-    assert "no training configuration yet" in result.output
+    assert "nothing declared yet" in result.output
 
 
 def test_state_writes_nothing(
@@ -3374,7 +3361,7 @@ def test_nothing_is_derived_without_a_declared_split(
 ) -> None:
     """Somebody planning with `--time` alone and no `training.toml` gets what
     they always got: the whole admissible space."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(
         main,
@@ -3424,7 +3411,7 @@ def test_plan_with_no_equipment_and_no_declaration_is_that_state(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Nothing to derive it from, reported as the state it is."""
-    monkeypatch.setenv("TRAINER_CONFIG", str(tmp_path / "absent.toml"))
+    home.inside(config.LEGACY_NAME).unlink()
 
     result = runner.invoke(
         main,
@@ -3433,8 +3420,8 @@ def test_plan_with_no_equipment_and_no_declaration_is_that_state(
     )
 
     assert result.exit_code != 0
-    assert "no training configuration yet" in result.output
-    assert "training.example.toml" in result.output
+    assert "nothing declared yet" in result.output
+    assert "bot" in result.output
 
 
 # -- the bot -------------------------------------------------------------------

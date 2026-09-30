@@ -34,9 +34,11 @@ def connection(database_file: Path) -> Iterator[sqlite3.Connection]:
 
 
 @pytest.fixture()
-def declared(declared_training: Path) -> config.TrainingConfig:
+def declared(
+    declared_training: Path, connection: sqlite3.Connection
+) -> config.TrainingConfig:
     declared_training.write_text(DECLARED, encoding="utf-8")
-    return config.load()
+    return config.load(connection)
 
 
 def performed(connection: sqlite3.Connection, on: str) -> None:

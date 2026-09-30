@@ -197,7 +197,7 @@ def today(connection: sqlite3.Connection) -> Today:
     where = state.rotation(connection)
     if where.cycle_length != len(kept.slots):
         raise MesocycleError(
-            f"the split in training.toml has {where.cycle_length} workouts and the "
+            f"the declared split has {where.cycle_length} workouts and the "
             f"mesocycle has {len(kept.slots)}; {ASK_FOR_ONE}"
         )
     since = where.performed - kept.accepted_after

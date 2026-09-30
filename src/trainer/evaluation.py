@@ -134,7 +134,7 @@ class Situation:
 
 
 GOAL = "hypertrophy"
-"""The goal every situation plans for; a door always sends the one `training.toml` declares."""
+"""The goal every situation plans for; a door always sends the declared one."""
 
 
 SPLIT = (("legs", "core"), ("chest", "back"))

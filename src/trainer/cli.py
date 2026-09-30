@@ -85,9 +85,9 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
         raise click.ClickException(f"the graph file is unusable: {error}") from error
-    except (config.NoTrainingConfig, config.NoGoal) as error:
-        # Before ConfigError, which they subclass: a state has its own
-        # wording and must not be dressed up as a broken file.
+    except config.NoTrainingConfig as error:
+        # Before ConfigError, which it subclasses: a state has its own
+        # wording and must not be dressed up as a broken declaration.
         raise click.ClickException(str(error)) from error
     except config.ConfigError as error:
         raise click.ClickException(
@@ -833,7 +833,7 @@ def bot_command() -> None:
 
     Only `TELEGRAM_OWNER_ID` is answered, and anything arriving from anybody
     else is ignored. Both settings are read from the environment, never from
-    `training.toml`, which holds what you declare about your training.
+    the declarations, which are what you declare about your training.
 
     Two models answer it (ADR-0006): the entrance holds the conversation on
     the one `ENTRANCE_MODEL` names, and the planner and the logger it reaches
@@ -1005,18 +1005,18 @@ def _negotiations() -> list[runs.Negotiation]:
 def config_command(show_groups: bool) -> None:
     """Show what the user has declared: cycle, cap, split, denominator, equipment, goal.
 
-    Read-only. Nothing in trainer writes this file; it is hand-edited until
-    onboarding fills it by talking to you (ADR-0003).
+    Read-only: the bot's interview writes them (ADR-0013).
     """
-    with reported():
-        if show_groups:
+    if show_groups:
+        with reported():
             _print_muscle_groups(muscle_groups.committed())
-            return
+        return
 
-        path = config.config_path()
-        declared = config.load(path)
+    with _opened() as connection:
+        version = config.current(connection)
+    declared = version.declaration
 
-    click.echo(f"configuration: {path}")
+    click.echo(f"declared on: {version.declared_on}")
     click.echo(f"cycle length: {declared.cycle_length} workouts")
     click.echo(f"duration cap: {declared.duration_cap_min} min")
     click.echo(f"volume counted per: {declared.volume_denominator}")
@@ -1092,7 +1092,7 @@ def admissible_command(
     lives in the `exclusions` table instead, and is read automatically
     alongside it.
 
-    `--time` over the cap declared in `training.toml` is refused rather than
+    `--time` over the declared cap is refused rather than
     answered: a workout that long is one the declaration says never happens.
     """
     with _opened() as connection:
@@ -1134,7 +1134,7 @@ def admissible_command(
     metavar="VALUE",
     multiple=True,
     help="Today's equipment; repeat for more than one. Defaults to what you "
-    "declared in training.toml, which is what you own -- name it here for "
+    "declared, which is what you own -- name it here for "
     "where you actually are today.",
 )
 @click.option(
@@ -1151,7 +1151,7 @@ def admissible_command(
     metavar="N",
     type=click.IntRange(min=1),
     help="Which workout of the declared rotation this is. Its groups and "
-    "muscles come from the split in training.toml, and the time divides over them.",
+    "muscles come from the declared split, and the time divides over them.",
 )
 @click.option(
     "--exclude",
@@ -1411,7 +1411,7 @@ def _served(connection: sqlite3.Connection, today: str) -> list[str]:
             connection,
             plan.from_prescribed(found.blocks),
             [prescribed.block for prescribed in found.blocks],
-            config.load().duration_cap_min,
+            config.load(connection).duration_cap_min,
             loads=True,
         ),
         "",
@@ -1896,9 +1896,8 @@ def state_command(cycles: int) -> None:
     workout or writes a number down.
 
     Every figure is recomputed from the performed workouts on each run. Change
-    `cycle_length` in `training.toml` and the windows move on the next
-    invocation -- there is no stored aggregate that could disagree with the
-    file.
+    the declared `cycle_length` and the windows move on the next invocation --
+    there is no stored aggregate that could disagree with it.
     """
     today = date.today().isoformat()
     with _opened() as connection:
