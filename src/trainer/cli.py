@@ -36,6 +36,7 @@ from trainer import (
 from trainer.coach import (
     bot,
     checkpoints,
+    conclusions,
     logfile,
     logger,
     memory,
@@ -867,7 +868,7 @@ def bot_command() -> None:
         # Opened before the block is printed, not after: a block that says
         # where the checkpoints go, immediately before saying they cannot go
         # there, is worse than no block at all.
-        with checkpoints.saver() as saver:
+        with checkpoints.saver() as saver, conclusions.opened() as store:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.described}")
             click.echo(f"logger:      {logs.described}")
@@ -878,6 +879,7 @@ def bot_command() -> None:
                 else f"context:     {on.provider}'s own"
             )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
+            click.echo(f"memory:      {conclusions.store_path()}")
             click.echo(f"log:         {log_file}")
             click.echo(f"bot:         {name}")
             # The owner's chat id is their user id, a private chat being
@@ -889,7 +891,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, front, on, logs, saver)
+            bot.serve(declared, front, on, logs, saver, store)
 
 
 @main.group("runs")

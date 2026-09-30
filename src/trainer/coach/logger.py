@@ -21,12 +21,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 from langgraph.types import interrupt
 
 from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import models
+from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import exclusions, workouts
@@ -161,6 +162,15 @@ Pain:
   loaded joint (`shoulder`) -- never an exercise id -- with a `retest_date`
   after today and a `why`. It is a proposal the user confirms. Propose one for
   pain, not for effort or a dislike.
+
+Remembering, when `remember` is offered:
+
+- A report sometimes says something lasting about the person, beside the
+  workout: «la cyclette mi annoia» is worth keeping, «oggi la cyclette mi ha
+  annoiato» is about today and is not. Call `remember` with it.
+- `quote` is their sentence exactly as they typed it; anything else is
+  refused. Never remember what you inferred, only what they said. Pain is
+  still an exclusion to propose, not something to remember instead.
 
 The validator checks the document. If it refuses one, you are told why and
 may read, ask and emit again. You also have a budget of tool calls; when it
@@ -313,8 +323,9 @@ def build(
     budget: int = tools.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
+    store: BaseStore | None = None,
 ) -> Logger:
-    """The compiled logger graph, running on `on`.
+    """The compiled logger graph, running on `on`; `store` is where `remember` keeps a conclusion.
 
     **Nothing here writes.** The six tools are reads and the document goes
     back to the caller; `workouts.record_performed` is reached through
@@ -326,6 +337,8 @@ def build(
     model = on.model
     offered = tools.registered("logger", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
+    if store is not None:
+        reads.append({"type": "function", "function": tools.schema(conclusions.remember)})
     asking = {"type": "function", "function": tools.schema(ask_user)}
     finishing = {"type": "function", "function": tools.schema(done_reading)}
     timed = records.timing(on)
@@ -380,7 +393,8 @@ def build(
         `ask_user` stops the graph here rather than in a node of its own,
         because a turn can carry it alongside a read and LangGraph gives a
         node one input. Resuming replays this node from the top, so the reads
-        beside it run a second time; every tool on this surface is a read, and
+        beside it run a second time; every tool on this surface is a read, or
+        `remember`, which writes the same key again, and
         the count of what was spent is taken from the state the node was given
         rather than added to as it goes.
         """
@@ -406,6 +420,23 @@ def build(
                 )
                 continue
             spent += 1
+            if call["name"] == conclusions.REMEMBER and store is not None:
+                kept, refused = conclusions.kept(
+                    store,
+                    conclusions.whose(),
+                    call["args"],
+                    _written_by_user(state, asked),
+                    state["today"],
+                )
+                answers.append(
+                    ToolMessage(
+                        kept,
+                        tool_call_id=call_id,
+                        name=call["name"],
+                        status="error" if refused else "success",
+                    )
+                )
+                continue
             result = tools.execute(
                 tools.Call(id=call_id, name=call["name"], arguments=call["args"]),
                 offered,
@@ -555,6 +586,16 @@ def build(
     )
     graph.add_edge("confirm", END)
     return graph.compile(checkpointer=checkpointer)
+
+
+def _written_by_user(state: LoggerState, asked: list[tuple[str, str]]) -> list[str]:
+    """What the user wrote in this run: the report, and their answers to its questions."""
+    answers = [
+        answer
+        for _, answer in [*state.get("questions", []), *asked]
+        if answer != SPENT_ASKING
+    ]
+    return [state["report"], *answers]
 
 
 def _ending(refused: str | None) -> str:

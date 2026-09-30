@@ -12,7 +12,7 @@ Read first: TRAINER.md § Agent and the onboarding line under the user's loop; A
 - **It resumes.** The thread is checkpointed: a user who stops at the fourth answer and writes the next day picks up where they left, nothing asked twice.
 - **It cannot end with a field missing.** Code checks the six declarations of ADR-0003 against the same validation `config.load` applies, and sends what is missing back to the model. Vocabulary (equipment, groups, goals) is read from the data.
 - **Triage is a tool**, `propose_exclusion(pattern or joint, re-test date, why)`, with the patterns and joints read from the catalog (ADR-0009 item 4). The user confirms or declines, through the same path the logger's proposed exclusion takes today (`coach/bot.py`).
-- **It has `remember`** from 01: *"I hate pressing"* said here is a conclusion with its quote.
+- **It has `remember`** from 01: *"I hate pressing"* said here is a conclusion with its quote. Wired as the entrance and logger wire it: `build(..., store=)` offers the tool, and a call is answered by `conclusions.kept` against the user's answers in the interview. Whose conclusions they are is `configurable.user`, which `bot._reading` sets from the chat.
 - **It writes `training.toml`** in `TRAINER_HOME`, with a comment per field as the example has, then starts the planner for a first mesocycle through the existing accept / turn down loop.
 - **Reachable from the chat**: the entrance hands off to it when the user asks to set up. 03 makes it start on its own.
 

@@ -24,12 +24,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 from langgraph.types import interrupt
 from pydantic import TypeAdapter
 
 from trainer import tools
 from trainer import plan as plans
-from trainer.coach import models
+from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import admissible, constraints, mesocycles, methodology, workouts
@@ -166,8 +167,10 @@ decision, and across the cycle the sets per muscle add up.
 EMIT_MESOCYCLE = "Emit the mesocycle now, in the required shape."
 
 
-def brief(request: plans.Request) -> str:
-    """Today's request, in words, for the model to plan against."""
+def brief(
+    request: plans.Request, known: Sequence[conclusions.Conclusion] = ()
+) -> str:
+    """Today's request, and what the user has said about themselves, in words for the model to plan against."""
     lines = [
         f"Equipment available today: {', '.join(request.equipment)}.",
         "Time available: {} minutes; the plan lands between {} and {}.".format(
@@ -221,8 +224,22 @@ def brief(request: plans.Request) -> str:
             "plan they have already turned down, and do not give up and offer "
             "something token: they still want to train today."
         )
+    if known:
+        lines.append(remembered(known))
     lines.append("Plan the workout.")
     return "\n".join(lines)
+
+
+def remembered(known: Sequence[conclusions.Conclusion]) -> str:
+    """The user's live conclusions, each with the sentence it came from."""
+    return "\n".join(
+        [
+            "What they have told you about themselves, each with the sentence it "
+            "came from. Weigh it when you choose: none of it is a rule, and the "
+            "admissible set is the same without it.",
+            *(f'- {one.conclusion} (they said: "{one.quote}")' for one in known),
+        ]
+    )
 
 
 def aimed(goal: str) -> str:
@@ -282,8 +299,10 @@ def continued(continuing: plans.Continuing) -> str:
     return "\n".join(lines)
 
 
-def mesocycle_brief(request: plans.MesocycleRequest) -> str:
-    """Every slot's request, in words, for the model to plan the mesocycle against."""
+def mesocycle_brief(
+    request: plans.MesocycleRequest, known: Sequence[conclusions.Conclusion] = ()
+) -> str:
+    """Every slot's request, and what the user has said about themselves, for the model to plan the mesocycle against."""
     lines = [f"The cycle has {len(request.slots)} workouts. Plan one for each, in this order."]
     for slot, asked in enumerate(request.slots, start=1):
         floor, ceiling = plans.window(asked.budget_min)
@@ -338,6 +357,8 @@ def mesocycle_brief(request: plans.MesocycleRequest) -> str:
             if refused.because:
                 lines.append(f"They said: {refused.because}")
         lines.append("Propose a different one, and do not argue the last.")
+    if known:
+        lines.append(remembered(known))
     lines.append("Plan the mesocycle.")
     return "\n".join(lines)
 
@@ -585,8 +606,9 @@ def build(
     budget: int = tools.CALL_BUDGET,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
+    store: BaseStore | None = None,
 ) -> Planner:
-    """The compiled planner graph, running on `on`.
+    """The compiled planner graph, running on `on`; `store` holds the conclusions its brief carries.
 
     `archive` is where a run goes when it ends (ADR-0007, item 6), and a graph
     built without one keeps nothing: the eval suites run the same graph
@@ -607,21 +629,26 @@ def build(
         {"type": "function", "function": tools.schema(tool)} for tool in offered
     ]
 
+    def known() -> list[conclusions.Conclusion]:
+        return [] if store is None else conclusions.live(store, conclusions.whose())
+
     def turn(state: PlannerState) -> dict[str, Any]:
         request = state["request"]
         if isinstance(request, dict) and "slots" in request:
             # Studio and the HTTP API send the request as JSON.
             request = TypeAdapter(plans.MesocycleRequest).validate_python(request)
         if isinstance(request, plans.MesocycleRequest):
-            return _turn(
-                state,
-                request,
-                [SystemMessage(MESOCYCLE_PLANNING), HumanMessage(mesocycle_brief(request))],
-            )
+            opening: list[AnyMessage] = []
+            if not state.get("messages"):
+                opening = [
+                    SystemMessage(MESOCYCLE_PLANNING),
+                    HumanMessage(mesocycle_brief(request, known())),
+                ]
+            return _turn(state, request, opening)
         if not isinstance(request, plans.Request):
             # Studio and the HTTP API send the request as JSON.
             request = TypeAdapter(plans.Request).validate_python(request)
-        opening: list[AnyMessage] = []
+        opening = []
         if not state.get("messages"):
             with tools.reported(), tools.opened() as connection:
                 today = constraints.constraining_today(
@@ -640,7 +667,7 @@ def build(
                 budget_min=today.budget_min,
                 groups=today.groups,
             )
-            opening = [SystemMessage(PLANNING), HumanMessage(brief(request))]
+            opening = [SystemMessage(PLANNING), HumanMessage(brief(request, known()))]
         return _turn(state, request, opening)
 
     def _turn(

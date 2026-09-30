@@ -23,12 +23,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
 from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import entrance, logfile, models, planner, progress
+from trainer.coach import conclusions, entrance, logfile, models, planner, progress
 from trainer.coach import logger as logger_graph
 from trainer.coach import record as run_record
 from trainer.engine import config, mesocycles, workouts
@@ -1308,8 +1309,13 @@ def _last(last: Any, marked: Callable[[str], str]) -> str:
 
 
 def _reading(thread: str) -> RunnableConfig:
-    """A thread, for a call that only reads: it writes no checkpoint to stamp."""
-    return {"configurable": {"thread_id": thread}}
+    """A thread, and the user whose conclusions its runs read and keep: the chat it is under."""
+    return {
+        "configurable": {
+            "thread_id": thread,
+            conclusions.USER: thread.partition("/")[0],
+        }
+    }
 
 
 def turns(graph: run_record.Graph, thread: str) -> list[str]:
@@ -1498,6 +1504,7 @@ def graphs(
     logs: models.Chat,
     saver: BaseCheckpointSaver[Any],
     archive: Path,
+    store: BaseStore | None = None,
 ) -> Graphs:
     """The three graphs, each on the model that answers it (ADR-0006, item 3).
 
@@ -1505,7 +1512,7 @@ def graphs(
     entrance is the node latency is felt on, the planner is the one that has
     to reason, and the logger the one that has to extract.
     """
-    plans_on = planner.build(on, checkpointer=saver, archive=archive)
+    plans_on = planner.build(on, checkpointer=saver, archive=archive, store=store)
     preparing: set[str] = set()
     return Graphs(
         entrance=entrance.build(
@@ -1513,9 +1520,12 @@ def graphs(
             checkpointer=saver,
             archive=archive,
             prepared=prepared(plans_on, preparing),
+            store=store,
         ),
         planner=plans_on,
-        logger=logger_graph.build(logs, checkpointer=saver, archive=archive),
+        logger=logger_graph.build(
+            logs, checkpointer=saver, archive=archive, store=store
+        ),
         archive=archive,
         preparing=preparing,
     )
@@ -1527,8 +1537,9 @@ def serve(
     on: models.Chat,
     logs: models.Chat,
     saver: BaseCheckpointSaver[Any],
+    store: BaseStore,
 ) -> None:
-    """Long-poll until interrupted, holding the models, the checkpointer and the graphs.
+    """Long-poll until interrupted, holding the models, the checkpointer, the store and the graphs.
 
     All of them for the life of the process (ADR-0004, item 6): the compiled
     graphs are what the threads are stored against.
@@ -1539,7 +1550,7 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    built = graphs(front, on, logs, saver, run_record.archive())
+    built = graphs(front, on, logs, saver, run_record.archive(), store)
     coach = Turns(
         owner_id=declared.owner_id,
         run=talking(built),

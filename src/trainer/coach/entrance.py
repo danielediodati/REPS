@@ -22,10 +22,11 @@ from langgraph.config import get_config
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import models
+from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import catalog, constraints, mesocycles
@@ -263,6 +264,17 @@ training, not one to look up.
 - Anything else -- hello, a question about how this works, a remark -- is
   yours to answer directly.
 
+Remembering, when `remember` is offered:
+
+- Something lasting they tell you about themselves -- what they like, what
+  they cannot stand, what they own, what their body does -- is worth
+  keeping: «la cyclette mi annoia», «ho comprato i manubri». Call `remember`
+  beside whatever else the turn needs.
+- What is true only today is not: «oggi sono distrutto», «oggi la cyclette
+  mi ha annoiato». No rule tells the two apart; you do.
+- `quote` is their sentence exactly as they typed it; anything else is
+  refused. Never remember what you inferred, only what they said.
+
 What you may never do:
 
 - **State a training fact no tool gave you.** Not a load, not a number of
@@ -455,11 +467,13 @@ def build(
     today: Callable[[], str] | None = None,
     checking: Callable[[str, Mapping[str, Any]], str | None] | None = None,
     prepared: Callable[[str], bool] | None = None,
+    store: BaseStore | None = None,
 ) -> Entrance:
     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
 
     `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
     `prepared` says whether the next mesocycle is waiting, or being prepared, on a thread.
+    `store` is where `remember` keeps a conclusion; without one it is not offered.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
     about what has been trained; everything else is handed to a subgraph, which
@@ -468,6 +482,8 @@ def build(
     model = on.model
     offered = tools.registered("entrance", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
+    if store is not None:
+        reads.append({"type": "function", "function": tools.schema(conclusions.remember)})
     timed = records.timing(on)
     looked_up = today if today is not None else reading_today
     checked = checking if checking is not None else startable
@@ -530,8 +546,26 @@ def build(
                     for call in reply.tool_calls
                 ]
             }
-        answers = [_answer(call, offered) for call in reply.tool_calls]
+        answers = [answering(call, state) for call in reply.tool_calls]
         return {"messages": answers, "spent": spent + len(answers)}
+
+    def answering(call: ToolCall, state: EntranceState) -> ToolMessage:
+        """A call that is not a handoff: a conclusion to keep, or an engine read."""
+        if call["name"] != conclusions.REMEMBER or store is None:
+            return _answer(call, offered)
+        said, refused = conclusions.kept(
+            store,
+            conclusions.whose(),
+            call["args"],
+            state.get("said", []),
+            date.today().isoformat(),
+        )
+        return ToolMessage(
+            said,
+            tool_call_id=answered(call),
+            name=call["name"],
+            status="error" if refused else "success",
+        )
 
     def hand_off(state: EntranceState) -> dict[str, Any]:
         """The turn that reached for a subgraph: which one, and every call in it answered.
@@ -555,7 +589,7 @@ def build(
             name = call["name"]
             if name not in HANDED:
                 spent += 1
-                answers.append(_answer(call, offered))
+                answers.append(answering(call, state))
                 continue
             if taken:
                 said = ONE_AT_A_TIME

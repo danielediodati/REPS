@@ -3516,7 +3516,7 @@ def healthy_bot(
     monkeypatch.setattr(Bot, "get_me", known)
     polled: list[object] = []
     monkeypatch.setattr(
-        bot, "serve", lambda declared, front, on, logs, saver: polled.append(declared)
+        bot, "serve", lambda declared, front, on, logs, saver, store: polled.append(declared)
     )
     return polled
 
@@ -3533,6 +3533,7 @@ def test_bot_says_what_it_runs_on_before_it_polls(
     assert "context:     8192 tokens" in result.output
     assert "bot:         @reps_coach_bot" in result.output
     assert "thread chat:6421" in result.output
+    assert "store.sqlite" in result.output, "the memory is kept next to the checkpoints"
     assert result.output.isascii()
     assert [getattr(declared, "owner_id") for declared in healthy_bot] == [6421]
 
