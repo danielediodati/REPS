@@ -3,6 +3,7 @@
   "graphs": {
     "entrance": "./src/trainer/coach/entrance.py:studio",
     "planner": "./src/trainer/coach/planner.py:studio",
-    "logger": "./src/trainer/coach/logger.py:studio"
+    "logger": "./src/trainer/coach/logger.py:studio",
+    "onboarding": "./src/trainer/coach/onboarding.py:studio"
   }
 }

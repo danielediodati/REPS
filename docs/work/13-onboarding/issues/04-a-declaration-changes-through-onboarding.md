@@ -13,6 +13,11 @@ Read first: ADR-0012 (all of it); ADR-0008 item 6; ADR-0007 (the negotiation loo
 - **Code lists the open paths** for the running mesocycle, per ADR-0012 item 2. Legality is the validator run on the mesocycle's workouts against the new declarations.
 - **The agent picks one and says why**; the user accepts or turns it down through the mesocycle's loop. Keeping it to its end writes nothing else: the next mesocycle reads the file.
 
+## From 02
+
+- `onboarding.written` renders the whole file from `settled(declared)` and overwrites it, and `set_up` starts from nothing. Rewriting one field means seeding `declared` from the current file and telling the interview which field changed.
+- A declaration change must not end in `bot.interviewed`'s first-mesocycle path: that plans a new mesocycle unconditionally.
+
 ## Acceptance criteria
 
 - [ ] *"I bought a barbell"* rewrites `equipment` and nothing else in the file.

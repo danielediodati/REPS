@@ -25,6 +25,8 @@ flowchart LR
   bot --> entrance[entrance: a chat model]
   entrance --> planner
   entrance --> logger
+  entrance --> onboarding
+  onboarding --> interview[/interrupt: question or confirm/]
   planner <--> tools[(engine tools)]
   logger <--> tools
   planner --> validate
@@ -90,7 +92,7 @@ An unreachable server, a model nobody pulled, a missing key and a model Groq has
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never in `training.toml`. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 
-**What the chat does with what you write.** You write in your own words and the entrance decides: today's workout is read off the mesocycle and sent at once; a new mesocycle, a change to it or an adaptation of today starts the planner; a report starts the logger; and a question about what you have trained is answered from the engine's read tools without either. Something lasting you say about yourself, as in *«la cyclette mi annoia»*, the entrance or the logger keeps as a conclusion with your sentence beside it, refused unless that sentence is one you wrote; every plan after it is briefed with them, as preferences and never as exclusions. Your turn is answered at once and the planning goes on behind it, with the graph's progress in the draft — a mesocycle is minutes. A mesocycle arrives with two buttons, keep or turn down, and an adapted workout with three; the logger's clarifying question is a message to reply to and the exclusion it proposes is two. Nothing the chat says is a fixed line except the two about the machine being in trouble, and neither of those quotes what went wrong: that goes to `trainer.log`.
+**What the chat does with what you write.** You write in your own words and the entrance decides: today's workout is read off the mesocycle and sent at once; a new mesocycle, a change to it or an adaptation of today starts the planner; a report starts the logger; asking to set up starts an interview, one question per message and resumed where you left it, that writes `training.toml`, keeps any exclusion you confirm and ends in a first mesocycle; and a question about what you have trained is answered from the engine's read tools without either. Something lasting you say about yourself, as in *«la cyclette mi annoia»*, the entrance or the logger keeps as a conclusion with your sentence beside it, refused unless that sentence is one you wrote; every plan after it is briefed with them, as preferences and never as exclusions. Your turn is answered at once and the planning goes on behind it, with the graph's progress in the draft — a mesocycle is minutes. A mesocycle arrives with two buttons, keep or turn down, and an adapted workout with three; the logger's clarifying question is a message to reply to and the exclusion it proposes is two. Nothing the chat says is a fixed line except the two about the machine being in trouble, and neither of those quotes what went wrong: that goes to `trainer.log`.
 
 **Everything the machine writes is in one directory**, `~/.reps`, so replacing the laptop is one directory to copy and two terminals are one installation. `TRAINER_HOME` moves it, and each artifact keeps an override that wins over it: `TRAINER_DB` for the training database, `TRAINER_CHECKPOINTS` for the graph's own state (never the training database), with the memory store `store.sqlite` beside it, `TRAINER_CONFIG` for `training.toml`, and `TRAINER_EVAL_RUNS` for the eval records. `trainer bot` also writes `trainer.log` there, rotated at a megabyte and four files deep, holding every state and every exception and never the token or the owner id. It has no override, because the chat names it by name when a run cannot start or falls over.
 
@@ -113,7 +115,7 @@ In Studio the planner's input is the request as JSON: `{"request": {"equipment":
 ```
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
-  coach/      the LangGraph agent: the entrance, the planner and logger graphs, the Telegram bot, the checkpointer and the run archive
+  coach/      the LangGraph agent: the entrance, the planner, logger and onboarding graphs, the Telegram bot, the checkpointer and the run archive
   data/       vendored catalog, muscle-group mapping, config example
   tools.py    the tool surface and how a model calls it, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer

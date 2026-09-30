@@ -126,16 +126,30 @@ def log_workout() -> str:
     raise AssertionError("the graph answers log_workout; nothing calls it")
 
 
+def set_up() -> str:
+    """Start the interview that sets up their training: their goal, their rotation, their time, their equipment.
+
+    Call this when they ask to set up their training, or to start it again
+    from the beginning. The interview asks its own questions, so this takes
+    no arguments.
+
+    The body is never run. The graph answers this call by starting the interview
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers set_up; nothing calls it")
+
+
 TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
 ADAPT_TODAY = adapt_today.__name__
 CHANGE_MESOCYCLE = change_mesocycle.__name__
 LOG_WORKOUT = log_workout.__name__
+SET_UP = set_up.__name__
 
-HANDOFFS = (todays_workout, plan_mesocycle, adapt_today, change_mesocycle, log_workout)
+HANDOFFS = (todays_workout, plan_mesocycle, adapt_today, change_mesocycle, log_workout, set_up)
 """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
 
-CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, LOG_WORKOUT)
+CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, LOG_WORKOUT, SET_UP)
 """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
 
 CHECKED = (ADAPT_TODAY, CHANGE_MESOCYCLE)
@@ -192,6 +206,11 @@ STARTED = {
         "The logger has started reading what they wrote. Tell them you are "
         "writing it down. You have not read it back yet, so do not repeat any "
         "of it to them as fact."
+    ),
+    SET_UP: (
+        "The interview that sets up their training has started, and its first "
+        "question follows your message. Tell them you will ask a few things to "
+        "set it up. Ask nothing yourself."
     ),
 }
 """What a handoff call is answered with: not words for the user, but what the
@@ -258,6 +277,8 @@ An exercise named in a sentence like these is one they want out of their
 training, not one to look up.
 - They are telling you about training they have already done: call
   `log_workout`.
+- They want to set up their training, or start it again from the beginning:
+  call `set_up`.
 - They ask something the tools above can answer -- how much of a muscle group
   this cycle, what they lifted last time, whether a workout is still
   unreported: call the tool and answer from what came back.
@@ -347,6 +368,12 @@ NEXT_MESOCYCLE = (
     "them so, and say nothing about what is in it."
 )
 
+ONBOARDED = (
+    "The interview is over and what they told you is written down. You are "
+    "planning their first mesocycle now, and it follows shortly. Tell them so, "
+    "and say nothing about what is in it."
+)
+
 NOT_LOGGED = (
     "What they reported could not be turned into a workout the engine will "
     "accept, so nothing was written. Tell them it did not go through and ask "
@@ -363,6 +390,7 @@ SITUATIONS = (
     LOGGED,
     NOT_LOGGED,
     NEXT_MESOCYCLE,
+    ONBOARDED,
 )
 """Everything the machine can ask the entrance to say.
 

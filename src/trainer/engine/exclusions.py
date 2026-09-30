@@ -7,7 +7,7 @@ same door. This module is what makes that hard rather than merely
 documented: `classify` only ever returns one of the two granularities or
 refuses outright, and nothing here accepts an exercise id.
 
-Triage is the one thing that will call `add` for real, once it exists. Until then, tests write rows directly to exercise the mechanism, and
+`add` is called by the logger's confirmed exclusion and by onboarding's triage.
 `--exclude` on the CLI classifies an ad-hoc value for a single query without
 persisting it -- a re-test date only means something for a decision meant to
 outlive the command that made it.

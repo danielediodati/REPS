@@ -61,10 +61,12 @@ NOT_READ = "il report non è passato: {why}"
 
 PLAN = "plan"
 LOG = "log"
+ONBOARD = "onboard"
 """Which run is being watched. The two graphs share four node names and mean
 different things by three of them: `emit` writes a plan on one and a performed
 workout on the other, and a draft that says *scrivo il piano* while a report is
-being read is a lie about what the machine is doing."""
+being read is a lie about what the machine is doing. An interview shows no
+lines: its steps are questions, and they reach the chat as messages."""
 
 LIMIT = 3500
 """Characters a draft is cut to, under Telegram's 4096, oldest lines first."""
@@ -87,6 +89,8 @@ class Progress:
     def reading(self, update: Mapping[str, Any]) -> bool:
         """One chunk, as new lines. True when the draft has something new to show."""
         before = len(self.lines)
+        if self.of == ONBOARD:
+            return False
         for node, delta in update.items():
             if isinstance(delta, Mapping):
                 self._node(node, delta)

@@ -29,7 +29,15 @@ from langgraph.types import Command
 from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import conclusions, entrance, logfile, models, planner, progress
+from trainer.coach import (
+    conclusions,
+    entrance,
+    logfile,
+    models,
+    onboarding,
+    planner,
+    progress,
+)
 from trainer.coach import logger as logger_graph
 from trainer.coach import record as run_record
 from trainer.engine import config, mesocycles, workouts
@@ -197,6 +205,7 @@ def thread_for(chat_id: int) -> str:
 
 PLANNING = "plan"
 LOGGING = "log"
+ONBOARDING = "onboard"
 
 
 def under(thread: str, graph: str) -> str:
@@ -523,6 +532,7 @@ class Graphs:
     entrance: entrance.Entrance
     planner: planner.Planner
     logger: logger_graph.Logger
+    onboarding: onboarding.Onboarding
     archive: Path
     talking: dict[str, asyncio.Lock] = field(default_factory=dict)
     """One lock per thread, so two turns never invoke the entrance on it at once.
@@ -554,6 +564,10 @@ def talking(graphs: Graphs) -> Run:
     """
 
     async def run(thread: str, text: str, chat: Chat) -> None:
+        if await asyncio.to_thread(_interviewing, graphs, thread):
+            # Whatever the interview is waiting on, a message answers it.
+            await _interview(graphs, thread, Command(resume=text), chat)
+            return
         if await asyncio.to_thread(_asking, graphs, thread) is not None:
             # The logger is holding a clarifying question, so this message is
             # the answer to it and not a new turn. That is the graph's own
@@ -571,6 +585,8 @@ def talking(graphs: Graphs) -> Run:
             await _planning(graphs, thread, final, chat)
         elif handoff == entrance.LOG_WORKOUT:
             await _logging(graphs, thread, text, final, chat)
+        elif handoff == entrance.SET_UP:
+            await _onboarding(graphs, thread, text, final, chat)
 
     return run
 
@@ -740,6 +756,70 @@ async def _reporting(graphs: Graphs, thread: str, given: Any, chat: Chat) -> Non
         progress.Progress(progress.LOG),
     )
     await reported(graphs, settled, thread, chat)
+
+
+async def _onboarding(
+    graphs: Graphs, thread: str, text: str, final: Mapping[str, Any], chat: Chat
+) -> None:
+    """The interview, behind the turn the entrance has already answered."""
+    try:
+        words = await asyncio.to_thread(_vocabulary)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot set up: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    given = dict(
+        onboarding.starting(text, date.today().isoformat(), words)
+    ) | entrance.carried(final)
+    await _interview(graphs, thread, given, chat)
+
+
+def _vocabulary() -> dict[str, list[str]]:
+    with tools.reported(), tools.opened() as connection:
+        return onboarding.vocabulary(connection)
+
+
+async def _interview(graphs: Graphs, thread: str, given: Any, chat: Chat) -> None:
+    """One run of the interview, up to its next question or its end."""
+    settled = await _ending(
+        graphs.onboarding,
+        given,
+        under(thread, ONBOARDING),
+        chat,
+        graphs.archive,
+        progress.Progress(progress.ONBOARD),
+    )
+    await interviewed(graphs, settled, thread, chat)
+
+
+async def interviewed(
+    graphs: Graphs, final: Mapping[str, Any], thread: str, chat: Chat
+) -> None:
+    """The interview's next question, or its declarations written and a first mesocycle planned."""
+    waiting = final.get("__interrupt__")
+    if waiting:
+        await _asked(waiting[0], thread, chat)
+        return
+    try:
+        await asyncio.to_thread(_onboarded, final)
+        request = await asyncio.to_thread(_handed, entrance.PLAN_MESOCYCLE, {})
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot finish setting up: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    await _relay(graphs, thread, entrance.ONBOARDED, chat)
+    await _proposing(graphs, thread, planner.starting(request), chat)
+
+
+def _onboarded(final: Mapping[str, Any]) -> None:
+    with tools.reported():
+        onboarding.written(dict(final))
+
+
+def _interviewing(graphs: Graphs, thread: str) -> bool:
+    """Whether the interview is waiting on this chat: a question, or an exclusion to confirm."""
+    held = graphs.onboarding.get_state(_reading(under(thread, ONBOARDING)))
+    return bool(held.interrupts)
 
 
 DRAFT_SECONDS = 20.0
@@ -940,6 +1020,10 @@ def answering(graphs: Graphs) -> Resume:
 
 async def _confirming(graphs: Graphs, thread: str, tap: Tap, chat: Chat) -> None:
     """The exclusion, confirmed or declined, and the run carried on from there."""
+    held = graphs.onboarding.get_state(_reading(under(thread, ONBOARDING))).interrupts
+    if held and held[0].id == tap.proposal:
+        await _interview(graphs, thread, Command(resume=tap.action == CONFIRMED), chat)
+        return
     pending = graphs.logger.get_state(_reading(under(thread, LOGGING))).interrupts
     if not pending or pending[0].id != tap.proposal:
         await _relay(graphs, thread, entrance.SUPERSEDED, chat)
@@ -1525,6 +1609,10 @@ def graphs(
         planner=plans_on,
         logger=logger_graph.build(
             logs, checkpointer=saver, archive=archive, store=store
+        ),
+        # On the entrance's model until ticket 13.5 measures one for it.
+        onboarding=onboarding.build(
+            front, checkpointer=saver, archive=archive, store=store
         ),
         archive=archive,
         preparing=preparing,

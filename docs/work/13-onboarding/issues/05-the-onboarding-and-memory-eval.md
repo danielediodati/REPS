@@ -15,6 +15,11 @@ Read first: ADR-0010 (legality at 100%, judgement at a declared bar); ADR-0011 (
 
 **Spends credits.** Every run is estimated first and runs only on the user's go (CLAUDE.md).
 
+## From 02
+
+- Onboarding runs on the entrance's model (`bot.graphs` passes `front`; `onboarding.studio` uses `models.entrance()`). There is no `ONBOARDING_MODEL` yet: this ticket adds it with its choice.
+- The graph is driven turn by turn with `Command(resume=...)` on a checkpointed thread; `tests/test_onboarding.py` shows the shape a scripted persona needs.
+
 ## Acceptance criteria
 
 - [ ] The suite runs against a fixture named in `TRAINER_DB` and `TRAINER_CONFIG`.

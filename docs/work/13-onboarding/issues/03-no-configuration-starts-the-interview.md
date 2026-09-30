@@ -13,6 +13,12 @@ Read first: CLAUDE.md, the standing rule on a missing precondition; `engine/conf
 - **`training.example.toml` goes**, with `EXAMPLE_CONFIG_PATH` and every message and test that names it. The comments it carried now come from the file onboarding writes.
 - README's setup section says the bot asks, and no longer tells the reader to copy a file.
 
+## From 02
+
+- The bot's entry is `bot._onboarding(graphs, thread, text, final, chat)`; it reads the vocabulary and starts `onboarding.starting`. Starting on its own needs an entrance-less `final` (or `entrance.carried` of an empty run).
+- `onboarding.starting` resets `declared` to `{}`: resuming a file with fields already set means seeding `declared` from it, so `_declared` reports only the rest as missing.
+- `onboarding.written` already writes a comment above every field, so the example's comments are not needed.
+
 ## Acceptance criteria
 
 - [ ] With no `training.toml`, the first message to the bot gets the first onboarding question.

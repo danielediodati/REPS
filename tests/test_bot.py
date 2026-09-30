@@ -49,10 +49,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from trainer.coach import bot, checkpoints, entrance, logfile, models, planner, progress
+from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
-from trainer.engine import catalog, database, exclusions, mesocycles, migrations, workouts
+from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
 
 OWNER = 6421
 STRANGER = 99
@@ -232,6 +232,7 @@ def graphs_of(
     *,
     front: BaseChatModel | None = None,
     log: coach_logger.Logger | None = None,
+    interview: onboarding.Onboarding | None = None,
     saver: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
 ) -> bot.Graphs:
@@ -263,6 +264,11 @@ def graphs_of(
         ),
         planner=plans_on,
         logger=log if log is not None else logger_graph_of(Scripted(), checkpointer=held),
+        onboarding=interview
+        if interview is not None
+        else onboarding.build(
+            models.Chat(Scripted(), FRONT_PROVIDER, FRONT_MODEL), checkpointer=held
+        ),
         archive=kept,
         preparing=preparing,
     )
@@ -2715,3 +2721,126 @@ def test_a_mesocycle_the_user_asked_for_and_has_not_answered_is_not_prepared_ove
     assert watched.offers == []
     assert len(planned.seen) == 1, "never a second planning run"
     assert graphs.planner.get_state(planning_on()).interrupts[0].id in asked.offers[0][1][0][0]
+
+
+# -- onboarding ----------------------------------------------------------------
+
+SETTLED = {
+    "cycle_length": 2,
+    "duration_cap_min": 45,
+    "split": [["legs"], ["shoulders"]],
+    "equipment": ["barbell"],
+    "goal": "hypertrophy",
+}
+"""What the interview settles here: `FIXTURE_SPLIT`, which `CATALOG` can plan."""
+
+
+def declaring(*made: tuple[str, dict[str, Any]]) -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {"name": name, "args": args, "id": f"call_{n}", "type": "tool_call"}
+            for n, (name, args) in enumerate(made)
+        ],
+    )
+
+
+def interview_of(*turns: AIMessage, saver: BaseCheckpointSaver[Any]) -> onboarding.Onboarding:
+    return onboarding.build(
+        models.Chat(Scripted(turns=list(turns)), FRONT_PROVIDER, FRONT_MODEL),
+        checkpointer=saver,
+    )
+
+
+def setting_up(interview: onboarding.Onboarding, saver: BaseCheckpointSaver[Any], plan: planner.Planner | None = None) -> bot.Graphs:
+    return graphs_of(
+        plan,
+        front=Talking(handoff=entrance.SET_UP),
+        interview=interview,
+        saver=saver,
+    )
+
+
+def test_asking_to_set_up_reaches_the_interview_and_its_first_question(
+    catalogued: sqlite3.Connection,
+) -> None:
+    saver = InMemorySaver()
+    graphs = setting_up(interview_of(AIMessage(content="Per cosa ti alleni?"), saver=saver), saver)
+
+    watched = asking(graphs, "voglio impostare l'allenamento")
+
+    assert watched.said == [SAYS, "Per cosa ti alleni?"]
+
+
+def test_the_interview_ends_in_the_file_and_a_mesocycle_offered(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    saver = InMemorySaver()
+    declared.unlink()
+    interview = interview_of(
+        AIMessage(content="Dimmi tutto: obiettivo, allenamenti, attrezzi, tempo."),
+        declaring((onboarding.DECLARE, SETTLED), (onboarding.FINISH, {})),
+        saver=saver,
+    )
+    plan = graph_of(Scripted(documents=[A_MESOCYCLE]), checkpointer=saver)
+    graphs = setting_up(interview, saver, plan)
+    coach = turns_of(graphs)
+    asyncio.run(coach.arriving(OWNER, CHAT, "impostiamo", Channels().chat))
+    answered = Channels()
+
+    asyncio.run(coach.arriving(OWNER, CHAT, "massa, gambe e spalle, bilanciere, 45", answered.chat))
+
+    assert config.load().split == (("legs",), ("shoulders",))
+    assert answered.said == [entrance.ONBOARDED]
+    (text, buttons) = answered.offers[0]
+    assert "Barbell Squat" in text
+    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+
+
+def test_the_interview_survives_a_restart(
+    tmp_path: Path, catalogued: sqlite3.Connection
+) -> None:
+    path = tmp_path / "checkpoints.sqlite"
+    with checkpoints.saver(path) as saver:
+        graphs = setting_up(interview_of(AIMessage(content="Per cosa ti alleni?"), saver=saver), saver)
+        asyncio.run(turns_of(graphs).arriving(OWNER, CHAT, "impostiamo", Channels().chat))
+
+    with checkpoints.saver(path) as saver:
+        graphs = setting_up(
+            interview_of(AIMessage(content="E quanti allenamenti a rotazione?"), saver=saver),
+            saver,
+        )
+        watched = Channels()
+        asyncio.run(turns_of(graphs).arriving(OWNER, CHAT, "massa", watched.chat))
+
+    assert watched.said == ["E quanti allenamenti a rotazione?"], "no entrance turn, no question twice"
+
+
+def test_an_exclusion_the_interview_proposes_is_confirmed_by_a_tap(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    saver = InMemorySaver()
+    interview = interview_of(
+        declaring(
+            (
+                onboarding.PROPOSE_EXCLUSION,
+                {"value": "vertical push", "retest_date": "2099-01-01", "why": "la spalla"},
+            )
+        ),
+        declaring((onboarding.DECLARE, SETTLED), (onboarding.FINISH, {})),
+        saver=saver,
+    )
+    plan = graph_of(Scripted(documents=[A_MESOCYCLE]), checkpointer=saver)
+    graphs = setting_up(interview, saver, plan)
+    coach = turns_of(graphs)
+    watched = Channels()
+    asyncio.run(coach.arriving(OWNER, CHAT, "impostiamo", watched.chat))
+    (text, buttons) = watched.offers[0]
+    assert "vertical push" in text
+    yes = next(data for data, label in buttons if data.startswith(bot.CONFIRMED + bot.SEPARATOR))
+
+    asyncio.run(coach.tapped(OWNER, CHAT, yes, Channels().chat))
+
+    assert exclusions.active(catalogued, date.today().isoformat()) == (
+        exclusions.Exclusion("pattern", "vertical push"),
+    )

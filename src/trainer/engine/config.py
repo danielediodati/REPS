@@ -11,9 +11,9 @@ apart.
 The file lives in `TRAINER_HOME` with everything else this machine writes, and
 not in the repository: it carries one user's own cap, split and equipment.
 
-**This module reads. Nothing in `engine/` writes it.** Onboarding is what will
-fill the file by talking to the user; until then it is hand-written, and
-`training.example.toml` is the committed example to start from.
+**This module reads. Nothing in `engine/` writes it.** Onboarding
+(`coach/onboarding.py`) fills it by talking to the user, and the user may edit
+it by hand.
 
 TOML, because `tomllib` is in the standard library and the file has to survive
 being edited by hand between sessions: comments stay where they were put, a
