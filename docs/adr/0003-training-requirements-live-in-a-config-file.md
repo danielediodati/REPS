@@ -1,5 +1,7 @@
 # Training requirements live in a config file, not in SQLite
 
+**Superseded by [ADR-0013](0013-declarations-live-in-the-database.md).**
+
 The user **declares** six things: cycle length, duration cap, split, volume denominator, the equipment they have and the goal. They edit them by hand and read them back, so these live in `training.toml`. SQLite keeps what the **system** writes: workouts, volume, exclusions.
 
 The dividing line is a file you read and edit by hand, against rows you query. A declaration is visible without a query; the same value in SQLite would sit beside measurements, with nothing to tell the two apart.

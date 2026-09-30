@@ -1,6 +1,6 @@
 # A declaration changes through onboarding
 
-Onboarding fills `training.toml` the first time (ADR-0003). A declaration also changes later: a barbell bought, minutes cut, a new goal. ADR-0008 has two doors for a change the user asks for, and neither of them writes the file.
+Onboarding writes the declarations the first time. A declaration also changes later: a barbell bought, minutes cut, a new goal. ADR-0008 has two doors for a change the user asks for, and neither of them writes a declaration.
 
 ## Decision
 
@@ -8,9 +8,9 @@ Onboarding fills `training.toml` the first time (ADR-0003). A declaration also c
 
    | request | example | door |
    |---|---|---|
-   | adaptation | *"only 30 minutes today"* | the planner, today only, as ADR-0008 item 6; `training.toml` is not touched |
+   | adaptation | *"only 30 minutes today"* | the planner, today only, as ADR-0008 item 6; the declarations are not touched |
    | change to the mesocycle | *"no more lunges"* | the planner, the cycles left, as ADR-0008 item 6 |
-   | change to a declaration | *"I bought a barbell"*, *"from now on 30 minutes"*, *"switching to strength"* | onboarding, asking only about what changed, then rewriting `training.toml` |
+   | change to a declaration | *"I bought a barbell"*, *"from now on 30 minutes"*, *"switching to strength"* | onboarding, asking only about what changed, then writing a new version of the declarations (ADR-0013) |
 
 2. **After a declaration changes, code says which paths are open for the running mesocycle:**
 
@@ -21,7 +21,7 @@ Onboarding fills `training.toml` the first time (ADR-0003). A declaration also c
    | the goal changed | a new mesocycle now, or at the end of this one; never rewritten under a new goal |
 
 3. **The agent picks one open path and says why**; the user accepts or turns it down through the mesocycle's loop (ADR-0007).
-4. **Keeping it to its end needs no memory.** The new declaration is already in `training.toml`, and the next mesocycle reads it from there.
+4. **Keeping it to its end needs no memory.** The new declaration is already the version in force, and the next mesocycle reads it from there.
 
 ## Consequences
 

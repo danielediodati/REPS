@@ -96,10 +96,10 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | store | holds | written by |
 |---|---|---|
 | engine SQLite | catalog; workouts (prescribed or performed, provenance per field); exclusions; volume views | engine |
+| engine SQLite, declarations | cycle length, duration cap, split, volume denominator, equipment, goal; one dated version per change | onboarding (ADR-0013) |
 | LangGraph checkpointer | the live run of each thread, paused threads | graph |
 | run archive (`runs/` in the home) | every closed run, one document per run under its negotiation | graph (ADR-0007) |
 | LangGraph store | preferences, conclusions, hypotheses, observations, each with a source | agent, gated by the supervisor |
-| `training.toml` | cycle length, duration cap, split, volume denominator, equipment, goal | user (ADR-0003) |
 | [methodology](src/trainer/data/methodology.md) | ranges per goal and principles, from the literature with sources; the planner reads it | human |
 
 No store writes another's facts.
@@ -186,7 +186,7 @@ The interface is Telegram, and it is asynchronous.
 - **Logging is by deviation.** *«panca bene, solo 3 serie di military perché la spalla tirava»*: whatever is not mentioned was done as prescribed.
 - **A prescribed workout with no report is unreported**, never assumed done.
 - **The next plan is prepared** as soon as a report arrives.
-- **Onboarding** is one conversation the agent leads in its own words, with no script. Code holds only that it cannot end while a field of `training.toml` is missing. It ends in a first mesocycle.
+- **Onboarding** is one conversation the agent leads in its own words, with no script. Code holds only that it cannot end while a declaration is missing. It ends in a first mesocycle.
 
 ## Appendix: catalog and enrichment
 
