@@ -108,7 +108,7 @@ In this order. Measuring first is what stops the methodology being written again
 
 **Demo**: an onboarding conversation, resumed after a day away, ending in a first mesocycle; weeks later, *"I hate pressing"* still holds.
 
-1. **Memory with a source.** Conclusions in the LangGraph store through a `remember` tool; admitted only when the user's verbatim sentence is in one of their messages. The planner reads them.
+1. **Memory with a source.** Conclusions in the LangGraph store through a `remember` tool; admitted only when the user's verbatim sentence is in one of their messages. The planner reads them. — **done** `417df7e`
 2. **The onboarding conversation.** Led by the agent from a prompt, one question per interrupt, resumed after a day; it cannot end with a field missing. Triage is a tool proposing an exclusion the user confirms. It writes `training.toml` and ends in a first mesocycle.
 3. **No configuration starts the interview**, instead of blocking the bot; `training.example.toml` goes with the state that named it.
 4. **A declaration changes through onboarding** (ADR-0012): code lists the paths open for the running mesocycle, the agent picks one, the user accepts.
