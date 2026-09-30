@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
-from collections.abc import Callable
+import tomllib
+from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, cast
@@ -25,12 +27,13 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from langgraph.types import interrupt
 
+from trainer import plan as plans
 from trainer import tools
 from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.coach.logger import CLARIFY, EXCLUSION
-from trainer.engine import catalog, config, exclusions, methodology, muscle_groups
+from trainer.engine import catalog, config, exclusions, mesocycles, methodology, muscle_groups
 
 FIELDS = ("cycle_length", "duration_cap_min", "split", "equipment", "goal")
 """The declarations the interview settles; `volume_denominator` has one value, so nothing to ask."""
@@ -84,7 +87,22 @@ def finish() -> str:
     raise AssertionError("the graph answers finish; nothing calls it")
 
 
+def choose(path: str, why: str) -> str:
+    """Pick what happens to the mesocycle they are following, now that a declaration changed.
+
+    - `path`: one of the paths `finish` said are open.
+    - `why`: one sentence to them, in Italian, saying why this one.
+
+    Refused while a declaration is missing or wrong, or when the path is not open.
+    What comes back ends the change.
+
+    The body is never run. The graph answers this call by checking the path.
+    """
+    raise AssertionError("the graph answers choose; nothing calls it")
+
+
 DECLARE = declare.__name__
+CHOOSE = choose.__name__
 PROPOSE_EXCLUSION = propose_exclusion.__name__
 FINISH = finish.__name__
 
@@ -137,6 +155,45 @@ missing or wrong and says what; ask them about it and declare it again.
 Today is {today}.
 """
 
+KEEP = "keep"
+REWRITE = "rewrite"
+NEW_NOW = "new_now"
+PATHS = {
+    KEEP: "keep the running mesocycle to its end; the next one is planned from the new declarations",
+    REWRITE: "rewrite the running mesocycle's cycles left under the new declarations",
+    NEW_NOW: "plan a new mesocycle now, ending the running one",
+}
+"""What each path open to the running mesocycle does (ADR-0012 item 2), as the model is told it."""
+
+CHANGING = """\
+You are the trainer of the person you are talking to, and their training is
+already set up. They have just told you something that changes what they
+declared. You write in Italian, the way a coach texting would: short, warm, one
+question per message.
+
+What is declared now:
+
+{current}
+
+Ask only about what changed, and only what you need to write it down: often
+their message says it all and you ask nothing. Declare the new values with
+`declare`; a field you leave out stays as it is. The words:
+
+- goal: one of {goals}.
+- split: one entry per workout, naming muscle groups or muscles from: {names}.
+- equipment: as the catalog names it: {equipment}. «body only» is having nothing.
+
+Remembering, when `remember` is offered: something lasting they tell you about
+themselves is worth keeping; `quote` is their sentence exactly as they typed it.
+
+When the change is declared, call `finish`: it says which paths are open for
+the mesocycle they are following. Pick one with `{choose}`, with one sentence to
+them saying why. They accept or turn down their mesocycle afterwards, so pick
+what you think is best rather than asking.
+
+Today is {today}.
+"""
+
 KEPT = "Written down. {missing}"
 STILL = "Still to settle: {fields}."
 SETTLED = "Everything is declared: call `finish` once they have nothing to add."
@@ -147,6 +204,21 @@ UNKNOWN_EQUIPMENT = (
     "Not finished: the catalog has no equipment called {names}. It has {valid}."
 )
 FINISHED = "The interview is over. Their first mesocycle is planned next."
+UNCHANGED = (
+    "Not finished: nothing differs from what was declared. Ask them what changed, "
+    "and declare it."
+)
+OPEN = (
+    "Declared. The paths open for the mesocycle they are following:\n{paths}\n"
+    "Pick one with `choose`, and say why."
+)
+NOT_OPEN = "Not chosen: {path!r} is not open. The paths open:\n{paths}"
+NO_WHY = "Not chosen: `why` is one sentence to them saying why this path."
+CHANGED = (
+    "The change is written down. No mesocycle is running, so the next one is "
+    "planned from it."
+)
+CHOSEN = "The change is written down, and {path} is what happens next."
 
 NOT_EXCLUDABLE = "Not proposed: {error}"
 BAD_RETEST = "Not proposed: retest_date {given!r} is not a date after {today}, as YYYY-MM-DD."
@@ -181,6 +253,18 @@ class OnboardingState(TypedDict, total=False):
     """Tool calls since the user's last answer, bounded by the budget."""
 
     budget: int
+    changing: bool
+    """Whether this is a change to what is declared rather than a first interview."""
+
+    before: dict[str, Any]
+    """The declarations in `training.toml` when a change began."""
+
+    chosen: str
+    """The path a change picked for the running mesocycle, or empty when none was running."""
+
+    why: str
+    """The model's sentence to the user saying why that path."""
+
     negotiation: str
     run: str
     follows: str | None
@@ -214,7 +298,84 @@ def starting(said: str, today: str, words: dict[str, list[str]]) -> OnboardingSt
         "finished": False,
         "spent": 0,
         "timings": [],
+        "changing": False,
+        "before": {},
+        "chosen": "",
+        "why": "",
     }
+
+
+def changing(
+    said: str, today: str, words: dict[str, list[str]], before: Mapping[str, Any]
+) -> OnboardingState:
+    """The input that starts a change: what they said, and what `training.toml` declares now."""
+    current = {field: before[field] for field in FIELDS if field in before}
+    started = starting(said, today, words)
+    started["declared"] = dict(current)
+    started["before"] = current
+    started["changing"] = True
+    return started
+
+
+def declarations(path: Path | None = None) -> dict[str, Any]:
+    """What `training.toml` declares, field by field, as TOML reads it; `NoTrainingConfig` when there is no file."""
+    target = path if path is not None else config.config_path()
+    if not target.is_file():
+        raise config.NoTrainingConfig(target)
+    try:
+        raw = tomllib.loads(target.read_text(encoding="utf-8-sig"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
+        raise config.ConfigError(f"{target.name} cannot be read: {error}") from error
+    return {field: raw[field] for field in FIELDS if field in raw}
+
+
+Opening = Callable[[Mapping[str, Any], config.TrainingConfig], tuple[str, ...]]
+"""The paths open for the running mesocycle, given the declarations before and after a change."""
+
+
+def opening_today(before: Mapping[str, Any], after: config.TrainingConfig) -> tuple[str, ...]:
+    """`open_paths` against the project's database, as of today."""
+    with tools.opened() as connection:
+        return open_paths(connection, date.today().isoformat(), before, after)
+
+
+def open_paths(
+    connection: sqlite3.Connection,
+    today: str,
+    before: Mapping[str, Any],
+    after: config.TrainingConfig,
+) -> tuple[str, ...]:
+    """The paths ADR-0012 leaves open to the running mesocycle under `after`; none when none is running."""
+    kept = mesocycles.active(connection)
+    if kept is None or mesocycles.finished(connection) is not None:
+        return ()
+    if before.get("goal") != after.goal:
+        return (NEW_NOW, KEEP)
+    # A rewrite keeps the count slot by slot, so it needs as many slots as before.
+    rewritable = len(kept.slots) == after.cycle_length
+    current = plans.Mesocycle(
+        workouts=[plans.from_prescribed(slot) for slot in kept.slots],
+        cycles=kept.cycles,
+        why=kept.why,
+    )
+    request = plans.mesocycle_requested(connection, today, declared=after)
+    if not plans.validate_mesocycle(connection, current, request):
+        return (KEEP, REWRITE, NEW_NOW)
+    return (REWRITE, NEW_NOW) if rewritable else (NEW_NOW,)
+
+
+def changed(before: Mapping[str, Any], after: config.TrainingConfig) -> tuple[str, ...]:
+    """The fields whose value `after` changes, compared as TOML holds them."""
+    return tuple(
+        field
+        for field in FIELDS
+        if field not in before or _plain(before[field]) != _plain(getattr(after, field))
+    )
+
+
+def _plain(value: Any) -> Any:
+    """A value with its tuples as lists, the way TOML reads an array back."""
+    return json.loads(json.dumps(value))
 
 
 Onboarding = CompiledStateGraph[OnboardingState, None, OnboardingState, OnboardingState]
@@ -226,37 +387,35 @@ def build(
     checkpointer: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
     store: BaseStore | None = None,
+    opening: Opening | None = None,
 ) -> Onboarding:
     """The compiled interview on `on`; `store` is where `remember` keeps a conclusion.
 
+    `opening` lists the paths open to the running mesocycle after a change.
     Nothing here writes the file or an exclusion: `written` does, from the door.
     """
     model = on.model
-    offered: list[Callable[..., str]] = [declare, propose_exclusion]
-    if store is not None:
-        offered.append(conclusions.remember)
-    working = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
-    ending = {"type": "function", "function": tools.schema(finish)}
+    remembering: list[Callable[..., str]] = [conclusions.remember] if store is not None else []
+    first = _defined([declare, propose_exclusion, *remembering])
+    change = _defined([declare, *remembering])
+    endings = _defined([finish])
+    changes_end = _defined([finish, choose])
     timed = records.timing(on)
+    paths_of = opening if opening is not None else opening_today
 
     def interview(state: OnboardingState) -> dict[str, Any]:
         born = records.born(state)
-        opening: list[AnyMessage] = []
+        started: list[AnyMessage] = []
         if not state.get("messages"):
-            words = state.get("vocabulary", {})
-            opening = [
-                SystemMessage(
-                    INTERVIEWING.format(
-                        today=state.get("today", ""),
-                        **{key: ", ".join(value) for key, value in words.items()},
-                    )
-                ),
+            started = [
+                SystemMessage(_prompt(state)),
                 HumanMessage(state.get("said", [""])[0]),
             ]
+        working, ending = (change, changes_end) if state.get("changing") else (first, endings)
         definitions = working if state.get("spent", 0) < budget else []
-        bound = model.bind_tools([*definitions, ending])
-        reply = bound.invoke([*state.get("messages", []), *opening])
-        return born | {"budget": budget, "messages": [*opening, reply]}
+        bound = model.bind_tools([*definitions, *ending])
+        reply = bound.invoke([*state.get("messages", []), *started])
+        return born | {"budget": budget, "messages": [*started, reply]}
 
     def ask(state: OnboardingState) -> dict[str, Any]:
         """The model's message put to the user, and their answer handed back."""
@@ -286,16 +445,24 @@ def build(
         confirmed = list(state.get("exclusions", []))
         said = list(state.get("said", []))
         spent = state.get("spent", 0)
+        before = state.get("before", {})
+        a_change = bool(state.get("changing"))
         finished = False
+        chosen, why = "", ""
         answers: list[AnyMessage] = []
         for call in reply.tool_calls:
             spent += 1
             name = call["name"]
-            if spent > budget and name != FINISH:
+            if spent > budget and name not in (FINISH, CHOOSE):
                 text, failed = SPENT, True
             elif name == DECLARE:
                 text, failed = _declared(declared, call)
-            elif name == PROPOSE_EXCLUSION:
+            elif a_change and name in (FINISH, CHOOSE):
+                text, failed, path = _changing(before, declared, call, paths_of)
+                if not failed and (path or text == CHANGED):
+                    finished, chosen = True, path
+                    why = str(call["args"].get("why", "")).strip()
+            elif name == PROPOSE_EXCLUSION and not a_change:
                 text, failed = _proposed(state, call, confirmed, said)
             elif name == conclusions.REMEMBER and store is not None:
                 text, failed = conclusions.kept(
@@ -322,6 +489,8 @@ def build(
             "said": said,
             "spent": spent,
             "finished": finished,
+            "chosen": chosen,
+            "why": why,
         }
         if finished:
             decided.update(records.closing({**state, **decided}, records.DONE, budget, archive))
@@ -345,6 +514,54 @@ def build(
         "tools", after_tools, {"interview": "interview", "done": END}
     )
     return graph.compile(checkpointer=checkpointer)
+
+
+def _defined(offered: list[Callable[..., str]]) -> list[dict[str, Any]]:
+    return [{"type": "function", "function": tools.schema(tool)} for tool in offered]
+
+
+def _prompt(state: OnboardingState) -> str:
+    """The system prompt: the whole interview, or a change to what is declared."""
+    words = {key: ", ".join(value) for key, value in state.get("vocabulary", {}).items()}
+    before = state.get("before", {})
+    if not state.get("changing"):
+        return INTERVIEWING.format(today=state.get("today", ""), **words)
+    current = "\n".join(f"- {field}: {json.dumps(before.get(field))}" for field in FIELDS)
+    return CHANGING.format(
+        current=current,
+        goals=words.get("goals", ""),
+        names=words.get("names", ""),
+        equipment=words.get("equipment", ""),
+        choose=CHOOSE,
+        today=state.get("today", ""),
+    )
+
+
+def _changing(
+    before: Mapping[str, Any],
+    declared: dict[str, Any],
+    call: ToolCall,
+    paths_of: Opening,
+) -> tuple[str, bool, str]:
+    """A `finish` or `choose` in a change: what the model is told, whether it failed, and the path chosen."""
+    refused = refusal(declared)
+    if refused is not None:
+        return refused, True, ""
+    after = settled(declared)
+    if not changed(before, after):
+        return UNCHANGED, True, ""
+    paths = paths_of(before, after)
+    if not paths:
+        return CHANGED, False, ""
+    listed = "\n".join(f"- {path}: {PATHS[path]}" for path in paths)
+    if call["name"] == FINISH:
+        return OPEN.format(paths=listed), False, ""
+    path = str(call["args"].get("path", "")).strip()
+    if path not in paths:
+        return NOT_OPEN.format(path=path, paths=listed), True, ""
+    if not str(call["args"].get("why", "")).strip():
+        return NO_WHY, True, ""
+    return CHOSEN.format(path=path), False, path
 
 
 def _declared(declared: dict[str, Any], call: ToolCall) -> tuple[str, bool]:
@@ -458,7 +675,16 @@ COMMENTS = {
 
 def rendered(declaration: config.TrainingConfig, today: str) -> str:
     """The declarations as TOML, with a comment above each."""
-    values = {
+    parts = [HEADER.format(today=today)]
+    for key, value in _values(declaration).items():
+        comment = "\n".join(f"# {line}" for line in COMMENTS[key].splitlines())
+        parts.append(f"{comment}\n{key} = {value}\n")
+    return "\n".join(parts)
+
+
+def _values(declaration: config.TrainingConfig) -> dict[str, str]:
+    """Each declaration's value as TOML, in the file's order."""
+    return {
         "cycle_length": str(declaration.cycle_length),
         "duration_cap_min": str(declaration.duration_cap_min),
         "volume_denominator": json.dumps(declaration.volume_denominator),
@@ -468,11 +694,6 @@ def rendered(declaration: config.TrainingConfig, today: str) -> str:
         "equipment": _listed(declaration.equipment),
         "goal": json.dumps(declaration.goal),
     }
-    parts = [HEADER.format(today=today)]
-    for key, value in values.items():
-        comment = "\n".join(f"# {line}" for line in COMMENTS[key].splitlines())
-        parts.append(f"{comment}\n{key} = {value}\n")
-    return "\n".join(parts)
 
 
 def _listed(names: tuple[str, ...]) -> str:
@@ -480,12 +701,68 @@ def _listed(names: tuple[str, ...]) -> str:
     return "[" + ", ".join(json.dumps(name) for name in names) + "]"
 
 
+def rewritten(text: str, after: config.TrainingConfig) -> str:
+    """`training.toml`'s text with the fields `after` changes replaced, and every other line kept."""
+    values = _values(after)
+    held = tomllib.loads(text)
+    missing = [key for key in values if key not in FIELDS and key not in held]
+    for field in (*changed(held, after), *missing):
+        found = _span(text, field)
+        if found is None:
+            text = text.rstrip("\n") + f"\n\n{field} = {values[field]}\n"
+        else:
+            start, end = found
+            text = text[:start] + values[field] + text[end:]
+    return text
+
+
+def _span(text: str, key: str) -> tuple[int, int] | None:
+    """Where the value of a top-level `key = value` starts and ends, comments and brackets allowed."""
+    found = re.search(rf"^[ \t]*{re.escape(key)}[ \t]*=[ \t]*", text, re.MULTILINE)
+    if found is None:
+        return None
+    start = at = found.end()
+    depth, quote, end = 0, "", len(text)
+    while at < len(text):
+        char = text[at]
+        if quote:
+            if char == "\\" and quote == '"':
+                at += 1
+            elif char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+        elif char == "#":
+            if depth == 0:
+                end = at
+                break
+            at = text.find("\n", at)
+            if at < 0:
+                break
+        elif char == "\n" and depth == 0:
+            end = at
+            break
+        at += 1
+    return start, start + len(text[start:end].rstrip())
+
+
 def written(final: dict[str, Any], path: Path | None = None) -> config.TrainingConfig:
-    """The interview's declarations written to `training.toml`, and its confirmed exclusions to the database."""
+    """The interview's declarations written to `training.toml`, and its confirmed exclusions to the database.
+
+    A change rewrites only the fields it changed; a first interview writes the whole file.
+    """
     declaration = settled(final["declared"])
     target = path if path is not None else config.config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(rendered(declaration, str(final["today"])), encoding="utf-8")
+    if final.get("changing") and target.is_file():
+        text = rewritten(target.read_text(encoding="utf-8-sig"), declaration)
+    else:
+        text = rendered(declaration, str(final["today"]))
+    target.write_text(text, encoding="utf-8")
     kept = final.get("exclusions", [])
     if kept:
         with tools.opened() as connection:

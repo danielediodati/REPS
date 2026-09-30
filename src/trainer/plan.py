@@ -377,7 +377,10 @@ class Assembled:
 
 
 def requested(
-    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
+    connection: sqlite3.Connection,
+    today: str,
+    asked: Asked = Asked(),
+    declared: config.TrainingConfig | None = None,
 ) -> Assembled:
     """Today's request, out of what a door was told and what the project knows.
 
@@ -405,7 +408,8 @@ def requested(
     if not catalog.values(connection, "movement_pattern"):
         raise admissible.AdmissibleError(admissible.UNENRICHED_MESSAGE)
 
-    declared = _declared()
+    if declared is None:
+        declared = _declared()
     if asked.workout is not None and asked.groups:
         raise PlanRejected(
             "a named workout takes its groups from the declared split, so "
@@ -425,6 +429,7 @@ def requested(
         budget_min=minutes,
         groups=turn.groups,
         given=[exclusion_state.classify(connection, value) for value in asked.exclude],
+        declared=declared,
     )
     return Assembled(
         request=Request(
@@ -441,18 +446,25 @@ def requested(
 
 
 def mesocycle_requested(
-    connection: sqlite3.Connection, today: str, asked: Asked = Asked()
+    connection: sqlite3.Connection,
+    today: str,
+    asked: Asked = Asked(),
+    declared: config.TrainingConfig | None = None,
 ) -> MesocycleRequest:
-    """One request per slot, each the one that slot would get asked on its own.
+    """One request per slot, each the one that slot would get asked on its own; `declared` defaults to the file's.
 
     A mesocycle needs the split, so with no `training.toml` that is the state
     reported, naming the example file.
     """
-    declared = config.load()
+    if declared is None:
+        declared = config.load()
     return MesocycleRequest(
         slots=tuple(
             requested(
-                connection, today, dataclasses.replace(asked, workout=slot, groups=())
+                connection,
+                today,
+                dataclasses.replace(asked, workout=slot, groups=()),
+                declared,
             ).request
             for slot in range(1, declared.cycle_length + 1)
         )
@@ -597,7 +609,7 @@ def _minutes(asked: int | None, declared: config.TrainingConfig | None) -> int:
         return declared.duration_cap_min
     # One refusal in one wording: the tool surface raises this same one when a
     # model asks for a workout longer than the declaration allows.
-    return constraints.within_the_cap(asked)
+    return constraints.within_the_cap(asked, declared)
 
 
 def _named(

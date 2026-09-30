@@ -587,6 +587,8 @@ def talking(graphs: Graphs) -> Run:
             await _logging(graphs, thread, text, final, chat)
         elif handoff == entrance.SET_UP:
             await _onboarding(graphs, thread, text, final, chat)
+        elif handoff == entrance.CHANGE_DECLARATION:
+            await _changing(graphs, thread, text, final, chat)
 
     return run
 
@@ -774,6 +776,31 @@ async def _onboarding(
     await _interview(graphs, thread, given, chat)
 
 
+async def _changing(
+    graphs: Graphs, thread: str, text: str, final: Mapping[str, Any], chat: Chat
+) -> None:
+    """The interview on what changed, seeded from `training.toml`; with no file, the whole interview (ADR-0012)."""
+    try:
+        before = await asyncio.to_thread(onboarding.declarations)
+    except config.NoTrainingConfig:
+        await _onboarding(graphs, thread, text, final, chat)
+        return
+    except config.ConfigError as state:
+        logger.warning("%s cannot change a declaration: %s", thread, state)
+        await chat.say(BLOCKED)
+        return
+    try:
+        words = await asyncio.to_thread(_vocabulary)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot change a declaration: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    given = dict(
+        onboarding.changing(text, date.today().isoformat(), words, before)
+    ) | entrance.carried(final)
+    await _interview(graphs, thread, given, chat)
+
+
 def _vocabulary() -> dict[str, list[str]]:
     with tools.reported(), tools.opened() as connection:
         return onboarding.vocabulary(connection)
@@ -800,6 +827,9 @@ async def interviewed(
     if waiting:
         await _asked(waiting[0], thread, chat)
         return
+    if final.get("changing"):
+        await _changed(graphs, final, thread, chat)
+        return
     try:
         await asyncio.to_thread(_onboarded, final)
         request = await asyncio.to_thread(_handed, entrance.PLAN_MESOCYCLE, {})
@@ -809,6 +839,33 @@ async def interviewed(
         return
     await _relay(graphs, thread, entrance.ONBOARDED, chat)
     await _proposing(graphs, thread, planner.starting(request), chat)
+
+
+async def _changed(
+    graphs: Graphs, final: Mapping[str, Any], thread: str, chat: Chat
+) -> None:
+    """A change written, the model's reason for its path said, and the planner started when the path needs one."""
+    chosen = str(final.get("chosen", ""))
+    try:
+        await asyncio.to_thread(_onboarded, final)
+        request = None
+        if chosen == onboarding.REWRITE:
+            said = str((final.get("said") or [""])[0])
+            request = await asyncio.to_thread(
+                _handed, entrance.CHANGE_MESOCYCLE, {"said": said}
+            )
+        elif chosen == onboarding.NEW_NOW:
+            request = await asyncio.to_thread(_handed, entrance.PLAN_MESOCYCLE, {})
+    except (tools.ToolFailure, mesocycles.MesocycleError) as state:
+        logger.warning("%s cannot finish a change: %s", thread, state, exc_info=True)
+        await chat.say(BLOCKED)
+        return
+    if not chosen:
+        await _relay(graphs, thread, entrance.DECLARED, chat)
+        return
+    await chat.say(str(final.get("why", "")) or FAILED)
+    if request is not None:
+        await _proposing(graphs, thread, planner.starting(request), chat)
 
 
 def _onboarded(final: Mapping[str, Any]) -> None:

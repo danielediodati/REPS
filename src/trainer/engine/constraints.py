@@ -35,6 +35,7 @@ def constraining_today(
     budget_min: int,
     groups: Sequence[str] = (),
     given: Sequence[Exclusion] = (),
+    declared: config.TrainingConfig | None = None,
 ) -> Constraints:
     """The standing exclusions as of `today`, plus the ones this caller adds, with the time and the groups asked for."""
     standing = exclusion_state.active(connection, today)
@@ -43,18 +44,19 @@ def constraining_today(
         # what it passes -- `trainer plan` does -- would otherwise send each
         # of them twice.
         exclusions=tuple(dict.fromkeys((*standing, *given))),
-        budget_min=within_the_cap(budget_min),
+        budget_min=within_the_cap(budget_min, declared),
         groups=tuple(groups),
     )
 
 
-def within_the_cap(budget_min: int) -> int:
-    """The minutes asked for, refused rather than clamped when a shorter cap is declared."""
-    try:
-        declared = config.load()
-    except config.NoTrainingConfig:
-        # Nobody has declared a cap, so there is no ceiling to be over.
-        return budget_min
+def within_the_cap(budget_min: int, declared: config.TrainingConfig | None = None) -> int:
+    """The minutes asked for, refused rather than clamped when a shorter cap is declared; `declared` defaults to the file's."""
+    if declared is None:
+        try:
+            declared = config.load()
+        except config.NoTrainingConfig:
+            # Nobody has declared a cap, so there is no ceiling to be over.
+            return budget_min
     if budget_min > declared.duration_cap_min:
         raise ConstraintError(
             f"{budget_min} minutes is over the {declared.duration_cap_min} "

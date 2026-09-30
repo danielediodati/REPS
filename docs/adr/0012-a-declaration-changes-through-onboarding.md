@@ -16,7 +16,7 @@ Onboarding fills `training.toml` the first time (ADR-0003). A declaration also c
 
    | the running mesocycle | open paths |
    |---|---|
-   | illegal under the new declarations | rewrite the cycles left, or a new mesocycle now |
+   | illegal under the new declarations | rewrite the cycles left (only with as many workouts per cycle as before), or a new mesocycle now |
    | still legal | keep it to its end, rewrite the cycles left, or a new mesocycle now |
    | the goal changed | a new mesocycle now, or at the end of this one; never rewritten under a new goal |
 
@@ -26,4 +26,5 @@ Onboarding fills `training.toml` the first time (ADR-0003). A declaration also c
 ## Consequences
 
 - **Amends ADR-0008 item 6**: a change naming a declaration goes to onboarding, not the planner.
-- **Legality of the running mesocycle** is the validator run on its workouts against the new declarations, not a new rule.
+- **Legality of the running mesocycle** is the validator run on its workouts against the new declarations, not a new rule. A longer cap makes it illegal too: its workouts fall under the new time.
+- **"At the end of this one" is keeping it to its end**: one path, since the next mesocycle reads the new goal from the file either way.

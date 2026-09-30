@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import tomllib
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -16,9 +17,11 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
 from conftest import enrich
-from test_planner import CATALOG, PATTERNS, Scripted
+from test_planner import CATALOG, PATTERNS, Scripted, mesocycle_of, plan_of
+from trainer import plan as plans
+from trainer import tools
 from trainer.coach import checkpoints, conclusions, logger, models, onboarding
-from trainer.engine import catalog, config, database, exclusions, migrations
+from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
 
 TODAY = "2026-09-30"
 THREAD: RunnableConfig = {"configurable": {"thread_id": "chat:1/onboard", conclusions.USER: "chat:1"}}
@@ -396,3 +399,248 @@ def test_the_file_it_writes_carries_a_comment_above_every_field() -> None:
     for key in (*onboarding.FIELDS, "volume_denominator"):
         at = next(n for n, line in enumerate(lines) if line.startswith(f"{key} = "))
         assert lines[at - 1].startswith("# "), key
+
+
+# -- a declaration changed (ADR-0012) --------------------------------------------
+
+FILE = onboarding.rendered(onboarding.settled(EVERYTHING), TODAY)
+"""`EVERYTHING` as onboarding writes it: a comment above every field."""
+
+
+def kept(connection: sqlite3.Connection, mesocycle: plans.Mesocycle) -> None:
+    """The mesocycle accepted, so it is the one running."""
+    mesocycles.record_mesocycle(
+        connection,
+        tuple(
+            tuple(
+                workouts.PrescribedBlock(block=block, reason=shape.reason)
+                for shape, block in zip(workout.blocks, plans.to_blocks(workout), strict=True)
+            )
+            for workout in mesocycle.workouts
+        ),
+        cycles=mesocycle.cycles,
+        why=mesocycle.why,
+        on=TODAY,
+    )
+
+
+@pytest.fixture()
+def running(connection: sqlite3.Connection, declared_training: Path) -> sqlite3.Connection:
+    """`EVERYTHING` declared, and a mesocycle legal under it running."""
+    declared_training.write_text(FILE, encoding="utf-8")
+    kept(connection, mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")))
+    return connection
+
+
+def after(**changed: Any) -> config.TrainingConfig:
+    return onboarding.settled(EVERYTHING | changed)
+
+
+def test_a_mesocycle_still_legal_can_be_kept_rewritten_or_replaced(
+    running: sqlite3.Connection,
+) -> None:
+    paths = onboarding.open_paths(running, TODAY, EVERYTHING, after(equipment=["barbell", "dumbbell"]))
+
+    assert paths == (onboarding.KEEP, onboarding.REWRITE, onboarding.NEW_NOW)
+
+
+def test_equipment_the_mesocycle_uses_taken_away_is_never_kept(
+    running: sqlite3.Connection,
+) -> None:
+    paths = onboarding.open_paths(running, TODAY, EVERYTHING, after(equipment=["dumbbell"]))
+
+    assert onboarding.KEEP not in paths
+    assert paths == (onboarding.REWRITE, onboarding.NEW_NOW)
+
+
+def test_a_changed_goal_is_never_rewritten(running: sqlite3.Connection) -> None:
+    paths = onboarding.open_paths(running, TODAY, EVERYTHING, after(goal="strength"))
+
+    assert onboarding.REWRITE not in paths
+    assert paths == (onboarding.NEW_NOW, onboarding.KEEP)
+
+
+def test_a_longer_cap_makes_the_running_mesocycle_too_short_to_keep(
+    running: sqlite3.Connection,
+) -> None:
+    paths = onboarding.open_paths(running, TODAY, EVERYTHING, after(duration_cap_min=90))
+
+    assert onboarding.KEEP not in paths
+
+
+def test_a_rotation_of_another_length_is_not_rewritten_slot_by_slot(
+    running: sqlite3.Connection,
+) -> None:
+    paths = onboarding.open_paths(
+        running, TODAY, EVERYTHING, after(cycle_length=1, split=[["legs", "shoulders"]])
+    )
+
+    assert paths == (onboarding.NEW_NOW,)
+
+
+def test_with_no_mesocycle_running_there_is_nothing_to_choose(
+    connection: sqlite3.Connection,
+) -> None:
+    assert onboarding.open_paths(connection, TODAY, EVERYTHING, after(equipment=["dumbbell"])) == ()
+
+
+def test_a_bought_barbell_rewrites_the_equipment_line_and_nothing_else() -> None:
+    before = onboarding.rendered(onboarding.settled(EVERYTHING | {"equipment": ["dumbbell"]}), TODAY)
+
+    rewritten = onboarding.rewritten(before, after(equipment=["dumbbell", "barbell"]))
+
+    old, new = before.splitlines(), rewritten.splitlines()
+    assert len(old) == len(new)
+    assert [(a, b) for a, b in zip(old, new, strict=True) if a != b] == [
+        ('equipment = ["dumbbell"]', 'equipment = ["dumbbell", "barbell"]')
+    ]
+
+
+def test_a_split_over_several_lines_is_replaced_whole_and_hand_comments_stay() -> None:
+    before = "# mine\n" + FILE.replace("goal = ", "# kept by hand\ngoal = ")
+
+    rewritten = onboarding.rewritten(
+        before, after(cycle_length=3, split=[["legs"], ["shoulders"], ["legs"]])
+    )
+
+    assert rewritten.startswith("# mine\n") and "# kept by hand\ngoal = " in rewritten
+    assert config.parse(tomllib.loads(rewritten)) == after(
+        cycle_length=3, split=[["legs"], ["shoulders"], ["legs"]]
+    )
+
+
+def test_a_field_missing_from_the_file_is_added_to_it() -> None:
+    before = "\n".join(line for line in FILE.splitlines() if not line.startswith("goal = "))
+
+    rewritten = onboarding.rewritten(before, after(goal="strength"))
+
+    assert config.parse(tomllib.loads(rewritten)).goal == "strength"
+
+
+def change(graph: onboarding.Onboarding, said: str) -> dict[str, Any]:
+    with tools.opened() as connection:
+        words = onboarding.vocabulary(connection)
+    started = onboarding.changing(said, TODAY, words, EVERYTHING)
+    return dict(graph.invoke(started, THREAD))
+
+
+def test_a_change_starts_from_what_is_declared_and_the_prompt_quotes_it(
+    running: sqlite3.Connection,
+) -> None:
+    model = Scripted(turns=[says("Quale bilanciere?")])
+
+    final = change(graph_of(model), "ho comprato dei manubri")
+
+    assert final["declared"] == EVERYTHING
+    prompt = model.seen[0][0].text
+    assert "ho comprato dei manubri" in model.seen[0][1].text
+    assert '"hypertrophy"' in prompt and onboarding.CHOOSE in prompt
+
+
+def test_finishing_a_change_lists_the_paths_open_and_ends_nothing(
+    running: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[
+            calls((onboarding.DECLARE, {"equipment": ["dumbbell"]}), (onboarding.FINISH, {})),
+            says("Riscrivo il mesociclo?"),
+        ]
+    )
+
+    final = change(graph_of(model), "ho venduto il bilanciere")
+
+    (told,) = answers_to(model, onboarding.FINISH)
+    assert onboarding.REWRITE in told.text and onboarding.KEEP not in told.text
+    assert not final["finished"]
+
+
+def test_a_path_that_is_not_open_is_refused(running: sqlite3.Connection) -> None:
+    model = Scripted(
+        turns=[
+            calls(
+                (onboarding.DECLARE, {"equipment": ["dumbbell"]}),
+                (onboarding.CHOOSE, {"path": onboarding.KEEP, "why": "va bene così"}),
+            ),
+            says("Allora?"),
+        ]
+    )
+
+    final = change(graph_of(model), "ho venduto il bilanciere")
+
+    (told,) = answers_to(model, onboarding.CHOOSE)
+    assert told.status == "error" and onboarding.REWRITE in told.text
+    assert not final["finished"]
+
+
+def test_an_open_path_chosen_ends_the_change_with_why(running: sqlite3.Connection) -> None:
+    model = Scripted(
+        turns=[
+            calls(
+                (onboarding.DECLARE, {"equipment": ["dumbbell"]}),
+                (onboarding.CHOOSE, {"path": onboarding.REWRITE, "why": "senza bilanciere va rifatto"}),
+            ),
+        ]
+    )
+
+    final = change(graph_of(model), "ho venduto il bilanciere")
+
+    assert final["finished"]
+    assert (final["chosen"], final["why"]) == (onboarding.REWRITE, "senza bilanciere va rifatto")
+
+
+def test_past_the_budget_a_change_can_still_choose_its_path(
+    running: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[
+            calls((onboarding.DECLARE, {"equipment": ["dumbbell"]})),
+            calls((onboarding.FINISH, {})),
+            calls((onboarding.CHOOSE, {"path": onboarding.REWRITE, "why": "va rifatto"})),
+        ]
+    )
+
+    final = change(graph_of(model, budget=2), "ho venduto il bilanciere")
+
+    assert model.bound[2] == [onboarding.FINISH, onboarding.CHOOSE]
+    assert final["finished"] and final["chosen"] == onboarding.REWRITE
+
+
+def test_a_change_that_changes_nothing_is_sent_back(running: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calls((onboarding.FINISH, {})), says("Cosa è cambiato?")])
+
+    change(graph_of(model), "ho sempre il bilanciere")
+
+    (told,) = answers_to(model, onboarding.FINISH)
+    assert told.status == "error"
+
+
+def test_with_no_mesocycle_running_a_change_finishes_without_a_choice(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(
+        turns=[calls((onboarding.DECLARE, {"equipment": ["dumbbell"]}), (onboarding.FINISH, {}))]
+    )
+
+    final = change(graph_of(model), "ho venduto il bilanciere")
+
+    assert final["finished"] and final["chosen"] == ""
+
+
+def test_a_change_written_touches_only_what_changed(
+    running: sqlite3.Connection, declared_training: Path
+) -> None:
+    model = Scripted(
+        turns=[
+            calls(
+                (onboarding.DECLARE, {"equipment": ["barbell", "dumbbell"]}),
+                (onboarding.CHOOSE, {"path": onboarding.KEEP, "why": "resta valido"}),
+            ),
+        ]
+    )
+    final = change(graph_of(model), "ho comprato dei manubri")
+
+    onboarding.written(final, declared_training)
+
+    assert declared_training.read_text(encoding="utf-8") == FILE.replace(
+        'equipment = ["barbell"]', 'equipment = ["barbell", "dumbbell"]'
+    )

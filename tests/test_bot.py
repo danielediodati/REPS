@@ -2844,3 +2844,126 @@ def test_an_exclusion_the_interview_proposes_is_confirmed_by_a_tap(
     assert exclusions.active(catalogued, date.today().isoformat()) == (
         exclusions.Exclusion("pattern", "vertical push"),
     )
+
+
+# -- a declaration changed (ADR-0012) --------------------------------------------
+
+WRITTEN = onboarding.rendered(onboarding.settled(SETTLED), "2026-09-01")
+"""`SETTLED` as onboarding wrote it, comments and all."""
+
+
+def changing_with(*turns: AIMessage, plan: planner.Planner | None = None) -> bot.Graphs:
+    """A chat whose every message changes a declaration, and an interview scripted by `turns`."""
+    saver = InMemorySaver()
+    return graphs_of(
+        plan,
+        front=Talking(handoff=entrance.CHANGE_DECLARATION),
+        interview=interview_of(*turns, saver=saver),
+        saver=saver,
+    )
+
+
+def test_a_bought_barbell_rewrites_the_equipment_and_nothing_else(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    before = WRITTEN.replace('equipment = ["barbell"]', 'equipment = ["dumbbell"]')
+    declared.write_text(before, encoding="utf-8")
+    graphs = changing_with(
+        declaring(
+            (onboarding.DECLARE, {"equipment": ["dumbbell", "barbell"]}), (onboarding.FINISH, {})
+        )
+    )
+
+    watched = asking(graphs, "ho comprato un bilanciere")
+
+    assert declared.read_text(encoding="utf-8") == before.replace(
+        'equipment = ["dumbbell"]', 'equipment = ["dumbbell", "barbell"]'
+    )
+    assert watched.said == [SAYS, entrance.DECLARED], "no mesocycle running: nothing planned"
+    assert watched.offers == []
+
+
+def test_a_change_the_mesocycle_can_keep_says_why_and_plans_nothing(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    declared.write_text(WRITTEN, encoding="utf-8")
+    served_from(catalogued)
+    kept = mesocycles.active(catalogued)
+    graphs = changing_with(
+        declaring(
+            (onboarding.DECLARE, {"equipment": ["barbell", "dumbbell"]}),
+            (onboarding.CHOOSE, {"path": onboarding.KEEP, "why": "Il mesociclo regge: lo finiamo."}),
+        )
+    )
+
+    watched = asking(graphs, "ho comprato dei manubri")
+
+    assert watched.said == [SAYS, "Il mesociclo regge: lo finiamo."]
+    assert watched.offers == []
+    assert mesocycles.active(catalogued) == kept
+    assert config.load().equipment == ("barbell", "dumbbell")
+
+
+def test_a_file_declaring_nothing_is_still_a_change_and_not_a_first_setup(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    declared.write_text("# emptied by hand\n", encoding="utf-8")
+    served_from(catalogued)
+    kept = mesocycles.active(catalogued)
+    graphs = changing_with(
+        declaring(
+            (onboarding.DECLARE, SETTLED),
+            (onboarding.CHOOSE, {"path": onboarding.KEEP, "why": "Lo finiamo com'è."}),
+        )
+    )
+
+    watched = asking(graphs, "ho comprato un bilanciere")
+
+    assert watched.said == [SAYS, "Lo finiamo com'è."], "no first mesocycle planned"
+    assert mesocycles.active(catalogued) == kept
+    assert declared.read_text(encoding="utf-8").startswith("# emptied by hand\n")
+    assert config.load().split == (("legs",), ("shoulders",))
+
+
+def test_a_rewrite_chosen_is_offered_through_the_mesocycles_loop(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    declared.write_text(WRITTEN, encoding="utf-8")
+    served_from(catalogued)
+    longer = mesocycle_of(
+        plan_of("Barbell_Squat", minutes=60), plan_of("Standing_Military_Press", minutes=60)
+    )
+    graphs = changing_with(
+        declaring(
+            (onboarding.DECLARE, {"duration_cap_min": 60}),
+            (onboarding.CHOOSE, {"path": onboarding.REWRITE, "why": "Con un'ora lo allungo."}),
+        ),
+        plan=graph_of(Scripted(raw=[longer.model_dump_json()]), checkpointer=InMemorySaver()),
+    )
+
+    watched = asking(graphs, "d'ora in poi ho un'ora")
+
+    assert watched.said == [SAYS, "Con un'ora lo allungo."]
+    ((_, buttons),) = watched.offers
+    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert config.load().duration_cap_min == 60
+
+
+def test_only_thirty_minutes_today_is_an_adaptation_and_leaves_the_file_alone(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    written = declared.read_bytes()
+    graphs = adapting_from(
+        catalogued,
+        calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
+        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
+    )
+
+    ((text, _),) = asking(graphs, "solo 30 minuti oggi").offers
+
+    assert "30" in text
+    assert declared.read_bytes() == written
+    interview = graphs.onboarding.get_state(
+        {"configurable": {"thread_id": bot.under(bot.thread_for(CHAT), bot.ONBOARDING)}}
+    )
+    assert not interview.values, "no onboarding ran"

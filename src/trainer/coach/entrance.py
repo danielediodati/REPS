@@ -112,6 +112,24 @@ def change_mesocycle(said: str) -> str:
     raise AssertionError("the graph answers change_mesocycle; nothing calls it")
 
 
+def change_declaration(said: str) -> str:
+    """Change what they declared, from now on: equipment bought or gone, the
+    minutes a workout lasts, their goal, their rotation.
+
+    Call this when what changes is not today's workout or this mesocycle's
+    exercises but what they have, how long they train, or what for, as in «ho
+    comprato un bilanciere», «d'ora in poi ho solo 30 minuti», «passo alla
+    forza». `said` is what they told you, in their own words.
+
+    The interview that writes it down asks its own questions, and its first
+    follows your message: tell them you are updating it.
+
+    The body is never run. The graph answers this call by starting the interview
+    behind the conversation.
+    """
+    raise AssertionError("the graph answers change_declaration; nothing calls it")
+
+
 def log_workout() -> str:
     """Record the workout the user has just described, in their own words.
 
@@ -143,13 +161,22 @@ TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
 ADAPT_TODAY = adapt_today.__name__
 CHANGE_MESOCYCLE = change_mesocycle.__name__
+CHANGE_DECLARATION = change_declaration.__name__
 LOG_WORKOUT = log_workout.__name__
 SET_UP = set_up.__name__
 
-HANDOFFS = (todays_workout, plan_mesocycle, adapt_today, change_mesocycle, log_workout, set_up)
+HANDOFFS = (
+    todays_workout,
+    plan_mesocycle,
+    adapt_today,
+    change_mesocycle,
+    change_declaration,
+    log_workout,
+    set_up,
+)
 """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
 
-CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, LOG_WORKOUT, SET_UP)
+CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, CHANGE_DECLARATION, LOG_WORKOUT, SET_UP)
 """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
 
 CHECKED = (ADAPT_TODAY, CHANGE_MESOCYCLE)
@@ -212,6 +239,11 @@ STARTED = {
         "question follows your message. Tell them you will ask a few things to "
         "set it up. Ask nothing yourself."
     ),
+    CHANGE_DECLARATION: (
+        "The interview that updates what they declared has started, and what it "
+        "says follows your message. Tell them you are updating it. Ask nothing "
+        "yourself."
+    ),
 }
 """What a handoff call is answered with: not words for the user, but what the
 model is told so it can find its own."""
@@ -270,8 +302,13 @@ What a turn asks of you:
 - They want the mesocycle itself changed from now on -- an exercise gone for
   good, a different emphasis, as in «d'ora in poi niente stacchi»: call
   `change_mesocycle`.
+- What they have, how long they train or what for has changed for good --
+  equipment bought or gone, the minutes from now on, a new goal, as in «ho
+  comprato un bilanciere» or «d'ora in poi ho 30 minuti»: call
+  `change_declaration`.
 - When you cannot tell whether they mean today only or from now on, as in
-  «niente panca», ask them which, in one sentence, and call nothing.
+  «niente panca» or «ho solo 30 minuti», ask them which, in one sentence, and
+  call nothing.
 
 An exercise named in a sentence like these is one they want out of their
 training, not one to look up.
@@ -374,6 +411,11 @@ ONBOARDED = (
     "and say nothing about what is in it."
 )
 
+DECLARED = (
+    "What they told you has changed is written down, and no mesocycle is "
+    "running: the next one is planned from it. Tell them so."
+)
+
 NOT_LOGGED = (
     "What they reported could not be turned into a workout the engine will "
     "accept, so nothing was written. Tell them it did not go through and ask "
@@ -391,6 +433,7 @@ SITUATIONS = (
     NOT_LOGGED,
     NEXT_MESOCYCLE,
     ONBOARDED,
+    DECLARED,
 )
 """Everything the machine can ask the entrance to say.
 

@@ -20,6 +20,12 @@ Read first: ADR-0010 (legality at 100%, judgement at a declared bar); ADR-0011 (
 - Onboarding runs on the entrance's model (`bot.graphs` passes `front`; `onboarding.studio` uses `models.entrance()`). There is no `ONBOARDING_MODEL` yet: this ticket adds it with its choice.
 - The graph is driven turn by turn with `Command(resume=...)` on a checkpointed thread; `tests/test_onboarding.py` shows the shape a scripted persona needs.
 
+## From 04
+
+- The entrance routes a declaration change through `change_declaration(said)`; an adaptation stays `adapt_today`. That routing is the judgement above.
+- A change starts with `onboarding.changing(said, today, words, before)`, seeded from `onboarding.declarations()`. It ends with `choose(path, why)` over `onboarding.open_paths`, or with `finish` alone when no mesocycle is running. Pass `opening=` to `onboarding.build` to fix the paths in a persona.
+- Held at 100% for a change: `chosen` is among the open paths, and only the changed fields differ in the file.
+
 ## Acceptance criteria
 
 - [ ] The suite runs against a fixture named in `TRAINER_DB` and `TRAINER_CONFIG`.
