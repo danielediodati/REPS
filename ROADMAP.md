@@ -112,7 +112,7 @@ In this order. Measuring first is what stops the methodology being written again
 2. **The onboarding conversation.** Led by the agent from a prompt, one question per interrupt, resumed after a day; it cannot end with a field missing. Triage is a tool proposing an exclusion the user confirms. It writes `training.toml` and ends in a first mesocycle. — **done** `665a70f`
 3. **Declarations live in the database** (ADR-0013): one dated version per change, written by onboarding, read by `trainer config`; with none, the bot starts the interview. `training.toml` is imported once and goes. — **done** `f2ef10a`
 4. **A declaration changes through onboarding** (ADR-0012): code lists the paths open for the running mesocycle, the agent picks one, the user accepts. — **done** `f9d1fd4`
-5. **The onboarding and memory eval**, and onboarding's model chosen by ADR-0011's rule.
+5. **The onboarding and memory eval**, and onboarding's model chosen by ADR-0011's rule. — **done** `aee7e92`
 
 ## Later sessions
 
