@@ -10,12 +10,13 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.12.0` knows what each model costs and runs the cheapest one that is good enough.** On top of `0.11.0` (a planner that reasons with a methodology for the declared goal, the minutes as a target, a split that names muscles), it has:
-- reasoning effort and host as settings per node, sent only to a model that takes them;
-- every run reporting its effort, its host and the dollars the provider charged, and every eval pass its dollars and seconds a run;
-- defaults picked by two measured matrices, one per subgraph: the cheapest configuration that clears the suite's bar ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)).
+**`0.13.0` sets you up in a conversation and remembers what you said.** On top of `0.12.0` (each node on the cheapest model that clears its bar), it has:
+- an onboarding interview the agent leads, one question per message and resumed after a day away, that cannot end with a declaration missing and ends in a first mesocycle;
+- declarations in the database, one dated version per change; a change reruns the interview on that alone, and the agent picks what happens to the running mesocycle among the paths code leaves open;
+- conclusions kept with your own sentence beside them, refused unless you wrote it, and briefed to every plan;
+- `trainer eval --suite onboard`: scripted users and messages to route, checked by code, which chose the interview's model.
 
-Session 13 opens next: an onboarding interview that writes your declarations and ends in a first mesocycle.
+Session 14 opens next: *«lunges don't work for me»* becomes a two-workout trial that ends in a conclusion.
 
 ## Architecture (target)
 
