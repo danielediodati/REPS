@@ -219,6 +219,93 @@ def test_performing_it_moves_the_next_serving_to_the_next_slot(
     assert workouts.prescribed(connection, second) == slot("Plank", reps=None, seconds=45)
 
 
+THREE_SLOTS = """cycle_length = 3
+duration_cap_min = 45
+volume_denominator = "cycle"
+goal = "hypertrophy"
+split = [["core"], ["legs"], ["core"]]
+equipment = ["barbell"]
+"""
+
+
+def three_accepted(connection: sqlite3.Connection, declared_training: Path) -> None:
+    declared_training.write_text(THREE_SLOTS, encoding="utf-8")
+    mesocycles.record_mesocycle(
+        connection,
+        (slot("Plank"), slot("Barbell_Squat"), slot("Plank", reps=None, seconds=45)),
+        cycles=2,
+        why="settle the loads",
+        on=TODAY,
+    )
+
+
+def performed_as(connection: sqlite3.Connection, slot_number: int) -> None:
+    """The mesocycle's workout at this slot served and performed, whatever the count says."""
+    found = mesocycles.today(connection)
+    workout_id = mesocycles.record_adapted(
+        connection,
+        mesocycles.active(connection).slots[slot_number - 1],  # type: ignore[union-attr]
+        on=TODAY,
+        mesocycle=found.mesocycle,
+        served_after=found.performed,
+    )
+    connection.execute("UPDATE served SET slot = ? WHERE workout_id = ?", (slot_number, workout_id))
+    performed(connection, workout_id)
+
+
+def test_the_next_is_the_first_of_the_cycle_not_yet_performed(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    """A, legs, B: A then B performed, and the next is legs, then A of the next cycle."""
+    three_accepted(connection, declared_training)
+    performed_as(connection, 1)
+    performed_as(connection, 3)
+
+    found, _ = mesocycles.record_served(connection, TODAY)
+    assert (found.slot, found.cycle) == (2, 1)
+    assert found.blocks == slot("Barbell_Squat")
+
+    performed_as(connection, 2)
+    assert (mesocycles.today(connection).slot, mesocycles.today(connection).cycle) == (1, 2)
+
+
+def test_training_nobody_planned_takes_the_first_slot_still_free(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    """B performed, then a workout off the plan: it counts as A, and legs is next."""
+    three_accepted(connection, declared_training)
+    performed_as(connection, 3)
+    performed(connection)
+
+    assert mesocycles.today(connection).slot == 2
+
+
+def test_a_workout_done_twice_leaves_its_cycle_ending_on_the_count(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    """Legs twice, then A: three performed close the cycle, and B was skipped."""
+    three_accepted(connection, declared_training)
+    performed_as(connection, 2)
+    performed_as(connection, 2)
+    assert mesocycles.today(connection).slot == 1
+
+    performed_as(connection, 1)
+    assert (mesocycles.today(connection).slot, mesocycles.today(connection).cycle) == (1, 2)
+
+
+def test_a_finished_mesocycle_names_the_slots_that_were_performed(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    three_accepted(connection, declared_training)
+    for number in (1, 3, 2, 2, 1, 3):
+        performed_as(connection, number)
+
+    ended = mesocycles.finished(connection)
+
+    assert ended is not None
+    assert [trained.slot for trained in ended.trained] == [1, 3, 2, 2, 1, 3]
+
+
 def test_after_its_last_cycle_nothing_is_served(
     connection: sqlite3.Connection, two_slots: Path
 ) -> None:

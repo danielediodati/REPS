@@ -242,7 +242,8 @@ def finished(connection: sqlite3.Connection) -> Finished | None:
     if kept is None:
         return None
     total = kept.cycles * len(kept.slots)
-    since = _performed(connection) - kept.accepted_after
+    filled = state.performed_slots(connection, len(kept.slots))
+    since = len(filled) - kept.accepted_after
     if since < total:
         return None
     rows = connection.execute(
@@ -254,7 +255,7 @@ def finished(connection: sqlite3.Connection) -> Finished | None:
         mesocycle=kept,
         trained=tuple(
             Trained(
-                slot=(kept.accepted_after + index) % len(kept.slots) + 1,
+                slot=filled[kept.accepted_after + index],
                 performed_on=str(row["performed_on"]),
                 blocks=workouts.performed(connection, int(row["id"])),
             )

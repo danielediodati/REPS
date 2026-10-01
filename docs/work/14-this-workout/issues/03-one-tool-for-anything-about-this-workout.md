@@ -14,7 +14,7 @@ Read first: ADR-0008 item 6; ADR-0001 (the engine constrains, never prescribes);
   - `equipment`: this workout's equipment in full, checked against the catalog. It replaces `without`, so *«solo corpo libero»* and *«ho una kettlebell in prestito»* are one field.
   - `leave_out`: exercises not to do this workout. Not an exclusion: it leaves nothing behind.
   - `ask_for`: exercises to do this workout.
-  - `workout`: which of the mesocycle's workouts this one is, when the user asked for another (*«niente gambe oggi»*). The entrance picks it from what the cycle has performed; `adaptation_requested` stops refusing it.
+  - `workout`: which of the mesocycle's workouts this one is, when the user asked for another (*«niente gambe oggi»*). The entrance picks it from what the cycle has performed; `adaptation_requested` stops refusing it. `mesocycles.record_adapted` must write the chosen slot into `served`: the cycle counts a workout as the slot recorded there (`state.performed_slots`), and today it writes the next free one.
 - **Names to ids**: the entrance resolves exercise names through the catalog; a name it cannot place is asked about, never guessed. The catalog has no Bulgarian split squat: row 0 holds `Split_Squat_with_Dumbbells` instead.
 - **An asked-for exercise under an exclusion** is refused before planning, naming the exclusion and its re-test date. The adaptation set scores row 16 by the re-test date, as ISO `YYYY-MM-DD`, in the tool message answering the call.
 - **The validator** refuses an adapted plan missing an `ask_for` exercise or holding a `leave_out` one, and sends it back like any refusal. Superset, order and *«one more per group»* stay the planner's, read from `said`.

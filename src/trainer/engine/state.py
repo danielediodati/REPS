@@ -236,16 +236,38 @@ def rotation(connection: sqlite3.Connection) -> Rotation:
     change is in the next answer.
     """
     length = config.load(connection).cycle_length
-    row = connection.execute(
-        "SELECT COUNT(*) AS performed FROM workouts WHERE state = 'performed'"
-    ).fetchone()
-    performed = int(row["performed"])
+    filled = performed_slots(connection, length)
+    performed = len(filled)
     return Rotation(
         performed=performed,
         cycle_length=length,
         cycle=performed // length + 1,
-        position=performed % length + 1,
+        position=_first_free(set(filled[performed - performed % length :]), length),
     )
+
+
+def performed_slots(connection: sqlite3.Connection, length: int) -> tuple[int, ...]:
+    """The slot of its cycle each performed workout filled, oldest first."""
+    rows = connection.execute(
+        "SELECT s.slot FROM workouts AS w LEFT JOIN served AS s ON s.workout_id = w.id "
+        "WHERE w.state = 'performed' ORDER BY w.performed_on, w.id"
+    ).fetchall()
+    filled: list[int] = []
+    for index, row in enumerate(rows):
+        taken = set(filled[index - index % length :])
+        recorded = row["slot"]
+        # Nobody served it, or served it under a split since shortened: it
+        # fills the first slot still free, which in an unchanged order is the
+        # one the count is at.
+        if recorded is not None and int(recorded) <= length:
+            filled.append(int(recorded))
+        else:
+            filled.append(_first_free(taken, length))
+    return tuple(filled)
+
+
+def _first_free(taken: set[int], length: int) -> int:
+    return next((slot for slot in range(1, length + 1) if slot not in taken), 1)
 
 
 @dataclass(frozen=True)
