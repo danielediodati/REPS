@@ -30,6 +30,8 @@ from trainer import (
     log,
     log_evaluation,
     log_set,
+    onboarding_evaluation,
+    onboarding_set,
     plan,
     tools,
 )
@@ -593,7 +595,7 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
-PLAN_SUITE, LOG_SUITE = "plan", "log"
+PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE = "plan", "log", "onboard"
 """The two measurements, under one command.
 
 Session 4's six situations and session 5's thirty reports are checked on
@@ -612,11 +614,12 @@ somebody's notes does.
 @click.option(
     "--suite",
     "suite",
-    type=click.Choice((PLAN_SUITE, LOG_SUITE)),
+    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE)),
     default=PLAN_SUITE,
     show_default=True,
-    help="Which measurement to run: the six planning situations, or the "
-    "logging set's thirty hand-written reports.",
+    help="Which measurement to run: the six planning situations, the "
+    "logging set's thirty hand-written reports, or the onboarding set's "
+    "scripted users.",
 )
 @click.option(
     "--repetitions",
@@ -675,21 +678,29 @@ def eval_command(
     the twelve on whether it asked, with a value written where a question was
     needed counted double against.
 
-    No model judges another model's output in either of them.
+    `--suite onboard` drives the onboarding set's scripted users through the
+    interview and its messages through the entrance, on the interview's and
+    the entrance's models.
+
+    No model judges another model's output in any of them.
 
     **This is the one command in the project that reaches a provider**, and
     the only one that spends money. `pytest` never runs it: the suite has no
     sockets and no credentials, and the checks are covered there against
     recorded runs instead.
 
-    The plan suite's bar is 100%; the log suite's are the two its set declares.
-    The command exits non-zero below either.
+    The plan suite's bar is 100%; the log and onboard suites' are the ones
+    their sets declare. The command exits non-zero below any of them.
     """
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
             if suite == LOG_SUITE:
                 lines, report = _log_suite(
+                    connection, only, repetitions, records, call_budget
+                )
+            elif suite == ONBOARD_SUITE:
+                lines, report = _onboard_suite(
                     connection, only, repetitions, records, call_budget
                 )
             else:
@@ -777,12 +788,47 @@ def _log_suite(
     return log_evaluation.render(report, chosen), report
 
 
+def _onboard_suite(
+    connection: sqlite3.Connection,
+    only: tuple[str, ...],
+    repetitions: int,
+    records: Path,
+    call_budget: int,
+) -> tuple[list[str], evaluation.Report]:
+    """The scripted users and the messages to route, against a copy with nothing declared."""
+    try:
+        holds = onboarding_set.load()
+    except onboarding_set.OnboardSetError as error:
+        raise click.ClickException(str(error)) from error
+    _refuse(onboarding_evaluation.problems(connection, holds))
+    chosen = _chosen(holds.cases, only, "case")
+    talks = front = None
+    if any(case.kind != onboarding_set.ROUTE for case in chosen):
+        talks = models.onboarding()
+        models.ready(talks)
+    if any(case.kind == onboarding_set.ROUTE for case in chosen):
+        front = models.entrance()
+        models.ready(front)
+    with onboarding_evaluation.prepared(connection, holds) as where:
+        report = onboarding_evaluation.run(
+            where,
+            chosen,
+            talks=talks,
+            front=front,
+            repetitions=repetitions,
+            records=records,
+            budget=call_budget,
+        )
+    report = onboarding_evaluation.barred(report, holds)
+    return onboarding_evaluation.render(report, chosen), report
+
+
 def _refuse(problems: Sequence[str]) -> None:
     if problems:
         raise click.ClickException("\n".join(problems))
 
 
-_Named = TypeVar("_Named", evaluation.Situation, log_set.Row)
+_Named = TypeVar("_Named", evaluation.Situation, log_set.Row, onboarding_set.Case)
 """What both suites' cases have in common at this boundary: a name typed at
 `--only`. Two concrete types rather than a protocol, because there are two and
 naming them is what makes the error message able to say which."""
@@ -863,6 +909,8 @@ def bot_command() -> None:
         models.ready(logs)
         front = models.entrance()
         models.ready(front)
+        interviews = models.onboarding()
+        models.ready(interviews)
         name = bot.identified(declared)
 
         # Opened before the block is printed, not after: a block that says
@@ -873,6 +921,7 @@ def bot_command() -> None:
             click.echo(f"model:       {on.described}")
             click.echo(f"logger:      {logs.described}")
             click.echo(f"entrance:    {front.described} on {front.provider}")
+            click.echo(f"onboarding:  {interviews.described}")
             click.echo(
                 f"context:     {context} tokens"
                 if context is not None
@@ -891,7 +940,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, front, on, logs, saver, store)
+            bot.serve(declared, front, on, logs, saver, store, interviews)
 
 
 @main.group("runs")

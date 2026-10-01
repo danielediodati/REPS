@@ -655,5 +655,5 @@ def written(final: dict[str, Any]) -> config.TrainingConfig:
 
 
 def studio() -> Onboarding:
-    """The interview on the entrance's model, as `langgraph dev` serves it."""
-    return build(models.entrance(), archive=records.archive())
+    """The interview on its own model, as `langgraph dev` serves it."""
+    return build(models.onboarding(), archive=records.archive())

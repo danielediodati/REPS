@@ -1679,7 +1679,7 @@ def stand_in(monkeypatch: pytest.MonkeyPatch, builder: Callable[[], Any]) -> Non
     """Every node's model built by `builder`, on any provider."""
     from trainer.coach import models
 
-    for node in ("planner", "logger", "entrance"):
+    for node in ("planner", "logger", "entrance", "onboarding"):
         monkeypatch.setattr(models, node, builder)
 
 
@@ -2384,6 +2384,63 @@ def test_a_log_set_that_cannot_be_read_says_so_as_a_state(
     assert result.exit_code != 0
     assert "the log set is unusable" in result.output
     assert "unknowable" in result.output
+
+
+# --- eval --suite onboard ----------------------------------------------------
+
+
+def test_the_onboard_suite_stops_at_the_credentials_state_too(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
+    result = runner.invoke(main, ["eval", "--suite", "onboard", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "no Groq credentials" in result.output
+    assert "interviews" not in result.output, "it ran the pass anyway"
+
+
+def test_the_onboard_suite_names_its_cases_when_one_is_mistyped(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(main, ["eval", "--suite", "onboard", "--only", "bought"])
+
+    assert result.exit_code != 0
+    assert "no case called 'bought'" in result.output
+    assert "bought-dumbbells" in result.output
+
+
+def test_the_onboard_suite_runs_a_change_against_its_fixture_and_prints_its_matrix(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from langchain_core.messages import AIMessage
+
+    from trainer.coach import onboarding
+
+    def calls(name: str, args: dict[str, Any], n: int) -> AIMessage:
+        return AIMessage(
+            content="", tool_calls=[{"name": name, "args": args, "id": f"c{n}", "type": "tool_call"}]
+        )
+
+    scripted_graph(
+        monkeypatch,
+        turns=[
+            calls(onboarding.DECLARE, {"equipment": ["body only", "dumbbell"]}, 1),
+            calls(onboarding.FINISH, {}, 2),
+            calls(onboarding.CHOOSE, {"path": "keep", "why": "Finisci questo."}, 3),
+        ],
+    )
+
+    result = runner.invoke(
+        main,
+        ["eval", "--suite", "onboard", "--repetitions", "1", "--only", "bought-dumbbells",
+         "--records", str(tmp_path / "records")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "changes" in result.output and "bought-dumbbells" in result.output
+    assert "held: 1 of 1" in result.output
 
 
 def test_the_plan_suite_is_what_the_command_still_means_by_default(
@@ -3503,7 +3560,9 @@ def healthy_bot(
     monkeypatch.setattr(Bot, "get_me", known)
     polled: list[object] = []
     monkeypatch.setattr(
-        bot, "serve", lambda declared, front, on, logs, saver, store: polled.append(declared)
+        bot,
+        "serve",
+        lambda declared, front, on, logs, saver, store, interviews: polled.append(declared),
     )
     return polled
 
@@ -3809,6 +3868,7 @@ def test_bot_says_which_model_answers_the_entrance(
 
     assert result.exit_code == 0, result.output
     assert f"entrance:    {models.DEFAULT_ENTRANCE_MODEL} on ollama" in result.output
+    assert "onboarding:  " in result.output
     assert result.output.isascii()
 
 

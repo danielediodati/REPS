@@ -60,7 +60,7 @@ uv run trainer plan --time 30                                 # today's adapted 
 uv run trainer plan --change "basta affondi"                  # the mesocycle rewritten for the cycles left
 uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
-uv run trainer eval --suite plan                              # or --suite log; ends with dollars and seconds a run
+uv run trainer eval --suite plan                              # or --suite log, --suite onboard; ends with dollars and seconds a run
 uv run trainer mcp                                            # the engine's tools over MCP
 uv run trainer bot                                            # answer Telegram, the owner only
 uv run trainer runs list                                      # every negotiation, and what it came to
@@ -85,7 +85,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
-`PLANNER_MODEL`, `LOGGER_MODEL` and `ENTRANCE_MODEL` give a node another model; `PLANNER_REASONING`, `LOGGER_REASONING` and `ENTRANCE_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; `PLANNER_HOST`, `LOGGER_HOST` and `ENTRANCE_HOST` another host. A model other than the choice runs at its own default effort, on OpenRouter's routing. `trainer runs show` names the effort and the host beside each model.
+`PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL` and `ENTRANCE_MODEL` give a node another model; the `_REASONING` line of each another effort (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; the `_HOST` line another host. A model other than the choice runs at its own default effort, on OpenRouter's routing. `trainer runs show` names the effort and the host beside each model.
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
@@ -125,5 +125,6 @@ docs/
   adr/        decisions
   enrichment/ vocabulary definitions and hand-decided rows, read by the code
   logging/    the log eval set
+  onboarding/ the onboarding eval set and its bars
   research/   notes behind decisions
 ```

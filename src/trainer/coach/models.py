@@ -48,6 +48,7 @@ runs on, so a fresh clone still has one provider to think about.
 
 PLANNER_MODEL_ENV = "PLANNER_MODEL"
 LOGGER_MODEL_ENV = "LOGGER_MODEL"
+ONBOARDING_MODEL_ENV = "ONBOARDING_MODEL"
 """Each subgraph's own model, on the provider `LLM_BACKEND` names.
 
 Empty falls back to that provider's model, so one variable still moves both.
@@ -55,6 +56,7 @@ Empty falls back to that provider's model, so one variable still moves both.
 
 PLANNER_REASONING_ENV = "PLANNER_REASONING"
 LOGGER_REASONING_ENV = "LOGGER_REASONING"
+ONBOARDING_REASONING_ENV = "ONBOARDING_REASONING"
 ENTRANCE_REASONING_ENV = "ENTRANCE_REASONING"
 """How hard each node's model reasons, on OpenRouter; empty is the model's default."""
 
@@ -65,6 +67,7 @@ OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
 
 PLANNER_HOST_ENV = "PLANNER_HOST"
 LOGGER_HOST_ENV = "LOGGER_HOST"
+ONBOARDING_HOST_ENV = "ONBOARDING_HOST"
 ENTRANCE_HOST_ENV = "ENTRANCE_HOST"
 """Each node's own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
 
@@ -120,6 +123,7 @@ class Choice:
 PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
 LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ENTRANCE_CHOICE = Choice("openai/gpt-oss-120b", "low", "cerebras")
+ONBOARDING_CHOICE = ENTRANCE_CHOICE
 
 DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
 """The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""
@@ -290,9 +294,17 @@ def logger() -> Chat:
     return _subgraph(LOGGER_MODEL_ENV, LOGGER_REASONING_ENV, LOGGER_HOST_ENV, LOGGER_CHOICE)
 
 
+def onboarding() -> Chat:
+    """The model the interview runs on: `ONBOARDING_MODEL`, or its choice on OpenRouter, or the coach's."""
+    return _subgraph(
+        ONBOARDING_MODEL_ENV, ONBOARDING_REASONING_ENV, ONBOARDING_HOST_ENV, ONBOARDING_CHOICE
+    )
+
+
 _CHOICES = {
     PLANNER_MODEL_ENV: PLANNER_CHOICE,
     LOGGER_MODEL_ENV: LOGGER_CHOICE,
+    ONBOARDING_MODEL_ENV: ONBOARDING_CHOICE,
     ENTRANCE_MODEL_ENV: ENTRANCE_CHOICE,
 }
 

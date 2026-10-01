@@ -1664,12 +1664,12 @@ def graphs(
     saver: BaseCheckpointSaver[Any],
     archive: Path,
     store: BaseStore | None = None,
+    interviews: models.Chat | None = None,
 ) -> Graphs:
-    """The three graphs, each on the model that answers it (ADR-0006, item 3).
+    """The graphs, each on the model that answers it (ADR-0006, item 3).
 
-    `front` is the entrance's, `on` the planner's and `logs` the logger's: the
-    entrance is the node latency is felt on, the planner is the one that has
-    to reason, and the logger the one that has to extract.
+    `front` is the entrance's, `on` the planner's, `logs` the logger's and
+    `interviews` onboarding's, the entrance's when not given.
     """
     plans_on = planner.build(on, checkpointer=saver, archive=archive, store=store)
     preparing: set[str] = set()
@@ -1685,9 +1685,8 @@ def graphs(
         logger=logger_graph.build(
             logs, checkpointer=saver, archive=archive, store=store
         ),
-        # On the entrance's model until ticket 13.5 measures one for it.
         onboarding=onboarding.build(
-            front, checkpointer=saver, archive=archive, store=store
+            interviews or front, checkpointer=saver, archive=archive, store=store
         ),
         archive=archive,
         preparing=preparing,
@@ -1701,6 +1700,7 @@ def serve(
     logs: models.Chat,
     saver: BaseCheckpointSaver[Any],
     store: BaseStore,
+    interviews: models.Chat | None = None,
 ) -> None:
     """Long-poll until interrupted, holding the models, the checkpointer, the store and the graphs.
 
@@ -1713,7 +1713,7 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    built = graphs(front, on, logs, saver, run_record.archive(), store)
+    built = graphs(front, on, logs, saver, run_record.archive(), store, interviews)
     coach = Turns(
         owner_id=declared.owner_id,
         run=talking(built),

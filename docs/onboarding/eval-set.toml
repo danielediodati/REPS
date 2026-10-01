@@ -1,0 +1,132 @@
+# The onboarding and memory eval set: scripted users for `trainer eval --suite onboard`.
+#
+# - An interview persona answers each question with its first reply whose
+#   fields are not all declared yet; with every field declared it says its
+#   `afterwards` lines in order, then `otherwise`. A reply given twice is a
+#   field asked again.
+# - `pause_after` stops a persona after that many replies; the graph is built
+#   again over the same checkpointer and the persona comes back with `back`.
+# - A change persona starts from `before`, written into the fixture as the
+#   version in force; `changes` are the fields it may change, `open` the paths
+#   open for the running mesocycle (empty: none is running).
+# - A route is one message to the entrance, and the handoff it must reach.
+#
+# Code holds at 100% every field filled and valid, no field asked again, every
+# stored quote in a user message, and, on a change, the chosen path open and
+# only `changes` differing. The bars below are for judgement (ADR-0010), set
+# before the first run.
+
+today = "2026-10-01"
+
+[bars]
+remembered = 80
+routed = 80
+
+# -- interviews ---------------------------------------------------------------
+
+[[cases]]
+name = "all-at-once"
+kind = "interview"
+describes = "two answers cover all five fields"
+opens = "Ciao! Voglio iniziare ad allenarmi seriamente."
+replies = [
+  { fields = ["goal", "equipment", "duration_cap_min"], says = "Voglio mettere su muscoli. Mi alleno in garage: ho un bilanciere e un paio di manubri, e di solito ho tre quarti d'ora. Odio le distensioni su panca, però." },
+  { fields = ["cycle_length", "split"], says = "Tre allenamenti che si ripetono: uno per le gambe, uno per petto, spalle e tricipiti, uno per schiena e bicipiti." },
+]
+otherwise = "No, va bene così."
+remembers = ["Odio le distensioni su panca"]
+
+[[cases]]
+name = "one-at-a-time"
+kind = "interview"
+describes = "one field an answer, and a knee that complains"
+opens = "ciao, mi aiuti a impostare gli allenamenti?"
+replies = [
+  { fields = ["goal"], says = "forza" },
+  { fields = ["cycle_length"], says = "due allenamenti diversi, alternati" },
+  { fields = ["split"], says = "uno per la parte bassa, gambe e addome, e uno per la parte alta" },
+  { fields = ["duration_cap_min"], says = "un'ora" },
+  { fields = ["equipment"], says = "palestra completa: bilancieri, manubri, cavi e macchine. detesto la cyclette" },
+]
+afterwards = ["quando faccio lo squat il ginocchio si lamenta"]
+otherwise = "no, nient'altro"
+confirms = true
+remembers = ["detesto la cyclette"]
+
+[[cases]]
+name = "back-next-day"
+kind = "interview"
+describes = "stops after two answers and comes back the next day"
+opens = "Voglio rimettermi in forma."
+replies = [
+  { fields = ["goal"], says = "Perdere un po' di grasso e mettere su un po' di muscolo, tutti e due insieme." },
+  { fields = ["equipment"], says = "A casa non ho niente, solo il mio corpo. Non sopporto le macchine della palestra." },
+  { fields = ["duration_cap_min"], says = "Mezz'ora al massimo." },
+  { fields = ["cycle_length", "split"], says = "Sempre lo stesso allenamento, tutto il corpo ogni volta." },
+]
+pause_after = 2
+back = "Scusa, ieri sono dovuto scappare. Dove eravamo?"
+otherwise = "No, a posto così."
+remembers = ["Non sopporto le macchine della palestra"]
+
+# -- changes ------------------------------------------------------------------
+
+[[cases]]
+name = "bought-dumbbells"
+kind = "change"
+describes = "equipment bought, a mesocycle running"
+opens = "Ho preso un paio di manubri regolabili, da oggi li ho a casa!"
+before = { cycle_length = 2, duration_cap_min = 45, split = [["legs", "core"], ["chest", "back", "shoulders"]], equipment = ["body only"], goal = "hypertrophy" }
+changes = ["equipment"]
+open = ["keep", "rewrite", "new_now"]
+otherwise = "Sì, li aggiungo a quello che avevo."
+
+[[cases]]
+name = "thirty-minutes"
+kind = "change"
+describes = "less time from now on, no mesocycle running"
+opens = "Da questa settimana riesco ad allenarmi solo 30 minuti, ho cambiato lavoro."
+before = { cycle_length = 2, duration_cap_min = 45, split = [["legs", "core"], ["chest", "back", "shoulders"]], equipment = ["body only"], goal = "hypertrophy" }
+changes = ["duration_cap_min"]
+open = []
+otherwise = "Sì, d'ora in poi è così."
+
+[[cases]]
+name = "to-strength"
+kind = "change"
+describes = "a new goal, a mesocycle running"
+opens = "Ho deciso: d'ora in poi punto sulla forza."
+before = { cycle_length = 2, duration_cap_min = 45, split = [["legs", "core"], ["chest", "back", "shoulders"]], equipment = ["body only"], goal = "hypertrophy" }
+changes = ["goal"]
+open = ["new_now", "keep"]
+otherwise = "Sì, cambia solo l'obiettivo."
+
+# -- routes -------------------------------------------------------------------
+
+[[cases]]
+name = "joined-a-gym"
+kind = "route"
+describes = "equipment from now on"
+opens = "Mi sono iscritto in palestra, da lunedì ho bilancieri e macchine."
+routed = "change_declaration"
+
+[[cases]]
+name = "new-goal"
+kind = "route"
+describes = "a goal from now on"
+opens = "Basta ipertrofia, voglio diventare più forte: cambiamo obiettivo."
+routed = "change_declaration"
+
+[[cases]]
+name = "short-today"
+kind = "route"
+describes = "less time today only"
+opens = "Oggi ho solo 20 minuti, poi devo scappare."
+routed = "adapt_today"
+
+[[cases]]
+name = "hotel-today"
+kind = "route"
+describes = "less equipment today only"
+opens = "Oggi sono in trasferta in hotel, niente bilanciere: ho solo un paio di manubri."
+routed = "adapt_today"

@@ -1061,6 +1061,38 @@ def test_the_coachs_model_moves_every_node_off_its_choice(
         assert "order" not in cast(Any, chat.model).extra_body["provider"]
 
 
+def test_onboarding_runs_on_its_choice_with_its_effort_and_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    openrouter_logger(monkeypatch)
+
+    chat = models.onboarding()
+
+    assert (chat.name, chat.reasoning, chat.host) == (
+        models.ONBOARDING_CHOICE.model,
+        models.ONBOARDING_CHOICE.effort,
+        models.ONBOARDING_CHOICE.host,
+    )
+    assert chat.setting == models.ONBOARDING_MODEL_ENV
+
+
+def test_onboarding_takes_a_model_effort_and_host_of_its_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """How a matrix row moves the interview alone."""
+    openrouter_logger(
+        monkeypatch,
+        ONBOARDING_MODEL="qwen/qwen3.8-27b",
+        ONBOARDING_REASONING="low",
+        ONBOARDING_HOST="deepinfra",
+    )
+
+    chat = models.onboarding()
+
+    assert (chat.name, chat.reasoning, chat.host) == ("qwen/qwen3.8-27b", "low", "deepinfra")
+    assert models.entrance().name == models.ENTRANCE_CHOICE.model
+
+
 def test_an_effort_named_wins_over_the_choices(monkeypatch: pytest.MonkeyPatch) -> None:
     chat = openrouter_logger(monkeypatch, LOGGER_REASONING="medium")
 
