@@ -1,0 +1,29 @@
+# Prompt caching
+
+Status: ready-for-agent
+
+Blocked by: none.
+
+Read first: ADR-0011 (each node runs the cheapest configuration that clears its bar); `models.openrouter` and `OpenRouterChat` (`coach/models.py`); `record._tokens` (`coach/record.py`).
+
+## What to build
+
+- **The record counts cached input**: `tokens.cached`, summed from each reply's `usage_metadata["input_token_details"]["cache_read"]`, beside `input` and `output`. A provider that reports none counts 0.
+- **The planner caches what repeats**: on an Anthropic model, a `cache_control: {"type": "ephemeral"}` breakpoint on the last message of each request, so each turn of its tool loop reads the turns before it (tools, system, brief, earlier calls) from the cache. Through OpenRouter's content-block form on the existing `ChatOpenAI` client; no Anthropic SDK. No breakpoint on a model that caches by itself.
+- **Haiku 4.5 caches only a prefix of 4096 tokens or more**: shorter is silently uncached, so the system prompt alone may not reach it. The first turns of a run may read nothing; the measurement says how much.
+- **The other nodes are measured, not changed**: whether DeepSeek on `parasail` and gpt-oss on `cerebras` already cache shows in `tokens.cached`.
+
+| Node | Model / host | Today |
+|---|---|---|
+| Planner | Haiku 4.5 / `anthropic` | no cache: Anthropic caches only on a breakpoint |
+| Logger, Onboarding | deepseek-v4-flash / `parasail` | unknown, automatic if the host does it |
+| Entrance | gpt-oss-120b / `cerebras` | unknown, automatic if the host does it |
+
+**Spends credits.** The measurement below is estimated first and runs only on the user's go (CLAUDE.md).
+
+## Acceptance criteria
+
+- [ ] A run record carries `tokens.cached` (unit test on a scripted reply with `cache_read`).
+- [ ] The planner's request to an Anthropic model carries the breakpoint, and to any other model does not (unit tests, no model).
+- [ ] One `trainer eval --suite plan --only no-equipment --repetitions 1` before and after: $ a mesocycle and `tokens.cached`, written as a row in ADR-0011.
+- [ ] Full test suite and mypy green.

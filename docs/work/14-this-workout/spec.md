@@ -21,3 +21,4 @@
 | 02 | The next workout is the first not yet performed | — |
 | 03 | One tool for anything about this workout | 02 |
 | 04 | This workout or from now on | 01, 03 |
+| 05 | Prompt caching | — |
