@@ -810,6 +810,114 @@ def test_a_host_error_on_a_structured_emission_names_the_host(
     assert str(raised.value).isascii()
 
 
+def recording(into: list[dict[str, Any]]) -> Callable[[Any], Any]:
+    """An OpenRouter that keeps each request's body and answers with an empty reply."""
+    import json
+
+    import httpx2
+
+    def answer(request: Any) -> Any:
+        into.append(json.loads(request.content))
+        return httpx2.Response(
+            200,
+            json={
+                "id": "a",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "a",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": "{}"},
+                    }
+                ],
+            },
+        )
+
+    return answer
+
+
+CONVERSATION: list[Any] = [
+    ("system", "You plan."),
+    ("human", "The brief."),
+    ("ai", "Reading."),
+    ("human", "The latest turn."),
+]
+
+
+def test_a_request_to_an_anthropic_model_marks_its_last_message_for_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Anthropic caches only up to a breakpoint, so without one each turn paid for the whole run again."""
+    sent: list[dict[str, Any]] = []
+    model = served_by(
+        monkeypatch, recording(sent), LOGGER_MODEL="anthropic/claude-haiku-4.5"
+    )
+
+    model.invoke(CONVERSATION)
+
+    *before, last = sent[0]["messages"]
+    assert last["content"] == [
+        {"type": "text", "text": "The latest turn.", "cache_control": {"type": "ephemeral"}}
+    ]
+    assert all("cache_control" not in str(message) for message in before)
+
+
+def test_a_breakpoint_goes_on_the_last_part_of_a_message_already_in_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.messages import HumanMessage
+
+    sent: list[dict[str, Any]] = []
+    model = served_by(
+        monkeypatch, recording(sent), LOGGER_MODEL="anthropic/claude-haiku-4.5"
+    )
+    parts = HumanMessage(
+        content=[{"type": "text", "text": "one"}, {"type": "text", "text": "two"}]
+    )
+
+    model.invoke([parts])
+
+    first, second = sent[0]["messages"][-1]["content"]
+    assert "cache_control" not in first
+    assert second["cache_control"] == {"type": "ephemeral"}
+    assert parts.content == [{"type": "text", "text": "one"}, {"type": "text", "text": "two"}]
+
+
+def test_a_structured_emission_to_an_anthropic_model_is_marked_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+    model = served_by(
+        monkeypatch, recording(sent), LOGGER_MODEL="anthropic/claude-haiku-4.5"
+    )
+    schema = {
+        "title": "Said",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+    model.with_structured_output(schema, method="json_schema", strict=True).invoke(
+        CONVERSATION
+    )
+
+    assert sent[0]["messages"][-1]["content"][-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_a_request_to_a_model_that_caches_by_itself_carries_no_breakpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[dict[str, Any]] = []
+    model = served_by(monkeypatch, recording(sent))
+
+    model.invoke(CONVERSATION)
+
+    assert sent[0]["messages"][-1]["content"] == "The latest turn."
+    assert "cache_control" not in str(sent[0])
+
+
 def test_a_host_error_on_a_tool_turn_names_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
     model = served_by(monkeypatch, failing_on("AkashML"))
 

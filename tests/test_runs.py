@@ -649,6 +649,39 @@ def test_a_run_no_reply_priced_says_so_rather_than_zero() -> None:
     assert all("$" not in line for line in said)
 
 
+def read(input_tokens: int, cache_read: int | None = None) -> AIMessage:
+    """One reply that read `input_tokens`, `cache_read` of them from the provider's cache."""
+    usage: dict[str, Any] = {
+        "input_tokens": input_tokens,
+        "output_tokens": 10,
+        "total_tokens": input_tokens + 10,
+    }
+    if cache_read is not None:
+        usage["input_token_details"] = {"cache_read": cache_read}
+    return AIMessage(content="a", usage_metadata=cast(Any, usage))
+
+
+def test_the_run_counts_the_input_read_from_the_cache() -> None:
+    written = run_record.of({"messages": [read(5000, 4100), read(6000, 5000)]}, 12)
+
+    assert written["tokens"] == {"input": 11000, "output": 20, "cached": 9100}
+    assert "  11000 tokens in, 9100 from the cache, 20 out" in run_record.summary(written)
+
+
+def test_a_provider_that_reports_no_cache_counts_none() -> None:
+    written = run_record.of({"messages": [read(5000)]}, 12)
+
+    assert written["tokens"]["cached"] == 0
+    assert "  5000 tokens in, 10 out" in run_record.summary(written)
+
+
+def test_a_record_from_before_the_cache_was_counted_still_reads() -> None:
+    written = run_record.of({"messages": [read(5000)]}, 12)
+    written["tokens"] = {"input": 5000, "output": 10}
+
+    assert "  5000 tokens in, 10 out" in run_record.summary(written)
+
+
 def test_a_record_from_before_costs_reads_as_not_reported() -> None:
     state = {"timings": [("planner", "qwen/qwen3.8-27b", "openrouter", 1.0, "low", "Groq")]}
 

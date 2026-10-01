@@ -33,6 +33,7 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 
 - Haiku's one screening failure was a group left untrained that the eval checked and the validator did not; `untrained` moved into the validator (`491f084`). Rows above Haiku ran before that.
 - Sonnet 5 at high, on 11.1's request, planned the same shape as Haiku at $0.33 and 142 s. No row needs a large model.
+- **Prompt caching** (14.5), `--only no-equipment`, 1 rep each, same evening: $0.073 without a breakpoint, **$0.052 with one**, 12 calls and 34–38 s both. 79,368 of 100,031 input tokens read from the cache. `emit` is $0.015 of the $0.052, the largest call: it binds no tools, and tools come first in Anthropic's prefix, so it cannot read the turns before it.
 
 ## The logger's matrix
 

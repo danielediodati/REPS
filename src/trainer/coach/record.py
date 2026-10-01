@@ -300,7 +300,9 @@ def summary(record: Mapping[str, Any]) -> list[str]:
     if asked:
         lines.append(f"  {asked} question(s) asked")
     counted = record.get("tokens", {"input": 0, "output": 0})
-    lines.append(f"  {counted['input']} tokens in, {counted['output']} out")
+    cached = counted.get("cached", 0)
+    read = f", {cached} from the cache" if cached else ""
+    lines.append(f"  {counted['input']} tokens in{read}, {counted['output']} out")
     dollars = record.get("dollars")
     lines.append(
         "  cost not reported by the provider" if dollars is None else f"  ${dollars:.4f}"
@@ -438,4 +440,8 @@ def _tokens(messages: Sequence[AnyMessage]) -> dict[str, int]:
     return {
         "input": sum(usage["input_tokens"] for usage in counted),
         "output": sum(usage["output_tokens"] for usage in counted),
+        "cached": sum(
+            usage.get("input_token_details", {}).get("cache_read", 0) or 0
+            for usage in counted
+        ),
     }

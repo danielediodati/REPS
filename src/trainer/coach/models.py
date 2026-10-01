@@ -467,6 +467,24 @@ class ProviderFailed(ModelError):
         self.emitted = tuple(emitted)
 
 
+BREAKPOINT_PREFIX = "anthropic/"
+"""The models that cache only up to a breakpoint the request marks; the others cache by themselves."""
+
+EPHEMERAL = {"type": "ephemeral"}
+
+
+def _mark_for_the_cache(messages: list[dict[str, Any]]) -> None:
+    """A breakpoint on the last part of the last message, so the next turn reads everything before it."""
+    if not messages:
+        return
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str) and content:
+        last["content"] = [{"type": "text", "text": content, "cache_control": EPHEMERAL}]
+    elif isinstance(content, list) and content and isinstance(content[-1], dict):
+        last["content"] = [*content[:-1], {**content[-1], "cache_control": EPHEMERAL}]
+
+
 class OpenRouterChat(ChatOpenAI):
     """`ChatOpenAI` on OpenRouter, keeping the host that answered and what it cost on each reply."""
 
@@ -563,6 +581,12 @@ class OpenRouterChat(ChatOpenAI):
     def _pinned(self) -> str:
         order = ((self.extra_body or {}).get("provider") or {}).get("order") or ()
         return order[0] if order else "OpenRouter's host"
+
+    def _get_request_payload(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        payload = super()._get_request_payload(*args, **kwargs)
+        if self.model_name.startswith(BREAKPOINT_PREFIX):
+            _mark_for_the_cache(payload.get("messages") or [])
+        return payload
 
     def _create_chat_result(
         self, response: dict[str, Any] | openai.BaseModel, generation_info: dict[str, Any] | None = None
