@@ -173,6 +173,12 @@ def run(
         )
         outcomes.extend(report.outcomes)
         stopped = report.stopped
+    elif routes:
+        outcomes.extend(
+            evaluation.Outcome(case.name, attempt, error=str(stopped), skipped=True)
+            for case in routes
+            for attempt in range(1, repetitions + 1)
+        )
     return evaluation.Report(tuple(outcomes), stopped=stopped)
 
 
@@ -288,14 +294,19 @@ class _Persona:
     again: list[str] = field(default_factory=list)
 
     def answer(self, declared: Mapping[str, Any]) -> str:
-        """The first reply whose fields are not all settled; then `afterwards` in order; then `otherwise`."""
-        for index, reply in enumerate(self.case.replies):
-            if all(self._settled(one, declared) for one in reply.fields):
-                continue
-            if index in self.replied:
-                self.again.extend(reply.fields)
-            self.replied.add(index)
-            return reply.says
+        """The first unsettled reply not yet given, else the first given again; then `afterwards`; then `otherwise`."""
+        unsettled = [
+            index
+            for index, reply in enumerate(self.case.replies)
+            if not all(self._settled(one, declared) for one in reply.fields)
+        ]
+        fresh = [index for index in unsettled if index not in self.replied]
+        if fresh:
+            self.replied.add(fresh[0])
+            return self.case.replies[fresh[0]].says
+        if unsettled:
+            self.again.extend(self.case.replies[unsettled[0]].fields)
+            return self.case.replies[unsettled[0]].says
         if self.spoken < len(self.case.afterwards):
             self.spoken += 1
             return self.case.afterwards[self.spoken - 1]

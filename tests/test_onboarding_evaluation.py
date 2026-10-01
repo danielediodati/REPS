@@ -179,12 +179,33 @@ def test_a_reply_the_model_did_not_declare_is_given_again_and_counted_as_asked_a
         case_of(holds, "terse"),
         tmp_path,
         says("Per cosa ti alleni, e con cosa?"),
+        says("E quanti allenamenti, e quanto tempo?"),
         says("Scusa, per cosa ti alleni?"),
         calls((onboarding.DECLARE, GOAL_AND_GEAR | THE_REST), (onboarding.FINISH, {})),
     )
 
     assert failed(report, "terse") == [onboarding_evaluation.AGAIN]
     assert failed(report, "terse remembers") == [onboarding_evaluation.REMEMBERED]
+
+
+def test_a_persona_gives_what_it_has_not_said_before_repeating_an_undeclared_reply(
+    where: onboarding_evaluation.Fixture, holds: onboarding_set.OnboardSet, tmp_path: Path
+) -> None:
+    """A model that sits on an answer and asks about the next field gets the next answer, not the old one."""
+    report = ran(
+        where,
+        case_of(holds, "terse"),
+        tmp_path,
+        says("Per cosa ti alleni, e con cosa?"),
+        says("E quanti allenamenti, e quanto tempo?"),
+        calls((onboarding.DECLARE, GOAL_AND_GEAR | THE_REST), (onboarding.FINISH, {})),
+    )
+
+    assert failed(report, "terse") == []
+    (outcome,) = [o for o in report.outcomes if o.case == "terse"]
+    assert isinstance(outcome.record, onboarding_evaluation.Talked)
+    said = [line for who, line in outcome.record.conversation if who == "user"]
+    assert said[1:] == [reply.says for reply in case_of(holds, "terse").replies]
 
 
 def test_an_interview_that_never_finishes_fails_filled(
@@ -261,6 +282,29 @@ def test_a_message_handed_where_its_row_says_holds_and_elsewhere_fails_routed(
 
     assert failed(right, "gym") == []
     assert failed(wrong, "gym") == [onboarding_evaluation.ROUTED]
+
+
+def test_a_quota_spent_on_the_interviews_counts_every_route_as_a_run_not_made(
+    where: onboarding_evaluation.Fixture, holds: onboarding_set.OnboardSet, tmp_path: Path
+) -> None:
+    class Spent(Scripted):
+        def _generate(self, *args: Any, **kwargs: Any) -> Any:
+            raise models.QuotaSpent("the day's quota is spent")
+
+    on = models.Chat(Spent(), "scripted", "a-stand-in")
+
+    report = onboarding_evaluation.run(
+        where,
+        [case_of(holds, "bought"), case_of(holds, "gym")],
+        talks=on,
+        front=on,
+        repetitions=2,
+        records=tmp_path / "records",
+    )
+
+    routed = [o for o in report.outcomes if o.case == "gym"]
+    assert report.stopped is not None
+    assert len(routed) == 2 and all(o.skipped for o in routed)
 
 
 def test_a_memory_below_its_bar_fails_the_pass_while_the_held_half_holds(

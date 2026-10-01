@@ -829,9 +829,7 @@ def _refuse(problems: Sequence[str]) -> None:
 
 
 _Named = TypeVar("_Named", evaluation.Situation, log_set.Row, onboarding_set.Case)
-"""What both suites' cases have in common at this boundary: a name typed at
-`--only`. Two concrete types rather than a protocol, because there are two and
-naming them is what makes the error message able to say which."""
+"""What every suite's cases have in common at this boundary: a name typed at `--only`."""
 
 
 def _chosen(

@@ -1,9 +1,10 @@
 # The onboarding and memory eval set: scripted users for `trainer eval --suite onboard`.
 #
-# - An interview persona answers each question with its first reply whose
-#   fields are not all declared yet; with every field declared it says its
-#   `afterwards` lines in order, then `otherwise`. A reply given twice is a
-#   field asked again.
+# - An interview persona answers each question with its first reply not yet
+#   given whose fields are not all declared; when it has given them all, it
+#   repeats the first still undeclared, and that is a field asked again. With
+#   every field declared it says its `afterwards` lines in order, then
+#   `otherwise`.
 # - `pause_after` stops a persona after that many replies; the graph is built
 #   again over the same checkpointer and the persona comes back with `back`.
 # - A change persona starts from `before`, written into the fixture as the
