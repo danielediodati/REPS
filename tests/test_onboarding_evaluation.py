@@ -171,7 +171,7 @@ def test_a_persona_answered_by_its_replies_holds_every_check_and_its_memory(
     assert outcome.written is not None and outcome.written.exists()
 
 
-def test_a_reply_the_model_did_not_declare_is_given_again_and_counted_as_asked_again(
+def test_a_reply_the_model_did_not_declare_is_given_again_and_counted_as_declared_late(
     where: onboarding_evaluation.Fixture, holds: onboarding_set.OnboardSet, tmp_path: Path
 ) -> None:
     report = ran(
@@ -184,7 +184,7 @@ def test_a_reply_the_model_did_not_declare_is_given_again_and_counted_as_asked_a
         calls((onboarding.DECLARE, GOAL_AND_GEAR | THE_REST), (onboarding.FINISH, {})),
     )
 
-    assert failed(report, "terse") == [onboarding_evaluation.AGAIN]
+    assert failed(report, "terse") == [onboarding_evaluation.LATE]
     assert failed(report, "terse remembers") == [onboarding_evaluation.REMEMBERED]
 
 

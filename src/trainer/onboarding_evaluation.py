@@ -28,7 +28,8 @@ from trainer.coach import record as run_record
 from trainer.engine import catalog, config, database
 
 FILLED = "filled"
-AGAIN = "asked again"
+LATE = "declared late"
+"""A field the persona had to say again because the model asked on without writing it down."""
 QUOTED = "quoted"
 PATH = "path open"
 ONLY = "only changed"
@@ -280,18 +281,18 @@ def _interviewed(
         seconds=time.monotonic() - started,
         forgotten=tuple(line for line in case.remembers if not _kept(line, kept)),
     )
-    return talked, _held(case, final, before, persona.again, kept, answers)
+    return talked, _held(case, final, before, persona.late, kept, answers)
 
 
 @dataclass
 class _Persona:
-    """A scripted user answering by code: which replies it has given, and which twice."""
+    """A scripted user answering by code: which replies it has given, and which it had to give again."""
 
     case: onboarding_set.Case
     before: Mapping[str, Any]
     replied: set[int] = field(default_factory=set)
     spoken: int = 0
-    again: list[str] = field(default_factory=list)
+    late: list[str] = field(default_factory=list)
 
     def answer(self, declared: Mapping[str, Any]) -> str:
         """The first unsettled reply not yet given, else the first given again; then `afterwards`; then `otherwise`."""
@@ -305,7 +306,7 @@ class _Persona:
             self.replied.add(fresh[0])
             return self.case.replies[fresh[0]].says
         if unsettled:
-            self.again.extend(self.case.replies[unsettled[0]].fields)
+            self.late.extend(self.case.replies[unsettled[0]].fields)
             return self.case.replies[unsettled[0]].says
         if self.spoken < len(self.case.afterwards):
             self.spoken += 1
@@ -333,7 +334,7 @@ def _held(
     case: onboarding_set.Case,
     final: Mapping[str, Any],
     before: Mapping[str, Any],
-    again: Sequence[str],
+    late: Sequence[str],
     kept: Sequence[conclusions.Conclusion],
     answers: int,
 ) -> tuple[tuple[str, str], ...]:
@@ -345,8 +346,8 @@ def _held(
         failures.append((FILLED, f"never finished: {answers} answers given"))
     elif refused is not None:
         failures.append((FILLED, refused))
-    if again:
-        failures.append((AGAIN, f"answered again: {', '.join(dict.fromkeys(again))}"))
+    if late:
+        failures.append((LATE, f"said again, still undeclared: {', '.join(dict.fromkeys(late))}"))
     said = list(final.get("said", []))
     unsaid = [one.quote for one in kept if not conclusions.admitted(one.quote, said)]
     if unsaid:
@@ -414,8 +415,8 @@ def barred(report: evaluation.Report, holds: onboarding_set.OnboardSet) -> evalu
 def render(report: evaluation.Report, chosen: Sequence[onboarding_set.Case]) -> list[str]:
     """One matrix per kind of case, the failures, what an onboarding cost, and the bars. ASCII."""
     kinds = (
-        (onboarding_set.INTERVIEW, "interviews", [FILLED, AGAIN, QUOTED]),
-        (onboarding_set.CHANGE, "changes", [FILLED, AGAIN, QUOTED, PATH, ONLY]),
+        (onboarding_set.INTERVIEW, "interviews", [FILLED, LATE, QUOTED]),
+        (onboarding_set.CHANGE, "changes", [FILLED, LATE, QUOTED, PATH, ONLY]),
     )
     lines: list[str] = []
     for kind, heading, columns in kinds:

@@ -2,7 +2,7 @@
 #
 # - An interview persona answers each question with its first reply not yet
 #   given whose fields are not all declared; when it has given them all, it
-#   repeats the first still undeclared, and that is a field asked again. With
+#   repeats the first still undeclared, and that field was declared late. With
 #   every field declared it says its `afterwards` lines in order, then
 #   `otherwise`.
 # - `pause_after` stops a persona after that many replies; the graph is built
@@ -12,7 +12,7 @@
 #   open for the running mesocycle (empty: none is running).
 # - A route is one message to the entrance, and the handoff it must reach.
 #
-# Code holds at 100% every field filled and valid, no field asked again, every
+# Code holds at 100% every field filled and valid, none declared late, every
 # stored quote in a user message, and, on a change, the chosen path open and
 # only `changes` differing. The bars below are for judgement (ADR-0010), set
 # before the first run.
