@@ -11,11 +11,12 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
    |---|---|---|---|---|---|---|
    | Planner | `anthropic/claude-haiku-4.5` | none | `anthropic` | plan suite, 100% | ~0.13 a mesocycle | ~47 |
    | Logger | `deepseek/deepseek-v4-flash` | high | `parasail` | log suite, 80% / 60% | ~0.003 a report | 8–200 |
+   | Onboarding | `deepseek/deepseek-v4-flash` | high | `parasail` | onboard suite, 100% held / 80% on time, remembered, routed | ~0.0015 an onboarding | 3–150 |
    | Entrance | `openai/gpt-oss-120b` | low | `cerebras` | none: no suite | 0.001–0.002 a turn | 0.3–1.2 |
 
-3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs all three choices. Ollama and Groq stay selectable.
+3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs every choice. Ollama and Groq stay selectable.
 4. **A choice's effort and host belong to its model.** Another model named on a node's line runs at its own default effort, on OpenRouter's routing. `OPENROUTER_MODEL` moves every node off its choice, which is how a matrix row runs.
-5. **The host is pinned per node**: `PLANNER_HOST`, `LOGGER_HOST`, `ENTRANCE_HOST`, then `OPENROUTER_PROVIDER` for all, then the choice's. No fallback to another host, so the run record names one.
+5. **The host is pinned per node**: `PLANNER_HOST`, `LOGGER_HOST`, `ONBOARDING_HOST`, `ENTRANCE_HOST`, then `OPENROUTER_PROVIDER` for all, then the choice's. No fallback to another host, so the run record names one.
 6. **The next model change is one more row** in the table below, run the same way, then this rule reapplied.
 
 ## The planner's matrix
@@ -49,6 +50,20 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 
 - `gpt-oss-20b` was never measured properly: the hosts lost 16 of its 20 rows. It is excluded on its 2 / 4 and its larger sibling's must-ask score.
 - More reasoning did not buy better questions: 120b at medium asked less than at low, and the reference, which reasons longest, asked least.
+
+## Onboarding's matrix
+
+`--suite onboard` (ticket 13.5) on its six held cases, three interviews and three changes, 3 reps a pass; deepseek's row is three passes. Bars in `docs/onboarding/eval-set.toml`: 100% held (fields filled and valid, quotes said, path open, only the changed fields), 80% on time, 80% remembered, 80% routed.
+
+| Model, effort, host | Held | On time | Remembered | $ an onboarding | s an onboarding |
+|---|---|---|---|---|---|
+| `openai/gpt-oss-120b` low, Cerebras | 11 / 18 | 14 / 18 | 2 / 9 | 0.009 | 0–15 |
+| **`deepseek/deepseek-v4-flash` high, Parasail** | **54 / 54** | **52 / 54** | **27 / 27** | **0.0013–0.0017** | **3–150** |
+| `anthropic/claude-haiku-4.5` none, Anthropic | 18 / 18 | 17 / 18 | 8 / 9 | 0.018 | 2–18 |
+
+- **On time** is whether a field was declared before the next question: a persona that has said everything repeats an undeclared answer. It began at 100% and moved to a bar after the third pass, because code cannot tell a late declaration from a proposed split being confirmed, which the prompt asks for. The final state was valid in every run either way.
+- gpt-oss-120b writes tool calls as text (`to=functions.finish{}`) and never ends.
+- Routing (`change_declaration` against `adapt_today`) runs on the entrance's choice: 36 / 36 over three passes.
 
 ## The entrance
 

@@ -17,6 +17,7 @@ DEFAULT_PARTS = ("docs", "onboarding", "eval-set.toml")
 INTERVIEW, CHANGE, ROUTE = "interview", "change", "route"
 KINDS = (INTERVIEW, CHANGE, ROUTE)
 ROUTES = (entrance.CHANGE_DECLARATION, entrance.ADAPT_TODAY)
+BARS = ("on_time", "remembered", "routed")
 
 
 class OnboardSetError(ValueError):
@@ -55,6 +56,7 @@ class Case:
 @dataclass(frozen=True)
 class OnboardSet:
     today: str
+    bar_on_time: int
     bar_remembered: int
     bar_routed: int
     cases: tuple[Case, ...]
@@ -92,8 +94,8 @@ def parse(text: str) -> OnboardSet:
     except tomllib.TOMLDecodeError as error:
         raise OnboardSetError(f"the set is not TOML: {error}") from error
     bars = raw.get("bars")
-    if not isinstance(bars, dict) or not {"remembered", "routed"} <= set(bars):
-        raise OnboardSetError("the set declares no [bars] with `remembered` and `routed`")
+    if not isinstance(bars, dict) or not set(BARS) <= set(bars):
+        raise OnboardSetError(f"the set declares no [bars] with {', '.join(BARS)}")
     cases = tuple(_case(entry) for entry in raw.get("cases", ()))
     names = [case.name for case in cases]
     repeated = sorted({name for name in names if names.count(name) > 1})
@@ -101,6 +103,7 @@ def parse(text: str) -> OnboardSet:
         raise OnboardSetError(f"cases named twice: {', '.join(repeated)}")
     return OnboardSet(
         today=str(raw.get("today", "")),
+        bar_on_time=int(bars["on_time"]),
         bar_remembered=int(bars["remembered"]),
         bar_routed=int(bars["routed"]),
         cases=cases,

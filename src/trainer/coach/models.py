@@ -123,7 +123,7 @@ class Choice:
 PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
 LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ENTRANCE_CHOICE = Choice("openai/gpt-oss-120b", "low", "cerebras")
-ONBOARDING_CHOICE = ENTRANCE_CHOICE
+ONBOARDING_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 
 DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
 """The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""

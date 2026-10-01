@@ -43,7 +43,8 @@ MAX_ANSWERS = 20
 """Answers a persona gives before the run is counted as never ending."""
 
 REMEMBERS = " remembers"
-"""Appended to an interview's name for the case that holds its memory to the bar."""
+ON_TIME = " on time"
+"""Appended to a case's name for the judgement it is held to at a bar: memory, and declaring on time."""
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,7 @@ class Talked:
     conversation: tuple[tuple[str, str], ...]
     seconds: float
     forgotten: tuple[str, ...] = ()
+    late: tuple[str, ...] = ()
 
     @property
     def written(self) -> str:
@@ -160,7 +162,7 @@ def run(
             ),
         )
         outcomes.extend(report.outcomes)
-        outcomes.extend(_memory(report.outcomes, held))
+        outcomes.extend(_judged(report.outcomes, held))
         stopped = report.stopped
     if routes and stopped is None:
         assert front is not None
@@ -200,25 +202,36 @@ def _scored(
     return evaluation.Outcome(case.name, attempt, failures, talked, written)
 
 
-def _memory(
+def _judged(
     outcomes: Sequence[evaluation.Outcome], held: Sequence[onboarding_set.Case]
 ) -> list[evaluation.Outcome]:
-    """Each interview's run again, as the case that holds what it remembered to the bar."""
+    """Each run again, as the cases held to a bar: whether it declared on time, and what it remembered."""
     remembering = {case.name for case in held if case.remembers}
-    derived = []
+    derived: list[evaluation.Outcome] = []
     for outcome in outcomes:
-        if outcome.case not in remembering:
-            continue
-        forgotten = outcome.record.forgotten if isinstance(outcome.record, Talked) else ()
-        derived.append(
+        talked = outcome.record if isinstance(outcome.record, Talked) else None
+        late = talked.late if talked else ()
+        judged: list[tuple[str, tuple[tuple[str, str], ...]]] = [
+            (
+                ON_TIME,
+                ((LATE, f"said again, still undeclared: {', '.join(late)}"),) if late else (),
+            )
+        ]
+        if outcome.case in remembering:
+            forgotten = talked.forgotten if talked else ()
+            judged.append(
+                (REMEMBERS, tuple((REMEMBERED, f"nothing kept from {line!r}") for line in forgotten))
+            )
+        derived.extend(
             evaluation.Outcome(
-                outcome.case + REMEMBERS,
+                outcome.case + suffix,
                 outcome.attempt,
-                tuple((REMEMBERED, f"nothing kept from {line!r}") for line in forgotten),
+                failures,
                 written=outcome.written,
                 error=outcome.error,
                 skipped=outcome.skipped,
             )
+            for suffix, failures in judged
         )
     return derived
 
@@ -280,8 +293,9 @@ def _interviewed(
         conversation=tuple(conversation),
         seconds=time.monotonic() - started,
         forgotten=tuple(line for line in case.remembers if not _kept(line, kept)),
+        late=tuple(dict.fromkeys(persona.late)),
     )
-    return talked, _held(case, final, before, persona.late, kept, answers)
+    return talked, _held(case, final, before, kept, answers)
 
 
 @dataclass
@@ -334,7 +348,6 @@ def _held(
     case: onboarding_set.Case,
     final: Mapping[str, Any],
     before: Mapping[str, Any],
-    late: Sequence[str],
     kept: Sequence[conclusions.Conclusion],
     answers: int,
 ) -> tuple[tuple[str, str], ...]:
@@ -346,8 +359,6 @@ def _held(
         failures.append((FILLED, f"never finished: {answers} answers given"))
     elif refused is not None:
         failures.append((FILLED, refused))
-    if late:
-        failures.append((LATE, f"said again, still undeclared: {', '.join(dict.fromkeys(late))}"))
     said = list(final.get("said", []))
     unsaid = [one.quote for one in kept if not conclusions.admitted(one.quote, said)]
     if unsaid:
@@ -395,11 +406,16 @@ def _routed(
 
 
 def barred(report: evaluation.Report, holds: onboarding_set.OnboardSet) -> evaluation.Report:
-    """The pass against its three bars: 100% held by code, and the two judgements the set declares."""
+    """The pass against its bars: 100% held by code, and the judgements the set declares."""
     return replace(
         report,
         halves=(
             evaluation.Half("held", frozenset(case.name for case in holds.held), 100),
+            evaluation.Half(
+                "on time",
+                frozenset(case.name + ON_TIME for case in holds.held),
+                holds.bar_on_time,
+            ),
             evaluation.Half(
                 "remembered",
                 frozenset(case.name + REMEMBERS for case in holds.held if case.remembers),
@@ -415,14 +431,17 @@ def barred(report: evaluation.Report, holds: onboarding_set.OnboardSet) -> evalu
 def render(report: evaluation.Report, chosen: Sequence[onboarding_set.Case]) -> list[str]:
     """One matrix per kind of case, the failures, what an onboarding cost, and the bars. ASCII."""
     kinds = (
-        (onboarding_set.INTERVIEW, "interviews", [FILLED, LATE, QUOTED]),
-        (onboarding_set.CHANGE, "changes", [FILLED, LATE, QUOTED, PATH, ONLY]),
+        (onboarding_set.INTERVIEW, "interviews", [FILLED, QUOTED]),
+        (onboarding_set.CHANGE, "changes", [FILLED, QUOTED, PATH, ONLY]),
     )
     lines: list[str] = []
     for kind, heading, columns in kinds:
         names = [case.name for case in chosen if case.kind == kind]
         if names:
             lines += [heading, *evaluation.matrix(report, names, [*columns, evaluation.NOT_RUN]), ""]
+    on_time = [case.name + ON_TIME for case in chosen if case.kind != onboarding_set.ROUTE]
+    if on_time:
+        lines += ["on time", *evaluation.matrix(report, on_time, [LATE, evaluation.NOT_RUN]), ""]
     remembering = [case.name + REMEMBERS for case in chosen if case.remembers]
     if remembering:
         lines += ["memory", *evaluation.matrix(report, remembering, [REMEMBERED, evaluation.NOT_RUN]), ""]
@@ -431,6 +450,7 @@ def render(report: evaluation.Report, chosen: Sequence[onboarding_set.Case]) -> 
         lines += ["routing", *evaluation.matrix(report, routes, [ROUTED, evaluation.NOT_RUN]), ""]
     about = {case.name: case.describes for case in chosen}
     about |= {case.name + REMEMBERS: case.describes for case in chosen}
+    about |= {case.name + ON_TIME: case.describes for case in chosen}
     lines += [*evaluation.failures(report, about), ""]
     lines += _per_onboarding(report, chosen)
     lines += evaluation.totals(report, "held what their case declares")

@@ -21,6 +21,7 @@ SET = """\
 today = "2026-10-01"
 
 [bars]
+on_time = 80
 remembered = 80
 routed = 80
 
@@ -184,7 +185,8 @@ def test_a_reply_the_model_did_not_declare_is_given_again_and_counted_as_declare
         calls((onboarding.DECLARE, GOAL_AND_GEAR | THE_REST), (onboarding.FINISH, {})),
     )
 
-    assert failed(report, "terse") == [onboarding_evaluation.LATE]
+    assert failed(report, "terse") == []
+    assert failed(report, "terse on time") == [onboarding_evaluation.LATE]
     assert failed(report, "terse remembers") == [onboarding_evaluation.REMEMBERED]
 
 
@@ -319,7 +321,7 @@ def test_a_memory_below_its_bar_fails_the_pass_while_the_held_half_holds(
 
     barred = onboarding_evaluation.barred(report, holds)
 
-    held, remembered, _ = barred.halves
+    held, _, remembered, _ = barred.halves
     assert barred.of(held).held == 1
     assert not barred.passed
 

@@ -2,7 +2,7 @@
 #
 # - An interview persona answers each question with its first reply not yet
 #   given whose fields are not all declared; when it has given them all, it
-#   repeats the first still undeclared, and that field was declared late. With
+#   repeats the first still undeclared: that field was declared late. With
 #   every field declared it says its `afterwards` lines in order, then
 #   `otherwise`.
 # - `pause_after` stops a persona after that many replies; the graph is built
@@ -12,14 +12,16 @@
 #   open for the running mesocycle (empty: none is running).
 # - A route is one message to the entrance, and the handoff it must reach.
 #
-# Code holds at 100% every field filled and valid, none declared late, every
-# stored quote in a user message, and, on a change, the chosen path open and
-# only `changes` differing. The bars below are for judgement (ADR-0010), set
-# before the first run.
+# Code holds at 100% every field filled and valid, every stored quote in a
+# user message, and, on a change, the chosen path open and only `changes`
+# differing. The bars below are for judgement (ADR-0010): `remembered` and
+# `routed` set before the first run, `on_time` after the third, once a late
+# declaration turned out to be timing rather than legality (ADR-0011).
 
 today = "2026-10-01"
 
 [bars]
+on_time = 80
 remembered = 80
 routed = 80
 

@@ -13,6 +13,7 @@ SET = """\
 today = "2026-10-01"
 
 [bars]
+on_time = 80
 remembered = 80
 routed = 70
 
@@ -52,7 +53,9 @@ routed = "adapt_today"
 def test_a_set_parses_into_its_cases_and_bars() -> None:
     parsed = onboarding_set.parse(SET)
 
-    assert (parsed.today, parsed.bar_remembered, parsed.bar_routed) == ("2026-10-01", 80, 70)
+    assert (parsed.today, parsed.bar_on_time, parsed.bar_remembered, parsed.bar_routed) == (
+        "2026-10-01", 80, 80, 70
+    )
     terse, bought, short = parsed.cases
     assert terse.kind == onboarding_set.INTERVIEW
     assert terse.replies[0].fields == ("goal", "equipment")
@@ -72,7 +75,8 @@ def test_the_set_says_which_cases_are_held_and_which_are_routes() -> None:
 @pytest.mark.parametrize(
     ("old", "new", "said"),
     [
-        ("[bars]\nremembered = 80\nrouted = 70\n", "", "bars"),
+        ("[bars]\non_time = 80\nremembered = 80\nrouted = 70\n", "", "bars"),
+        ("on_time = 80\n", "", "on_time"),
         ('kind = "route"', 'kind = "chat"', "kind"),
         ('fields = ["goal", "equipment"]', 'fields = ["goal", "gear"]', "gear"),
         ('{ fields = ["cycle_length", "split", "duration_cap_min"], says = "due, sopra e sotto, un\'ora" },\n', "", "duration_cap_min"),
