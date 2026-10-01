@@ -228,8 +228,7 @@ def test_a_handed_off_turn_is_not_offered_the_tools_again(
 def test_no_handoff_takes_an_argument_from_the_entrance() -> None:
     """Which workout is due, and what the report says, are not the entrance's
     to name. A parameter here is a place for it to invent one -- and `report`
-    above all, which is the user's own words and is what a hypothesis is
-    formed from."""
+    above all, which is the user's own words."""
     for handed in (entrance.todays_workout, entrance.plan_mesocycle, entrance.log_workout):
         assert tools.schema(handed)["parameters"]["properties"] == {}
 

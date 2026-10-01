@@ -1870,8 +1870,8 @@ def _ascii(text: str) -> str:
     Accents are dropped rather than transliterated, so `perch\u00e9` prints as
     `perche` -- which is how the user types it anyway, and is in every case
     better than `perch?`. **Presentation only**: `report` is stored verbatim,
-    because it is what a hypothesis is formed from and a
-    paraphrase is the system's reading of the user rather than the user.
+    because a paraphrase is the system's reading of the user rather than the
+    user.
     """
     import unicodedata
 

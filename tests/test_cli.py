@@ -2628,8 +2628,8 @@ def test_log_writes_an_exercise_performed_under_an_exclusion(
     runner: CliRunner, enriched: Path, tmp_path: Path
 ) -> None:
     """The row this ticket exists to protect. Recorded and flagged, never
-    refused: an exclusion the user trained straight through is what session 9
-    forms a hypothesis about."""
+    refused: an exclusion the user trained straight through is what the
+    supervisor has to see."""
     with closing(database.connect(enriched)) as connection:
         exclusions.add(
             connection, exclusions.Exclusion("pattern", "vertical push"), "2099-01-01"

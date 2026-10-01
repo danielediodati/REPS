@@ -732,8 +732,7 @@ async def _logging(
 
     The report is `text` -- what the user typed, character for character. The
     entrance never retells it: a paraphrase is the system's reading of the
-    user rather than the user, and `report` is what a hypothesis is formed
-    from.
+    user rather than the user.
     """
     try:
         open_workout = await asyncio.to_thread(_awaiting)
