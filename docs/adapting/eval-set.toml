@@ -1,0 +1,178 @@
+# The adaptation set: real requests for `trainer eval --suite adapt`.
+#
+# - Every case is one message to the entrance, against a fixture holding the
+#   declaration and the mesocycle below, with none of its workouts performed:
+#   this workout is slot 1, the legs.
+# - `goes` is where the message must go: a handoff the entrance offers, or
+#   - `ask`: nothing started, and the answer asks which they mean;
+#   - `triage`: nothing started, and the answer asks about the ache;
+#   - `remember`: a conclusion kept, and nothing started;
+#   - `refused`: an adaptation asked for and refused before planning.
+# - `excluded` is written into the fixture for that case only, re-tested six
+#   weeks after the run.
+# - A case that goes to `adapt_today` is planned, and code holds its plan at
+#   100%: it validated, every `holds` id is in it, no `without_pattern` and no
+#   `without_named` (a substring of the catalog name) is, every exercise is on
+#   `equipment`, it runs `minutes` inside the validator's window, it trains
+#   none of `untrained`, and with `longer` any minutes asked exceed the cap.
+#
+# The bar below is for judgement (ADR-0010), set before the first run: where a
+# message goes. Acting where the row asks counts double, as in the log set.
+#
+# The catalog has no Bulgarian split squat; `Split_Squat_with_Dumbbells` is
+# the closest it holds.
+
+today = "2026-10-01"
+
+[bars]
+routed = 80
+
+[declared]
+cycle_length = 3
+duration_cap_min = 45
+split = [["legs", "core"], ["chest", "shoulders", "arms"], ["back", "arms"]]
+equipment = ["barbell", "dumbbell", "body only"]
+goal = "hypertrophy"
+
+[mesocycle]
+cycles = 4
+why = "four cycles to settle the loads"
+
+[[mesocycle.slots]]
+blocks = [
+  { rounds = 5, rest = 120, reason = "the main squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "one leg at a time", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }, { exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+]
+
+[[mesocycle.slots]]
+blocks = [
+  { rounds = 5, rest = 120, reason = "the main press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "overhead", items = [{ exercise_id = "Dumbbell_Shoulder_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "side delts", items = [{ exercise_id = "Side_Lateral_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "volume to finish", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }, { exercise_id = "Dips_-_Triceps_Version", prescription = { unit = "reps", amount = 10 } }] },
+]
+
+[[mesocycle.slots]]
+blocks = [
+  { rounds = 5, rest = 120, reason = "the main row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "the vertical pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 60, reason = "the arms", items = [{ exercise_id = "Dumbbell_Bicep_Curl", prescription = { unit = "reps", amount = 12 } }, { exercise_id = "Hammer_Curls", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "grip", items = [{ exercise_id = "Seated_Dumbbell_Palms-Up_Wrist_Curl", prescription = { unit = "reps", amount = 15 } }] },
+]
+
+# -- this workout -------------------------------------------------------------
+
+[[cases]]
+name = "superset"
+says = "oggi niente squat, stacchi rumeni in superset con i bulgari"
+goes = "adapt_today"
+without_pattern = ["squat"]
+holds = ["Romanian_Deadlift", "Split_Squat_with_Dumbbells"]
+
+[[cases]]
+name = "you-choose"
+says = "oggi niente squat, proponi tu"
+goes = "adapt_today"
+without_pattern = ["squat"]
+
+[[cases]]
+name = "thirty"
+says = "oggi ho 30 minuti invece di 45"
+goes = "adapt_today"
+minutes = 30
+
+[[cases]]
+name = "football"
+says = "oggi niente gambe che stasera gioco a calcio"
+goes = "adapt_today"
+untrained = ["legs"]
+
+[[cases]]
+name = "kettlebell"
+says = "mi hanno prestato una kettlebell, usiamola oggi"
+goes = "adapt_today"
+equipment = ["barbell", "dumbbell", "body only", "kettlebells"]
+
+[[cases]]
+name = "away"
+says = "sono in trasferta, solo corpo libero"
+goes = "adapt_today"
+equipment = ["body only"]
+
+[[cases]]
+name = "one-more"
+says = "oggi ho tempo, metti un esercizio in più per gruppo"
+goes = "adapt_today"
+longer = true
+
+[[cases]]
+name = "dumbbells"
+says = "oggi solo manubri, la palestra è piena"
+goes = "adapt_today"
+equipment = ["dumbbell"]
+
+[[cases]]
+name = "twenty-bare"
+says = "20 minuti e niente attrezzi"
+goes = "adapt_today"
+minutes = 20
+equipment = ["body only"]
+
+[[cases]]
+name = "pull-ups"
+says = "oggi vorrei fare trazioni"
+goes = "adapt_today"
+holds = ["Pullups"]
+
+[[cases]]
+name = "no-bench"
+says = "oggi non ho voglia di panca"
+goes = "adapt_today"
+without_named = ["Bench Press"]
+
+# -- from now on --------------------------------------------------------------
+
+[[cases]]
+name = "no-lunges"
+says = "da ora in poi niente affondi"
+goes = "change_mesocycle"
+
+[[cases]]
+name = "lunges-again"
+says = "gli affondi non li sopporto più"
+goes = "change_mesocycle"
+
+[[cases]]
+name = "bought-barbell"
+says = "ho comprato un bilanciere"
+goes = "change_declaration"
+
+[[cases]]
+name = "thirty-from-now"
+says = "d'ora in poi ho solo 30 minuti"
+goes = "change_declaration"
+
+# -- neither ------------------------------------------------------------------
+
+[[cases]]
+name = "no-squat"
+says = "niente squat"
+goes = "ask"
+
+[[cases]]
+name = "shoulder"
+says = "mi fa male la spalla quando spingo sopra la testa"
+goes = "triage"
+
+[[cases]]
+name = "hinge-excluded"
+says = "oggi stacchi rumeni"
+goes = "refused"
+excluded = ["hip hinge"]
+
+[[cases]]
+name = "hate-bench"
+says = "odio la panca"
+goes = "remember"

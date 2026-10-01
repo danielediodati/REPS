@@ -261,6 +261,9 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
     and which says exactly what that exception covers.
     """
     assert _importers_of("trainer.engine.workouts") == {
+        # Session 14: the adaptation set's mesocycle is written into its
+        # fixture as the `PrescribedBlock`s a kept one is.
+        "adapt_evaluation.py",
         "cli.py",
         # Session 7: a plan becomes a prescribed workout when the user accepts
         # it (ADR-0005), and the node after the resume is what writes it.
@@ -414,7 +417,12 @@ def test_the_writer_call_guard_does_not_fire_on_a_reader(tmp_path: Path) -> None
 def test_only_an_accepted_mesocycle_is_kept() -> None:
     """ADR-0008: a mesocycle is accepted once, and the node after the resume
     is the one place that keeps it -- never a tool the model can call."""
-    assert _callers_of(("record_mesocycle",)) == {"coach/planner.py"}
+    assert _callers_of(("record_mesocycle",)) == {
+        "coach/planner.py",
+        # The adaptation set is measured against an active mesocycle, written
+        # into a throwaway copy, as `log_evaluation.py` writes its prescriptions.
+        "adapt_evaluation.py",
+    }
 
 
 def test_only_a_door_serves_todays_workout() -> None:

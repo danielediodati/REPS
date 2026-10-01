@@ -26,6 +26,8 @@ from langgraph.types import Command
 
 from trainer import (
     __version__,
+    adapt_evaluation,
+    adapt_set,
     evaluation,
     log,
     log_evaluation,
@@ -595,7 +597,7 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
-PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE = "plan", "log", "onboard"
+PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE = "plan", "log", "onboard", "adapt"
 """The two measurements, under one command.
 
 Session 4's six situations and session 5's thirty reports are checked on
@@ -614,12 +616,12 @@ somebody's notes does.
 @click.option(
     "--suite",
     "suite",
-    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE)),
+    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE)),
     default=PLAN_SUITE,
     show_default=True,
     help="Which measurement to run: the six planning situations, the "
-    "logging set's thirty hand-written reports, or the onboarding set's "
-    "scripted users.",
+    "logging set's thirty hand-written reports, the onboarding set's "
+    "scripted users, or the adaptation set's requests.",
 )
 @click.option(
     "--repetitions",
@@ -682,6 +684,10 @@ def eval_command(
     interview and its messages through the entrance, on the interview's and
     the entrance's models.
 
+    `--suite adapt` sends the adaptation set's messages through the entrance
+    against a fixture with an active mesocycle, plans every adaptation it
+    starts, and holds that plan to its row.
+
     No model judges another model's output in any of them.
 
     **This is the one command in the project that reaches a provider**, and
@@ -701,6 +707,10 @@ def eval_command(
                 )
             elif suite == ONBOARD_SUITE:
                 lines, report = _onboard_suite(
+                    connection, only, repetitions, records, call_budget
+                )
+            elif suite == ADAPT_SUITE:
+                lines, report = _adapt_suite(
                     connection, only, repetitions, records, call_budget
                 )
             else:
@@ -823,12 +833,48 @@ def _onboard_suite(
     return onboarding_evaluation.render(report, chosen), report
 
 
+def _adapt_suite(
+    connection: sqlite3.Connection,
+    only: tuple[str, ...],
+    repetitions: int,
+    records: Path,
+    call_budget: int,
+) -> tuple[list[str], evaluation.Report]:
+    """The adaptation set's messages, against a copy holding its declaration and mesocycle."""
+    try:
+        holds = adapt_set.load()
+    except adapt_set.AdaptSetError as error:
+        raise click.ClickException(str(error)) from error
+    _refuse(adapt_evaluation.problems(connection, holds))
+    chosen = _chosen(holds.cases, only, "case")
+    front = models.entrance()
+    models.ready(front)
+    plans_on = None
+    if any(case.planned for case in chosen):
+        plans_on = models.planner()
+        models.ready(plans_on)
+    with adapt_evaluation.prepared(connection, holds) as where:
+        report = adapt_evaluation.run(
+            where,
+            chosen,
+            front=front,
+            plans_on=plans_on,
+            repetitions=repetitions,
+            records=records,
+            budget=call_budget,
+        )
+    report = adapt_evaluation.barred(report, holds)
+    return adapt_evaluation.render(report, chosen), report
+
+
 def _refuse(problems: Sequence[str]) -> None:
     if problems:
         raise click.ClickException("\n".join(problems))
 
 
-_Named = TypeVar("_Named", evaluation.Situation, log_set.Row, onboarding_set.Case)
+_Named = TypeVar(
+    "_Named", evaluation.Situation, log_set.Row, onboarding_set.Case, adapt_set.Case
+)
 """What every suite's cases have in common at this boundary: a name typed at `--only`."""
 
 

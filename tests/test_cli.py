@@ -2443,6 +2443,67 @@ def test_the_onboard_suite_runs_a_change_against_its_fixture_and_prints_its_matr
     assert "held: 1 of 1" in result.output
 
 
+# --- eval --suite adapt ------------------------------------------------------
+
+
+def test_the_adapt_suite_stops_at_the_credentials_state_too(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
+    result = runner.invoke(main, ["eval", "--suite", "adapt", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "no Groq credentials" in result.output
+    assert "routing" not in result.output, "it ran the pass anyway"
+
+
+def test_the_adapt_suite_names_its_cases_when_one_is_mistyped(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(main, ["eval", "--suite", "adapt", "--only", "superset!"])
+
+    assert result.exit_code != 0
+    assert "no case called 'superset!'" in result.output
+    assert "football" in result.output
+
+
+def test_the_adapt_suite_routes_a_message_against_its_fixture_and_prints_its_matrix(
+    runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from langchain_core.messages import AIMessage
+
+    from trainer.coach import entrance
+
+    scripted_graph(
+        monkeypatch,
+        turns=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": entrance.CHANGE_DECLARATION,
+                        "args": {"said": "ho comprato un bilanciere"},
+                        "id": "c1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Aggiorno quello che hai."),
+        ],
+    )
+
+    result = runner.invoke(
+        main,
+        ["eval", "--suite", "adapt", "--repetitions", "1", "--only", "bought-barbell",
+         "--records", str(tmp_path / "records")],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "routing" in result.output and "bought-barbell" in result.output
+    assert "routed: 1 of 1" in result.output
+
+
 def test_the_plan_suite_is_what_the_command_still_means_by_default(
     runner: CliRunner, enriched: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

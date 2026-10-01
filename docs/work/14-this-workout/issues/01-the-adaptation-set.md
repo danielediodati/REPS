@@ -1,6 +1,6 @@
 # The adaptation set
 
-Status: ready-for-agent
+Status: needs-info
 
 Blocked by: none.
 
@@ -41,7 +41,12 @@ The first run is the baseline: it measures today's gap, so failing rows are expe
 
 ## Acceptance criteria
 
-- [ ] The suite runs against a fixture named in `TRAINER_DB`.
-- [ ] The bar is written before the first run.
+- [x] The suite runs against a fixture named in `TRAINER_DB`.
+- [x] The bar is written before the first run.
 - [ ] A baseline run on the current entrance configuration, with $ and s per message, its failures listed.
-- [ ] Full test suite and mypy green.
+- [x] Full test suite and mypy green.
+
+## Comments
+
+- Built: `docs/adapting/eval-set.toml` (bar `routed = 80`, written before any run), `adapt_set.py`, `adapt_evaluation.py`, `trainer eval --suite adapt`. Verified without a model: the set holds no catalog problem, the fixture serves slot 1 (legs) of a 3-slot mesocycle at 41-42 min against the 45 cap.
+- Open: the baseline run. The user declined it on 2026-10-01 (estimate ~$0.7-1 and ~8 min a repetition).
