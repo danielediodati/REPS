@@ -1188,35 +1188,180 @@ def test_an_adaptation_needs_a_mesocycle_to_adapt(
         plans.adaptation_requested(connection, TODAY, plans.Asked(minutes=30))
 
 
-def test_equipment_missing_today_comes_off_what_was_declared(
+def test_this_workouts_equipment_is_named_in_full(
     connection: sqlite3.Connection, declaring_legs: Path
 ) -> None:
     kept(connection)
 
-    asked = plans.adaptation_requested(connection, TODAY, plans.Asked(), without=("barbell",))
+    asked = plans.adaptation_requested(connection, TODAY, plans.Asked(equipment=("body only",)))
 
     assert asked.equipment == ("body only",)
 
 
-def test_equipment_missing_today_is_checked_against_the_catalog(
+def test_this_workouts_equipment_is_checked_against_the_catalog(
     connection: sqlite3.Connection, declaring_legs: Path
 ) -> None:
     kept(connection)
 
     with pytest.raises(catalog.UnknownFilterValue):
-        plans.adaptation_requested(connection, TODAY, plans.Asked(), without=("dumbells",))
+        plans.adaptation_requested(connection, TODAY, plans.Asked(equipment=("dumbells",)))
 
 
-def test_missing_every_piece_of_equipment_is_refused_rather_than_ignored(
+def test_minutes_over_the_cap_are_planned_as_asked(
     connection: sqlite3.Connection, declaring_legs: Path
 ) -> None:
-    """An empty list is what `requested` reads as *nothing named*, which is all of it."""
+    """70 against a cap of 45: the cap is the usual time, and a plan of 70 is the one that fits."""
+    kept(connection)
+    asked = plans.adaptation_requested(connection, TODAY, plans.Asked(minutes=70))
+
+    def squats(rounds: int) -> plans.WorkoutPlan:
+        return plans.parse(
+            document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}}, rounds=rounds, rest=180))
+        )
+
+    seventy = next(rounds for rounds in range(1, 60) if duration.plan_duration(connection, plans.to_blocks(squats(rounds))) >= 70)
+
+    def budget(rounds: int) -> list[plans.Violation]:
+        plan = squats(rounds)
+        return [v for v in plans.validate(connection, plans.to_blocks(plan), asked, plan) if v.rule == plans.BUDGET]
+
+    assert (asked.budget_min, asked.allocation) == (70, (("legs", 70),))
+    assert budget(seventy) == []
+    assert budget(seventy // 2) != []
+
+
+def test_another_of_the_cycle_starts_from_its_slot(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
     kept(connection)
 
-    with pytest.raises(plans.PlanRejected, match="nothing left"):
-        plans.adaptation_requested(
-            connection, TODAY, plans.Asked(), without=("barbell", "body only")
-        )
+    asked = plans.adaptation_requested(connection, TODAY, plans.Asked(workout=2), said="oggi niente gambe")
+
+    assert asked.groups == ("shoulders",)
+    assert asked.adapting is not None and asked.adapting.slot == 2
+    assert asked.adapting.workout == plans.WorkoutPlan.model_validate(press_day())
+
+
+@pytest.mark.parametrize(("workout", "says"), [(3, "outside a cycle of 2"), (0, "outside")])
+def test_a_workout_outside_the_cycle_is_refused_naming_the_ones_left(
+    connection: sqlite3.Connection, declaring_legs: Path, workout: int, says: str
+) -> None:
+    kept(connection)
+
+    with pytest.raises(plans.PlanRejected, match=says) as refused:
+        plans.adaptation_requested(connection, TODAY, plans.Asked(workout=workout))
+    assert "2 (shoulders)" in str(refused.value)
+
+
+def test_a_workout_already_performed_this_cycle_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+    found = mesocycles.today(connection)
+    served = mesocycles.record_adapted(
+        connection,
+        mesocycles.active(connection).slots[1],  # type: ignore[union-attr]
+        on=TODAY,
+        mesocycle=found.mesocycle,
+        served_after=found.performed,
+        slot=2,
+    )
+    connection.execute("UPDATE workouts SET state = 'performed', performed_on = ? WHERE id = ?", (TODAY, served))
+
+    with pytest.raises(plans.PlanRejected, match="already been performed") as refused:
+        plans.adaptation_requested(connection, TODAY, plans.Asked(workout=2))
+    assert "1 (legs)" in str(refused.value)
+
+
+def test_exercises_asked_for_and_left_out_travel_with_the_request(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+
+    asked = plans.adaptation_requested(
+        connection, TODAY, ask_for=("Barbell_Squat",), leave_out=("Plank",)
+    )
+
+    assert asked.adapting is not None
+    assert (asked.adapting.asked_for, asked.adapting.left_out) == (("Barbell_Squat",), ("Plank",))
+
+
+@pytest.mark.parametrize("field", ["ask_for", "leave_out"])
+def test_an_exercise_id_the_catalog_lacks_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path, field: str
+) -> None:
+    kept(connection)
+
+    with pytest.raises(plans.PlanRejected, match="search_exercises"):
+        plans.adaptation_requested(connection, TODAY, **{field: ("Bulgarian_Split_Squat",)})  # type: ignore[arg-type]
+
+
+def test_an_exercise_asked_for_and_left_out_is_refused(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+
+    with pytest.raises(plans.PlanRejected, match="both"):
+        plans.adaptation_requested(connection, TODAY, ask_for=("Plank",), leave_out=("Plank",))
+
+
+def test_an_exercise_asked_for_outside_the_workout_is_refused_saying_why(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    """Asking never widens the admissible set: a press on the legs day names the groups."""
+    kept(connection)
+
+    with pytest.raises(plans.PlanRejected, match="today's workout is legs"):
+        plans.adaptation_requested(connection, TODAY, ask_for=("Standing_Military_Press",))
+
+
+def test_an_exercise_asked_for_under_an_exclusion_names_it_and_its_retest(
+    connection: sqlite3.Connection, declaring_legs: Path
+) -> None:
+    kept(connection)
+    connection.execute(
+        "INSERT INTO exclusions (granularity, value, retest_date) VALUES ('pattern', 'squat', '2099-03-01')"
+    )
+
+    with pytest.raises(plans.PlanRejected, match="pattern squat, until its re-test on 2099-03-01"):
+        plans.adaptation_requested(connection, TODAY, ask_for=("Barbell_Squat",))
+
+
+def adapting(asked_for: tuple[str, ...] = (), left_out: tuple[str, ...] = ()) -> plans.Request:
+    return dataclasses.replace(
+        BARBELL_45,
+        adapting=plans.Adapting(
+            mesocycle=1,
+            served_after=0,
+            slot=1,
+            workout=plans.WorkoutPlan.model_validate(squat_day()),
+            asked_for=asked_for,
+            left_out=left_out,
+        ),
+    )
+
+
+def rules(connection: sqlite3.Connection, request: plans.Request, text: str) -> list[str]:
+    plan = plans.parse(text)
+    return [v.rule for v in plans.validate(connection, plans.to_blocks(plan), request, plan)]
+
+
+def test_a_plan_without_an_exercise_asked_for_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    squat = document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}}))
+
+    assert plans.ASKED_FOR in rules(connection, adapting(asked_for=("Standing_Military_Press",)), squat)
+    assert plans.ASKED_FOR not in rules(connection, adapting(asked_for=("Barbell_Squat",)), squat)
+
+
+def test_a_plan_holding_an_exercise_left_out_is_refused(
+    connection: sqlite3.Connection,
+) -> None:
+    squat = document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 5}}))
+
+    assert plans.LEFT_OUT in rules(connection, adapting(left_out=("Barbell_Squat",)), squat)
+    assert plans.LEFT_OUT not in rules(connection, adapting(left_out=("Plank",)), squat)
 
 
 def test_a_change_is_asked_with_the_mesocycle_it_rewrites(

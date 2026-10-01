@@ -91,6 +91,16 @@ def active(connection: sqlite3.Connection, today: str) -> tuple[Exclusion, ...]:
     return tuple(Exclusion(row["granularity"], row["value"]) for row in rows)
 
 
+def retest_date(connection: sqlite3.Connection, exclusion: Exclusion, today: str) -> str | None:
+    """The last re-test date of this exclusion still ahead of `today`, or `None` when it is not in force."""
+    row = connection.execute(
+        "SELECT MAX(retest_date) FROM exclusions "
+        "WHERE granularity = ? AND value = ? AND retest_date > ?",
+        (exclusion.granularity, exclusion.value, today),
+    ).fetchone()
+    return None if row[0] is None else str(row[0])
+
+
 def covering(
     connection: sqlite3.Connection,
     exclusions: Sequence[Exclusion],

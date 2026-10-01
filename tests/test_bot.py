@@ -2398,7 +2398,7 @@ def test_an_adaptation_is_offered_accepted_and_served_and_the_mesocycle_stays(
 ) -> None:
     graphs = adapting_from(
         catalogued,
-        calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
+        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi", minutes=30),
         planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
     )
     kept = mesocycles.active(catalogued)
@@ -2680,7 +2680,7 @@ def test_an_adaptation_after_the_last_cycle_points_at_the_one_waiting(
     asyncio.run(reported_and_prepared(graphs, Channels()))
 
     front.handoff = ""
-    front.turns = [calling(entrance.ADAPT_TODAY, said="solo 30 minuti", minutes=30)]
+    front.turns = [calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti", minutes=30)]
     asking(graphs, "solo 30 minuti oggi")
 
     assert entrance.WAITING_MESOCYCLE in told_the_entrance(graphs)
@@ -2932,7 +2932,7 @@ def test_only_thirty_minutes_today_is_an_adaptation_and_leaves_the_file_alone(
 ) -> None:
     graphs = adapting_from(
         catalogued,
-        calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
+        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi", minutes=30),
         planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
     )
 

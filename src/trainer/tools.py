@@ -66,7 +66,6 @@ _ENGINE_ERRORS = (
     budget.BudgetError,
     catalog.CatalogError,
     config.ConfigError,
-    constraints.ConstraintError,
     duration.DurationError,
     ExclusionError,
     graph.GraphError,
@@ -212,9 +211,8 @@ def admissible_set(
     exercise id.
 
     `equipment` names the catalog's own values (`barbell`, `body only`) and
-    must hold at least one. `budget_min` over the declared cap is refused
-    rather than answered, because a workout that
-    long is one the declaration says never happens. `muscle_groups` names what
+    must hold at least one. `budget_min` is the time this workout has, as
+    the brief gives it. `muscle_groups` names what
     this workout trains, as the brief gives it: groups (`arms`) or muscles
     (`biceps`). Give them, because the whole space is several times larger
     than any one workout needs and every exercise you are handed you are also

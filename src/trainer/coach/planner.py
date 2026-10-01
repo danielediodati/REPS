@@ -251,15 +251,21 @@ def aimed(goal: str) -> str:
 
 
 def adapted(adapting: plans.Adapting) -> str:
-    """Today's slot of the mesocycle, as the starting point an adaptation is planned from."""
+    """The mesocycle's slot an adaptation is planned from, and what this workout must and must not hold."""
     lines = [
-        "This adapts today's workout from their mesocycle, which is below. Start "
-        "from it: keep what still fits today and change only what today's "
-        "constraint asks for. The mesocycle itself stays as it is.",
+        f"This adapts workout {adapting.slot} of their mesocycle, which is "
+        "below, for this workout only. Start from it: keep what still fits and "
+        "change only what they asked for. The mesocycle itself stays as it is.",
     ]
     if adapting.said:
         lines.append(f"They said: {adapting.said}")
-    lines.append("Today's workout in the mesocycle:\n" + adapting.workout.model_dump_json(indent=1))
+    if adapting.asked_for:
+        lines.append("They asked for, and the plan must hold: " + ", ".join(adapting.asked_for) + ".")
+    if adapting.left_out:
+        lines.append("They asked to leave out, and the plan must not hold: " + ", ".join(adapting.left_out) + ".")
+    lines.append(
+        f"Workout {adapting.slot} in the mesocycle:\n" + adapting.workout.model_dump_json(indent=1)
+    )
     return "\n".join(lines)
 
 
@@ -918,6 +924,7 @@ def build(
                     on=on,
                     mesocycle=request.adapting.mesocycle,
                     served_after=request.adapting.served_after,
+                    slot=request.adapting.slot,
                 )
             )
         return {"workout": written} | closed(

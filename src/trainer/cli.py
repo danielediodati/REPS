@@ -1190,6 +1190,7 @@ def admissible_command(
     """
     with _opened() as connection:
         _require_enrichment(connection)
+        constraints.within_the_cap(budget, config.declared(connection))
 
         classified = [exclusions.classify(connection, value) for value in exclude]
         todays = constraints.constraining_today(

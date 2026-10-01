@@ -10,7 +10,7 @@
 #   - `refused`: an adaptation asked for and refused before planning.
 # - `excluded` is written into the fixture for that case only, re-tested six
 #   weeks after the run.
-# - A case that goes to `adapt_today` is planned, and code holds its plan at
+# - A case that goes to `adapt_this_workout` is planned, and code holds its plan at
 #   100%: it validated, every `holds` id is in it, no `without_pattern` and no
 #   `without_named` (a substring of the catalog name) is, every exercise is on
 #   `equipment`, it runs `minutes` inside the validator's window, it trains
@@ -67,69 +67,69 @@ blocks = [
 [[cases]]
 name = "superset"
 says = "oggi niente squat, stacchi rumeni in superset con i bulgari"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 without_pattern = ["squat"]
 holds = ["Romanian_Deadlift", "Split_Squat_with_Dumbbells"]
 
 [[cases]]
 name = "you-choose"
 says = "oggi niente squat, proponi tu"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 without_pattern = ["squat"]
 
 [[cases]]
 name = "thirty"
 says = "oggi ho 30 minuti invece di 45"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 minutes = 30
 
 [[cases]]
 name = "football"
 says = "oggi niente gambe che stasera gioco a calcio"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 untrained = ["legs"]
 
 [[cases]]
 name = "kettlebell"
 says = "mi hanno prestato una kettlebell, usiamola oggi"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 equipment = ["barbell", "dumbbell", "body only", "kettlebells"]
 
 [[cases]]
 name = "away"
 says = "sono in trasferta, solo corpo libero"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 equipment = ["body only"]
 
 [[cases]]
 name = "one-more"
 says = "oggi ho tempo, metti un esercizio in più per gruppo"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 longer = true
 
 [[cases]]
 name = "dumbbells"
 says = "oggi solo manubri, la palestra è piena"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 equipment = ["dumbbell"]
 
 [[cases]]
 name = "twenty-bare"
 says = "20 minuti e niente attrezzi"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 minutes = 20
 equipment = ["body only"]
 
 [[cases]]
 name = "pull-ups"
 says = "oggi vorrei fare trazioni"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 holds = ["Pullups"]
 
 [[cases]]
 name = "no-bench"
 says = "oggi non ho voglia di panca"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 without_named = ["Bench Press"]
 
 # -- from now on --------------------------------------------------------------

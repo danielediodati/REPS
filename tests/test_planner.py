@@ -1450,6 +1450,30 @@ def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged
     assert [block.block.rounds for block in workouts.prescribed(connection, served)] == [2]
 
 
+def test_another_slot_adapted_and_accepted_is_served_as_that_slot(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """Legs due, the press day asked for: served as slot 2, and briefed with what must be in it."""
+    keeping(connection, two_slots)
+    asked = plans.adaptation_requested(
+        connection,
+        "2026-09-22",
+        plans.Asked(workout=2),
+        said="oggi niente gambe",
+        ask_for=("Standing_Military_Press",),
+    )
+    model = Scripted(documents=[plan_of("Standing_Military_Press")])
+    graph, thread = pausing(model)
+    graph.invoke(planner.starting(asked), thread)
+    briefed = "\n".join(message.text for message in model.seen[0])
+
+    final = graph.invoke(Command(resume=planner.accepted()), thread)
+
+    assert "must hold: Standing_Military_Press" in briefed
+    found, served = mesocycles.record_served(connection, "2026-09-22")
+    assert (served, found.slot) == (final["workout"], 2)
+
+
 def test_an_adaptation_turned_down_is_planned_again_from_the_same_slot(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:

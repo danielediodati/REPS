@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from trainer.engine import duration, state, workouts
 
@@ -188,6 +188,9 @@ class Today:
     performed: int
     """Workouts performed so far: what a serving of today is keyed by."""
 
+    done: tuple[int, ...] = ()
+    """The slots of this cycle already performed."""
+
 
 def today(connection: sqlite3.Connection) -> Today:
     """Today's workout off the active mesocycle, or the state that stops it."""
@@ -214,6 +217,7 @@ def today(connection: sqlite3.Connection) -> Today:
         cycles=kept.cycles,
         blocks=kept.slots[where.position - 1],
         performed=where.performed,
+        done=where.done,
     )
 
 
@@ -268,27 +272,23 @@ def finished(connection: sqlite3.Connection) -> Finished | None:
 def record_served(connection: sqlite3.Connection, on: str) -> tuple[Today, int]:
     """Today's workout, prescribed the first time it is served, and its workout id.
 
-    Served again, it is the prescription on record, which an adaptation may
-    have made different from the slot.
+    Served again, it is the prescription on record and the slot it was served
+    as, which an adaptation may have made different from the rotation's.
     """
     connection.execute("BEGIN IMMEDIATE")
     try:
         found = today(connection)
         performed = found.performed
         row = connection.execute(
-            "SELECT workout_id FROM served WHERE mesocycle_id = ? AND served_after = ?",
+            "SELECT workout_id, slot FROM served WHERE mesocycle_id = ? AND served_after = ?",
             (found.mesocycle, performed),
         ).fetchone()
         if row is not None:
             workout_id = int(row["workout_id"])
-            found = Today(
-                mesocycle=found.mesocycle,
-                slot=found.slot,
-                slots=found.slots,
-                cycle=found.cycle,
-                cycles=found.cycles,
+            found = replace(
+                found,
+                slot=int(row["slot"]),
                 blocks=workouts.prescribed(connection, workout_id),
-                performed=found.performed,
             )
         else:
             workout_id = workouts.write_prescribed(connection, found.blocks, on)
@@ -314,12 +314,14 @@ def record_adapted(
     on: str,
     mesocycle: int,
     served_after: int,
+    slot: int | None = None,
 ) -> int:
     """Prescribe an adapted workout as today's serving of the mesocycle, and return its id.
 
-    The mesocycle is not touched (ADR-0008 item 6). A serving of the same day
-    that nobody performed is withdrawn; a day the rotation has moved past, or
-    a mesocycle since replaced, is a state.
+    `slot` is which of the cycle's workouts it counts as, the rotation's when
+    not given. The mesocycle is not touched (ADR-0008 item 6). A serving of
+    the same day that nobody performed is withdrawn; a day the rotation has
+    moved past, or a mesocycle since replaced, is a state.
     """
     if not blocks:
         raise workouts.WorkoutError("a workout is at least one block")
@@ -338,7 +340,7 @@ def record_adapted(
         connection.execute(
             "INSERT INTO served (workout_id, mesocycle_id, slot, served_after) "
             "VALUES (?, ?, ?, ?)",
-            (workout_id, mesocycle, found.slot, served_after),
+            (workout_id, mesocycle, found.slot if slot is None else slot, served_after),
         )
         connection.execute("COMMIT")
     except Exception:

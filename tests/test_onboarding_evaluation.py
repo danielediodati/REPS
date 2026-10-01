@@ -280,7 +280,7 @@ def test_a_message_handed_where_its_row_says_holds_and_elsewhere_fails_routed(
     gym = case_of(holds, "gym")
 
     right = ran(where, gym, tmp_path, calls((entrance.CHANGE_DECLARATION, {"said": gym.opens})), says("Aggiorno."))
-    wrong = ran(where, gym, tmp_path, calls((entrance.ADAPT_TODAY, {"said": gym.opens})), says("Adatto oggi."))
+    wrong = ran(where, gym, tmp_path, calls((entrance.ADAPT_THIS_WORKOUT, {"said": gym.opens})), says("Adatto oggi."))
 
     assert failed(right, "gym") == []
     assert failed(wrong, "gym") == [onboarding_evaluation.ROUTED]

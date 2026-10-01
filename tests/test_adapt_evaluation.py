@@ -64,7 +64,7 @@ blocks = [{ rounds = 4, rest = 90, reason = "press", items = [{ exercise_id = "D
 [[cases]]
 name = "hinge"
 says = "oggi stacchi rumeni"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 holds = ["Romanian_Deadlift"]
 
 [[cases]]
@@ -228,7 +228,7 @@ def test_asking_holds_and_acting_where_the_row_asks_counts_double(
     which = case_of(holds, "which")
 
     asked = ran(where, which, tmp_path, says("Solo oggi o da ora in poi?"))
-    acted = ran(where, which, tmp_path, calls((entrance.ADAPT_TODAY, {"said": which.says})), says("Adatto."))
+    acted = ran(where, which, tmp_path, calls((entrance.ADAPT_THIS_WORKOUT, {"said": which.says})), says("Adatto."))
     silent = ran(where, which, tmp_path, says("Va bene."))
 
     assert failed(asked, "which") == []
@@ -259,33 +259,27 @@ def test_an_adaptation_refused_naming_the_retest_date_holds_a_refused_row(
     where: adapt_evaluation.Fixture,
     holds: adapt_set.AdaptSet,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     excluded = case_of(holds, "excluded")
     misread = ran(
         where,
         excluded,
         tmp_path,
-        calls((entrance.ADAPT_TODAY, {"said": excluded.says, "without": ["kettlebells"]})),
+        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says, "equipment": ["kettlebells"]})),
         says("Non ho capito."),
     )
     started = ran(
         where,
         excluded,
         tmp_path,
-        calls((entrance.ADAPT_TODAY, {"said": excluded.says})),
+        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says})),
         says("Ci penso io."),
-    )
-    monkeypatch.setattr(
-        entrance,
-        "startable",
-        lambda _name, _asked: f"hip hinge is excluded until {adapt_evaluation.retested()}",
     )
     refused = ran(
         where,
         excluded,
         tmp_path,
-        calls((entrance.ADAPT_TODAY, {"said": excluded.says})),
+        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says, "ask_for": ["Romanian_Deadlift"]})),
         says("Non posso: è escluso."),
     )
 
@@ -303,7 +297,7 @@ def test_an_adaptation_started_is_planned_and_held_against_its_row(
         where,
         hinge,
         tmp_path,
-        calls((entrance.ADAPT_TODAY, {"said": hinge.says})),
+        calls((entrance.ADAPT_THIS_WORKOUT, {"said": hinge.says})),
         says("Ci lavoro."),
         emitted=(plan_of("Barbell_Squat"),) * planner.ATTEMPTS,
     )
@@ -341,7 +335,7 @@ def test_a_plan_is_held_on_what_it_holds_and_leaves_out(where: adapt_evaluation.
     case = adapt_set.Case(
         name="c",
         says="",
-        goes=entrance.ADAPT_TODAY,
+        goes=entrance.ADAPT_THIS_WORKOUT,
         holds=("Romanian_Deadlift",),
         without_pattern=("squat",),
         without_named=("bench press",),
@@ -358,9 +352,9 @@ def test_a_plan_is_held_on_what_it_holds_and_leaves_out(where: adapt_evaluation.
 
 
 def test_a_plan_is_held_on_its_equipment_workout_and_minutes(where: adapt_evaluation.Fixture) -> None:
-    bare = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_TODAY, equipment=("body only",))
-    no_legs = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_TODAY, untrained=("legs",))
-    one_minute = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_TODAY, minutes=1)
+    bare = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, equipment=("body only",))
+    no_legs = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, untrained=("legs",))
+    one_minute = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, minutes=1)
 
     assert held(where, bare, plan_of("Pushups")) == []
     assert held(where, bare, plan_of("Dumbbell_Bench_Press")) == [adapt_evaluation.EQUIPMENT]
@@ -372,7 +366,7 @@ def test_a_plan_is_held_on_its_equipment_workout_and_minutes(where: adapt_evalua
 
 
 def test_longer_holds_only_minutes_asked_past_the_cap(where: adapt_evaluation.Fixture) -> None:
-    longer = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_TODAY, longer=True)
+    longer = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, longer=True)
 
     assert held(where, longer, plan_of("Pushups")) == []
     assert held(where, longer, plan_of("Pushups"), budget_min=40, asked_minutes=40) == [
@@ -384,7 +378,7 @@ def test_longer_holds_only_minutes_asked_past_the_cap(where: adapt_evaluation.Fi
 def test_a_plan_the_validator_refused_or_that_never_parsed_fails_planned(
     where: adapt_evaluation.Fixture,
 ) -> None:
-    case = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_TODAY)
+    case = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT)
     request = plans.Request(equipment=("barbell",), budget_min=45)
 
     refused = adapt_evaluation.held(
@@ -437,7 +431,7 @@ def test_a_refusal_is_checked_against_the_retest_date_its_exclusion_was_written_
     refused = {
         "handoff": "",
         "messages": [
-            ToolMessage(f"excluded until {written}", tool_call_id="c", name=entrance.ADAPT_TODAY)
+            ToolMessage(f"excluded until {written}", tool_call_id="c", name=entrance.ADAPT_THIS_WORKOUT)
         ],
     }
 
@@ -458,7 +452,7 @@ def test_a_planner_run_that_fails_on_an_empty_message_still_says_what_failed(
     monkeypatch.setattr(planner, "build", broken)
     hinge = case_of(holds, "hinge")
 
-    report = ran(where, hinge, tmp_path, calls((entrance.ADAPT_TODAY, {"said": hinge.says})), says("Ok."))
+    report = ran(where, hinge, tmp_path, calls((entrance.ADAPT_THIS_WORKOUT, {"said": hinge.says})), says("Ok."))
 
     (plan,) = [o for o in report.outcomes if o.case == "hinge plan"]
     assert plan.error == "AssertionError: "

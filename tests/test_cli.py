@@ -4212,7 +4212,7 @@ def test_an_option_shaping_today_adapts_the_mesocycles_workout(
     assert result.exit_code == 0, result.output
     assert "adapting mesocycle workout 1 of 2, cycle 1 of 3 -- legs" in result.output
     briefed = "\n".join(message.text for message in model.seen[0])
-    assert "Today's workout in the mesocycle" in briefed and "30 minutes" in briefed
+    assert "Workout 1 in the mesocycle" in briefed and "30 minutes" in briefed
     with closing(database.connect(enriched)) as connection:
         assert mesocycles.active(connection) == before
     no_model(monkeypatch)

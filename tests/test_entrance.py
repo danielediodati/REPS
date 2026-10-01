@@ -235,11 +235,11 @@ def test_no_handoff_takes_an_argument_from_the_entrance() -> None:
 
 def test_an_adaptation_and_a_change_carry_what_was_asked_and_never_a_workout() -> None:
     """The constraint is read out of what the user wrote, which is the
-    entrance's to read; the slot it applies to is still the rotation's."""
-    adapting = tools.schema(entrance.adapt_today)["parameters"]
+    entrance's to read; which workout is due is still the rotation's."""
+    adapting = tools.schema(entrance.adapt_this_workout)["parameters"]
     changing = tools.schema(entrance.change_mesocycle)["parameters"]
 
-    assert set(adapting["properties"]) == {"said", "minutes", "without", "exclude"}
+    assert set(adapting["properties"]) == {"said", "minutes", "equipment", "leave_out", "ask_for", "workout"}
     assert adapting["required"] == ["said"]
     assert set(changing["properties"]) == {"said"}
 
@@ -465,7 +465,7 @@ def test_a_read_past_the_budget_is_not_run(connection: sqlite3.Connection) -> No
 def test_a_constraint_for_today_reaches_an_adaptation(connection: sqlite3.Connection) -> None:
     model = Scripted(
         turns=[
-            calling(entrance.ADAPT_TODAY, said="solo 30 minuti oggi", minutes=30),
+            calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi", minutes=30),
             says("Lo adatto, arriva a momenti."),
         ]
     )
@@ -474,7 +474,7 @@ def test_a_constraint_for_today_reaches_an_adaptation(connection: sqlite3.Connec
         entrance.heard("solo 30 minuti oggi")
     )
 
-    assert final["handoff"] == entrance.ADAPT_TODAY
+    assert final["handoff"] == entrance.ADAPT_THIS_WORKOUT
     assert final["asked"] == {"said": "solo 30 minuti oggi", "minutes": 30}
     assert final["ending"] == "", "the planner carries the run on"
 
@@ -498,7 +498,7 @@ def test_a_request_that_cannot_be_assembled_goes_back_to_the_model(
     """Nothing starts, and the model is told why, so it can call again or ask."""
     model = Scripted(
         turns=[
-            calling(entrance.ADAPT_TODAY, said="niente manubri", without=["manubri"]),
+            calling(entrance.ADAPT_THIS_WORKOUT, said="solo manubri", equipment=["manubri"]),
             says("Che attrezzi hai oggi?"),
         ]
     )
@@ -510,12 +510,12 @@ def test_a_request_that_cannot_be_assembled_goes_back_to_the_model(
     assert final["handoff"] == ""
     told = [m.text for m in final["messages"] if isinstance(m, ToolMessage)]
     assert told == ["no such equipment"]
-    assert entrance.ADAPT_TODAY in model.bound[1], "offered again, to call it right"
+    assert entrance.ADAPT_THIS_WORKOUT in model.bound[1], "offered again, to call it right"
     assert final["ending"] == records.DONE
 
 
 def test_the_prompt_tells_a_change_from_an_adaptation_and_asks_when_it_cannot() -> None:
-    assert entrance.ADAPT_TODAY in entrance.TALKING
+    assert entrance.ADAPT_THIS_WORKOUT in entrance.TALKING
     assert entrance.CHANGE_MESOCYCLE in entrance.TALKING
     assert "cannot tell" in entrance.TALKING
 
@@ -547,13 +547,13 @@ def following(connection: sqlite3.Connection, declared_training: Path) -> int:
 
 
 def test_an_adaptation_the_engine_can_assemble_starts(following: int) -> None:
-    assert entrance.startable(entrance.ADAPT_TODAY, {"said": "30 minuti", "minutes": 30}) is None
+    assert entrance.startable(entrance.ADAPT_THIS_WORKOUT, {"said": "30 minuti", "minutes": 30}) is None
     assert entrance.startable(entrance.CHANGE_MESOCYCLE, {"said": "basta squat"}) is None
 
 
 def test_equipment_misnamed_goes_back_with_what_the_catalog_calls_it(following: int) -> None:
     said = entrance.startable(
-        entrance.ADAPT_TODAY, {"said": "niente bilanciere", "without": ["bilanciere"]}
+        entrance.ADAPT_THIS_WORKOUT, {"said": "solo bilanciere", "equipment": ["bilanciere"]}
     )
 
     assert said is not None and "bilanciere" in said and "barbell" in said
@@ -562,14 +562,14 @@ def test_equipment_misnamed_goes_back_with_what_the_catalog_calls_it(following: 
 def test_with_no_mesocycle_there_is_nothing_to_adapt_or_change(
     connection: sqlite3.Connection,
 ) -> None:
-    for handoff in (entrance.ADAPT_TODAY, entrance.CHANGE_MESOCYCLE):
+    for handoff in (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE):
         assert entrance.startable(handoff, {"said": "x"}) == entrance.NO_MESOCYCLE
 
 
 def test_a_single_value_where_a_list_belongs_is_read_as_one_value(following: int) -> None:
-    """Observed on llama3.1: `without: "elastici"`, which iterated is eight letters."""
+    """Observed on llama3.1: `without: "elastici"`, a list argument given as one value, which iterated is eight letters."""
     said = entrance.startable(
-        entrance.ADAPT_TODAY, {"said": "niente bilanciere", "without": "bilanciere"}
+        entrance.ADAPT_THIS_WORKOUT, {"said": "solo bilanciere", "equipment": "bilanciere"}
     )
 
     assert said is not None and "'bilanciere'" in said
@@ -578,7 +578,7 @@ def test_a_single_value_where_a_list_belongs_is_read_as_one_value(following: int
 def test_an_adaptation_past_the_budget_is_not_started(connection: sqlite3.Connection) -> None:
     """Checked, it can be refused and called again, so the budget bounds it like a read."""
     model = Scripted(
-        turns=[calling(entrance.ADAPT_TODAY, said="30 minuti", minutes=30), says("non posso")]
+        turns=[calling(entrance.ADAPT_THIS_WORKOUT, said="30 minuti", minutes=30), says("non posso")]
     )
 
     final = graph_of(model, budget=0, checking=lambda name, asked: None).invoke(

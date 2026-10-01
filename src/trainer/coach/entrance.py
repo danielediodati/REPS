@@ -67,33 +67,45 @@ def plan_mesocycle() -> str:
     raise AssertionError("the graph answers plan_mesocycle; nothing calls it")
 
 
-def adapt_today(
+def adapt_this_workout(
     said: str,
     minutes: int | None = None,
-    without: list[str] | None = None,
-    exclude: list[str] | None = None,
+    equipment: list[str] | None = None,
+    leave_out: list[str] | None = None,
+    ask_for: list[str] | None = None,
+    workout: int | None = None,
 ) -> str:
-    """Plan today's workout again from their mesocycle's, for today only.
+    """Plan this workout again from their mesocycle, for this workout only.
 
-    Call this when what they want is today's workout changed and the
-    mesocycle left as it is: less time today, equipment they do not have
-    today, something to keep out today. Which workout is today's is read for
-    you; you say only what is different about today.
+    Call this when what they want is this workout changed and the mesocycle
+    left as it is: a different time, other equipment, an exercise out or in,
+    another of the cycle's workouts. Which workout is due is read for you;
+    you say only what is different about this one. Everything but `said` is
+    optional: give a field only when they said it.
 
-    - `said`: what they asked for, in their own words.
-    - `minutes`: the time they have today, when they said it.
-    - `without`: equipment they do not have today, as the catalog names it.
-    - `exclude`: a movement pattern or joint to keep out today, as the
-      catalog names it.
+    - `said`: what they asked for, in their own words. Anything the fields
+      cannot hold, as a superset or «one more per group», is read from here.
+    - `minutes`: the time they have for this workout. It may be more than
+      their usual time.
+    - `equipment`: all the equipment they have for this workout, as the
+      catalog names it: «solo corpo libero» is `["body only"]`, a borrowed
+      kettlebell is what they declared plus `kettlebells`.
+    - `leave_out`: ids of exercises not to do in this workout.
+    - `ask_for`: ids of exercises to do in this workout.
+    - `workout`: the number in their cycle of another of its workouts, when
+      they do not want the one due, as in «oggi niente gambe».
+
+    Exercise ids come from `search_exercises`: look up every exercise they
+    name, and ask them when you cannot tell which one they mean.
 
     When it starts, the adapted workout arrives in the chat by itself in a few
     minutes: tell them you are on it. When it does not, what comes back says
-    why: call it again put right, or ask them.
+    why: call it again put right, or tell them.
 
     The body is never run. The graph answers this call by starting the planner
     behind the conversation.
     """
-    raise AssertionError("the graph answers adapt_today; nothing calls it")
+    raise AssertionError("the graph answers adapt_this_workout; nothing calls it")
 
 
 def change_mesocycle(said: str) -> str:
@@ -159,7 +171,7 @@ def set_up() -> str:
 
 TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
-ADAPT_TODAY = adapt_today.__name__
+ADAPT_THIS_WORKOUT = adapt_this_workout.__name__
 CHANGE_MESOCYCLE = change_mesocycle.__name__
 CHANGE_DECLARATION = change_declaration.__name__
 LOG_WORKOUT = log_workout.__name__
@@ -168,7 +180,7 @@ SET_UP = set_up.__name__
 HANDOFFS = (
     todays_workout,
     plan_mesocycle,
-    adapt_today,
+    adapt_this_workout,
     change_mesocycle,
     change_declaration,
     log_workout,
@@ -176,10 +188,10 @@ HANDOFFS = (
 )
 """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
 
-CARRIED = (PLAN_MESOCYCLE, ADAPT_TODAY, CHANGE_MESOCYCLE, CHANGE_DECLARATION, LOG_WORKOUT, SET_UP)
+CARRIED = (PLAN_MESOCYCLE, ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE, CHANGE_DECLARATION, LOG_WORKOUT, SET_UP)
 """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
 
-CHECKED = (ADAPT_TODAY, CHANGE_MESOCYCLE)
+CHECKED = (ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE)
 """The handoffs whose request is assembled before they start, so a misread goes back to the model."""
 
 SERVING = (
@@ -219,8 +231,8 @@ STARTED = {
         "it together and that it will arrive shortly. You have not seen it, so "
         "say nothing about what is in it."
     ),
-    ADAPT_TODAY: (
-        "The planner has started adapting today's workout; the mesocycle stays "
+    ADAPT_THIS_WORKOUT: (
+        "The planner has started adapting this workout; the mesocycle stays "
         "as it is. Tell them you are on it and that it will arrive shortly. You "
         "have not seen it, so say nothing about what is in it."
     ),
@@ -296,9 +308,9 @@ What a turn asks of you:
 - They want something to train, now or today: call `todays_workout`.
 - They ask for a new mesocycle, or say yes when you offered one: call
   `plan_mesocycle`.
-- They want today's workout different for today only -- less time, missing
-  equipment, something to keep out today, as in «oggi ho solo mezz'ora»: call
-  `adapt_today`.
+- They want this workout different, and only this one -- another time,
+  other equipment, an exercise out or in, another of the cycle's workouts, as
+  in «oggi ho solo mezz'ora»: call `adapt_this_workout`.
 - They want the mesocycle itself changed from now on -- an exercise gone for
   good, a different emphasis, as in «d'ora in poi niente stacchi»: call
   `change_mesocycle`.
@@ -310,8 +322,8 @@ What a turn asks of you:
   «niente panca» or «ho solo 30 minuti», ask them which, in one sentence, and
   call nothing.
 
-An exercise named in a sentence like these is one they want out of their
-training, not one to look up.
+An exercise they name for this workout is looked up with `search_exercises`
+for its id; one you cannot place, ask them about.
 - They are telling you about training they have already done: call
   `log_workout`.
 - They want to set up their training, or start it again from the beginning:
@@ -339,7 +351,8 @@ What you may never do:
   sets, not how much of a muscle group they have done, not what they trained
   last. If no tool answered it, say you do not know and offer to look.
 - **Decide which workout is due.** That is the rotation, read off what has been
-  performed, and `todays_workout` reads it for you.
+  performed, and `todays_workout` reads it for you. When they ask for another
+  of the cycle's, `adapt_this_workout` takes it.
 - **Judge whether a plan fits.** That is the validator's, and it has already
   refused plans you would have accepted.
 - Invent an exercise, an id or a date.
@@ -741,7 +754,6 @@ def reading_today() -> str:
 
 MISREADS = (
     ExclusionError,
-    constraints.ConstraintError,
     plans.PlanRejected,
     TypeError,
     ValueError,
@@ -776,17 +788,22 @@ def requested(
     said = str(asked.get("said", ""))
     if handoff == CHANGE_MESOCYCLE:
         return plans.change_requested(connection, today, said=said)
-    minutes = asked.get("minutes")
     return plans.adaptation_requested(
         connection,
         today,
         plans.Asked(
-            minutes=None if minutes is None else int(minutes),
-            exclude=_listed(asked.get("exclude")),
+            minutes=_number(asked.get("minutes")),
+            equipment=_listed(asked.get("equipment")),
+            workout=_number(asked.get("workout")),
         ),
         said=said,
-        without=_listed(asked.get("without")),
+        ask_for=_listed(asked.get("ask_for")),
+        leave_out=_listed(asked.get("leave_out")),
     )
+
+
+def _number(given: Any) -> int | None:
+    return None if given is None else int(given)
 
 
 def _listed(given: Any) -> tuple[str, ...]:

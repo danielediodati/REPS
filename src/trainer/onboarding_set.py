@@ -16,7 +16,7 @@ DEFAULT_PARTS = ("docs", "onboarding", "eval-set.toml")
 
 INTERVIEW, CHANGE, ROUTE = "interview", "change", "route"
 KINDS = (INTERVIEW, CHANGE, ROUTE)
-ROUTES = (entrance.CHANGE_DECLARATION, entrance.ADAPT_TODAY)
+ROUTES = (entrance.CHANGE_DECLARATION, entrance.ADAPT_THIS_WORKOUT)
 BARS = ("on_time", "remembered", "routed")
 
 

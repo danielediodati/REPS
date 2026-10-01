@@ -103,14 +103,11 @@ def test_a_persisted_exclusion_is_applied_when_the_caller_names_none(
     assert [exercise["id"] for exercise in found] == ["Standing_Military_Press"]
 
 
-def test_a_budget_over_the_declared_cap_is_refused_naming_the_cap(
+def test_a_budget_over_the_declared_cap_is_answered(
     stocked: sqlite3.Connection,
 ) -> None:
-    """The cap is the one number in `training.toml` that says a workout never
-    runs longer than this. Answered instead, the agent plans against minutes
-    the user does not have."""
-    with pytest.raises(tools.ToolFailure, match="60"):
-        tools.admissible_set(["barbell"], 90)
+    """An adaptation may ask for more than the cap, and its planner reads the space it asked for."""
+    assert tools.admissible_set(["barbell"], 90)
 
 
 def test_the_tool_itself_answers_with_the_whole_record(

@@ -248,8 +248,8 @@ def performed_as(connection: sqlite3.Connection, slot_number: int) -> None:
         on=TODAY,
         mesocycle=found.mesocycle,
         served_after=found.performed,
+        slot=slot_number,
     )
-    connection.execute("UPDATE served SET slot = ? WHERE workout_id = ?", (slot_number, workout_id))
     performed(connection, workout_id)
 
 
@@ -267,6 +267,28 @@ def test_the_next_is_the_first_of_the_cycle_not_yet_performed(
 
     performed_as(connection, 2)
     assert (mesocycles.today(connection).slot, mesocycles.today(connection).cycle) == (1, 2)
+
+
+def test_another_of_the_cycle_adapted_is_recorded_as_that_slot(
+    connection: sqlite3.Connection, declared_training: Path
+) -> None:
+    """A due, B asked for instead: served as B, and A is still next once it is performed."""
+    three_accepted(connection, declared_training)
+    found = mesocycles.today(connection)
+
+    workout_id = mesocycles.record_adapted(
+        connection,
+        slot("Plank", reps=None, seconds=20),
+        on=TODAY,
+        mesocycle=found.mesocycle,
+        served_after=found.performed,
+        slot=3,
+    )
+
+    served, again = mesocycles.record_served(connection, TODAY)
+    assert (again, served.slot) == (workout_id, 3)
+    performed(connection, workout_id)
+    assert (mesocycles.today(connection).slot, mesocycles.today(connection).done) == (1, (3,))
 
 
 def test_training_nobody_planned_takes_the_first_slot_still_free(

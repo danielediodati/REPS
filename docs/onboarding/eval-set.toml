@@ -125,11 +125,11 @@ name = "short-today"
 kind = "route"
 describes = "less time today only"
 opens = "Oggi ho solo 20 minuti, poi devo scappare."
-routed = "adapt_today"
+routed = "adapt_this_workout"
 
 [[cases]]
 name = "hotel-today"
 kind = "route"
 describes = "less equipment today only"
 opens = "Oggi sono in trasferta in hotel, niente bilanciere: ho solo un paio di manubri."
-routed = "adapt_today"
+routed = "adapt_this_workout"

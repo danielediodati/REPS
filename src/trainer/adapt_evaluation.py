@@ -209,7 +209,7 @@ def _once(
         acted = bool(final.get("handoff"))
         weight = 2 if failures and case.goes == adapt_set.ASK and acted else 1
         routed = evaluation.Outcome(case.name, attempt, failures, talked, written, weight=weight)
-        if case.planned and final.get("handoff") == entrance.ADAPT_TODAY:
+        if case.planned and final.get("handoff") == entrance.ADAPT_THIS_WORKOUT:
             assert plans_on is not None
             planned.append(_planned(where, case, attempt, dict(final.get("asked", {})), plans_on, budget, records))
     return routed
@@ -263,7 +263,7 @@ def _refused_adaptation(final: Mapping[str, Any], retest: str) -> bool:
     """An adaptation was asked for and refused naming the exclusion's re-test date."""
     return any(
         isinstance(message, ToolMessage)
-        and message.name == entrance.ADAPT_TODAY
+        and message.name == entrance.ADAPT_THIS_WORKOUT
         and retest in message.text
         for message in final.get("messages", ())
     )
@@ -282,7 +282,7 @@ def _planned(
     name = case.name + PLAN
     started = time.monotonic()
     try:
-        request = entrance.requested(where.connection, entrance.ADAPT_TODAY, asked)
+        request = entrance.requested(where.connection, entrance.ADAPT_THIS_WORKOUT, asked)
         assert isinstance(request, plans.Request)
         graph = planner.build(on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared()))
         thread: RunnableConfig = {"configurable": {"thread_id": f"adapt-plan:{uuid4()}"}}

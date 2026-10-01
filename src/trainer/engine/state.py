@@ -227,6 +227,8 @@ class Rotation:
     cycle_length: int
     cycle: int
     position: int
+    done: tuple[int, ...] = ()
+    """The slots of the current cycle already performed, in the order they were."""
 
 
 def rotation(connection: sqlite3.Connection) -> Rotation:
@@ -238,11 +240,13 @@ def rotation(connection: sqlite3.Connection) -> Rotation:
     length = config.load(connection).cycle_length
     filled = performed_slots(connection, length)
     performed = len(filled)
+    done = filled[performed - performed % length :]
     return Rotation(
         performed=performed,
         cycle_length=length,
         cycle=performed // length + 1,
-        position=_first_free(set(filled[performed - performed % length :]), length),
+        position=_first_free(set(done), length),
+        done=done,
     )
 
 

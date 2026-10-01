@@ -46,7 +46,7 @@ name = "short"
 kind = "route"
 describes = "today only"
 opens = "oggi ho 20 minuti"
-routed = "adapt_today"
+routed = "adapt_this_workout"
 """
 
 
@@ -62,7 +62,7 @@ def test_a_set_parses_into_its_cases_and_bars() -> None:
     assert (terse.pause_after, terse.back, terse.remembers) == (1, "eccomi", ("odio correre",))
     assert bought.before["equipment"] == ["body only"]
     assert (bought.changes, bought.open) == (("equipment",), ("keep", "rewrite"))
-    assert short.routed == "adapt_today"
+    assert short.routed == "adapt_this_workout"
 
 
 def test_the_set_says_which_cases_are_held_and_which_are_routes() -> None:
@@ -81,7 +81,7 @@ def test_the_set_says_which_cases_are_held_and_which_are_routes() -> None:
         ('fields = ["goal", "equipment"]', 'fields = ["goal", "gear"]', "gear"),
         ('{ fields = ["cycle_length", "split", "duration_cap_min"], says = "due, sopra e sotto, un\'ora" },\n', "", "duration_cap_min"),
         ('open = ["keep", "rewrite"]', 'open = ["keep", "later"]', "later"),
-        ('routed = "adapt_today"', 'routed = "log_workout"', "log_workout"),
+        ('routed = "adapt_this_workout"', 'routed = "log_workout"', "log_workout"),
         ('name = "short"', 'name = "terse"', "terse"),
         ("pause_after = 1", "pause_after = 2", "pause_after"),
         ('changes = ["equipment"]', "changes = []", "changes"),

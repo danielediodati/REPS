@@ -35,21 +35,15 @@ def constraining_today(
     budget_min: int,
     groups: Sequence[str] = (),
     given: Sequence[Exclusion] = (),
-    declared: config.TrainingConfig | None = None,
 ) -> Constraints:
-    """The standing exclusions as of `today`, plus the ones this caller adds, with the time and the groups asked for.
-
-    `declared` defaults to the declarations in force.
-    """
-    if declared is None:
-        declared = config.declared(connection)
+    """The standing exclusions as of `today`, plus the ones this caller adds, with the time and the groups asked for."""
     standing = exclusion_state.active(connection, today)
     return Constraints(
         # Deduplicated: a caller that already folded the standing ones into
         # what it passes -- `trainer plan` does -- would otherwise send each
         # of them twice.
         exclusions=tuple(dict.fromkeys((*standing, *given))),
-        budget_min=within_the_cap(budget_min, declared),
+        budget_min=budget_min,
         groups=tuple(groups),
     )
 

@@ -34,7 +34,7 @@ blocks = [
 [[cases]]
 name = "short"
 says = "oggi ho 30 minuti"
-goes = "adapt_today"
+goes = "adapt_this_workout"
 minutes = 30
 holds = ["Barbell_Squat"]
 
@@ -49,7 +49,7 @@ def test_the_committed_set_parses_with_its_bar() -> None:
     holds = adapt_set.load(Path("docs") / "adapting" / "eval-set.toml")
 
     assert holds.bar_routed == 80
-    assert {case.goes for case in holds.cases} >= {entrance.ADAPT_TODAY, adapt_set.ASK}
+    assert {case.goes for case in holds.cases} >= {entrance.ADAPT_THIS_WORKOUT, adapt_set.ASK}
 
 
 def test_a_case_carries_what_its_plan_must_hold() -> None:

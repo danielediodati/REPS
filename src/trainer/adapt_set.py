@@ -18,7 +18,7 @@ ADAPT_SET_ENV_VAR = "TRAINER_ADAPT_SET"
 DEFAULT_PARTS = ("docs", "adapting", "eval-set.toml")
 
 ASK, TRIAGE, REMEMBER, REFUSED = "ask", "triage", "remember", "refused"
-HANDED = (entrance.ADAPT_TODAY, entrance.CHANGE_MESOCYCLE, entrance.CHANGE_DECLARATION)
+HANDED = (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE, entrance.CHANGE_DECLARATION)
 DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER, REFUSED)
 ASKING = (ASK, TRIAGE)
 """Where nothing may start and the answer is a question."""
@@ -46,7 +46,7 @@ class Case:
 
     @property
     def planned(self) -> bool:
-        return self.goes == entrance.ADAPT_TODAY
+        return self.goes == entrance.ADAPT_THIS_WORKOUT
 
 
 @dataclass(frozen=True)
@@ -118,7 +118,7 @@ def _case(entry: Mapping[str, Any]) -> Case:
     goes = str(entry.get("goes", ""))
     if goes not in DESTINATIONS:
         raise AdaptSetError(f"{name}: goes {goes!r} is not one of {', '.join(DESTINATIONS)}")
-    if goes != entrance.ADAPT_TODAY and any(key in entry for key in PLAN_KEYS):
+    if goes != entrance.ADAPT_THIS_WORKOUT and any(key in entry for key in PLAN_KEYS):
         raise AdaptSetError(f"{name}: only an adaptation is planned, so only one says what its plan holds")
 
     def listed(key: str) -> tuple[str, ...]:
