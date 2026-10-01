@@ -9,7 +9,7 @@ _Avoid_: session, which in ROADMAP.md means a unit of development work.
 
 **Unreported**: a prescribed workout with no report after a later workout has been performed. It contributes no volume and is never assumed done. Whether to ask about it is the agent's call.
 
-**Cycle**: one complete rotation through the workouts being trained. The user declares its length. It advances when a workout is performed, never when a date passes.
+**Cycle**: one complete rotation through the workouts being trained. The user declares its length. It advances when a workout is performed, never when a date passes. Unasked, the next workout is the first of the cycle not yet performed; asked, the agent chooses which.
 _Avoid_: week; mesocycle.
 
 **Mesocycle**: a workout for each slot of the cycle, with fixed exercises, repeated for a number of cycles the agent chooses with a reason (ADR-0008). It is accepted once and read from between workouts; nothing is planned in between.
@@ -17,7 +17,8 @@ _Avoid_: programme, routine, and counting it in weeks.
 
 **Change**: a request that rewrites the mesocycle for the cycles left, e.g. *"no more lunges"*.
 
-**Adaptation**: today's workout planned from the mesocycle's under today's constraint (less time, missing equipment). The mesocycle stays as it was.
+**Adaptation**: this workout planned from one of the mesocycle's under whatever the user asks of it: less or more time, other equipment, an exercise left out or asked for, another of the cycle's workouts. The mesocycle stays as it was.
+_Avoid_: calling it temporary, which does not say until when.
 
 **Ramp-in**: a workout on the normal scheme with reduced volume and loads chosen by feel, used when returning from a break.
 
@@ -96,11 +97,7 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 
 ## What the system learns
 
-**Hypothesis**: a falsifiable statement about the user. It is admissible only if a trial exists that can discriminate it.
-
-**Trial**: a change to the plan that holds everything fixed except one variable. It has a duration, and its outcome comes back in.
-
-**Conclusion**: a fact about this person that has a source: something they said, or a trial outcome. It has a state and can be retired.
+**Conclusion**: a fact about this person that has a source: something they said. It has a state and can be retired.
 
 **Observation**: a fact about the agent, written by the supervisor from the trajectory. It points at a measure.
 

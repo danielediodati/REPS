@@ -16,7 +16,7 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 - conclusions kept with your own sentence beside them, refused unless you wrote it, and briefed to every plan;
 - `trainer eval --suite onboard`: scripted users and messages to route, checked by code, which chose the interview's model.
 
-Session 14 opens next: *«lunges don't work for me»* becomes a two-workout trial that ends in a conclusion.
+Session 14 opens next: anything asked about this workout (another exercise, borrowed equipment, legs moved to later in the cycle) comes back as this workout, and the mesocycle stays as it was.
 
 ## Architecture (target)
 

@@ -114,13 +114,21 @@ In this order. Measuring first is what stops the methodology being written again
 4. **A declaration changes through onboarding** (ADR-0012): code lists the paths open for the running mesocycle, the agent picks one, the user accepts. — **done** `f9d1fd4`
 5. **The onboarding and memory eval**, and onboarding's model chosen by ADR-0011's rule. — **done** `aee7e92`
 
+## Session 14 — `0.14.0` — Anything about this workout
+
+**Demo**: *«oggi niente squat, stacchi rumeni in superset con i bulgari»* and *«oggi niente gambe, stasera gioco a calcio»* each come back as this workout, and the cycle after them is still right.
+
+1. **The adaptation set.** `trainer eval --suite adapt`: real requests, where each must go and what its plan must hold; a baseline run.
+2. **The next workout is the first not yet performed** in the cycle, read off the log; no stored order.
+3. **One tool for anything about this workout.** `adapt_this_workout`: minutes over the cap, this workout's equipment in full, exercises left out and asked for, another of the cycle's workouts; the validator holds them.
+4. **This workout or from now on.** The entrance tells adaptation, change, declaration and memory apart, and asks when the words do not say; the set at its bars.
+
 ## Later sessions
 
 Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 14 | `0.14.0` | *"lunges don't work for me"* becomes a two-workout trial, which runs and ends in a conclusion | hypotheses that must have a discriminating trial; a trial as a plan modification that holds everything else fixed; a thread alive across workouts; the outcome written back |
 | 15 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 | 16 | `1.1.0` | a plan in Telegram shows each exercise done: its start and end photos | the two photos free-exercise-db has for 873 of 876 exercises, sent with the plan; an exercise without photos is sent without; nothing generated |
 

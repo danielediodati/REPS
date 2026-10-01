@@ -20,7 +20,6 @@ Vocabulary: [CONTEXT.md](CONTEXT.md). Architecture decision: [ADR-0004](docs/adr
 | | the system guarantees | the agent fills in |
 |---|---|---|
 | plan | admissible ids, a valid shape, within five minutes of the budget | which exercises, how many, in what order, and why |
-| hypothesis | a trial exists that discriminates it | what it hypothesizes |
 | conclusion | it has a source | what it says |
 | observation | a measure says whether it was heeded | what it observes |
 
@@ -81,12 +80,11 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 ### Agent: the deliberative layer
 
 - Chooses the tools, the exercises, their order and the rest, and says why.
-- Plans a **mesocycle**, not a workout: every workout of the cycle with fixed exercises, and how many cycles it holds, with a reason. Between workouts it plans nothing; today's is read off the mesocycle, adapted only for today's constraint (ADR-0008).
+- Plans a **mesocycle**, not a workout: every workout of the cycle with fixed exercises, and how many cycles it holds, with a reason. Between workouts it plans nothing; today's is read off the mesocycle, and changed only for what the user asks of this workout, including which of the cycle's workouts it is (ADR-0008).
 - Emits a **plan**, never prose, against a schema whose `exercise_id` can only be an admissible id. The validator checks what a schema cannot, and sends refusals back.
 - Asks instead of guessing (`interrupt()`). Proposes an exclusion only for the user to confirm.
 - Decides between a full workout, a reduced one and rest. The reduced workout protects adherence.
 - Decides, at every turn, what is worth remembering.
-- Formulates hypotheses and designs the trials that test them.
 - Picks one primary goal during onboarding (the others become constraints), and the progression scheme at a mesocycle boundary.
 
 **Pain.** No pain scale, no health check-in, no referral to a doctor. Pain is prose, and its only structured outcome is an exclusion the user confirms.
@@ -99,22 +97,14 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | engine SQLite, declarations | cycle length, duration cap, split, volume denominator, equipment, goal; one dated version per change | onboarding (ADR-0013) |
 | LangGraph checkpointer | the live run of each thread, paused threads | graph |
 | run archive (`runs/` in the home) | every closed run, one document per run under its negotiation | graph (ADR-0007) |
-| LangGraph store | preferences, conclusions, hypotheses, observations, each with a source | agent, gated by the supervisor |
+| LangGraph store | preferences, conclusions, observations, each with a source | agent, gated by the supervisor |
 | [methodology](src/trainer/data/methodology.md) | ranges per goal and principles, from the literature with sources; the planner reads it | human |
 
 No store writes another's facts.
 
-## The loop: hypothesis → trial → outcome
-
-This loop handles what is not decidable: why someone skips workouts, why *«lunges don't work for me»*. The explanations cannot be enumerated, so the **form** is constrained instead.
-
-1. **A hypothesis is admissible only if a trial exists that discriminates it.** The trial is a plan modification that holds every variable fixed but one: *same plan, lunges second instead of last, for two workouts*.
-2. **The outcome comes back in.** The system now knows something new, or knows it was wrong.
-3. **A hypothesis with no possible trial is outside the program.** It goes to the user, or to a doctor.
-
 ## Memory
 
-- **Admission.** Only what has a source gets in: a sentence from the user, or a trial outcome. Never the agent's inference (*«responds well to high volume»*). The check is code: a conclusion carries the user's sentence verbatim, and is refused unless that sentence appears in one of the user's messages.
+- **Admission.** Only what has a source gets in: a sentence from the user. Never the agent's inference (*«responds well to high volume»*). The check is code: a conclusion carries the user's sentence verbatim, and is refused unless that sentence appears in one of the user's messages.
 - **What to remember is judged every turn**, by the node already reading it (onboarding, entrance, logger) through a `remember` tool. No node of its own, so no extra model call.
 
   | sentence | keep? |
@@ -125,10 +115,10 @@ This loop handles what is not decidable: why someone skips workouts, why *«lung
   | *«the bike bores me»* | yes |
 
   No syntactic rule separates these.
-- **The why matters.** *«I don't like pressing»* is renegotiable. *«Pressing hurts my shoulder»* is not, until a trial says otherwise.
+- **The why matters.** *«I don't like pressing»* is renegotiable. *«Pressing hurts my shoulder»* is not.
 - **Conclusions are not exclusions.** An exclusion is safety: what is possible. A conclusion is knowledge of the person: what makes sense.
 - **Life cycle**: proposed → provisional → confirmed → used → retired, with a date and a reason. Retired, never deleted.
-- **No vector DB.** Conclusions grow at the rate of trials, so after three years they still fit in a prompt.
+- **No vector DB.** Conclusions grow at the rate the user says lasting things, so after three years they still fit in a prompt.
 
 ## The supervisor
 
@@ -177,7 +167,7 @@ The situations are deliberately nasty:
 - Two controls: a user with no truth should produce no conclusions, and random noise should produce no conclusion before workout 3.
 - Each case runs 5 times and passes at 4 of 5.
 
-**The limit.** This proves the loop works, not that the advice is good. Only the 8-week criterion tests that.
+**The limit.** This proves the system learns, not that the advice is good. Only the 8-week criterion tests that.
 
 ## Interaction
 

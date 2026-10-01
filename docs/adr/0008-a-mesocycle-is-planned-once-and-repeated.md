@@ -6,13 +6,13 @@ Until session 9 every workout was planned from nothing. The split fixed which gr
 
 1. **A mesocycle is a workout for each slot of the cycle, with fixed exercises, repeated for a number of cycles.** The planner emits it whole; the validator checks each workout in it as it checks one today.
 2. **How many cycles it lasts is the agent's choice, with a reason**, like a block's rest. The engine checks there is a number and a reason, and nothing else (ADR-0001).
-3. **Between workouts nothing is planned.** Today's workout is read off the mesocycle at the rotation's position, with the last load performed beside each exercise. Raising it is the user's call until progression lands (after 1.0).
+3. **Between workouts nothing is planned.** Today's workout is read off the mesocycle: the first of the cycle not yet performed, with the last load performed beside each exercise. Raising it is the user's call until progression lands (after 1.0).
 4. **A mesocycle is accepted once.** Each of its workouts becomes *prescribed* when it is served as today's, not when the mesocycle is accepted: ADR-0005's reason holds, an outstanding prescription for a future workout would corrupt the volume deficit.
 5. **Three things open a negotiation for a mesocycle**, all through the same accept / turn down loop (ADR-0007):
    - the last cycle ends, and the next one is prepared without being asked for;
    - the user asks for a new one;
    - the user asks for a change to it.
-6. **A change and an adaptation are different things.** A change (*"no more lunges"*) rewrites the mesocycle for the cycles left. An adaptation (*"only 30 minutes today"*, *"no dumbbells today"*) plans today's workout from the mesocycle's and leaves the mesocycle as it was. The entrance tells them apart from the user's words, and asks when it cannot.
+6. **A change and an adaptation are different things.** A change (*"no more lunges"*) rewrites the mesocycle for the cycles left. An adaptation (*"only 30 minutes today"*, *"no dumbbells today"*, *"no legs today, I play football tonight"*) plans this workout from one of the mesocycle's, which the agent picks when asked, and leaves the mesocycle as it was. The entrance tells them apart from the user's words, and asks when it cannot.
 7. **The accepted mesocycle is kept in SQLite.** It is something the system writes and the engine reads, not a declaration (ADR-0003).
 
 ## Why
