@@ -15,6 +15,11 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 
 **Spends credits.** The closing pass of `trainer eval --suite adapt` is estimated first and runs only on the user's go (CLAUDE.md).
 
+## From ticket 01
+
+- The baseline is the second pass below (ADR-0011's choices, before the planner read the words): routed 13/19, plans 5/8. No run exists on the configuration before this ticket's prompt; the user accepted that one in its place.
+- The bar, `routed = 80`, was written in `b21e804`, before any run.
+
 ## From ticket 03
 
 - A refused `adapt_this_workout` comes back as *«That was not started: ... call it again put right, or ask them»*. Two refusals want different turns: row 8 (pull-ups on the legs day) names the workout's groups and should be called again with `workout`; row 16 names the exclusion and its re-test date and should be relayed, not retried.
