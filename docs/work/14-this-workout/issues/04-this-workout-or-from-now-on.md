@@ -25,3 +25,19 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 - [ ] The adaptation set at 100% on what code holds, and at its bar on where messages go, with $ and s per message.
 - [ ] If the entrance's model no longer clears its bar, ADR-0011's rule picks another and the ADR gets the row.
 - [ ] Full test suite and mypy green.
+
+## Comments
+
+- Built (`d84e61a`): the prompt sorts a change by how long it is for, plus a dislike (remember) and an ache (ask); its examples are no longer the set's rows. `plans.Excluded` is relayed, never retried; a group refusal names the workouts still to do by number.
+- First pass, 2026-10-02, 1 repetition: **routed 15/19 (78%, bar 80)**, **held 4/9 (44%, bar 100)**, $0.20, 82 min of wall time (superset alone 40 min: three budget refusals on gpt-oss-120b).
+
+| row | what happened |
+|---|---|
+| twenty-bare | asked «solo oggi o d'ora in poi?» -- the words carry no «oggi» |
+| pull-ups | asked which pull-up variant |
+| lunges-again | remembered, then asked mesocycle or this workout |
+| hinge-excluded | `log_workout`: «oggi stacchi rumeni» read as a report |
+| superset, football, one-more plans | over the budget, 53-59 min against 45-50 |
+| football | called without `workout`: the entrance cannot know which number is not legs, so the plan is held to legs |
+| you-choose plan | `Dumbbell_Squat` kept: `leave_out` takes ids, «niente squat» is a pattern |
+| no-bench plan | a block of 0 rounds |
