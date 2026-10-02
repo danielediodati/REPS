@@ -203,6 +203,17 @@ def test_8_pull_ups_on_the_legs_day_are_refused_naming_the_workout(
     assert said is not None and "legs, core" in said
 
 
+def test_8_the_refusal_names_the_workouts_still_to_do_by_number(
+    where: adapt_evaluation.Fixture,
+) -> None:
+    said = entrance.startable(
+        entrance.ADAPT_THIS_WORKOUT, {"said": "oggi vorrei fare trazioni", "ask_for": ["Pullups"]}
+    )
+
+    assert said is not None
+    assert "`workout`" in said and "3 (back, arms)" in said and "Call it again" in said
+
+
 def test_8_pull_ups_on_the_back_workout_are_asked_for(where: adapt_evaluation.Fixture) -> None:
     request = asked(where, "oggi vorrei fare trazioni", ask_for=["Pullups"], workout=3)
 
@@ -229,3 +240,16 @@ def test_16_a_hinge_under_an_exclusion_is_refused_naming_its_retest(
         )
 
     assert said is not None and "hip hinge" in said and retest in said
+
+
+def test_16_an_exclusion_is_relayed_and_not_called_again(
+    where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet
+) -> None:
+    case = next(case for case in holds.cases if case.name == "hinge-excluded")
+    with adapt_evaluation.excluding(where, case):
+        said = entrance.startable(
+            entrance.ADAPT_THIS_WORKOUT, {"said": case.says, "ask_for": ["Romanian_Deadlift"]}
+        )
+
+    assert said is not None
+    assert "do not call it again" in said and "Call it again" not in said

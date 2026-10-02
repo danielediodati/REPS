@@ -84,16 +84,16 @@ def adapt_this_workout(
     optional: give a field only when they said it.
 
     - `said`: what they asked for, in their own words. Anything the fields
-      cannot hold, as a superset or «one more per group», is read from here.
+      cannot hold, as a superset or «a finisher at the end», is read from here.
     - `minutes`: the time they have for this workout. It may be more than
       their usual time.
     - `equipment`: all the equipment they have for this workout, as the
-      catalog names it: «solo corpo libero» is `["body only"]`, a borrowed
+      catalog names it: «a corpo libero» is `["body only"]`, a borrowed
       kettlebell is what they declared plus `kettlebells`.
     - `leave_out`: ids of exercises not to do in this workout.
     - `ask_for`: ids of exercises to do in this workout.
     - `workout`: the number in their cycle of another of its workouts, when
-      they do not want the one due, as in «oggi niente gambe».
+      they do not want the one due, as in «oggi niente petto».
 
     Exercise ids come from `search_exercises`: look up every exercise they
     name, and ask them when you cannot tell which one they mean.
@@ -130,7 +130,7 @@ def change_declaration(said: str) -> str:
 
     Call this when what changes is not today's workout or this mesocycle's
     exercises but what they have, how long they train, or what for, as in «ho
-    comprato un bilanciere», «d'ora in poi ho solo 30 minuti», «passo alla
+    preso una panca piana», «da adesso mi alleno un'ora», «passo alla
     forza». `said` is what they told you, in their own words.
 
     The interview that writes it down asks its own questions, and its first
@@ -225,6 +225,11 @@ MISREAD = (
     "ask them what they meant."
 )
 
+REFUSED = (
+    "That was not started, and calling it again will not start it: {error}. "
+    "Tell them, with the date, and do not call it again."
+)
+
 STARTED = {
     PLAN_MESOCYCLE: (
         "The planner has started on a mesocycle. Tell the user you are putting "
@@ -308,22 +313,6 @@ What a turn asks of you:
 - They want something to train, now or today: call `todays_workout`.
 - They ask for a new mesocycle, or say yes when you offered one: call
   `plan_mesocycle`.
-- They want this workout different, and only this one -- another time,
-  other equipment, an exercise out or in, another of the cycle's workouts, as
-  in «oggi ho solo mezz'ora»: call `adapt_this_workout`.
-- They want the mesocycle itself changed from now on -- an exercise gone for
-  good, a different emphasis, as in «d'ora in poi niente stacchi»: call
-  `change_mesocycle`.
-- What they have, how long they train or what for has changed for good --
-  equipment bought or gone, the minutes from now on, a new goal, as in «ho
-  comprato un bilanciere» or «d'ora in poi ho 30 minuti»: call
-  `change_declaration`.
-- When you cannot tell whether they mean today only or from now on, as in
-  «niente panca» or «ho solo 30 minuti», ask them which, in one sentence, and
-  call nothing.
-
-An exercise they name for this workout is looked up with `search_exercises`
-for its id; one you cannot place, ask them about.
 - They are telling you about training they have already done: call
   `log_workout`.
 - They want to set up their training, or start it again from the beginning:
@@ -333,6 +322,30 @@ for its id; one you cannot place, ask them about.
   unreported: call the tool and answer from what came back.
 - Anything else -- hello, a question about how this works, a remark -- is
   yours to answer directly.
+
+When they want something changed, the question is how long for:
+
+- **This workout only** -- another time, other equipment, an exercise out or
+  in, another of the cycle's workouts, as in «oggi ho solo mezz'ora», «in
+  hotel ho solo un elastico», «oggi niente petto»: call `adapt_this_workout`. An exercise
+  they name is looked up with `search_exercises` for its id; one you cannot
+  place, ask them about.
+- **The mesocycle, from now on** -- an exercise gone for good, a different
+  emphasis, as in «d'ora in poi niente stacchi» or «i dip non li
+  voglio più vedere»: call `change_mesocycle`.
+- **What they declared, for good** -- equipment bought or gone, the minutes
+  from now on, a new goal, as in «ho preso una panca piana» or «da adesso mi
+  alleno un'ora»: call `change_declaration`.
+- **When you cannot tell** whether they mean this workout or from now on, as
+  in «niente panca» or «ho solo 30 minuti», ask them which, in one sentence,
+  and call nothing. Their answer, next turn, is what you act on.
+- **A dislike with nothing asked**, as in «detesto il rematore», changes nothing
+  yet: remember it, and you may ask whether they want it out.
+- **An ache or a pain**, as in «il ginocchio mi tira sugli squat», starts nothing: ask
+  them about it, in one question -- where, and doing what.
+
+When a call comes back not started, what it says is the next step: call it
+again put right, or tell them, as it says.
 
 Remembering, when `remember` is offered:
 
@@ -769,6 +782,8 @@ def startable(handoff: str, asked: Mapping[str, Any]) -> str | None:
                 requested(connection, handoff, asked)
             except mesocycles.MesocycleError:
                 return NO_MESOCYCLE
+            except plans.Excluded as error:
+                return REFUSED.format(error=error)
             except catalog.UnknownFilterValue as error:
                 return MISREAD.format(
                     error=f"{error}; the catalog has {', '.join(error.valid)}"

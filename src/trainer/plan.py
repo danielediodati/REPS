@@ -29,6 +29,10 @@ class PlanRejected(RuntimeError):
     exercise written twice -- never about the document."""
 
 
+class Excluded(PlanRejected):
+    """An exercise asked for under an exclusion: a refusal to relay, not a misreading to put right."""
+
+
 @dataclass(frozen=True)
 class Violation:
     """One rule this plan breaks, named so that a reader can say which."""
@@ -546,20 +550,25 @@ def adaptation_requested(
 
 def _another(connection: sqlite3.Connection, found: mesocycles.Today, workout: int) -> int:
     """The cycle's workout asked for in place of the rotation's, refused when it is not one still to do."""
-    declared = config.load(connection)
-    left = [slot for slot in range(1, found.slots + 1) if slot not in found.done]
-    still = ", ".join(f"{slot} ({', '.join(declared.groups_for(slot))})" for slot in left)
+    still = _still(connection, found)
     if workout not in range(1, found.slots + 1):
         raise PlanRejected(
             f"workout {workout} is outside a cycle of {found.slots}; the ones "
             f"still to do this cycle are {still}"
         )
-    if workout not in left:
+    if workout in found.done:
         raise PlanRejected(
             f"workout {workout} has already been performed this cycle; the "
             f"ones still to do are {still}"
         )
     return workout
+
+
+def _still(connection: sqlite3.Connection, found: mesocycles.Today) -> str:
+    """The cycle's workouts still to do, each by its number and its groups."""
+    declared = config.load(connection)
+    left = [slot for slot in range(1, found.slots + 1) if slot not in found.done]
+    return ", ".join(f"{slot} ({', '.join(declared.groups_for(slot))})" for slot in left)
 
 
 def _admits(connection: sqlite3.Connection, request: Request, today: str) -> None:
@@ -578,7 +587,7 @@ def _admits(connection: sqlite3.Connection, request: Request, today: str) -> Non
             continue
         for exclusion in exclusion_state.covering(connection, request.exclusions, exercise_id):
             until = exclusion_state.retest_date(connection, exclusion, today)
-            raise PlanRejected(
+            raise Excluded(
                 f"{exercise_id} is excluded: {exclusion.granularity} "
                 f"{exclusion.value}, until its re-test on {until}. Asking for "
                 "it does not lift the exclusion"
@@ -591,9 +600,21 @@ def _admits(connection: sqlite3.Connection, request: Request, today: str) -> Non
             request.budget_min,
             request.groups,
         )
+        elsewhere = ""
+        if exercise_id in {
+            exercise.id
+            for exercise in admissible.admissible_set(
+                connection, request.exclusions, request.equipment, request.budget_min
+            )
+        }:
+            elsewhere = (
+                "; for another of the cycle's workouts, give its number as "
+                f"`workout`: the ones still to do are "
+                f"{_still(connection, mesocycles.today(connection))}"
+            )
         raise PlanRejected(
             f"{exercise_id} {why or 'is not admissible'}; an exercise asked for "
-            "has to be admissible in this workout"
+            f"has to be admissible in this workout{elsewhere}"
         )
 
 
