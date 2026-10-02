@@ -308,7 +308,7 @@ def test_a_plan_is_held_on_what_it_holds_and_leaves_out(where: adapt_evaluation.
         name="c",
         says="",
         goes=entrance.ADAPT_THIS_WORKOUT,
-        holds=("Romanian_Deadlift",),
+        holds=(("Romanian_Deadlift",),),
         without_pattern=("squat",),
         without_named=("bench press",),
     )
@@ -335,6 +335,15 @@ def test_a_plan_is_held_on_its_equipment_workout_and_minutes(where: adapt_evalua
     assert held(where, one_minute, plan_of("Barbell_Squat", "Romanian_Deadlift")) == [
         adapt_evaluation.MINUTES
     ]
+
+
+def test_a_list_in_holds_is_any_one_of_it(where: adapt_evaluation.Fixture) -> None:
+    case = adapt_set.Case(
+        name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, holds=(("Pushups", "Romanian_Deadlift"),)
+    )
+
+    assert held(where, case, plan_of("Romanian_Deadlift")) == []
+    assert held(where, case, plan_of("Barbell_Squat")) == [adapt_evaluation.ASKED_FOR]
 
 
 def test_longer_holds_a_plan_that_runs_past_the_cap(where: adapt_evaluation.Fixture) -> None:

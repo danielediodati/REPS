@@ -10,9 +10,9 @@
 # - `excluded` is written into the fixture for that case only, re-tested six
 #   weeks after the run.
 # - A case that goes to `adapt_this_workout` is planned, and code holds its plan at
-#   100%: it validated, every `holds` id is in it, no `without_pattern` and no
-#   `without_named` (a substring of the catalog name) is, every exercise is on
-#   `equipment`, it runs `minutes` inside the validator's window, it trains
+#   100%: it validated, every `holds` entry is in it (a list: any one of
+#   it), no `without_pattern` and no `without_named` (a substring of the
+#   catalog name) is, every exercise is on `equipment`, it runs `minutes` inside the validator's window, it trains
 #   none of `untrained`, with `longer` it runs past the cap, and with `told`
 #   its note names the exclusion's re-test date. The validator holds none of
 #   these: an adaptation answers to what the user said, so only the set can.
@@ -20,8 +20,8 @@
 # The bar below is for judgement (ADR-0010), set before the first run: where a
 # message goes. Acting where the row asks counts double, as in the log set.
 #
-# The catalog has no Bulgarian split squat; `Split_Squat_with_Dumbbells` is
-# the closest it holds.
+# The catalog has no Bulgarian split squat; `Split_Squat_with_Dumbbells` and
+# `Elevated_Back_Lunge` (rear foot raised, which is what a Bulgarian is) are.
 
 today = "2026-10-01"
 
@@ -70,7 +70,7 @@ name = "superset"
 says = "oggi niente squat, stacchi rumeni in superset con i bulgari"
 goes = "adapt_this_workout"
 without_pattern = ["squat"]
-holds = ["Romanian_Deadlift", "Split_Squat_with_Dumbbells"]
+holds = ["Romanian_Deadlift", ["Split_Squat_with_Dumbbells", "Elevated_Back_Lunge"]]
 
 [[cases]]
 name = "you-choose"

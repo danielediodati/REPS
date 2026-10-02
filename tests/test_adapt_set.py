@@ -36,7 +36,7 @@ name = "short"
 says = "oggi ho 30 minuti"
 goes = "adapt_this_workout"
 minutes = 30
-holds = ["Barbell_Squat"]
+holds = ["Barbell_Squat", ["Plank", "Pushups"]]
 
 [[cases]]
 name = "which"
@@ -56,7 +56,7 @@ def test_a_case_carries_what_its_plan_must_hold() -> None:
     holds = adapt_set.parse(SET)
 
     short, which = holds.cases
-    assert short.minutes == 30 and short.holds == ("Barbell_Squat",)
+    assert short.minutes == 30 and short.holds == (("Barbell_Squat",), ("Plank", "Pushups"))
     assert short.planned and not which.planned
     assert holds.mesocycle.workouts[0].blocks[0].items[0].exercise_id == "Barbell_Squat"
     assert holds.declared["cycle_length"] == 1

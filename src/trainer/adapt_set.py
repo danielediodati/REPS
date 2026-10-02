@@ -38,7 +38,8 @@ class Case:
     excluded: tuple[str, ...] = ()
     minutes: int | None = None
     equipment: tuple[str, ...] = ()
-    holds: tuple[str, ...] = ()
+    holds: tuple[tuple[str, ...], ...] = ()
+    """Each entry one exercise the plan must hold: any one of its ids."""
     without_pattern: tuple[str, ...] = ()
     without_named: tuple[str, ...] = ()
     untrained: tuple[str, ...] = ()
@@ -135,7 +136,10 @@ def _case(entry: Mapping[str, Any]) -> Case:
         excluded=listed("excluded"),
         minutes=None if minutes is None else int(minutes),
         equipment=listed("equipment"),
-        holds=listed("holds"),
+        holds=tuple(
+            tuple(str(one) for one in entry) if isinstance(entry, list) else (str(entry),)
+            for entry in entry.get("holds", ())
+        ),
         without_pattern=listed("without_pattern"),
         without_named=listed("without_named"),
         untrained=listed("untrained"),

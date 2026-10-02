@@ -152,7 +152,7 @@ def problems(connection: sqlite3.Connection, holds: adapt_set.AdaptSet) -> tuple
                 f"[mesocycle] has {len(holds.mesocycle.workouts)} slots for a cycle of {declared.cycle_length}"
             )
     for case in holds.cases:
-        named |= set(case.holds)
+        named |= {one for any_of in case.holds for one in any_of}
         found += [f"{case.name}: no equipment called {one}" for one in case.equipment if one not in known_equipment]
         found += [f"{case.name}: no pattern called {one}" for one in case.without_pattern if one not in known_patterns]
         found += [f"{case.name}: no group called {one}" for one in case.untrained if one not in groups]
@@ -321,7 +321,7 @@ def held(
             ids,
         )
     }
-    missing = [one for one in case.holds if one not in ids]
+    missing = [" or ".join(any_of) for any_of in case.holds if not set(any_of) & set(ids)]
     if missing:
         failures.append((ASKED_FOR, f"missing {', '.join(missing)}"))
     named = [n.lower() for n in case.without_named]
