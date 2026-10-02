@@ -60,3 +60,4 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 | dumbbells plan | a `Plank` in «solo manubri» |
 | pull-ups | `todays_workout`, «le trazioni sono programmate» (they are not) |
 | no-bench, lunges-again, bought-barbell | asked instead of acting |
+- The entrance's matrix, 2026-10-02, on `2b16134`: deepseek-v4-flash high on Parasail is the only row over both bars (routed 17/19, plans 11/11), and the cheapest; it is the entrance's choice in ADR-0011. Left: «oggi vorrei fare trazioni» goes to `todays_workout` on every model, and the demo in Telegram.

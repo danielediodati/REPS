@@ -83,7 +83,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 | planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles, ~$0.13 and ~47 s each |
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80%, ~$0.0015 and 3-150 s an onboarding |
-| entrance | `openai/gpt-oss-120b`, low, Cerebras | routing 36 of 36 in the onboard suite; $0.001-0.002 and 0.3-1.2 s a turn |
+| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routing 17 of 19 in the adapt suite; $0.0003-0.001 and 1-6 s a turn |
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
@@ -91,7 +91,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
-**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it runs on something fast while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `openai/gpt-oss-120b` on OpenRouter, `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Every model is checked before the bot starts.
+**The entrance has a model of its own** (ADR-0006). `trainer bot` answers every turn through a chat model that holds the conversation and reaches the planner and the logger as tools; it is the node you wait on, so it has a line of its own while the subgraphs keep the one `LLM_BACKEND` names. `ENTRANCE_MODEL` names it — `deepseek/deepseek-v4-flash` on OpenRouter, `llama3.1` on Ollama, `GROQ_MODEL`'s on Groq — and `ENTRANCE_BACKEND` puts it on the other provider, which is how the planner goes to Groq while hello stays on this machine. Every model is checked before the bot starts.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, which @BotFather issues, and `TELEGRAM_OWNER_ID`, the only user id it answers, which @userinfobot replies with. Both live in `.env`, never among your declarations. On Ollama it also needs `OLLAMA_CONTEXT_LENGTH` of at least 8192, and it checks both providers and the token before it starts. It long-polls, so there is no public IP and no tunnel, and one chat is one thread: the conversation survives a restart.
 

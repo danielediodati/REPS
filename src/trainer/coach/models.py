@@ -122,7 +122,7 @@ class Choice:
 
 PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
 LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-ENTRANCE_CHOICE = Choice("openai/gpt-oss-120b", "low", "cerebras")
+ENTRANCE_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ONBOARDING_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 
 DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model

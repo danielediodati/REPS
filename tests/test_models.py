@@ -1122,7 +1122,7 @@ def test_the_default_backend_starts_every_node_on_the_key_alone(
 def test_the_choices_are_the_ones_adr_0011_records() -> None:
     assert models.PLANNER_CHOICE == models.Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
     assert models.LOGGER_CHOICE == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-    assert models.ENTRANCE_CHOICE == models.Choice("openai/gpt-oss-120b", "low", "cerebras")
+    assert models.ENTRANCE_CHOICE == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 
 
 def test_a_node_defaulted_to_its_choice_names_its_own_line(

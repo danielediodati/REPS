@@ -12,7 +12,7 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
    | Planner | `anthropic/claude-haiku-4.5` | none | `anthropic` | plan suite, 100% | ~0.13 a mesocycle | ~47 |
    | Logger | `deepseek/deepseek-v4-flash` | high | `parasail` | log suite, 80% / 60% | ~0.003 a report | 8–200 |
    | Onboarding | `deepseek/deepseek-v4-flash` | high | `parasail` | onboard suite, 100% held / 80% on time, remembered, routed | ~0.0015 an onboarding | 3–150 |
-   | Entrance | `openai/gpt-oss-120b` | low | `cerebras` | none: no suite | 0.001–0.002 a turn | 0.3–1.2 |
+   | Entrance | `deepseek/deepseek-v4-flash` | high | `parasail` | adapt suite, 80% routed | 0.0003–0.001 a turn | 1–6 |
 
 3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs every choice. Ollama and Groq stay selectable.
 4. **A choice's effort and host belong to its model.** Another model named on a node's line runs at its own default effort, on OpenRouter's routing. `OPENROUTER_MODEL` moves every node off its choice, which is how a matrix row runs.
@@ -66,13 +66,24 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 - gpt-oss-120b writes tool calls as text (`to=functions.finish{}`) and never ends.
 - Routing (`change_declaration` against `adapt_today`) runs on the entrance's choice: 36 / 36 over three passes.
 
-## The entrance
+## The entrance's matrix
 
-No suite, so no bar (a later session's). It runs `gpt-oss-120b` on Cerebras, the fastest host that serves tools and `json_schema` with an effort, on a model the logger's screening shows calling tools. Five turns measured on 2026-09-29: $0.001–0.002 and 0.3–1.2 s each, every one answered by Cerebras.
+`--suite adapt` (ticket 14.4), 19 messages, 1 rep each, the planner on its choice. Bars in `docs/adapting/eval-set.toml`: 80% routed, and every adapted plan holding its row.
+
+| Model, effort, host | Routed | Plans held | $ a turn | s a turn |
+|---|---|---|---|---|
+| `openai/gpt-oss-120b` low, Cerebras | 15 / 19 | 8 / 10 | 0.001–0.002 | 0–1 |
+| `openai/gpt-oss-120b` medium, Cerebras | 16 / 19 | 9 / 10 | 0.001–0.003 | 0–2 |
+| **`deepseek/deepseek-v4-flash` high, Parasail** | **17 / 19** | **11 / 11** | **0.0003–0.001** | **1–6** |
+| `anthropic/claude-haiku-4.5` none, Anthropic | 9 / 19 | 4 / 4 | 0.006–0.008 | 1–3 |
+
+- Haiku asks «solo oggi o d'ora in poi?» even after «oggi», and started `set_up` and `change_declaration` for this workout.
+- All four sent «oggi vorrei fare trazioni» to `todays_workout`, gpt-oss-120b also «oggi stacchi rumeni».
+- Plans held differ because the entrance decides which messages get planned; the planner is the same in every row.
 
 ## Consequences
 
-- **A month costs about $0.5–0.9**: ~300 entrance turns ($0.30–0.65), ~20 reports (~$0.06), one mesocycle (~$0.13).
+- **A month costs about $0.3–0.5**: ~300 entrance turns ($0.10–0.30), ~20 reports (~$0.06), one mesocycle (~$0.13).
 - **Time is the open cost, not dollars.** The logger on Parasail went from 8–63 s a report to 80–200 s within one evening.
 - **OpenRouter's shared pool is what fails, not a host's uptime.** A 429 with `limit_source: upstream_provider_shared_pool` hit DeepInfra and AkashML at busy hours at 96–99.5% uptime. Pin a host by the run records, not by the listing.
 - **New OpenRouter accounts are held to 20 requests a minute per model.** One report is several calls.
