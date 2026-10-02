@@ -29,7 +29,7 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 ## Comments
 
 - Built (`d84e61a`): the prompt sorts a change by how long it is for, plus a dislike (remember) and an ache (ask); its examples are no longer the set's rows. `plans.Excluded` is relayed, never retried; a group refusal names the workouts still to do by number.
-- First pass, 2026-10-02, 1 repetition: **routed 15/19 (78%, bar 80)**, **held 4/9 (44%, bar 100)**, $0.20, 82 min of wall time (superset alone 40 min: three budget refusals on gpt-oss-120b).
+- First pass, 2026-10-02, 1 repetition, **off ADR-0011** (`.env` named qwen3.8-27b on the entrance and gpt-oss-120b on the planner, unpinned): **routed 15/19 (78%, bar 80)**, **held 4/9 (44%, bar 100)**, $0.20, 82 min of wall time (superset alone 40 min: three budget refusals on gpt-oss-120b).
 
 | row | what happened |
 |---|---|
@@ -41,3 +41,14 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 | football | called without `workout`: the entrance cannot know which number is not legs, so the plan is held to legs |
 | you-choose plan | `Dumbbell_Squat` kept: `leave_out` takes ids, «niente squat» is a pattern |
 | no-bench plan | a block of 0 rounds |
+- Second pass, 2026-10-02, 1 repetition, on ADR-0011's choices: **routed 13/19 (68%)**, **held 5/8 (62%)**, $0.44, 23 s a run. The planner is no longer the problem: every failing plan was started with only `said`.
+
+| row | what happened |
+|---|---|
+| superset, football, dumbbells, hinge-excluded | `adapt_this_workout` called with `said` alone: no `ask_for`, `workout`, `equipment`, so code holds nothing and the exclusion is never checked |
+| thirty | `change_declaration` for «oggi ho 30 minuti invece di 45» |
+| pull-ups | `todays_workout`, then «ti mando le trazioni» |
+| bought-barbell | `remember` only, then «aggiorno la tua dichiarazione» with nothing started (the fixture already declares a barbell) |
+| no-bench, lunges-again | asked instead of acting |
+
+- Next, per this ticket's second criterion: the entrance (`gpt-oss-120b` low, chosen with no suite) does not clear the bar; ADR-0011's rule picks another on this set.
