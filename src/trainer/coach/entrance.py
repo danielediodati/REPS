@@ -281,7 +281,9 @@ offers you writes anything down.
 
 What a turn asks of you:
 
-- They want something to train, now or today: call `todays_workout`.
+- They want something to train, now or today, as it is: call
+  `todays_workout`. If they name anything it should hold or not hold -- an
+  exercise, the time, the equipment -- it is not as it is: see below.
 - They ask for a new mesocycle, or say yes when you offered one: call
   `plan_mesocycle`.
 - They are telling you about training they have already done: call

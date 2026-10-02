@@ -1437,6 +1437,26 @@ def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
     assert "named, and the plan keeps to it: 30 minutes" in briefed
 
 
+def test_an_adaptations_emit_schema_lists_no_ids_and_the_validator_holds_the_exclusions(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """The whole catalog as an enum is a schema Anthropic refuses to compile."""
+    keeping(connection, two_slots)
+    exclusions.add(connection, Exclusion("pattern", "squat"), "2099-01-01")
+    connection.commit()
+    asked = plans.adaptation_requested(connection, "2026-09-22", said="oggi squat")
+    model = Scripted(
+        documents=[adapted_of("Barbell_Squat"), adapted_of("Standing_Military_Press")]
+    )
+    graph, thread = pausing(model)
+
+    final = graph.invoke(planner.starting(asked), thread)
+
+    assert set(exercise_id_enums(model.schemas[0])) == {None}
+    assert [v.rule for v in final["refusals"][0]] == [plans.ADMISSIBLE]
+    assert final["plan"] == adapted_of("Standing_Military_Press")
+
+
 def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:

@@ -456,9 +456,11 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
             request.groups,
         )
     ]
-    schema = tools.strict_schema(
-        plans.WorkoutPlan if request.adapting is None else plans.AdaptedPlan
-    )
+    if request.adapting is not None:
+        # Its admissible set is the whole catalog, an enum Anthropic refuses
+        # to compile; the validator holds the ids instead.
+        return tools.strict_schema(plans.AdaptedPlan)
+    schema = tools.strict_schema(plans.WorkoutPlan)
 
     def restrict(node: Any) -> None:
         if isinstance(node, dict):
