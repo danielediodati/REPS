@@ -52,3 +52,11 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 | no-bench, lunges-again | asked instead of acting |
 
 - Next, per this ticket's second criterion: the entrance (`gpt-oss-120b` low, chosen with no suite) does not clear the bar; ADR-0011's rule picks another on this set.
+- Fourth pass, 2026-10-02, after `1057b2a` (the planner reads the words) and `dcf3be3`: **routed 15/19 (78%)**, **held 8/10 (80%)**, $0.44, 8 s a run. Football, the exclusion's note and every time row now hold.
+
+| row | what happened |
+|---|---|
+| superset plan | `Elevated_Back_Lunge` for «i bulgari»: a rear-foot-elevated split squat, which the row's single id does not accept |
+| dumbbells plan | a `Plank` in «solo manubri» |
+| pull-ups | `todays_workout`, «le trazioni sono programmate» (they are not) |
+| no-bench, lunges-again, bought-barbell | asked instead of acting |
