@@ -1368,6 +1368,7 @@ SLOT = "*Allenamento {slot} di {slots}* · {groups}"
 SAID_NO = "  ⚠️ avevi detto di no: {why}"
 WHY = "_{reason}_"
 TOTAL = "*Totale* {total} min su {budget}"
+NOTE = "⚠️ {note}"
 
 PARSE_MODE = "MarkdownV2"
 """The dialect `proposal` writes and `_offering` sends a plan as."""
@@ -1455,6 +1456,8 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> s
         lines.append(WHY.format(reason=marked(block.reason)))
         lines.append("")
     lines.append(TOTAL.format(total=reading.total_min, budget=reading.budget_min))
+    if reading.note:
+        lines.append(NOTE.format(note=marked(reading.note)))
     return "\n".join(lines)
 
 

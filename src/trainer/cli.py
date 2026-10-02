@@ -1423,8 +1423,8 @@ def plan_command(
             if adapting is not None:
                 request = plan.adaptation_requested(connection, today, shaping)
                 click.echo(
-                    f"adapting mesocycle workout {adapting.slot} of {adapting.slots}, "
-                    f"cycle {adapting.cycle} of {adapting.cycles} -- {', '.join(request.groups)}"
+                    f"adapting from mesocycle workout {adapting.slot} of {adapting.slots}, "
+                    f"cycle {adapting.cycle} of {adapting.cycles}"
                 )
             else:
                 assembled = plan.requested(connection, today, shaping)

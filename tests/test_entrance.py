@@ -233,14 +233,12 @@ def test_no_handoff_takes_an_argument_from_the_entrance() -> None:
         assert tools.schema(handed)["parameters"]["properties"] == {}
 
 
-def test_an_adaptation_and_a_change_carry_what_was_asked_and_never_a_workout() -> None:
-    """The constraint is read out of what the user wrote, which is the
-    entrance's to read; which workout is due is still the rotation's."""
+def test_an_adaptation_and_a_change_carry_only_their_words() -> None:
+    """What the words ask is the planner's to read, not the entrance's to extract."""
     adapting = tools.schema(entrance.adapt_this_workout)["parameters"]
     changing = tools.schema(entrance.change_mesocycle)["parameters"]
 
-    assert set(adapting["properties"]) == {"said", "minutes", "equipment", "leave_out", "ask_for", "workout"}
-    assert adapting["required"] == ["said"]
+    assert set(adapting["properties"]) == {"said"}
     assert set(changing["properties"]) == {"said"}
 
 
@@ -551,28 +549,11 @@ def test_an_adaptation_the_engine_can_assemble_starts(following: int) -> None:
     assert entrance.startable(entrance.CHANGE_MESOCYCLE, {"said": "basta squat"}) is None
 
 
-def test_equipment_misnamed_goes_back_with_what_the_catalog_calls_it(following: int) -> None:
-    said = entrance.startable(
-        entrance.ADAPT_THIS_WORKOUT, {"said": "solo bilanciere", "equipment": ["bilanciere"]}
-    )
-
-    assert said is not None and "bilanciere" in said and "barbell" in said
-
-
 def test_with_no_mesocycle_there_is_nothing_to_adapt_or_change(
     connection: sqlite3.Connection,
 ) -> None:
     for handoff in (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE):
         assert entrance.startable(handoff, {"said": "x"}) == entrance.NO_MESOCYCLE
-
-
-def test_a_single_value_where_a_list_belongs_is_read_as_one_value(following: int) -> None:
-    """Observed on llama3.1: `without: "elastici"`, a list argument given as one value, which iterated is eight letters."""
-    said = entrance.startable(
-        entrance.ADAPT_THIS_WORKOUT, {"said": "solo bilanciere", "equipment": "bilanciere"}
-    )
-
-    assert said is not None and "'bilanciere'" in said
 
 
 def test_an_adaptation_past_the_budget_is_not_started(connection: sqlite3.Connection) -> None:

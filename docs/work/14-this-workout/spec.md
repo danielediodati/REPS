@@ -5,11 +5,11 @@
 | Question | Answer |
 |---|---|
 | Scope | Any request about this workout works. The hypothesis and trial loop is dropped from the design, not postponed. |
-| The tool | `adapt_today` becomes `adapt_this_workout`: the user's sentence, plus the fields code can check (minutes, this workout's equipment in full, exercises left out, exercises asked for, which of the cycle's workouts). A superset, *«one more per group»*, *«you choose»* stay prose for the planner. |
+| The tool | `adapt_this_workout(said)`: the user's sentence only. The planner reads it; nothing is extracted into fields (ADR-0008 item 6). |
 | The declared cap | The usual time, not a limit: this workout may ask for more. |
 | Borrowed equipment | Counts for this workout only; keeping it is `change_declaration`. |
-| An asked-for exercise under an exclusion | Refused before planning, naming the exclusion and its re-test date. An asked-for exercise never widens the admissible set. |
-| Which workout of the cycle | Unasked, the first of the cycle not yet performed, read off the log; no stored order. Asked (*«niente gambe oggi»*), the agent picks one of the mesocycle's. |
+| An asked-for exercise under an exclusion | Planned without, and the plan's `note` tells them, with the re-test date. Exclusions are the one thing that binds an adaptation. |
+| Which workout of the cycle | Unasked, the first of the cycle not yet performed, read off the log; no stored order. An adapted workout says which one still to do it `counts_as`, so the cycle goes on right after it. |
 | This workout or from now on | The entrance decides from context, and asks when the words do not say. |
 | The measure | A set of real requests: where each one goes, and what its plan must hold. |
 

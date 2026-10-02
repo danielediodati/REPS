@@ -1407,6 +1407,10 @@ def test_a_mesocycle_request_sent_as_json_is_read_as_one(
 # -- an adaptation and a change (ADR-0008 item 6) ------------------------------
 
 
+def adapted_of(*exercise_ids: str, counts_as: int = 1, **shaped: Any) -> plans.AdaptedPlan:
+    return plans.AdaptedPlan(**plan_of(*exercise_ids, **shaped).model_dump(), counts_as=counts_as, note="")
+
+
 def keeping(connection: sqlite3.Connection, two_slots: plans.MesocycleRequest) -> int:
     """The squat day and the press day, accepted through the graph."""
     offered = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"), cycles=3)
@@ -1422,7 +1426,7 @@ def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
     asked = plans.adaptation_requested(
         connection, "2026-09-22", plans.Asked(minutes=30), said="solo 30 minuti oggi"
     )
-    model = Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)])
+    model = Scripted(documents=[adapted_of("Barbell_Squat", rounds=2, minutes=30)])
     graph, thread = pausing(model)
 
     graph.invoke(planner.starting(asked), thread)
@@ -1430,7 +1434,7 @@ def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
     briefed = "\n".join(message.text for message in model.seen[0])
     assert "solo 30 minuti oggi" in briefed
     assert "Barbell_Squat" in briefed, "today's slot is the starting point"
-    assert "30 minutes" in briefed
+    assert "named, and the plan keeps to it: 30 minutes" in briefed
 
 
 def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged(
@@ -1439,7 +1443,7 @@ def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged
     keeping(connection, two_slots)
     before = mesocycles.active(connection)
     asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
-    graph, thread = pausing(Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]))
+    graph, thread = pausing(Scripted(documents=[adapted_of("Barbell_Squat", rounds=2, minutes=30)]))
     graph.invoke(planner.starting(asked), thread)
 
     final = graph.invoke(Command(resume=planner.accepted()), thread)
@@ -1450,26 +1454,20 @@ def test_an_accepted_adaptation_is_todays_workout_and_the_mesocycle_is_unchanged
     assert [block.block.rounds for block in workouts.prescribed(connection, served)] == [2]
 
 
-def test_another_slot_adapted_and_accepted_is_served_as_that_slot(
+def test_an_adaptation_counted_as_another_slot_is_served_as_that_slot(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:
-    """Legs due, the press day asked for: served as slot 2, and briefed with what must be in it."""
+    """Legs due, a press planned for «niente gambe»: served as slot 2, briefed with the cycle."""
     keeping(connection, two_slots)
-    asked = plans.adaptation_requested(
-        connection,
-        "2026-09-22",
-        plans.Asked(workout=2),
-        said="oggi niente gambe",
-        ask_for=("Standing_Military_Press",),
-    )
-    model = Scripted(documents=[plan_of("Standing_Military_Press")])
+    asked = plans.adaptation_requested(connection, "2026-09-22", said="oggi niente gambe")
+    model = Scripted(documents=[adapted_of("Standing_Military_Press", counts_as=2)])
     graph, thread = pausing(model)
     graph.invoke(planner.starting(asked), thread)
     briefed = "\n".join(message.text for message in model.seen[0])
 
     final = graph.invoke(Command(resume=planner.accepted()), thread)
 
-    assert "must hold: Standing_Military_Press" in briefed
+    assert "Workout 2 (shoulders)" in briefed and "Standing_Military_Press" in briefed
     found, served = mesocycles.record_served(connection, "2026-09-22")
     assert (served, found.slot) == (final["workout"], 2)
 
@@ -1481,14 +1479,17 @@ def test_an_adaptation_turned_down_is_planned_again_from_the_same_slot(
     asked = plans.adaptation_requested(connection, "2026-09-22", plans.Asked(minutes=30))
     model = Scripted(
         turns=[AIMessage(content="planned"), AIMessage(content="another")],
-        documents=[plan_of("Barbell_Squat", rounds=2, minutes=30), plan_of("Barbell_Squat", rounds=1, minutes=30)],
+        documents=[
+            adapted_of("Barbell_Squat", rounds=2, minutes=30),
+            adapted_of("Barbell_Squat", rounds=1, minutes=30),
+        ],
     )
     graph, thread = pausing(model)
     graph.invoke(planner.starting(asked), thread)
 
     final = graph.invoke(Command(resume=planner.refused("troppo")), thread)
 
-    assert final["plan"] == plan_of("Barbell_Squat", rounds=1, minutes=30)
+    assert final["plan"] == adapted_of("Barbell_Squat", rounds=1, minutes=30)
     assert final["request"].adapting == asked.adapting
     assert "troppo" in "\n".join(message.text for message in model.seen[-1])
 

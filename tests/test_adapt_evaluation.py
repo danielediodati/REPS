@@ -85,8 +85,10 @@ goes = "remember"
 [[cases]]
 name = "excluded"
 says = "oggi stacchi rumeni"
-goes = "refused"
+goes = "adapt_this_workout"
 excluded = ["hip hinge"]
+without_pattern = ["hip hinge"]
+told = true
 """
 
 
@@ -162,13 +164,15 @@ def failed(report: evaluation.Report, case: str) -> list[str]:
     return [name for name, _ in outcome_of(report, case).failures]
 
 
-def plan_of(*ids: str) -> plans.WorkoutPlan:
-    return plans.WorkoutPlan.model_validate(
+def plan_of(*ids: str, note: str = "", rounds: int = 3) -> plans.AdaptedPlan:
+    return plans.AdaptedPlan.model_validate(
         {
+            "counts_as": 1,
+            "note": note,
             "blocks": [
                 {
                     "items": [{"exercise_id": one, "prescription": {"unit": "reps", "amount": 8}}],
-                    "rounds": 3,
+                    "rounds": rounds,
                     "rest": 90,
                     "reason": "work",
                 }
@@ -255,37 +259,12 @@ def test_a_fact_kept_and_nothing_started_holds_a_remember_row(
     assert failed(forgot, "hate") == [adapt_evaluation.ROUTED]
 
 
-def test_an_adaptation_refused_naming_the_retest_date_holds_a_refused_row(
-    where: adapt_evaluation.Fixture,
-    holds: adapt_set.AdaptSet,
-    tmp_path: Path,
-) -> None:
-    excluded = case_of(holds, "excluded")
-    misread = ran(
-        where,
-        excluded,
-        tmp_path,
-        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says, "equipment": ["kettlebells"]})),
-        says("Non ho capito."),
-    )
-    started = ran(
-        where,
-        excluded,
-        tmp_path,
-        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says})),
-        says("Ci penso io."),
-    )
-    refused = ran(
-        where,
-        excluded,
-        tmp_path,
-        calls((entrance.ADAPT_THIS_WORKOUT, {"said": excluded.says, "ask_for": ["Romanian_Deadlift"]})),
-        says("Non posso: è escluso."),
-    )
+def test_a_note_naming_the_retest_holds_a_told_row(where: adapt_evaluation.Fixture) -> None:
+    told = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, told=True)
 
-    assert failed(refused, "excluded") == []
-    assert failed(misread, "excluded") == [adapt_evaluation.ROUTED]
-    assert failed(started, "excluded") == [adapt_evaluation.ROUTED]
+    assert held(where, told, plan_of("Pushups", note="esclusi fino al 2026-11-13")) == []
+    assert held(where, told, plan_of("Pushups")) == [adapt_evaluation.TOLD]
+    assert held(where, told, plan_of("Pushups", note="esclusi per ora")) == [adapt_evaluation.TOLD]
 
 
 def test_an_adaptation_started_is_planned_and_held_against_its_row(
@@ -315,18 +294,11 @@ def test_a_message_that_never_started_an_adaptation_has_no_plan_to_hold(
     assert [o.case for o in report.outcomes] == ["hinge"]
 
 
-def held(
-    where: adapt_evaluation.Fixture,
-    case: adapt_set.Case,
-    plan: plans.WorkoutPlan,
-    budget_min: int = 45,
-    asked_minutes: int | None = None,
-) -> list[str]:
-    request = plans.Request(equipment=("barbell", "dumbbell"), budget_min=budget_min)
+def held(where: adapt_evaluation.Fixture, case: adapt_set.Case, plan: plans.WorkoutPlan) -> list[str]:
     return [
         name
         for name, _ in adapt_evaluation.held(
-            where.connection, case, request, plan, (), asked_minutes=asked_minutes, cap=where.cap
+            where.connection, case, plan, (), cap=where.cap, retest="2026-11-13"
         )
     ]
 
@@ -365,32 +337,26 @@ def test_a_plan_is_held_on_its_equipment_workout_and_minutes(where: adapt_evalua
     ]
 
 
-def test_longer_holds_only_minutes_asked_past_the_cap(where: adapt_evaluation.Fixture) -> None:
+def test_longer_holds_a_plan_that_runs_past_the_cap(where: adapt_evaluation.Fixture) -> None:
     longer = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT, longer=True)
 
-    assert held(where, longer, plan_of("Pushups")) == []
-    assert held(where, longer, plan_of("Pushups"), budget_min=40, asked_minutes=40) == [
-        adapt_evaluation.LONGER
-    ]
-    assert held(where, longer, plan_of("Pushups"), budget_min=60, asked_minutes=60) == []
+    assert held(where, longer, plan_of("Pushups")) == [adapt_evaluation.LONGER]
+    assert held(where, longer, plan_of("Pushups", "Barbell_Squat", rounds=20)) == []
 
 
 def test_a_plan_the_validator_refused_or_that_never_parsed_fails_planned(
     where: adapt_evaluation.Fixture,
 ) -> None:
     case = adapt_set.Case(name="c", says="", goes=entrance.ADAPT_THIS_WORKOUT)
-    request = plans.Request(equipment=("barbell",), budget_min=45)
-
     refused = adapt_evaluation.held(
         where.connection,
         case,
-        request,
         plan_of("Pushups"),
-        (plans.Violation(plans.BUDGET, "too short"),),
-        asked_minutes=None,
+        (plans.Violation(plans.COUNTS_AS, "workout 9"),),
         cap=45,
+        retest="2026-11-13",
     )
-    nothing = adapt_evaluation.held(where.connection, case, request, None, (), asked_minutes=None, cap=45)
+    nothing = adapt_evaluation.held(where.connection, case, None, (), cap=45, retest="2026-11-13")
 
     assert [name for name, _ in refused] == [adapt_evaluation.PLANNED]
     assert [name for name, _ in nothing] == [adapt_evaluation.PLANNED]
@@ -418,26 +384,6 @@ def test_the_rendered_pass_is_ascii_with_cost_per_message(
 
     assert all(line.isascii() for line in lines)
     assert any(line.startswith("  bought: $") for line in lines)
-
-
-def test_a_refusal_is_checked_against_the_retest_date_its_exclusion_was_written_with(
-    where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet
-) -> None:
-    from langchain_core.messages import ToolMessage
-
-    excluded = case_of(holds, "excluded")
-    with adapt_evaluation.excluding(where, excluded) as retest:
-        written = where.connection.execute("SELECT retest_date FROM exclusions").fetchone()[0]
-    refused = {
-        "handoff": "",
-        "messages": [
-            ToolMessage(f"excluded until {written}", tool_call_id="c", name=entrance.ADAPT_THIS_WORKOUT)
-        ],
-    }
-
-    assert retest == written
-    assert adapt_evaluation.routing(excluded, refused, retest) == ()
-    assert adapt_evaluation.routing(excluded, refused, "2099-01-01") != ()
 
 
 def test_a_planner_run_that_fails_on_an_empty_message_still_says_what_failed(

@@ -120,7 +120,7 @@ In this order. Measuring first is what stops the methodology being written again
 
 1. **The adaptation set.** `trainer eval --suite adapt`: real requests, where each must go and what its plan must hold; a baseline run.
 2. **The next workout is the first not yet performed** in the cycle, read off the log; no stored order. — **done** `e7e6324`
-3. **One tool for anything about this workout.** `adapt_this_workout`: minutes over the cap, this workout's equipment in full, exercises left out and asked for, another of the cycle's workouts; the validator holds them. — **done** `af0302b`
+3. **One tool for anything about this workout.** `adapt_this_workout`: minutes over the cap, this workout's equipment in full, exercises left out and asked for, another of the cycle's workouts; the validator holds them. — **done** `af0302b`, its fields dropped in 14.4: the planner reads the words
 4. **This workout or from now on.** The entrance tells adaptation, change, declaration and memory apart, and asks when the words do not say; the set at its bars.
 5. **Prompt caching.** The run record counts cached input; the planner's prompt and tools cached on Anthropic; $ a mesocycle before and after in ADR-0011. — **done** `251dacc`
 

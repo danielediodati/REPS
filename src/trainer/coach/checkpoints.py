@@ -41,6 +41,7 @@ DECLARED: tuple[type, ...] = (
     plans.Refusal,
     plans.Violation,
     plans.WorkoutPlan,
+    plans.AdaptedPlan,
     plans.MesocycleRequest,
     plans.MesocycleRefusal,
     plans.Mesocycle,

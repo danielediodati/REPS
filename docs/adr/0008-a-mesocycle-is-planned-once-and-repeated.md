@@ -13,6 +13,7 @@ Until session 9 every workout was planned from nothing. The split fixed which gr
    - the user asks for a new one;
    - the user asks for a change to it.
 6. **A change and an adaptation are different things.** A change (*"no more lunges"*) rewrites the mesocycle for the cycles left. An adaptation (*"only 30 minutes today"*, *"no dumbbells today"*, *"no legs today, I play football tonight"*) plans this workout from one of the mesocycle's, which the agent picks when asked, and leaves the mesocycle as it was. The entrance tells them apart from the user's words, and asks when it cannot.
+   - **An adaptation answers to the user's words first.** The entrance hands over only their sentence; the planner reads it. Nothing of the mesocycle binds it: not the slot's groups, the declared equipment or the usual time. Only the exclusions do, and the plan says which of the cycle's workouts still to do it counts as. What it could not do is a `note` to the user, not a refusal before planning.
 7. **The accepted mesocycle is kept in SQLite.** It is something the system writes and the engine reads, not a declaration (ADR-0003).
 
 ## Why

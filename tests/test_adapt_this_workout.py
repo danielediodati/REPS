@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
+import json
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -14,7 +13,7 @@ from conftest import enrich, make_exercise
 from trainer import adapt_evaluation, adapt_set
 from trainer import plan as plans
 from trainer.coach import entrance
-from trainer.engine import catalog, database, migrations
+from trainer.engine import catalog, database, duration, migrations
 
 CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
@@ -90,8 +89,10 @@ blocks = [{one("Bent_Over_Barbell_Row")}]
 [[cases]]
 name = "hinge-excluded"
 says = "oggi stacchi rumeni"
-goes = "refused"
+goes = "adapt_this_workout"
 excluded = ["hip hinge"]
+without_pattern = ["hip hinge"]
+told = true
 """
 
 
@@ -110,146 +111,111 @@ def where(database_file: Path, holds: adapt_set.AdaptSet) -> Iterator[adapt_eval
             yield prepared
 
 
-def asked(where: adapt_evaluation.Fixture, said: str, **args: Any) -> plans.Request:
-    request = entrance.requested(
-        where.connection, entrance.ADAPT_THIS_WORKOUT, {"said": said, **args}
-    )
+def asked(where: adapt_evaluation.Fixture, said: str) -> plans.Request:
+    request = entrance.requested(where.connection, entrance.ADAPT_THIS_WORKOUT, {"said": said})
     assert isinstance(request, plans.Request)
     assert request.adapting is not None
     return request
 
 
-def test_0_a_superset_leaves_the_squat_out_and_asks_for_the_hinge_and_the_split_squat(
-    where: adapt_evaluation.Fixture,
-) -> None:
-    request = asked(
-        where,
-        "oggi niente squat, stacchi rumeni in superset con i bulgari",
-        leave_out=["Barbell_Squat"],
-        ask_for=["Romanian_Deadlift", "Split_Squat_with_Dumbbells"],
+def adapted(*exercise_ids: str, counts_as: int = 1, rounds: int = 4, note: str = "") -> plans.AdaptedPlan:
+    return plans.parse_adapted(
+        json.dumps(
+            {
+                "blocks": [
+                    {
+                        "rounds": rounds,
+                        "rest": 90,
+                        "reason": "work",
+                        "items": [
+                            {"exercise_id": one, "prescription": {"unit": "reps", "amount": 8}}
+                        ],
+                    }
+                    for one in exercise_ids
+                ],
+                "despite": [],
+                "counts_as": counts_as,
+                "note": note,
+            }
+        )
     )
 
-    assert request.adapting is not None
-    assert request.adapting.left_out == ("Barbell_Squat",)
-    assert request.adapting.asked_for == ("Romanian_Deadlift", "Split_Squat_with_Dumbbells")
-    assert "superset" in request.adapting.said
-    assert (request.adapting.slot, request.groups) == (1, ("legs", "core"))
+
+def violations(where: adapt_evaluation.Fixture, request: plans.Request, plan: plans.WorkoutPlan) -> list[str]:
+    return [v.rule for v in plans.validate(where.connection, plans.to_blocks(plan), request, plan)]
 
 
-def test_0b_you_choose_leaves_the_squat_out_and_asks_for_nothing(
+def test_the_request_is_their_words_with_the_mesocycle_as_a_starting_point(
     where: adapt_evaluation.Fixture,
 ) -> None:
-    request = asked(where, "oggi niente squat, proponi tu", leave_out=["Barbell_Squat"])
+    request = asked(where, "oggi niente squat, stacchi rumeni in superset con i bulgari")
 
     assert request.adapting is not None
-    assert (request.adapting.left_out, request.adapting.asked_for) == (("Barbell_Squat",), ())
+    assert request.adapting.said == "oggi niente squat, stacchi rumeni in superset con i bulgari"
+    assert (request.adapting.slot, request.adapting.still) == (1, (1, 2, 3))
+    assert request.adapting.split == ("legs, core", "chest, shoulders, arms", "back, arms")
+    assert len(request.adapting.cycle) == 3
+    assert (request.adapting.usual_minutes, request.adapting.usual_equipment) == (
+        45,
+        ("barbell", "dumbbell", "body only"),
+    )
 
 
-def test_1_thirty_minutes(where: adapt_evaluation.Fixture) -> None:
-    assert asked(where, "oggi ho 30 minuti invece di 45", minutes=30).budget_min == 30
-
-
-def test_2_not_legs_is_another_of_the_cycles_workouts(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "oggi niente gambe che stasera gioco a calcio", workout=2)
-
-    assert request.adapting is not None
-    assert request.adapting.slot == 2
-    assert request.groups == ("chest", "shoulders", "arms")
-
-
-def test_3_a_borrowed_kettlebell_is_this_workouts_equipment_in_full(
+def test_neither_the_groups_nor_the_declared_equipment_bind_it(
     where: adapt_evaluation.Fixture,
 ) -> None:
-    request = asked(
-        where,
-        "mi hanno prestato una kettlebell, usiamola oggi",
-        equipment=["barbell", "dumbbell", "body only", "kettlebells"],
-    )
+    request = asked(where, "mi hanno prestato una kettlebell, usiamola oggi")
 
-    assert request.equipment == ("barbell", "dumbbell", "body only", "kettlebells")
+    assert request.groups == ()
+    assert "kettlebells" in request.equipment
+    assert violations(where, request, adapted("Kettlebell_Goblet_Squat")) == []
 
 
-def test_4_away_with_nothing_but_the_body(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "sono in trasferta, solo corpo libero", equipment=["body only"])
-
-    assert request.equipment == ("body only",)
-
-
-def test_5_more_time_than_the_cap(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "oggi ho tempo, metti un esercizio in più per gruppo", minutes=60)
-
-    assert request.budget_min == 60 > where.cap
-
-
-def test_6_dumbbells_only(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "oggi solo manubri, la palestra è piena", equipment=["dumbbell"])
-
-    assert request.equipment == ("dumbbell",)
-
-
-def test_7_twenty_minutes_and_no_equipment(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "20 minuti e niente attrezzi", minutes=20, equipment=["body only"])
-
-    assert (request.budget_min, request.equipment) == (20, ("body only",))
-
-
-def test_8_pull_ups_on_the_legs_day_are_refused_naming_the_workout(
+def test_2_no_legs_today_is_a_plan_of_another_workout_counted_as_it(
     where: adapt_evaluation.Fixture,
 ) -> None:
-    said = entrance.startable(
-        entrance.ADAPT_THIS_WORKOUT, {"said": "oggi vorrei fare trazioni", "ask_for": ["Pullups"]}
-    )
+    request = asked(where, "oggi niente gambe che stasera gioco a calcio")
 
-    assert said is not None and "legs, core" in said
+    assert violations(where, request, adapted("Barbell_Bench_Press_-_Medium_Grip", counts_as=2)) == []
 
 
-def test_8_the_refusal_names_the_workouts_still_to_do_by_number(
+def test_core_but_no_legs_is_a_plan_the_slots_groups_never_described(
     where: adapt_evaluation.Fixture,
 ) -> None:
-    said = entrance.startable(
-        entrance.ADAPT_THIS_WORKOUT, {"said": "oggi vorrei fare trazioni", "ask_for": ["Pullups"]}
-    )
+    request = asked(where, "oggi faccio il core ma niente gambe")
 
-    assert said is not None
-    assert "`workout`" in said and "3 (back, arms)" in said and "Call it again" in said
+    assert violations(where, request, adapted("Plank", counts_as=1)) == []
 
 
-def test_8_pull_ups_on_the_back_workout_are_asked_for(where: adapt_evaluation.Fixture) -> None:
-    request = asked(where, "oggi vorrei fare trazioni", ask_for=["Pullups"], workout=3)
+def test_5_more_time_than_the_usual_is_no_violation(where: adapt_evaluation.Fixture) -> None:
+    request = asked(where, "oggi ho tempo, metti un esercizio in più per gruppo")
+    long = adapted("Barbell_Squat", "Romanian_Deadlift", "Split_Squat_with_Dumbbells", "Plank", rounds=12)
 
-    assert request.adapting is not None
-    assert (request.adapting.slot, request.adapting.asked_for) == (3, ("Pullups",))
-
-
-def test_14_no_bench_today_leaves_it_out(where: adapt_evaluation.Fixture) -> None:
-    request = asked(
-        where, "oggi non ho voglia di panca", leave_out=["Barbell_Bench_Press_-_Medium_Grip"]
-    )
-
-    assert request.adapting is not None
-    assert request.adapting.left_out == ("Barbell_Bench_Press_-_Medium_Grip",)
+    assert duration.plan_duration(where.connection, plans.to_blocks(long)) > where.cap
+    assert violations(where, request, long) == []
 
 
-def test_16_a_hinge_under_an_exclusion_is_refused_naming_its_retest(
+def test_it_counts_as_a_workout_still_to_do(where: adapt_evaluation.Fixture) -> None:
+    request = asked(where, "oggi niente gambe")
+
+    assert violations(where, request, adapted("Plank", counts_as=4)) == [plans.COUNTS_AS]
+
+
+def test_a_plain_workout_plan_does_not_say_what_it_counts_as(where: adapt_evaluation.Fixture) -> None:
+    request = asked(where, "oggi niente gambe")
+    plan = plans.WorkoutPlan.model_validate(adapted("Plank").model_dump(exclude={"counts_as", "note"}))
+
+    assert violations(where, request, plan) == [plans.COUNTS_AS]
+
+
+def test_16_an_exclusion_still_binds_and_the_planner_is_told_its_retest(
     where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet
 ) -> None:
     case = next(case for case in holds.cases if case.name == "hinge-excluded")
     with adapt_evaluation.excluding(where, case) as retest:
-        said = entrance.startable(
-            entrance.ADAPT_THIS_WORKOUT, {"said": case.says, "ask_for": ["Romanian_Deadlift"]}
-        )
+        request = asked(where, case.says)
+        refused = violations(where, request, adapted("Romanian_Deadlift"))
 
-    assert said is not None and "hip hinge" in said and retest in said
-
-
-def test_16_an_exclusion_is_relayed_and_not_called_again(
-    where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet
-) -> None:
-    case = next(case for case in holds.cases if case.name == "hinge-excluded")
-    with adapt_evaluation.excluding(where, case):
-        said = entrance.startable(
-            entrance.ADAPT_THIS_WORKOUT, {"said": case.says, "ask_for": ["Romanian_Deadlift"]}
-        )
-
-    assert said is not None
-    assert "do not call it again" in said and "Call it again" not in said
+    assert refused == [plans.ADMISSIBLE]
+    assert request.adapting is not None
+    assert request.adapting.retests == (f"pattern hip hinge until {retest}",)

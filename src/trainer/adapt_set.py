@@ -17,9 +17,9 @@ from trainer.coach import entrance
 ADAPT_SET_ENV_VAR = "TRAINER_ADAPT_SET"
 DEFAULT_PARTS = ("docs", "adapting", "eval-set.toml")
 
-ASK, TRIAGE, REMEMBER, REFUSED = "ask", "triage", "remember", "refused"
+ASK, TRIAGE, REMEMBER = "ask", "triage", "remember"
 HANDED = (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE, entrance.CHANGE_DECLARATION)
-DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER, REFUSED)
+DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER)
 ASKING = (ASK, TRIAGE)
 """Where nothing may start and the answer is a question."""
 
@@ -43,6 +43,7 @@ class Case:
     without_named: tuple[str, ...] = ()
     untrained: tuple[str, ...] = ()
     longer: bool = False
+    told: bool = False
 
     @property
     def planned(self) -> bool:
@@ -110,7 +111,9 @@ def parse(text: str) -> AdaptSet:
     )
 
 
-PLAN_KEYS = ("minutes", "equipment", "holds", "without_pattern", "without_named", "untrained", "longer")
+PLAN_KEYS = (
+    "minutes", "equipment", "holds", "without_pattern", "without_named", "untrained", "longer", "told"
+)
 
 
 def _case(entry: Mapping[str, Any]) -> Case:
@@ -137,4 +140,5 @@ def _case(entry: Mapping[str, Any]) -> Case:
         without_named=listed("without_named"),
         untrained=listed("untrained"),
         longer=bool(entry.get("longer", False)),
+        told=bool(entry.get("told", False)),
     )

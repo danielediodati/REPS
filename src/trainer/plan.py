@@ -29,9 +29,6 @@ class PlanRejected(RuntimeError):
     exercise written twice -- never about the document."""
 
 
-class Excluded(PlanRejected):
-    """An exercise asked for under an exclusion: a refusal to relay, not a misreading to put right."""
-
 
 @dataclass(frozen=True)
 class Violation:
@@ -52,8 +49,7 @@ REFUSED = "refused"
 UNTRAINED = "untrained"
 SLOTS = "slots"
 CYCLES = "cycles"
-ASKED_FOR = "asked for"
-LEFT_OUT = "left out"
+COUNTS_AS = "counts as"
 
 TOLERANCE_MIN = 5
 """How far either side of the minutes asked for a plan may land: 45 accepts 40 to 50."""
@@ -187,6 +183,24 @@ class WorkoutPlan(BaseModel):
     """
 
 
+class AdaptedPlan(WorkoutPlan):
+    """A workout adapted for today: the plan, which of the cycle's workouts it stands for, and what to tell the user."""
+
+    counts_as: int = Field(
+        description=(
+            "The number of the cycle's workout, among those still to do, that "
+            "this one takes the place of."
+        ),
+    )
+    note: str = Field(
+        description=(
+            "Empty, unless something they asked for could not be done, as an "
+            "exercise under an exclusion: then one sentence saying so, with "
+            "its re-test date."
+        ),
+    )
+
+
 class Mesocycle(BaseModel):
     """A workout for each slot of the cycle, how many cycles it is repeated for, and why (ADR-0008)."""
 
@@ -241,27 +255,44 @@ def turned_down(
 
 @dataclass(frozen=True)
 class Adapting:
-    """The slot of the mesocycle an adaptation starts from, and what the user asked of this workout (ADR-0008 item 6)."""
+    """The mesocycle an adaptation starts from, and what the user said of this workout (ADR-0008 item 6).
+
+    Nothing here binds the plan: the user's words do, within the exclusions.
+    """
 
     mesocycle: int
     served_after: int
     """Workouts performed when it was asked: the day it is today's workout for."""
 
     slot: int
-    """Which of the cycle's workouts this one counts as: the rotation's, or the one they asked for."""
+    """The cycle's workout the rotation has due today."""
 
-    workout: WorkoutPlan
+    cycle: tuple[WorkoutPlan, ...]
+    """Every workout of the mesocycle, in the cycle's order."""
+
+    split: tuple[str, ...]
+    """The groups each of the cycle's workouts trains, in the same order."""
+
+    still: tuple[int, ...]
+    """The cycle's workouts not yet performed: the ones this one may count as."""
+
+    usual_minutes: int
+    usual_equipment: tuple[str, ...]
     said: str = ""
-    asked_for: tuple[str, ...] = ()
-    """Exercise ids this workout must hold."""
+    named: tuple[str, ...] = ()
+    """What a door named outright, as the terminal's `--minutes`: binding, unlike the words."""
 
-    left_out: tuple[str, ...] = ()
-    """Exercise ids this workout must not hold. Not an exclusion: nothing outlives the workout."""
+    retests: tuple[str, ...] = ()
+    """Each exclusion in force with its re-test date, as the user is told it."""
 
     def __post_init__(self) -> None:
         # A checkpoint reads tuples back as lists.
-        object.__setattr__(self, "asked_for", tuple(self.asked_for))
-        object.__setattr__(self, "left_out", tuple(self.left_out))
+        for name in ("cycle", "split", "still", "usual_equipment", "named", "retests"):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+
+    @property
+    def workout(self) -> WorkoutPlan:
+        return self.cycle[self.slot - 1]
 
 
 @dataclass(frozen=True)
@@ -494,128 +525,65 @@ def adaptation_requested(
     today: str,
     asked: Asked = Asked(),
     said: str = "",
-    ask_for: tuple[str, ...] = (),
-    leave_out: tuple[str, ...] = (),
 ) -> Request:
-    """This workout's request, with a slot of the mesocycle as its starting point.
+    """This workout's request: the whole catalog under today's exclusions, with the mesocycle as a starting point.
 
-    `asked.workout` is another of the cycle's workouts, one not yet performed
-    this cycle; `asked.equipment` is this workout's equipment in full;
-    `asked.minutes` may exceed the declared cap. An exercise asked for is
-    refused here when the request does not admit it.
+    What was named on `asked` narrows it -- equipment, minutes, exclusions --
+    and nothing else does: the mesocycle's groups, the declared equipment and
+    the usual time are the planner's to read, not limits.
     """
-    if asked.groups:
+    if asked.groups or asked.workout is not None:
         raise PlanRejected(
-            "an adaptation is of one of the mesocycle's workouts; name it by "
-            "its number in the cycle, not by its groups"
+            "an adaptation chooses which of the cycle's workouts it stands for "
+            "itself; name groups or a workout to plan one outright"
         )
     found = mesocycles.today(connection)
-    slot = found.slot if asked.workout is None else _another(connection, found, asked.workout)
     kept = mesocycles.active(connection)
     assert kept is not None, "`today` found a mesocycle"
-    for exercise_id in (*ask_for, *leave_out):
-        if catalog.exercise(connection, exercise_id) is None:
-            raise PlanRejected(
-                f"no exercise has the id {exercise_id!r}: look it up with "
-                "`search_exercises`, or ask them which one they mean"
-            )
-    both = sorted(set(ask_for) & set(leave_out))
-    if both:
-        raise PlanRejected(f"{', '.join(both)} is both asked for and left out; ask them which")
-    request = requested(
-        connection, today, dataclasses.replace(asked, workout=slot, minutes=None)
-    ).request
-    if asked.minutes is not None:
-        # This workout may run past the cap, which `requested` refuses.
-        request = dataclasses.replace(
-            request,
-            budget_min=asked.minutes,
-            allocation=_divided(asked.minutes, request.groups),
-        )
-    request = dataclasses.replace(
-        request,
+    declared = config.load(connection)
+    equipment = (
+        _equipment(connection, asked.equipment, declared)
+        if asked.equipment
+        else tuple(catalog.values(connection, "equipment"))
+    )
+    minutes = declared.duration_cap_min if asked.minutes is None else asked.minutes
+    todays = constraints.constraining_today(
+        connection,
+        today,
+        budget_min=minutes,
+        given=[exclusion_state.classify(connection, value) for value in asked.exclude],
+    )
+    return Request(
+        equipment=equipment,
+        budget_min=minutes,
+        exclusions=todays.exclusions,
+        preferences=_preferred(connection, asked.avoid),
+        goal=declared.goal,
         adapting=Adapting(
             mesocycle=found.mesocycle,
             served_after=found.performed,
-            slot=slot,
-            workout=from_prescribed(kept.slots[slot - 1]),
+            slot=found.slot,
+            cycle=tuple(from_prescribed(slot) for slot in kept.slots),
+            split=tuple(
+                ", ".join(declared.groups_for(slot)) for slot in range(1, found.slots + 1)
+            ),
+            still=tuple(slot for slot in range(1, found.slots + 1) if slot not in found.done),
+            usual_minutes=declared.duration_cap_min,
+            usual_equipment=declared.equipment,
             said=said,
-            asked_for=tuple(dict.fromkeys(ask_for)),
-            left_out=tuple(dict.fromkeys(leave_out)),
+            named=(
+                *([] if asked.minutes is None else [f"{asked.minutes} minutes"]),
+                *([] if not asked.equipment else [f"only {', '.join(equipment)}"]),
+                *(f"no {value}" for value in asked.exclude),
+                *(f"rather not {one}" for one in asked.avoid),
+            ),
+            retests=tuple(
+                f"{one.granularity} {one.value} until "
+                f"{exclusion_state.retest_date(connection, one, today)}"
+                for one in todays.exclusions
+            ),
         ),
     )
-    _admits(connection, request, today)
-    return request
-
-
-def _another(connection: sqlite3.Connection, found: mesocycles.Today, workout: int) -> int:
-    """The cycle's workout asked for in place of the rotation's, refused when it is not one still to do."""
-    still = _still(connection, found)
-    if workout not in range(1, found.slots + 1):
-        raise PlanRejected(
-            f"workout {workout} is outside a cycle of {found.slots}; the ones "
-            f"still to do this cycle are {still}"
-        )
-    if workout in found.done:
-        raise PlanRejected(
-            f"workout {workout} has already been performed this cycle; the "
-            f"ones still to do are {still}"
-        )
-    return workout
-
-
-def _still(connection: sqlite3.Connection, found: mesocycles.Today) -> str:
-    """The cycle's workouts still to do, each by its number and its groups."""
-    declared = config.load(connection)
-    left = [slot for slot in range(1, found.slots + 1) if slot not in found.done]
-    return ", ".join(f"{slot} ({', '.join(declared.groups_for(slot))})" for slot in left)
-
-
-def _admits(connection: sqlite3.Connection, request: Request, today: str) -> None:
-    """Every exercise asked for inside this request's admissible set: asking never widens it."""
-    assert request.adapting is not None
-    if not request.adapting.asked_for:
-        return
-    inside = {
-        exercise.id
-        for exercise in admissible.admissible_set(
-            connection, request.exclusions, request.equipment, request.budget_min, request.groups
-        )
-    }
-    for exercise_id in request.adapting.asked_for:
-        if exercise_id in inside:
-            continue
-        for exclusion in exclusion_state.covering(connection, request.exclusions, exercise_id):
-            until = exclusion_state.retest_date(connection, exclusion, today)
-            raise Excluded(
-                f"{exercise_id} is excluded: {exclusion.granularity} "
-                f"{exclusion.value}, until its re-test on {until}. Asking for "
-                "it does not lift the exclusion"
-            )
-        why = admissible.rejection(
-            connection,
-            exercise_id,
-            request.exclusions,
-            request.equipment,
-            request.budget_min,
-            request.groups,
-        )
-        elsewhere = ""
-        if exercise_id in {
-            exercise.id
-            for exercise in admissible.admissible_set(
-                connection, request.exclusions, request.equipment, request.budget_min
-            )
-        }:
-            elsewhere = (
-                "; for another of the cycle's workouts, give its number as "
-                f"`workout`: the ones still to do are "
-                f"{_still(connection, mesocycles.today(connection))}"
-            )
-        raise PlanRejected(
-            f"{exercise_id} {why or 'is not admissible'}; an exercise asked for "
-            f"has to be admissible in this workout{elsewhere}"
-        )
 
 
 def change_requested(
@@ -775,6 +743,18 @@ def parse(text: str) -> WorkoutPlan:
         raise PlanError(_shape(error)) from error
 
 
+def parse_adapted(text: str) -> AdaptedPlan:
+    """An adapted workout out of JSON, or a shape error naming the field it choked on."""
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise PlanError(f"that is not JSON: {error}") from error
+    try:
+        return AdaptedPlan.model_validate(raw)
+    except ValidationError as error:
+        raise PlanError(_shape(error)) from error
+
+
 def parse_mesocycle(text: str) -> Mesocycle:
     """A mesocycle out of JSON, or a shape error naming the field it choked on."""
     try:
@@ -854,7 +834,9 @@ def validate(
         )
         if broken is not None
     ]
-    if not found:
+    if not found and request.adapting is None:
+        # An adaptation answers to what the user said, which no rule reads:
+        # its time and its groups are the planner's to choose.
         found.extend(
             broken
             for broken in (
@@ -868,8 +850,7 @@ def validate(
         for broken in (
             _preferences_acknowledged(plan, request),
             _not_a_plan_already_refused(plan, request),
-            _holds_what_was_asked_for(plan, request),
-            _holds_nothing_left_out(plan, request),
+            _counts_as_one_still_to_do(plan, request),
         )
         if broken is not None
     )
@@ -1103,29 +1084,20 @@ def _not_a_plan_already_refused(plan: WorkoutPlan, request: Request) -> Violatio
     return None
 
 
-def _holds_what_was_asked_for(plan: WorkoutPlan, request: Request) -> Violation | None:
+def _counts_as_one_still_to_do(plan: WorkoutPlan, request: Request) -> Violation | None:
     if request.adapting is None:
         return None
-    missing = [one for one in request.adapting.asked_for if one not in exercise_ids(plan)]
-    if not missing:
+    still = request.adapting.still
+    if not isinstance(plan, AdaptedPlan):
+        return Violation(
+            COUNTS_AS, "an adapted workout says which of the cycle's workouts it counts as"
+        )
+    if plan.counts_as in still:
         return None
     return Violation(
-        ASKED_FOR,
-        f"the user asked for {', '.join(missing)} in this workout and the plan "
-        "does not hold it: put it in",
-    )
-
-
-def _holds_nothing_left_out(plan: WorkoutPlan, request: Request) -> Violation | None:
-    if request.adapting is None:
-        return None
-    held = [one for one in request.adapting.left_out if one in exercise_ids(plan)]
-    if not held:
-        return None
-    return Violation(
-        LEFT_OUT,
-        f"the user asked to leave {', '.join(held)} out of this workout and the "
-        "plan holds it: take it out",
+        COUNTS_AS,
+        f"it counts as workout {plan.counts_as}, which is not one still to do "
+        f"this cycle: those are {', '.join(str(one) for one in still)}",
     )
 
 
@@ -1201,6 +1173,8 @@ class Shown:
     blocks: tuple[ShownBlock, ...]
     total_min: int
     budget_min: int
+    note: str = ""
+    """What an adapted workout tells the user it could not do; empty otherwise."""
 
 
 def shown(
@@ -1261,6 +1235,7 @@ def shown(
         ),
         total_min=duration.plan_duration(connection, blocks),
         budget_min=budget_min,
+        note=plan.note if isinstance(plan, AdaptedPlan) else "",
     )
 
 
@@ -1296,6 +1271,8 @@ def render(
         lines.append("")
 
     lines.append(f"total {reading.total_min} min of {reading.budget_min}")
+    if reading.note:
+        lines.append(f"note: {reading.note}")
     return lines
 
 

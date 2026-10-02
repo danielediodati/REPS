@@ -108,7 +108,8 @@ The rules you are working inside, none of which you can talk your way around:
 - The plan is built to the time declared, within {plans.TOLERANCE_MIN} minutes either side:
   45 minutes accepts 40 to 50. A plan short of that is refused as surely as
   one over it, and neither is trimmed or padded to fit, so ask
-  `remaining_budget` before you commit to a block rather than after.
+  `remaining_budget` before you commit to a block rather than after. An
+  adapted workout is the one exception: its time is whatever they asked for.
 - An exercise appears at most once in the whole plan. One line per exercise,
   with the rounds and reps it needs.
 - Each exercise is prescribed in reps or in seconds: its `prescription` gives
@@ -171,12 +172,15 @@ def brief(
     request: plans.Request, known: Sequence[conclusions.Conclusion] = ()
 ) -> str:
     """Today's request, and what the user has said about themselves, in words for the model to plan against."""
-    lines = [
-        f"Equipment available today: {', '.join(request.equipment)}.",
-        "Time available: {} minutes; the plan lands between {} and {}.".format(
-            request.budget_min, *plans.window(request.budget_min)
-        ),
-    ]
+    if request.adapting is not None:
+        lines = [adapted(request)]
+    else:
+        lines = [
+            f"Equipment available today: {', '.join(request.equipment)}.",
+            "Time available: {} minutes; the plan lands between {} and {}.".format(
+                request.budget_min, *plans.window(request.budget_min)
+            ),
+        ]
     if request.goal is not None:
         lines.append(aimed(request.goal))
     if request.groups:
@@ -199,7 +203,7 @@ def brief(
             "point and not an instruction: `allocate` will divide it on any "
             "proportions you think are better."
         )
-    if request.exclusions:
+    if request.exclusions and request.adapting is None:
         lines.append(
             "Excluded, and already filtered out of the admissible set: "
             + ", ".join(f"{e.granularity} {e.value}" for e in request.exclusions)
@@ -215,8 +219,6 @@ def brief(
             '{"exercise_id": "...", "why": "..."}. The field is `why`; '
             "`reason` belongs to a block. Proposing one silently is rejected."
         )
-    if request.adapting is not None:
-        lines.append(adapted(request.adapting))
     if request.refusals:
         lines.append(turned_down(request.refusals))
         lines.append(
@@ -250,22 +252,50 @@ def aimed(goal: str) -> str:
     )
 
 
-def adapted(adapting: plans.Adapting) -> str:
-    """The mesocycle's slot an adaptation is planned from, and what this workout must and must not hold."""
+def adapted(request: plans.Request) -> str:
+    """An adaptation as the planner reads it: their words first, the mesocycle as where to start."""
+    adapting = request.adapting
+    assert adapting is not None
     lines = [
-        f"This adapts workout {adapting.slot} of their mesocycle, which is "
-        "below, for this workout only. Start from it: keep what still fits and "
-        "change only what they asked for. The mesocycle itself stays as it is.",
+        "This workout is adapted from their mesocycle, for today only, and "
+        "what they said is the first thing it answers to:",
+        f"  {adapting.said}" if adapting.said else "  (they said nothing more)",
+        *(
+            [f"They also named, and the plan keeps to it: {'; '.join(adapting.named)}."]
+            if adapting.named
+            else []
+        ),
+        "Nothing of the mesocycle binds it: not its groups, not the time "
+        "they usually train, not the equipment they declared. Read what they "
+        "said and plan the workout it asks for -- more time or less, other "
+        "groups, other equipment, an exercise in or out. Where they leave "
+        "something to you, decide it.",
+        f"Usually they train {adapting.usual_minutes} minutes with "
+        f"{', '.join(adapting.usual_equipment)}. The workout due today is "
+        f"workout {adapting.slot}; start from it unless what they said points "
+        "elsewhere.",
+        "The cycle's workouts:",
     ]
-    if adapting.said:
-        lines.append(f"They said: {adapting.said}")
-    if adapting.asked_for:
-        lines.append("They asked for, and the plan must hold: " + ", ".join(adapting.asked_for) + ".")
-    if adapting.left_out:
-        lines.append("They asked to leave out, and the plan must not hold: " + ", ".join(adapting.left_out) + ".")
+    for number, (workout, groups) in enumerate(
+        zip(adapting.cycle, adapting.split, strict=True), start=1
+    ):
+        done = "" if number in adapting.still else ", already performed this cycle"
+        lines.append(f"Workout {number} ({groups}{done}):\n" + workout.model_dump_json(indent=1))
     lines.append(
-        f"Workout {adapting.slot} in the mesocycle:\n" + adapting.workout.model_dump_json(indent=1)
+        "`counts_as` is the number of the workout still to do ("
+        + ", ".join(str(one) for one in adapting.still)
+        + ") that this one takes the place of, so the cycle goes on right "
+        "after it: the one it is closest to."
     )
+    if adapting.retests:
+        lines.append(
+            "Excluded, and not in the admissible set whatever they asked: "
+            + "; ".join(adapting.retests)
+            + ". If they asked for something this rules out, plan without it "
+            "and say so in `note`, with the re-test date."
+        )
+    else:
+        lines.append("`note` stays empty unless something they asked for cannot be done.")
     return "\n".join(lines)
 
 
@@ -426,7 +456,9 @@ def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict
             request.groups,
         )
     ]
-    schema = tools.strict_schema(plans.WorkoutPlan)
+    schema = tools.strict_schema(
+        plans.WorkoutPlan if request.adapting is None else plans.AdaptedPlan
+    )
 
     def restrict(node: Any) -> None:
         if isinstance(node, dict):
@@ -792,7 +824,11 @@ def build(
                 with tools.opened() as connection:
                     violations = plans.validate_mesocycle(connection, emitted, request)
             else:
-                plan = plans.parse(document.text)
+                plan = (
+                    plans.parse(document.text)
+                    if request.adapting is None
+                    else plans.parse_adapted(document.text)
+                )
                 emitted = plan
                 with tools.opened() as connection:
                     violations = plans.validate(
@@ -924,7 +960,11 @@ def build(
                     on=on,
                     mesocycle=request.adapting.mesocycle,
                     served_after=request.adapting.served_after,
-                    slot=request.adapting.slot,
+                    slot=(
+                        accepted_plan.counts_as
+                        if isinstance(accepted_plan, plans.AdaptedPlan)
+                        else request.adapting.slot
+                    ),
                 )
             )
         return {"workout": written} | closed(

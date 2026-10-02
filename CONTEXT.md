@@ -17,7 +17,7 @@ _Avoid_: programme, routine, and counting it in weeks.
 
 **Change**: a request that rewrites the mesocycle for the cycles left, e.g. *"no more lunges"*.
 
-**Adaptation**: this workout planned from one of the mesocycle's under whatever the user asks of it: less or more time, other equipment, an exercise left out or asked for, another of the cycle's workouts. The mesocycle stays as it was.
+**Adaptation**: this workout planned from the user's words, with the mesocycle as a starting point and only the exclusions binding: less or more time, other equipment, an exercise left out or asked for, another of the cycle's workouts. It counts as one of the cycle's workouts still to do; the mesocycle stays as it was.
 _Avoid_: calling it temporary, which does not say until when.
 
 **Ramp-in**: a workout on the normal scheme with reduced volume and loads chosen by feel, used when returning from a break.

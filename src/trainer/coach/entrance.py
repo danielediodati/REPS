@@ -29,7 +29,7 @@ from trainer import tools
 from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.engine import catalog, constraints, mesocycles
+from trainer.engine import catalog, mesocycles
 from trainer.engine.exclusions import ExclusionError
 
 
@@ -67,40 +67,16 @@ def plan_mesocycle() -> str:
     raise AssertionError("the graph answers plan_mesocycle; nothing calls it")
 
 
-def adapt_this_workout(
-    said: str,
-    minutes: int | None = None,
-    equipment: list[str] | None = None,
-    leave_out: list[str] | None = None,
-    ask_for: list[str] | None = None,
-    workout: int | None = None,
-) -> str:
+def adapt_this_workout(said: str) -> str:
     """Plan this workout again from their mesocycle, for this workout only.
 
     Call this when what they want is this workout changed and the mesocycle
     left as it is: a different time, other equipment, an exercise out or in,
-    another of the cycle's workouts. Which workout is due is read for you;
-    you say only what is different about this one. Everything but `said` is
-    optional: give a field only when they said it.
+    another of the cycle's workouts, anything about today. `said` is what they
+    asked for, in their own words: the planner reads it, and decides the rest.
 
-    - `said`: what they asked for, in their own words. Anything the fields
-      cannot hold, as a superset or «a finisher at the end», is read from here.
-    - `minutes`: the time they have for this workout. It may be more than
-      their usual time.
-    - `equipment`: all the equipment they have for this workout, as the
-      catalog names it: «a corpo libero» is `["body only"]`, a borrowed
-      kettlebell is what they declared plus `kettlebells`.
-    - `leave_out`: ids of exercises not to do in this workout.
-    - `ask_for`: ids of exercises to do in this workout.
-    - `workout`: the number in their cycle of another of its workouts, when
-      they do not want the one due, as in «oggi niente petto».
-
-    Exercise ids come from `search_exercises`: look up every exercise they
-    name, and ask them when you cannot tell which one they mean.
-
-    When it starts, the adapted workout arrives in the chat by itself in a few
-    minutes: tell them you are on it. When it does not, what comes back says
-    why: call it again put right, or tell them.
+    The adapted workout arrives in the chat by itself in a few minutes: tell
+    them you are on it.
 
     The body is never run. The graph answers this call by starting the planner
     behind the conversation.
@@ -225,11 +201,6 @@ MISREAD = (
     "ask them what they meant."
 )
 
-REFUSED = (
-    "That was not started, and calling it again will not start it: {error}. "
-    "Tell them, with the date, and do not call it again."
-)
-
 STARTED = {
     PLAN_MESOCYCLE: (
         "The planner has started on a mesocycle. Tell the user you are putting "
@@ -327,9 +298,8 @@ When they want something changed, the question is how long for:
 
 - **This workout only** -- another time, other equipment, an exercise out or
   in, another of the cycle's workouts, as in «oggi ho solo mezz'ora», «in
-  hotel ho solo un elastico», «oggi niente petto»: call `adapt_this_workout`. An exercise
-  they name is looked up with `search_exercises` for its id; one you cannot
-  place, ask them about.
+  hotel ho solo un elastico», «oggi niente petto»: call `adapt_this_workout`
+  with their words. The planner decides what the workout is.
 - **The mesocycle, from now on** -- an exercise gone for good, a different
   emphasis, as in «d'ora in poi niente stacchi» or «i dip non li
   voglio più vedere»: call `change_mesocycle`.
@@ -343,9 +313,6 @@ When they want something changed, the question is how long for:
   yet: remember it, and you may ask whether they want it out.
 - **An ache or a pain**, as in «il ginocchio mi tira sugli squat», starts nothing: ask
   them about it, in one question -- where, and doing what.
-
-When a call comes back not started, what it says is the next step: call it
-again put right, or tell them, as it says.
 
 Remembering, when `remember` is offered:
 
@@ -782,8 +749,6 @@ def startable(handoff: str, asked: Mapping[str, Any]) -> str | None:
                 requested(connection, handoff, asked)
             except mesocycles.MesocycleError:
                 return NO_MESOCYCLE
-            except plans.Excluded as error:
-                return REFUSED.format(error=error)
             except catalog.UnknownFilterValue as error:
                 return MISREAD.format(
                     error=f"{error}; the catalog has {', '.join(error.valid)}"
@@ -803,31 +768,7 @@ def requested(
     said = str(asked.get("said", ""))
     if handoff == CHANGE_MESOCYCLE:
         return plans.change_requested(connection, today, said=said)
-    return plans.adaptation_requested(
-        connection,
-        today,
-        plans.Asked(
-            minutes=_number(asked.get("minutes")),
-            equipment=_listed(asked.get("equipment")),
-            workout=_number(asked.get("workout")),
-        ),
-        said=said,
-        ask_for=_listed(asked.get("ask_for")),
-        leave_out=_listed(asked.get("leave_out")),
-    )
-
-
-def _number(given: Any) -> int | None:
-    return None if given is None else int(given)
-
-
-def _listed(given: Any) -> tuple[str, ...]:
-    """A list argument, with one value where the list belongs read as that value."""
-    if not given:
-        return ()
-    if isinstance(given, str):
-        return (given,)
-    return tuple(str(value) for value in given)
+    return plans.adaptation_requested(connection, today, said=said)
 
 
 def _answer(

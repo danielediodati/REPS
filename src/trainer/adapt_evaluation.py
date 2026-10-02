@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import tempfile
 import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
@@ -46,7 +45,8 @@ EQUIPMENT = "equipment"
 MINUTES = "minutes"
 WORKOUT = "workout"
 LONGER = "longer"
-COLUMNS = (PLANNED, ASKED_FOR, LEFT_OUT, EQUIPMENT, MINUTES, WORKOUT, LONGER)
+TOLD = "told"
+COLUMNS = (PLANNED, ASKED_FOR, LEFT_OUT, EQUIPMENT, MINUTES, WORKOUT, LONGER, TOLD)
 
 PLAN = " plan"
 """Appended to a case's name for its adapted plan, the half code holds at 100%."""
@@ -205,13 +205,15 @@ def _once(
                 raise quota from error
             return evaluation.Outcome(case.name, attempt, error=str(error))
         written = evaluation.write(records, f"{case.name}-{attempt}", talked.written)
-        failures = routing(case, final, retest)
+        failures = routing(case, final)
         acted = bool(final.get("handoff"))
         weight = 2 if failures and case.goes == adapt_set.ASK and acted else 1
         routed = evaluation.Outcome(case.name, attempt, failures, talked, written, weight=weight)
         if case.planned and final.get("handoff") == entrance.ADAPT_THIS_WORKOUT:
             assert plans_on is not None
-            planned.append(_planned(where, case, attempt, dict(final.get("asked", {})), plans_on, budget, records))
+            planned.append(
+                _planned(where, case, attempt, dict(final.get("asked", {})), plans_on, budget, records, retest)
+            )
     return routed
 
 
@@ -238,9 +240,7 @@ def _routed(
     return talked, final
 
 
-def routing(
-    case: adapt_set.Case, final: Mapping[str, Any], retest: str
-) -> tuple[tuple[str, str], ...]:
+def routing(case: adapt_set.Case, final: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
     """Whether the message went where its row says, as one failure or none."""
     handoff = str(final.get("handoff", ""))
     answer = str(final.get("answer", ""))
@@ -249,24 +249,12 @@ def routing(
         wrong = handoff != case.goes
     elif case.goes in adapt_set.ASKING:
         wrong = bool(handoff) or "?" not in answer
-    elif case.goes == adapt_set.REMEMBER:
+    else:
         wrong = bool(handoff) or not final.get("kept")
         went = f"{went}, {len(final.get('kept', ()))} kept"
-    else:
-        wrong = bool(handoff) or not _refused_adaptation(final, retest)
     if not wrong:
         return ()
     return ((ROUTED, f"went to {went}: {answer!r}"),)
-
-
-def _refused_adaptation(final: Mapping[str, Any], retest: str) -> bool:
-    """An adaptation was asked for and refused naming the exclusion's re-test date."""
-    return any(
-        isinstance(message, ToolMessage)
-        and message.name == entrance.ADAPT_THIS_WORKOUT
-        and retest in message.text
-        for message in final.get("messages", ())
-    )
 
 
 def _planned(
@@ -277,6 +265,7 @@ def _planned(
     on: models.Chat,
     budget: int,
     records: Path,
+    retest: str,
 ) -> evaluation.Outcome:
     """The adaptation the entrance started, planned, and held against the row."""
     name = case.name + PLAN
@@ -300,11 +289,10 @@ def _planned(
     failures = held(
         where.connection,
         case,
-        request,
         final.get("plan"),
         tuple(final.get("violations", ())),
-        asked_minutes=asked.get("minutes"),
         cap=where.cap,
+        retest=retest,
     )
     return evaluation.Outcome(name, attempt, failures, talked, written)
 
@@ -312,12 +300,11 @@ def _planned(
 def held(
     connection: sqlite3.Connection,
     case: adapt_set.Case,
-    request: plans.Request,
     plan: plans.WorkoutPlan | None,
     violations: Sequence[plans.Violation],
     *,
-    asked_minutes: Any,
     cap: int,
+    retest: str,
 ) -> tuple[tuple[str, str], ...]:
     """Every check code holds at 100% on one adapted plan."""
     if plan is None:
@@ -353,15 +340,16 @@ def held(
         off = [f"{one} needs {rows[one]['equipment']}" for one in ids if one in rows and rows[one]["equipment"] not in case.equipment]
         if off:
             failures.append((EQUIPMENT, "; ".join(off)))
-    if case.minutes is not None:
+    if case.minutes is not None or case.longer:
         try:
             spent = duration.plan_duration(connection, plans.to_blocks(plan))
         except (plans.PlanError, duration.DurationError) as error:
             failures.append((MINUTES, f"it cannot be costed: {error}"))
         else:
-            floor, ceiling = plans.window(case.minutes)
-            if not floor <= spent <= ceiling:
+            if case.minutes is not None and not plans.window(case.minutes)[0] <= spent <= plans.window(case.minutes)[1]:
                 failures.append((MINUTES, f"runs {spent} min against {case.minutes} asked"))
+            if case.longer and spent <= cap:
+                failures.append((LONGER, f"runs {spent} min against a cap of {cap}"))
     if case.untrained:
         mapping = muscle_groups.committed()
         trained = [
@@ -372,8 +360,8 @@ def held(
         ]
         if trained:
             failures.append((WORKOUT, f"trains {', '.join(case.untrained)}: {', '.join(trained)}"))
-    if case.longer and asked_minutes is not None and request.budget_min <= cap:
-        failures.append((LONGER, f"{request.budget_min} min asked against a cap of {cap}"))
+    if case.told and (not isinstance(plan, plans.AdaptedPlan) or retest not in plan.note):
+        failures.append((TOLD, f"the note does not name the re-test on {retest}"))
     return tuple(failures)
 
 

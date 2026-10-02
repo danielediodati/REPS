@@ -31,6 +31,7 @@ from trainer import tools
 from test_logger import graph_of as logger_graph_of
 from test_logger import prescribe, proposing, report, scripted
 from test_planner import (
+    adapted_of,
     BARBELL_45,
     CATALOG,
     PATTERNS,
@@ -2398,8 +2399,8 @@ def test_an_adaptation_is_offered_accepted_and_served_and_the_mesocycle_stays(
 ) -> None:
     graphs = adapting_from(
         catalogued,
-        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi", minutes=30),
-        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
+        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi"),
+        planned=Scripted(documents=[adapted_of("Barbell_Squat", rounds=2, minutes=30)]),
     )
     kept = mesocycles.active(catalogued)
 
@@ -2932,8 +2933,8 @@ def test_only_thirty_minutes_today_is_an_adaptation_and_leaves_the_file_alone(
 ) -> None:
     graphs = adapting_from(
         catalogued,
-        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi", minutes=30),
-        planned=Scripted(documents=[plan_of("Barbell_Squat", rounds=2, minutes=30)]),
+        calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi"),
+        planned=Scripted(documents=[adapted_of("Barbell_Squat", rounds=2, minutes=30)]),
     )
 
     ((text, _),) = asking(graphs, "solo 30 minuti oggi").offers
