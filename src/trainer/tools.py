@@ -439,6 +439,32 @@ def prescribed_workout(workout_id: int) -> dict[str, Any]:
         }
 
 
+def due_workout() -> dict[str, Any]:
+    """The mesocycle's workout due today, read and not served: its number in
+    the cycle, the groups it trains, and its exercises by id and by name.
+
+    Read it to tell whether what they ask is already in today's workout or
+    changes it: an exercise they name, or groups they would rather not train.
+    """
+    with reported(), opened() as connection:
+        try:
+            found = mesocycles.today(connection)
+        except mesocycles.MesocycleError as error:
+            raise ToolFailure(str(error)) from error
+        return {
+            "workout": found.slot,
+            "of": found.slots,
+            "trains": list(config.load(connection).groups_for(found.slot)),
+            "blocks": [
+                {
+                    "rounds": block.block.rounds,
+                    "items": [_prescribed_item(connection, item) for item in block.block.items],
+                }
+                for block in found.blocks
+            ],
+        }
+
+
 def _prescribed_item(
     connection: sqlite3.Connection, item: duration.BlockItem
 ) -> dict[str, Any]:
@@ -492,6 +518,7 @@ TOOLS: tuple[Callable[..., Any], ...] = (
     volume_deficit,
     unreported_workouts,
     prescribed_workout,
+    due_workout,
     compare_variants,
 )
 """The surface, enumerated once.

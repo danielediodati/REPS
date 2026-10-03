@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from conftest import enrich, make_exercise
 from trainer import tools
 from trainer import plan as plans
-from trainer.coach import checkpoints, models, planner, record
+from trainer.coach import checkpoints, entrance, models, planner, record
 from trainer.coach import logger as coach_logger
 from trainer.engine import catalog, database, duration, exclusions, mesocycles, methodology, migrations, workouts
 from trainer.engine.exclusions import Exclusion
@@ -635,7 +635,7 @@ def test_every_tool_that_exists_reaches_at_least_one_agent() -> None:
     still serve it, which is what makes the gap survivable long enough to
     forget about.
     """
-    reached = set(planner.TOOLS) | set(coach_logger.TOOLS)
+    reached = set(planner.TOOLS) | set(coach_logger.TOOLS) | set(entrance.TOOLS)
 
     assert {tool.__name__ for tool in tools.TOOLS} == reached
 

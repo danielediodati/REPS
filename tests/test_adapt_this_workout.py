@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 
 from conftest import enrich, make_exercise
-from trainer import adapt_evaluation, adapt_set
+from trainer import adapt_evaluation, adapt_set, tools
 from trainer import plan as plans
-from trainer.coach import entrance
+from trainer.coach import entrance, planner
 from trainer.engine import catalog, database, duration, migrations
 
 CATALOG = (
@@ -219,3 +219,17 @@ def test_16_an_exclusion_still_binds_and_the_planner_is_told_its_retest(
     assert refused == [plans.ADMISSIBLE]
     assert request.adapting is not None
     assert request.adapting.retests == (f"pattern hip hinge until {retest}",)
+
+
+def test_the_workout_due_today_is_read_with_its_exercises_by_name(where: adapt_evaluation.Fixture) -> None:
+    """What the entrance reads to tell whether what they ask is already in it."""
+    due = tools.due_workout()
+
+    assert (due["workout"], due["of"], due["trains"]) == (1, 3, ["legs", "core"])
+    named = {item["exercise_id"]: item["name"] for block in due["blocks"] for item in block["items"]}
+    assert named == {"Barbell_Squat": "Barbell Squat", "Plank": "Plank"}
+
+
+def test_the_entrance_reads_the_workout_due_and_the_planner_does_not() -> None:
+    assert "due_workout" in entrance.TOOLS
+    assert "due_workout" not in planner.TOOLS

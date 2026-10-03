@@ -132,8 +132,8 @@ def test_every_tool_has_a_usable_schema_and_a_description() -> None:
 
         assert schema["type"] == "object"
         assert tool.description, f"{tool.name} has no description"
-        if tool.name == "unreported_workouts":
-            # The one question with nothing to ask about. It takes no
+        if tool.name in ("unreported_workouts", "due_workout"):
+            # The questions with nothing to ask about. They take no
             # arguments -- *today* is the door's to supply, not the model's,
             # for the reason nothing in `engine/` reads the clock.
             assert schema.get("properties") == {}
