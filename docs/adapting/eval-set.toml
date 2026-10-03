@@ -20,6 +20,10 @@
 # The bar below is for judgement (ADR-0010), set before the first run: where a
 # message goes. Acting where the row asks counts double, as in the log set.
 #
+# A row is corrected only where it misstates a fact about the catalog or the
+# fixture, in a commit of its own that says which fact, before the next pass;
+# never because a model's answer looked reasonable.
+#
 # The catalog has no Bulgarian split squat; `Split_Squat_with_Dumbbells` and
 # `Elevated_Back_Lunge` (rear foot raised, which is what a Bulgarian is) are.
 
@@ -128,10 +132,10 @@ goes = "adapt_this_workout"
 holds = ["Pullups"]
 
 [[cases]]
-name = "no-bench"
-says = "oggi non ho voglia di panca"
+name = "no-plank"
+says = "oggi non ho voglia di plank"
 goes = "adapt_this_workout"
-without_named = ["Bench Press"]
+without_named = ["Plank"]
 
 # -- from now on --------------------------------------------------------------
 
