@@ -269,7 +269,9 @@ def adapted(request: plans.Request) -> str:
         "they usually train, not the equipment they declared. Read what they "
         "said and plan the workout it asks for -- more time or less, other "
         "groups, other equipment, an exercise in or out. Where they leave "
-        "something to you, decide it.",
+        "something to you, decide it. Equipment they name as all they have "
+        "today is all of it: with «solo kettlebell», every exercise is a "
+        "kettlebell one.",
         f"Usually they train {adapting.usual_minutes} minutes with "
         f"{', '.join(adapting.usual_equipment)}. The workout due today is "
         f"workout {adapting.slot}; start from it unless what they said points "
