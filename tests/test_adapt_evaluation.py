@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -42,6 +43,7 @@ SET = """\
 today = "2026-10-01"
 
 [bars]
+held = 90
 routed = 80
 
 [declared]
@@ -371,7 +373,7 @@ def test_a_plan_the_validator_refused_or_that_never_parsed_fails_planned(
     assert [name for name, _ in nothing] == [adapt_evaluation.PLANNED]
 
 
-def test_the_plans_are_held_at_100_and_the_routes_at_the_sets_bar(holds: adapt_set.AdaptSet) -> None:
+def test_the_plans_and_the_routes_are_held_at_the_sets_bars(holds: adapt_set.AdaptSet) -> None:
     def outcome(case: str, held: bool) -> evaluation.Outcome:
         return evaluation.Outcome(case, 1, () if held else (("x", "y"),))
 
@@ -381,6 +383,7 @@ def test_the_plans_are_held_at_100_and_the_routes_at_the_sets_bar(holds: adapt_s
 
     assert adapt_evaluation.barred(held_plan, holds).passed
     assert not adapt_evaluation.barred(broken_plan, holds).passed
+    assert adapt_evaluation.barred(broken_plan, dataclasses.replace(holds, bar_held=0)).passed
 
 
 def test_the_rendered_pass_is_ascii_with_cost_per_message(

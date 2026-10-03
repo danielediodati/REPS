@@ -64,6 +64,7 @@ SET = f"""\
 today = "2026-10-01"
 
 [bars]
+held = 90
 routed = 80
 
 [declared]

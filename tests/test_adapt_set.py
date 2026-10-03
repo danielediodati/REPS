@@ -13,6 +13,7 @@ SET = """\
 today = "2026-10-01"
 
 [bars]
+held = 90
 routed = 80
 
 [declared]
@@ -45,10 +46,10 @@ goes = "ask"
 """
 
 
-def test_the_committed_set_parses_with_its_bar() -> None:
+def test_the_committed_set_parses_with_its_bars() -> None:
     holds = adapt_set.load(Path("docs") / "adapting" / "eval-set.toml")
 
-    assert holds.bar_routed == 80
+    assert (holds.bar_held, holds.bar_routed) == (90, 80)
     assert {case.goes for case in holds.cases} >= {entrance.ADAPT_THIS_WORKOUT, adapt_set.ASK}
 
 
@@ -62,9 +63,10 @@ def test_a_case_carries_what_its_plan_must_hold() -> None:
     assert holds.declared["cycle_length"] == 1
 
 
-def test_a_set_without_its_bar_is_refused() -> None:
-    with pytest.raises(adapt_set.AdaptSetError, match="routed"):
-        adapt_set.parse(SET.replace("routed = 80", ""))
+@pytest.mark.parametrize("bar", ["held = 90", "routed = 80"])
+def test_a_set_without_either_bar_is_refused(bar: str) -> None:
+    with pytest.raises(adapt_set.AdaptSetError, match="held and routed"):
+        adapt_set.parse(SET.replace(bar, ""))
 
 
 def test_a_destination_nothing_answers_is_refused_naming_the_case() -> None:

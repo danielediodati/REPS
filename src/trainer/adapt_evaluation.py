@@ -49,7 +49,7 @@ TOLD = "told"
 COLUMNS = (PLANNED, ASKED_FOR, LEFT_OUT, EQUIPMENT, MINUTES, WORKOUT, LONGER, TOLD)
 
 PLAN = " plan"
-"""Appended to a case's name for its adapted plan, the half code holds at 100%."""
+"""Appended to a case's name for its adapted plan, the half code holds against the set's bar."""
 
 USER = "eval"
 RETEST = timedelta(weeks=6)
@@ -306,7 +306,7 @@ def held(
     cap: int,
     retest: str,
 ) -> tuple[tuple[str, str], ...]:
-    """Every check code holds at 100% on one adapted plan."""
+    """Every check code holds on one adapted plan."""
     if plan is None:
         return ((PLANNED, "nothing it emitted parses as a workout"),)
     failures: list[tuple[str, str]] = []
@@ -373,11 +373,11 @@ def _group(mapping: muscle_groups.MuscleGroups, muscle: str) -> str | None:
 
 
 def barred(report: evaluation.Report, holds: adapt_set.AdaptSet) -> evaluation.Report:
-    """The pass against its bars: 100% on the adapted plans, the set's own on where messages go."""
+    """The pass against the bars the set declares: on the adapted plans and on where messages go."""
     return replace(
         report,
         halves=(
-            evaluation.Half("held", frozenset(case.name + PLAN for case in holds.cases if case.planned), 100),
+            evaluation.Half("held", frozenset(case.name + PLAN for case in holds.cases if case.planned), holds.bar_held),
             evaluation.Half("routed", frozenset(case.name for case in holds.cases), holds.bar_routed),
         ),
     )

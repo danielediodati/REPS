@@ -27,9 +27,9 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 
 ## Acceptance criteria
 
-- [ ] The adaptation set at 100% on what code holds, and at its bar on where messages go, with $ and s per message.
-- [ ] If the entrance's model no longer clears its bar, ADR-0011's rule picks another and the ADR gets the row.
-- [ ] Full test suite and mypy green.
+- [x] The adaptation set at its bars, held 90 and routed 80 (100% held until ADR-0010 item 4), with $ and s per message.
+- [x] If the entrance's model no longer clears its bar, ADR-0011's rule picks another and the ADR gets the row.
+- [x] Full test suite and mypy green (1840, mypy clean, 2026-10-03).
 
 ## Comments
 
@@ -68,8 +68,17 @@ Read first: ADR-0006 (the entrance is a conversation); ADR-0008 item 6; ADR-0011
 - The entrance's matrix, 2026-10-02, on `2b16134`: deepseek-v4-flash high on Parasail is the only row over both bars (routed 17/19, plans 11/11), and the cheapest; it is the entrance's choice in ADR-0011. Left: «oggi vorrei fare trazioni» goes to `todays_workout` on every model, and the demo in Telegram.
 - Pass on `ab37417` (`due_workout`), deepseek entrance, 2026-10-03: **routed 17/19**, **plans 10/11**, $0.46. Pull-ups: `due_workout`, then `adapt_this_workout`, planned as workout 3 with `Pullups`. no-bench read the workout, found no bench in it and said so: right on this fixture, where the legs day holds none; the row assumed it did. dumbbells: `Plank` and `Hanging_Leg_Raise` in «solo manubri».
 
+- Closing pass, 2026-10-03, 3 repetitions, on ADR-0011's choices (`ENTRANCE_MODEL=` emptied for the run): **routed 48/57 (84%)**, **held 30/31 (96%)**, $1.22, 14 s a run. `00f4c8b` and `1879139` hold: dumbbells and no-plank plans 3/3.
+
+| row | what happened |
+|---|---|
+| lunges-again 3/3, no-plank 2/3, away, twenty-bare, hinge-excluded | asked «solo oggi o d'ora in poi?» instead of acting |
+| hate-bench 1/3 | «la tengo a mente» with nothing kept |
+| you-choose plan 1/3 | `Front_Barbell_Squat`, «front squat replaces back squat»: «niente squat» read as one squat out |
+
+- The user declined a brief sentence for you-choose (a hotfix for one row, heavier prompt, no better generalisation) and moved `held` to a declared bar of 90: ADR-0010 item 4.
+
 ## Next
 
-- `00f4c8b` corrected no-bench to no-plank (the set's header now says when a row may change); `1879139` tells the planner that equipment named as all there is today is all of it. Neither has been measured.
-- **The closing pass is 3 repetitions** (the suite's default), on ADR-0011's choices: `ENTRANCE_MODEL=deepseek/deepseek-v4-flash` if `.env` still names gpt-oss. About $1.4 and 30 min; ask before running it.
-- Then the demo in Telegram (the user's), and the close.
+- The demo in Telegram (the user's): rows 0 and 2, then the next workout served.
+- Then the close.

@@ -54,6 +54,7 @@ class Case:
 @dataclass(frozen=True)
 class AdaptSet:
     today: str
+    bar_held: int
     bar_routed: int
     declared: Mapping[str, Any]
     mesocycle: plans.Mesocycle
@@ -83,8 +84,8 @@ def parse(text: str) -> AdaptSet:
     except tomllib.TOMLDecodeError as error:
         raise AdaptSetError(f"the set is not TOML: {error}") from error
     bars = raw.get("bars")
-    if not isinstance(bars, dict) or "routed" not in bars:
-        raise AdaptSetError("the set declares no [bars] with routed")
+    if not isinstance(bars, dict) or not {"held", "routed"} <= bars.keys():
+        raise AdaptSetError("the set declares no [bars] with held and routed")
     declared = raw.get("declared")
     if not isinstance(declared, dict):
         raise AdaptSetError("the set declares no [declared]")
@@ -105,6 +106,7 @@ def parse(text: str) -> AdaptSet:
         raise AdaptSetError(f"cases named twice: {', '.join(repeated)}")
     return AdaptSet(
         today=str(raw.get("today", "")),
+        bar_held=int(bars["held"]),
         bar_routed=int(bars["routed"]),
         declared=declared,
         mesocycle=mesocycle,

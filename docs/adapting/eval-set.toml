@@ -9,16 +9,19 @@
 #   - `remember`: a conclusion kept, and nothing started.
 # - `excluded` is written into the fixture for that case only, re-tested six
 #   weeks after the run.
-# - A case that goes to `adapt_this_workout` is planned, and code holds its plan at
-#   100%: it validated, every `holds` entry is in it (a list: any one of
+# - A case that goes to `adapt_this_workout` is planned, and code holds its plan:
+#   it validated, every `holds` entry is in it (a list: any one of
 #   it), no `without_pattern` and no `without_named` (a substring of the
 #   catalog name) is, every exercise is on `equipment`, it runs `minutes` inside the validator's window, it trains
 #   none of `untrained`, with `longer` it runs past the cap, and with `told`
 #   its note names the exclusion's re-test date. The validator holds none of
 #   these: an adaptation answers to what the user said, so only the set can.
 #
-# The bar below is for judgement (ADR-0010), set before the first run: where a
-# message goes. Acting where the row asks counts double, as in the log set.
+# The bars below are for judgement (ADR-0010): `routed`, where a message goes,
+# set before the first run, and acting where the row asks counts double, as in
+# the log set; `held`, what the plan keeps of the user's words, set after the
+# 3-repetition pass of 2026-10-03, where one plan in 31 read «niente squat» as
+# one squat out.
 #
 # A row is corrected only where it misstates a fact about the catalog or the
 # fixture, in a commit of its own that says which fact, before the next pass;
@@ -30,6 +33,7 @@
 today = "2026-10-01"
 
 [bars]
+held = 90
 routed = 80
 
 [declared]
