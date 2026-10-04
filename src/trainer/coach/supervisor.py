@@ -89,7 +89,10 @@ class Direction(BaseModel):
     )
     why: str = Field(description="Why, from the history and what they said.")
     varies: list[Literal["exercises", "reps", "rest"]] = Field(
-        description="Which of exercises, reps and rest the next mesocycle changes; at least one.",
+        description=(
+            "Exactly the ones `changes` changes, of exercises, reps and rest; at least one. "
+            "The planner is checked for changing each one named here."
+        ),
     )
 
     @field_validator("varies")
@@ -111,13 +114,15 @@ def brief(
     ended: mesocycles.Mesocycle,
     goal: str | None,
     known: Sequence[conclusions.Conclusion] = (),
+    split: Sequence[Sequence[str]] = (),
 ) -> str:
     """The mesocycle that ended, the goal and what they said: where the supervisor starts."""
     lines = [
         f"Mesocycle {ended.id} has ended: {len(ended.slots)} workouts a cycle, "
         f"{ended.cycles} cycles, accepted on {ended.accepted_on}. What it prescribed:",
         *(
-            f"- workout {number}: " + "; ".join(_block(prescribed) for prescribed in slot)
+            f"- workout {number}{_training(split, number)}: "
+            + "; ".join(_block(prescribed) for prescribed in slot)
             for number, slot in enumerate(ended.slots, start=1)
         ),
     ]
@@ -137,6 +142,12 @@ def brief(
     return "\n".join(lines)
 
 
+def _training(split: Sequence[Sequence[str]], number: int) -> str:
+    """The groups the split gives this workout, when it gives it any."""
+    groups = split[number - 1] if number <= len(split) else ()
+    return f", training {', '.join(groups)}" if groups else ""
+
+
 def _block(prescribed: workouts.PrescribedBlock) -> str:
     """One block as numbers and exercises; its reason is the planner's and stays out."""
     block = prescribed.block
@@ -152,6 +163,9 @@ class SupervisorState(TypedDict, total=False):
     """The mesocycle that ended."""
 
     goal: str | None
+    split: tuple[tuple[str, ...], ...]
+    """The groups each workout of the next mesocycle trains, in order."""
+
     negotiation: str
     run: str
     follows: str | None
@@ -167,11 +181,14 @@ class SupervisorState(TypedDict, total=False):
     direction: mesocycles.Direction | None
 
 
-def starting(last: int, goal: str | None) -> SupervisorState:
+def starting(
+    last: int, goal: str | None, split: tuple[tuple[str, ...], ...] = ()
+) -> SupervisorState:
     """The input that starts a run, with whatever the thread's last run left cleared."""
     return {
         "last": last,
         "goal": goal,
+        "split": split,
         **records.identity(records.negotiation_id(), None),  # type: ignore[typeddict-item]
         "messages": [cast(AnyMessage, RemoveMessage(REMOVE_ALL_MESSAGES))],
         "spent": 0,
@@ -211,7 +228,7 @@ def build(
             known = [] if store is None else conclusions.live(store, conclusions.whose())
             opening = [
                 SystemMessage(SUPERVISING),
-                HumanMessage(brief(ended, state.get("goal"), known)),
+                HumanMessage(brief(ended, state.get("goal"), known, state.get("split", ()))),
             ]
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model
         try:
@@ -315,7 +332,8 @@ def directed(
         return request
     goal = request.slots[0].goal if request.slots else None
     try:
-        final = graph.invoke(starting(continuing.mesocycle, goal), config)
+        split = tuple(slot.groups for slot in request.slots)
+        final = graph.invoke(starting(continuing.mesocycle, goal, split), config)
     except Exception:
         records.failed(graph, config, tools.CALL_BUDGET, archive)
         raise

@@ -101,6 +101,8 @@ def test_it_starts_from_the_mesocycle_that_ended_with_the_goal_and_its_methodolo
     assert variation.committed().for_supervisor.strip() in system
     assert "## Ranges by goal" in system
     assert "3 x (Barbell_Squat" in briefed
+    for number, slot in enumerate(asked.slots, start=1):
+        assert f"- workout {number}, training {', '.join(slot.groups)}:" in briefed
     assert "goal is hypertrophy" in briefed
     assert "It had no direction" in briefed
     assert asked.continuing is not None and asked.continuing.ended.why not in briefed

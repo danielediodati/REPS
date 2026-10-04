@@ -44,7 +44,7 @@ FOLLOWS = " followed"
 
 REPS_MOVE = 1
 REST_MOVE = 10
-"""How far the mean reps per item, and the mean rest per block in seconds, must move to count as changed."""
+"""How far the mean reps per item, and the mean rest per block in seconds, must move for `rest` and `reps` to hold."""
 
 USER = "eval"
 
@@ -314,14 +314,33 @@ def _moved(before: Sequence[int], after: Sequence[int]) -> float:
     return mean(after) - mean(before) if before and after else 0.0
 
 
+def _scheme(mesocycle: plans.Mesocycle) -> list[list[tuple[tuple[int, ...], int]]]:
+    """Each workout's blocks in order, as the rep counts of its items and its rest."""
+    return [
+        [
+            (tuple(item.prescription.amount for item in block.items if item.prescription.unit == "reps"), block.rest)
+            for block in workout.blocks
+        ]
+        for workout in mesocycle.workouts
+    ]
+
+
 def moved(ended: plans.Mesocycle, plan: plans.Mesocycle) -> tuple[str, ...]:
-    """Which of `mesocycles.VARIES` the plan changed from the mesocycle that ended."""
+    """Which of `mesocycles.VARIES` the plan changed from the mesocycle that ended.
+
+    Reps and rest are compared block by block, at the positions both have.
+    """
+    pairs = [
+        pair
+        for before, after in zip(_scheme(ended), _scheme(plan))
+        for pair in zip(before, after)
+    ]
     found = []
     if _ids(plan) != _ids(ended):
         found.append("exercises")
-    if abs(_moved(_reps(ended), _reps(plan))) >= REPS_MOVE:
+    if any(old[0] != new[0] for old, new in pairs):
         found.append("reps")
-    if abs(_moved(_rests(ended), _rests(plan))) >= REST_MOVE:
+    if any(old[1] != new[1] for old, new in pairs):
         found.append("rest")
     return tuple(found)
 

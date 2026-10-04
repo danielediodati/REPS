@@ -17,8 +17,9 @@
 #   - `varies`: the direction names each of these among what it varies;
 #   - `rest` (`shorter`, `longer`) and `reps` (`fewer`, `more`): the mean
 #     moved that way.
-# - Reps changed means the mean reps per item moved by 1 or more; rest
-#   changed, the mean rest per block by 10 s or more.
+# - Reps or rest changed means a block's reps or rest differ from the block
+#   at the same position of the same workout, where both have one. `rest`
+#   and `reps` need the mean to move by 10 s, or by 1 rep, the way they say.
 #
 # The bars (ADR-0010), set before the first run:
 # - `held`: rows holding everything they name;

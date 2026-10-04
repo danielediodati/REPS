@@ -131,14 +131,15 @@ def failed(case: supervise_set.Case, plan: plans.Mesocycle | None, *varies: str)
 # -- what code holds ------------------------------------------------------------
 
 
-def test_what_moved_is_read_off_the_exercises_and_the_mean_reps_and_rest() -> None:
+def test_what_moved_is_read_off_the_exercises_and_each_blocks_reps_and_rest_by_position() -> None:
     moved = supervise_evaluation.moved
 
     assert moved(ENDED, ENDED) == ()
     assert moved(ENDED, mesocycle_of(("Front_Barbell_Squat", 8, 120), ("Romanian_Deadlift", 10, 90))) == ("exercises",)
-    assert moved(ENDED, mesocycle_of(("Barbell_Squat", 10, 120), ("Romanian_Deadlift", 10, 90))) == ("reps",)
-    assert moved(ENDED, mesocycle_of(("Barbell_Squat", 8, 100), ("Romanian_Deadlift", 10, 90))) == ("rest",)
-    assert moved(ENDED, mesocycle_of(("Barbell_Squat", 8, 115), ("Romanian_Deadlift", 10, 90))) == (), "under the move that counts"
+    assert moved(ENDED, mesocycle_of(("Barbell_Squat", 8, 120), ("Romanian_Deadlift", 12, 90))) == ("reps",)
+    assert moved(ENDED, mesocycle_of(("Barbell_Squat", 8, 120), ("Romanian_Deadlift", 10, 75))) == ("rest",)
+    added = mesocycle_of(("Barbell_Squat", 8, 120), ("Romanian_Deadlift", 10, 90), ("Front_Barbell_Squat", 15, 45))
+    assert moved(ENDED, added) == ("exercises",), "a block added is not the old blocks' reps or rest changing"
 
 
 def test_a_row_that_asks_for_change_fails_on_the_same_mesocycle() -> None:
