@@ -13,6 +13,7 @@ Read first: ADR-0014; ADR-0008 (a mesocycle is planned once and repeated); ADR-0
 - **It writes a direction**: one theme for the whole mesocycle, what changes from the last, why; inside the goal's ranges in `methodology.md`, reasoning with `variation.md` (01). Kept with the mesocycle it shaped, beside `mesocycles.why`.
 - **It never reads** the planner's `why` or the entrance's messages. Its own past directions it does.
 - A run record like every other run's: what it called, what it cost.
+- **Reading `variation.md`**: it has no loader yet. Add one beside `engine/methodology.py`, giving the document without its sources the way `for_planner` does, and move `tests/test_variation.py`'s `VARIATION_PATH` onto it.
 
 ## Acceptance criteria
 

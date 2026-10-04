@@ -9,6 +9,7 @@ Read first: ADR-0014 items 4-5; ADR-0010 (judgement at a declared bar); ADR-0006
 ## What to build
 
 - **The brief of a following mesocycle** holds the direction and the mesocycle that ended. The per-workout log in `continued` goes; `volume_deficit`, `pattern_history` and `last_performed_load` remain as tools.
+- **The planner's prompts stay byte-identical**: `tests/test_variation.py` pins their sha256. The brief changes; `PLANNING` and `MESOCYCLE_PLANNING` do not.
 - **The validator does not hold the direction.** Following it is measured in 04.
 - **The proposal tells the user the direction** in a line, in the entrance's words: a situation, not a constant.
 
