@@ -281,6 +281,8 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # in the last one, so the checkpoint has to read those blocks back.
         # It names the two types to register them and calls nothing.
         "coach/checkpoints.py",
+        # Session 15: the demo's home is a history performed. See the next test.
+        "demo.py",
         # Session 15: the supervisor's brief reads the ended mesocycle's
         # `PrescribedBlock`s, without their reasons; it writes nothing.
         "coach/supervisor.py",
@@ -388,6 +390,9 @@ def test_only_the_cli_and_an_accepted_plan_call_a_writer() -> None:
         # built by writing them, into a copy deleted with its temp directory.
         # `test_supervise_evaluation.py` holds that the source stays unwritten.
         "supervise_evaluation.py",
+        # Session 15: the demo's history is performed workouts too, written
+        # into a database `trainer demo` creates and refuses to build over.
+        "demo.py",
     }
 
 
@@ -434,6 +439,8 @@ def test_only_an_accepted_mesocycle_is_kept() -> None:
         "adapt_evaluation.py",
         # And the supervisor's set writes each history's mesocycles the same way.
         "supervise_evaluation.py",
+        # The demo's home, into a database `trainer demo` creates.
+        "demo.py",
     }
 
 
@@ -446,4 +453,6 @@ def test_only_a_door_serves_todays_workout() -> None:
         # A history in the supervisor's set is served and performed into a
         # throwaway copy, as a door would.
         "supervise_evaluation.py",
+        # And the demo's history, into a database `trainer demo` creates.
+        "demo.py",
     }
