@@ -26,6 +26,12 @@ Read first: ADR-0010; ADR-0011 (the cheapest configuration that clears its bar);
 - Its brief carries the live conclusions (TRAINER.md § The supervisor), so the "exercise they love" row is a conclusion in the store, under the `conclusions.USER` the config names.
 - A history needs mesocycles accepted through `mesocycles.record_mesocycle` (with `direction=` for the past ones) and workouts performed against them: `mesocycle_history` counts performed workouts from each one's `accepted_after`.
 
+## From 03
+
+- The planner reads the direction in `planner.continued`, under *Theme / What changes / Why*; what was performed is not in its brief, only behind `volume_deficit`, `pattern_history` and `last_performed_load`. A row checking the planned mesocycle checks it against that.
+- Nothing in `plan.validate` reads the direction: following it is this set's to measure.
+- The user hears it through `entrance.NEXT_MESOCYCLE`, filled by `bot._following`. One real turn on `deepseek-v4-flash` said the theme and the why in a sentence, no numbers.
+
 ## Acceptance criteria
 
 - [ ] The set declares its bars before the first run.
