@@ -3951,8 +3951,9 @@ def test_bot_starts_on_the_key_and_telegram_alone(
     monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
     chosen = (models.PLANNER_CHOICE, models.LOGGER_CHOICE, models.ENTRANCE_CHOICE)
+    listed = (*chosen, models.SUPERVISOR_CHOICE)
     monkeypatch.setattr(
-        models, "openrouter_listing", lambda key: {c.model: {"supported_parameters": ["reasoning"]} for c in chosen}
+        models, "openrouter_listing", lambda key: {c.model: {"supported_parameters": ["reasoning"]} for c in listed}
     )
 
     async def known(self: Any, *args: Any, **kwargs: Any) -> User:

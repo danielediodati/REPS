@@ -1123,6 +1123,7 @@ def test_the_choices_are_the_ones_adr_0011_records() -> None:
     assert models.PLANNER_CHOICE == models.Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
     assert models.LOGGER_CHOICE == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
     assert models.ENTRANCE_CHOICE == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
+    assert models.SUPERVISOR_CHOICE == models.Choice("openai/gpt-6-luna", "", "openai")
 
 
 def test_a_node_defaulted_to_its_choice_names_its_own_line(
@@ -1227,7 +1228,7 @@ def test_a_local_subgraph_model_is_asked_to_reason(
     assert cast(Any, models.planner().model).reasoning == models.REASONING
 
 
-def test_the_supervisor_runs_on_its_choice_until_its_set_measures_one(
+def test_the_supervisor_runs_on_its_own_choice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     openrouter_logger(monkeypatch)

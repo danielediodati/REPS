@@ -323,3 +323,11 @@ def test_plans_that_did_not_follow_hold_the_pass_below_its_bar() -> None:
     )
 
     assert not supervise_evaluation.barred(report, supervise_set.parse(SET)).passed
+
+
+def test_one_rep_fewer_on_every_item_is_fewer_however_the_means_round() -> None:
+    """Means of 29/6 and 23/6 differ by 0.9999999999999996 in floats."""
+    ended = mesocycle_of(*((f"E{n}", reps, 180) for n, reps in enumerate((4, 5, 6, 4, 5, 5))))
+    fewer = mesocycle_of(*((f"E{n}", reps, 180) for n, reps in enumerate((3, 4, 5, 3, 4, 4))))
+
+    assert supervise_evaluation._trend(case_of(reps="fewer"), ended, fewer) is None

@@ -127,8 +127,8 @@ PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
 LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ENTRANCE_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ONBOARDING_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-SUPERVISOR_CHOICE = PLANNER_CHOICE
-"""The planner's until the supervisor's set measures one (ticket 15.4)."""
+SUPERVISOR_CHOICE = Choice("openai/gpt-6-luna", "", "openai")
+"""Its default effort: the supervisor's set was measured without one."""
 
 DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
 """The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""

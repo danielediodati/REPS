@@ -13,8 +13,8 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
+from fractions import Fraction
 from pathlib import Path
-from statistics import mean
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
@@ -321,9 +321,11 @@ def _rests(mesocycle: plans.Mesocycle) -> list[int]:
     return [block.rest for workout in mesocycle.workouts for block in workout.blocks]
 
 
-def _moved(before: Sequence[int], after: Sequence[int]) -> float:
-    """How far the mean moved, zero when either side has nothing to average."""
-    return mean(after) - mean(before) if before and after else 0.0
+def _moved(before: Sequence[int], after: Sequence[int]) -> Fraction:
+    """How far the mean moved, exactly, so one rep fewer everywhere is a move of one; zero when either side is empty."""
+    if not before or not after:
+        return Fraction(0)
+    return Fraction(sum(after), len(after)) - Fraction(sum(before), len(before))
 
 
 def _scheme(mesocycle: plans.Mesocycle) -> list[list[tuple[tuple[int, ...], int]]]:
@@ -414,13 +416,13 @@ def _trend(case: supervise_set.Case, ended: plans.Mesocycle, plan: plans.Mesocyc
     rest, reps = _moved(_rests(ended), _rests(plan)), _moved(_reps(ended), _reps(plan))
     wrong = []
     if case.rest == supervise_set.SHORTER and rest > -REST_MOVE:
-        wrong.append(f"mean rest moved {rest:+.0f}s, not shorter")
+        wrong.append(f"mean rest moved {float(rest):+.1f}s, not shorter")
     if case.rest == supervise_set.LONGER and rest < REST_MOVE:
-        wrong.append(f"mean rest moved {rest:+.0f}s, not longer")
+        wrong.append(f"mean rest moved {float(rest):+.1f}s, not longer")
     if case.reps == supervise_set.FEWER and reps > -REPS_MOVE:
-        wrong.append(f"mean reps moved {reps:+.1f}, not fewer")
+        wrong.append(f"mean reps moved {float(reps):+.2f}, not fewer")
     if case.reps == supervise_set.MORE and reps < REPS_MOVE:
-        wrong.append(f"mean reps moved {reps:+.1f}, not more")
+        wrong.append(f"mean reps moved {float(reps):+.2f}, not more")
     return "; ".join(wrong) or None
 
 

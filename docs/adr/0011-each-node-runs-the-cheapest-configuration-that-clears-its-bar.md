@@ -13,10 +13,11 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
    | Logger | `deepseek/deepseek-v4-flash` | high | `parasail` | log suite, 80% / 60% | ~0.003 a report | 8–200 |
    | Onboarding | `deepseek/deepseek-v4-flash` | high | `parasail` | onboard suite, 100% held / 80% on time, remembered, routed | ~0.0015 an onboarding | 3–150 |
    | Entrance | `deepseek/deepseek-v4-flash` | high | `parasail` | adapt suite, 80% routed / 90% held | 0.0003–0.001 a turn | 1–6 |
+   | Supervisor | `openai/gpt-6-luna` | default | `openai` | supervise suite, 80% held / 80% followed | ~0.0015 a direction | ~20 |
 
 3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs every choice. Ollama and Groq stay selectable.
 4. **A choice's effort and host belong to its model.** Another model named on a node's line runs at its own default effort, on OpenRouter's routing. `OPENROUTER_MODEL` moves every node off its choice, which is how a matrix row runs.
-5. **The host is pinned per node**: `PLANNER_HOST`, `LOGGER_HOST`, `ONBOARDING_HOST`, `ENTRANCE_HOST`, then `OPENROUTER_PROVIDER` for all, then the choice's. No fallback to another host, so the run record names one.
+5. **The host is pinned per node**: `PLANNER_HOST`, `LOGGER_HOST`, `ONBOARDING_HOST`, `ENTRANCE_HOST`, `SUPERVISOR_HOST`, then `OPENROUTER_PROVIDER` for all, then the choice's. No fallback to another host, so the run record names one.
 6. **The next model change is one more row** in the table below, run the same way, then this rule reapplied.
 
 ## The planner's matrix
@@ -81,6 +82,20 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 - All four sent «oggi vorrei fare trazioni» to `todays_workout`, gpt-oss-120b also «oggi stacchi rumeni».
 - Plans held differ because the entrance decides which messages get planned; the planner is the same in every row.
 - The closing pass on deepseek, 3 reps (2026-10-03): routed 48 / 57 (84%), plans 30 / 31 (96%), $1.22, 14 s a run.
+
+## The supervisor's matrix
+
+`--suite supervise` (ticket 15.4), 17 histories, the planner on its choice. Bars in `docs/supervising/eval-set.toml`: 80% of rows holding everything they name, 80% of plans changing everything their direction varies. Screened at 1 rep on the corrected set (`33c1830`); $ a pass includes the planner, ~$0.045 a history.
+
+| Model, effort, host | Held | Followed | $ a pass | $ a direction |
+|---|---|---|---|---|
+| **`openai/gpt-6-luna` default, OpenAI** | **14 / 17** | **17 / 17** | **0.90** | **~0.0015** |
+| `google/gemini-3.8-flash` default | 11 / 17 | 17 / 17 | 1.45 | ~0.013 |
+| `anthropic/claude-haiku-4.5` none, Anthropic | 12 / 17 | 17 / 17 | 1.34 | ~0.02 |
+
+- **The closing pass on luna, 3 reps (2026-10-04)**: held 45 / 51 (88%), followed 51 / 51, $2.40, ~21 s a run. Four of its six failures are one habit: with a loved exercise, it keeps every exercise instead of rotating the rest. The other two are the planner landing under the time window.
+- Haiku states hypertrophy's rest band as 30–90 s, endurance's, and takes rest below the goal's floor. Gemini reads 2–3 tools where the others read 7–13.
+- Two models were dropped at a two-history taste: `deepseek/deepseek-v4-flash` high, Parasail, wrote a slug for `changes` and a direction in Spanish, which no check sees; `qwen/qwen3.8-flash` wrote a 5,000-character plan of sets and RIR, the planner's job.
 
 ## Consequences
 
