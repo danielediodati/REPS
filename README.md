@@ -85,10 +85,11 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80%, ~$0.0015 and 3-150 s an onboarding |
 | entrance | `deepseek/deepseek-v4-flash`, high, Parasail | adapt suite over three passes: routed 84% against 80%, plans held 96% against 90%; $0.0003-0.001 and 1-6 s a turn |
+| supervisor | the planner's, until its set measures one (ticket 15.4) | not yet measured |
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
-`PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL` and `ENTRANCE_MODEL` give a node another model; the `_REASONING` line of each another effort (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; the `_HOST` line another host. A model other than the choice runs at its own default effort, on OpenRouter's routing. `trainer runs show` names the effort and the host beside each model.
+`PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; the `_REASONING` line of each another effort (`none`, `low`, `medium`, `high`), checked against what the model takes before the run starts; the `_HOST` line another host. A model other than the choice runs at its own default effort, on OpenRouter's routing. `trainer runs show` names the effort and the host beside each model.
 
 An unreachable server, a model nobody pulled, a missing key and a model Groq has retired are each reported as a state with the command that fixes it, before the run starts. `trainer log` runs the logger graph on the same provider as everything else.
 
