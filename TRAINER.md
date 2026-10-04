@@ -98,7 +98,8 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | LangGraph checkpointer | the live run of each thread, paused threads | graph |
 | run archive (`runs/` in the home) | every closed run, one document per run under its negotiation | graph (ADR-0007) |
 | LangGraph store | preferences and conclusions, each with a source | agent |
-| [methodology](src/trainer/data/methodology.md) | ranges per goal and principles, from the literature with sources; the planner reads it | human |
+| [methodology](src/trainer/data/methodology.md) | within a mesocycle: ranges per goal and principles, from the literature with sources; the planner reads it | human |
+| variation (`src/trainer/data/variation.md`) | between mesocycles: varying exercises, reps and rest, with sources; the supervisor reads it, with the goal's ranges from the methodology | human |
 
 No store writes another's facts.
 

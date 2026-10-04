@@ -10,9 +10,10 @@ TRAINER.md designed the supervisor as a drift guard: observations pointing at a 
 4. **The planner plans from the direction and the mesocycle that ended**; the per-workout log leaves its brief. Following the direction is judgement, measured at a declared bar, never held by the validator (ADR-0010).
 5. **The user is told the direction** when the new mesocycle is proposed.
 6. **Its model is chosen by ADR-0011's rule.** ADR-0004 item 8's *different model* goes: it bought independence for a guard.
+7. **Two methodologies, one per reader.** `methodology.md` is within a mesocycle and the planner reads it; `variation.md` is between mesocycles and the supervisor reads it. The goal's ranges live only in the first, and the supervisor reads them from there.
 
 ## Consequences
 
 - **Dropped to after 1.0.0**: observations and their teeth, and the memory gate (marking a conclusion suspect or retiring it). Both belonged to the guard.
 - **The supervisor's set** is histories with what the next direction must hold, checked by code, no judge model.
-- **The methodology grows a section on variation between mesocycles**, with sources, before the supervisor is built.
+- **`variation.md` is written**, with sources, before the supervisor is built.

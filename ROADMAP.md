@@ -128,7 +128,7 @@ In this order. Measuring first is what stops the methodology being written again
 
 **Demo**: after three mesocycles, the fourth arrives with its reason, and what changed is visible in it.
 
-1. **Between mesocycles, in the methodology.** A section on varying exercises, reps and rest from one mesocycle to the next, from primary sources.
+1. **Between mesocycles, in a methodology of its own.** `variation.md`, read by the supervisor and not the planner: varying exercises, reps and rest from one mesocycle to the next, from primary sources.
 2. **The supervisor.** A graph (ADR-0014) with tools over the history; when a mesocycle ends, before the planner, it writes the next one's direction, kept with that mesocycle, reading its own past directions.
 3. **The planner plans from the direction, and the user reads it.** The brief holds the direction and the mesocycle that ended, not the per-workout log; the proposal says the direction in a line.
 4. **The supervisor's set.** `trainer eval --suite supervise`: 15-20 scripted histories with what the direction must hold, checked by code, and how often the planner follows it at a declared bar; the model chosen by ADR-0011's rule.
