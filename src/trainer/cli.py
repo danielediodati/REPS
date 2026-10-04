@@ -695,7 +695,7 @@ def eval_command(
     sockets and no credentials, and the checks are covered there against
     recorded runs instead.
 
-    The plan suite's bar is 100%; the log and onboard suites' are the ones
+    The plan suite's bar is 100%; the log, onboard and adapt suites' are the ones
     their sets declare. The command exits non-zero below any of them.
     """
     with _opened() as connection:

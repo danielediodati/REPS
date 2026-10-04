@@ -10,13 +10,14 @@ REPS is not a plan generator: **it is a loop**. By week 3 the lunges at the end 
 
 ## Status
 
-**`0.13.0` sets you up in a conversation and remembers what you said.** On top of `0.12.0` (each node on the cheapest model that clears its bar), it has:
-- an onboarding interview the agent leads, one question per message and resumed after a day away, that cannot end with a declaration missing and ends in a first mesocycle;
-- declarations in the database, one dated version per change; a change reruns the interview on that alone, and the agent picks what happens to the running mesocycle among the paths code leaves open;
-- conclusions kept with your own sentence beside them, refused unless you wrote it, and briefed to every plan;
-- `trainer eval --suite onboard`: scripted users and messages to route, checked by code, which chose the interview's model.
+**`0.14.0` adapts this workout to anything you say about it.** On top of `0.13.0` (an onboarding interview, dated declarations, conclusions with your sentence), it has:
+- one tool for anything about this workout: less or more time, borrowed equipment, an exercise left out or asked for, another of the cycle's workouts; the planner reads your words, the exclusions still bind, and the mesocycle stays as it was;
+- the entrance telling this workout, the mesocycle, a declaration and a fact about you apart, and asking *«solo oggi o d'ora in poi?»* when the words do not say;
+- the next workout read off the log as the first of the cycle not yet performed, with no stored order;
+- the planner's prompt and tools cached on Anthropic, and the run record counting what was read from the cache;
+- `trainer eval --suite adapt`: real requests, where each must go and what its plan must hold, checked by code.
 
-Session 14 opens next: anything asked about this workout (another exercise, borrowed equipment, legs moved to later in the cycle) comes back as this workout, and the mesocycle stays as it was.
+Session 15 opens next, for `1.0.0`: when a mesocycle ends, a supervisor writes where the next one goes, and the planner plans from it.
 
 ## Architecture (target)
 
@@ -61,7 +62,7 @@ uv run trainer plan --time 30                                 # today's adapted 
 uv run trainer plan --change "basta affondi"                  # the mesocycle rewritten for the cycles left
 uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
-uv run trainer eval --suite plan                              # or --suite log, --suite onboard; ends with dollars and seconds a run
+uv run trainer eval --suite plan                              # or --suite log, onboard, adapt; ends with dollars and seconds a run
 uv run trainer mcp                                            # the engine's tools over MCP
 uv run trainer bot                                            # answer Telegram, the owner only
 uv run trainer runs list                                      # every negotiation, and what it came to
@@ -83,7 +84,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 | planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles, ~$0.13 and ~47 s each |
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80%, ~$0.0015 and 3-150 s an onboarding |
-| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routing 17 of 19 in the adapt suite; $0.0003-0.001 and 1-6 s a turn |
+| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | adapt suite over three passes: routed 84% against 80%, plans held 96% against 90%; $0.0003-0.001 and 1-6 s a turn |
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
