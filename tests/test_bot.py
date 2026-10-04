@@ -2569,7 +2569,8 @@ def test_the_report_that_completes_the_last_cycle_prepares_the_next_mesocycle(
 
     drafted = asyncio.run(reported_and_prepared(graphs, watched))
 
-    assert watched.said == [SAYS, entrance.LOGGED, entrance.NEXT_MESOCYCLE]
+    assert watched.said[:2] == [SAYS, entrance.LOGGED]
+    assert watched.said[2].startswith(entrance.NEXT_MESOCYCLE.split("{")[0])
     ((text, buttons),) = watched.offers
     assert "3 cicli" in text
     assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
@@ -2588,6 +2589,11 @@ def test_the_supervisor_directs_the_next_mesocycle_before_it_is_planned_and_it_i
     graphs = finishing(catalogued, planned, directs=directs)
     watched = Channels()
     asyncio.run(reported_and_prepared(graphs, watched))
+
+    situation = watched.said[-1]
+    assert situation.startswith(entrance.NEXT_MESOCYCLE.split("{")[0]), "said before the offer"
+    for said in (DIRECTED.theme, DIRECTED.changes, DIRECTED.why):
+        assert said in situation, "the entrance is told the direction"
 
     assert len(directs.seen) == 2 and len(planned.seen) == 1
     first_planned = planned.seen[0][0]

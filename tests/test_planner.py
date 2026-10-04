@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sqlite3
 from collections.abc import Callable, Iterator, Sequence
@@ -1603,11 +1604,19 @@ def test_the_next_mesocycle_needs_the_last_one_finished(
         plans.next_requested(connection, "2026-09-22")
 
 
-def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_what_was_done(
+def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_its_direction(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:
+    """ADR-0014 item 4: what was performed is the tools' to read, not the brief's."""
     ran_out(connection, two_slots)
     asked = plans.next_requested(connection, "2026-09-22")
+    assert asked.continuing is not None
+    direction = mesocycles.Direction(
+        theme="unilateral strength", changes="the squat goes to a split squat", why="the loads stalled"
+    )
+    asked = dataclasses.replace(
+        asked, continuing=dataclasses.replace(asked.continuing, direction=direction)
+    )
     model = Scripted(documents=[mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))])
     graph, thread = pausing(model)
 
@@ -1616,7 +1625,9 @@ def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_what_was_done
     briefed = "\n".join(message.text for message in model.seen[0])
     assert "has run all 1 of its cycles" in briefed
     assert '"Standing_Military_Press"' in briefed, "the mesocycle that ended, whole"
-    assert "Barbell_Squat 3x5 reps at 102.5 kg" in briefed, "what was performed against it"
+    for said in (direction.theme, direction.changes, direction.why):
+        assert said in briefed
+    assert "102.5" not in briefed, "no per-workout log"
 
 
 def test_a_run_nobody_asked_for_says_so_in_its_record(

@@ -401,20 +401,10 @@ def today(connection: sqlite3.Connection) -> Today:
 
 
 @dataclass(frozen=True)
-class Trained:
-    """One workout performed while a mesocycle ran: its slot, its day, and what was done."""
-
-    slot: int
-    performed_on: str
-    blocks: tuple[workouts.PerformedBlock, ...]
-
-
-@dataclass(frozen=True)
 class Finished:
-    """The active mesocycle once its cycles are all performed, and what was performed in them."""
+    """The active mesocycle once its cycles are all performed."""
 
     mesocycle: Mesocycle
-    trained: tuple[Trained, ...]
     past: int
     """Workouts performed after its last cycle ended; zero on the report that ended it."""
 
@@ -429,23 +419,7 @@ def finished(connection: sqlite3.Connection) -> Finished | None:
     since = len(filled) - kept.accepted_after
     if since < total:
         return None
-    rows = connection.execute(
-        "SELECT id, performed_on FROM workouts WHERE state = 'performed' "
-        "ORDER BY performed_on, id LIMIT ? OFFSET ?",
-        (total, kept.accepted_after),
-    ).fetchall()
-    return Finished(
-        mesocycle=kept,
-        trained=tuple(
-            Trained(
-                slot=filled[kept.accepted_after + index],
-                performed_on=str(row["performed_on"]),
-                blocks=workouts.performed(connection, int(row["id"])),
-            )
-            for index, row in enumerate(rows)
-        ),
-        past=since - total,
-    )
+    return Finished(mesocycle=kept, past=since - total)
 
 
 def record_served(connection: sqlite3.Connection, on: str) -> tuple[Today, int]:

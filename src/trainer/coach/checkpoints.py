@@ -48,7 +48,6 @@ DECLARED: tuple[type, ...] = (
     plans.Adapting,
     plans.Changing,
     plans.Continuing,
-    mesocycles.Trained,
     mesocycles.Direction,
     workouts.PerformedBlock,
     workouts.PerformedItem,

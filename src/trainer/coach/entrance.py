@@ -400,7 +400,11 @@ LOGGED = (
 NEXT_MESOCYCLE = (
     "That workout was the last of their mesocycle's cycles, and you have "
     "planned the next one without being asked: it follows this message. Tell "
-    "them so, and say nothing about what is in it."
+    "them so, and in one sentence what the new one is about and why, from its "
+    "direction below. Say nothing else about what is in it.\n"
+    "Theme: {theme}\n"
+    "What changes: {changes}\n"
+    "Why: {why}"
 )
 
 ONBOARDED = (

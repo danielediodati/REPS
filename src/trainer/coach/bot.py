@@ -16,7 +16,7 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -1293,7 +1293,7 @@ async def _prepare(
             progress.Progress(progress.PLAN),
         )
         if settled.get("__interrupt__"):
-            await _relay(graphs, thread, entrance.NEXT_MESOCYCLE, chat)
+            await _relay(graphs, thread, _following(request), chat)
         await told(graphs, settled, thread, quiet)
     except Exception:
         logger.exception("preparing the next mesocycle on %s failed", thread)
@@ -1301,6 +1301,14 @@ async def _prepare(
             await chat.say(FAILED)
     finally:
         graphs.preparing.discard(thread)
+
+
+def _following(request: plans.MesocycleRequest) -> str:
+    """The situation that announces a prepared mesocycle, with the direction it was planned from."""
+    assert request.continuing is not None and request.continuing.direction is not None, (
+        "a prepared mesocycle is always directed first"
+    )
+    return entrance.NEXT_MESOCYCLE.format(**asdict(request.continuing.direction))
 
 
 async def _reoffered(graphs: Graphs, thread: str, chat: Chat) -> None:

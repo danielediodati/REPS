@@ -317,23 +317,24 @@ def changed(changing: plans.Changing) -> str:
 
 
 def continued(continuing: plans.Continuing) -> str:
-    """The mesocycle that ended and what was performed in it, as what the next one follows."""
+    """The mesocycle that ended and the direction the next one is planned from."""
     lines = [
         f"The mesocycle below has run all {continuing.ended.cycles} of its cycles, "
         "and this one follows it. Nobody asked for it yet: it will be waiting "
         "for them when they next write.",
         "The mesocycle that ended:\n" + continuing.ended.model_dump_json(indent=1),
-        "What they performed while it ran, oldest first:",
     ]
-    for trained in continuing.trained:
-        done = "; ".join(
-            f"{item.exercise_id} {block.rounds}x{item.amount} {item.unit}"
-            + ("" if item.load_kg is None else f" at {item.load_kg:g} kg")
-            + ("" if block.rpe is None else f" (RPE {block.rpe:g})")
-            for block in trained.blocks
-            for item in block.items
+    if continuing.direction is not None:
+        lines.append(
+            "Its direction, written by the coach between mesocycles; plan this one from it:\n"
+            f"Theme: {continuing.direction.theme}\n"
+            f"What changes: {continuing.direction.changes}\n"
+            f"Why: {continuing.direction.why}"
         )
-        lines.append(f"- workout {trained.slot}, {trained.performed_on}: {done or 'nothing reported'}")
+    lines.append(
+        "What they performed while it ran is in `volume_deficit`, "
+        "`pattern_history` and `last_performed_load`."
+    )
     return "\n".join(lines)
 
 

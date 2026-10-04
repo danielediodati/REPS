@@ -315,19 +315,6 @@ def test_a_workout_done_twice_leaves_its_cycle_ending_on_the_count(
     assert (mesocycles.today(connection).slot, mesocycles.today(connection).cycle) == (1, 2)
 
 
-def test_a_finished_mesocycle_names_the_slots_that_were_performed(
-    connection: sqlite3.Connection, declared_training: Path
-) -> None:
-    three_accepted(connection, declared_training)
-    for number in (1, 3, 2, 2, 1, 3):
-        performed_as(connection, number)
-
-    ended = mesocycles.finished(connection)
-
-    assert ended is not None
-    assert [trained.slot for trained in ended.trained] == [1, 3, 2, 2, 1, 3]
-
-
 def test_after_its_last_cycle_nothing_is_served(
     connection: sqlite3.Connection, two_slots: Path
 ) -> None:
@@ -480,7 +467,7 @@ def test_a_mesocycle_still_running_has_not_finished(
 def test_the_report_that_completes_its_last_cycle_finishes_it(
     connection: sqlite3.Connection, two_slots: Path
 ) -> None:
-    """With what was performed against it, slot by slot, and nothing past its end."""
+    """And nothing past its end."""
     performed(connection)
     identifier = accepted(connection, cycles=1)
     for _ in range(2):
@@ -491,9 +478,6 @@ def test_the_report_that_completes_its_last_cycle_finishes_it(
 
     assert ended is not None
     assert ended.mesocycle.id == identifier
-    assert [trained.slot for trained in ended.trained] == [2, 1]
-    assert all(trained.performed_on == TODAY for trained in ended.trained)
-    assert ended.trained[0].blocks[0].items[0].exercise_id == "Plank"
     assert ended.past == 0
 
 
@@ -509,7 +493,6 @@ def test_a_workout_performed_after_its_end_is_counted_past_it(
 
     assert ended is not None
     assert ended.past == 1
-    assert len(ended.trained) == 2
 
 
 def test_with_none_accepted_nothing_has_finished(connection: sqlite3.Connection) -> None:

@@ -362,11 +362,10 @@ class Changing:
 
 @dataclass(frozen=True)
 class Continuing:
-    """The mesocycle whose cycles have all been performed, what was performed in them, and the next one's direction."""
+    """The mesocycle whose cycles have all been performed, and the next one's direction."""
 
     mesocycle: int
     ended: Mesocycle
-    trained: tuple[mesocycles.Trained, ...]
     direction: mesocycles.Direction | None = None
     """Written by the supervisor before the planner runs (ADR-0014), and kept with the mesocycle accepted."""
 
@@ -613,7 +612,7 @@ def change_requested(
 
 
 def next_requested(connection: sqlite3.Connection, today: str) -> MesocycleRequest:
-    """A mesocycle's request carrying the one that has run all its cycles and what was done in it."""
+    """A mesocycle's request carrying the one that has run all its cycles."""
     ended = mesocycles.finished(connection)
     if ended is None:
         raise mesocycles.MesocycleError(
@@ -628,7 +627,6 @@ def next_requested(connection: sqlite3.Connection, today: str) -> MesocycleReque
                 cycles=ended.mesocycle.cycles,
                 why=ended.mesocycle.why,
             ),
-            trained=ended.trained,
         ),
     )
 
