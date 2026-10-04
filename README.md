@@ -62,7 +62,7 @@ uv run trainer plan --time 30                                 # today's adapted 
 uv run trainer plan --change "basta affondi"                  # the mesocycle rewritten for the cycles left
 uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
-uv run trainer eval --suite plan                              # or --suite log, onboard, adapt; ends with dollars and seconds a run
+uv run trainer eval --suite plan                              # or --suite log, onboard, adapt, supervise; ends with dollars and seconds a run
 uv run trainer mcp                                            # the engine's tools over MCP
 uv run trainer bot                                            # answer Telegram, the owner only
 uv run trainer runs list                                      # every negotiation, and what it came to
@@ -85,7 +85,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80%, ~$0.0015 and 3-150 s an onboarding |
 | entrance | `deepseek/deepseek-v4-flash`, high, Parasail | adapt suite over three passes: routed 84% against 80%, plans held 96% against 90%; $0.0003-0.001 and 1-6 s a turn |
-| supervisor | the planner's, until its set measures one (ticket 15.4) | not yet measured |
+| supervisor | `openai/gpt-6-luna`, default, OpenAI | supervise suite at 3 reps: held 88% against 80%, followed 100% against 80%; ~$0.0015 a direction, once a mesocycle |
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
@@ -130,5 +130,6 @@ docs/
   enrichment/ vocabulary definitions and hand-decided rows, read by the code
   logging/    the log eval set
   onboarding/ the onboarding eval set and its bars
+  supervising/ the supervisor's eval set: scripted histories and their bars
   research/   notes behind decisions
 ```
