@@ -99,7 +99,11 @@ _Avoid_: excluding an exercise id. There is no third granularity.
 
 **Conclusion**: a fact about this person that has a source: something they said. It has a state and can be retired.
 
-**Observation**: a fact about the agent, written by the supervisor from the trajectory. It points at a measure.
+**Supervisor**: the coach between mesocycles. When one ends, it reads the history through tools and writes the next one's direction. It never reads the planner's or the entrance's prose; it does read its own past directions.
+_Avoid_: watchdog, which is the drift guard it is not.
+
+**Direction**: what the next mesocycle is about and why, written by the supervisor: one theme for every workout in it, and what changes from the last (exercises, reps, rest), inside the methodology's ranges. The planner plans from it and the user is told it. Neither the first mesocycle nor a change has one.
+_Avoid_: observation, the drift guard's term, which is not built.
 
 ## What the machine writes about itself
 

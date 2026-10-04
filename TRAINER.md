@@ -21,7 +21,7 @@ Vocabulary: [CONTEXT.md](CONTEXT.md). Architecture decision: [ADR-0004](docs/adr
 |---|---|---|
 | plan | admissible ids, a valid shape, within five minutes of the budget | which exercises, how many, in what order, and why |
 | conclusion | it has a source | what it says |
-| observation | a measure says whether it was heeded | what it observes |
+| direction | it is written before a following mesocycle is planned, from the history | its theme, what changes, and why |
 
 **Enumerate only what the world already enumerates.** The catalog is a closed set, so pre-filtering it is correct. Why someone skips workouts is an open question. A list of reasons turns the agent into a classifier, and when the true reason is off the list it is plausibly wrong.
 
@@ -62,7 +62,7 @@ Telegram  <->  bot on the PC (long polling)
                  +------> onboarding   [interrupt] per question
 
 memory writer --> LangGraph store (only with a source)
-supervisor: a separate graph, a different model, run between workouts
+supervisor: a separate graph, run when a mesocycle ends, before the planner
 models: Ollama locally, or Groq (LLM_BACKEND)
 ```
 
@@ -97,7 +97,7 @@ A pure Python library with no LLM in it, exposed as tools (`src/trainer/tools.py
 | engine SQLite, declarations | cycle length, duration cap, split, volume denominator, equipment, goal; one dated version per change | onboarding (ADR-0013) |
 | LangGraph checkpointer | the live run of each thread, paused threads | graph |
 | run archive (`runs/` in the home) | every closed run, one document per run under its negotiation | graph (ADR-0007) |
-| LangGraph store | preferences, conclusions, observations, each with a source | agent, gated by the supervisor |
+| LangGraph store | preferences and conclusions, each with a source | agent |
 | [methodology](src/trainer/data/methodology.md) | ranges per goal and principles, from the literature with sources; the planner reads it | human |
 
 No store writes another's facts.
@@ -122,18 +122,15 @@ No store writes another's facts.
 
 ## The supervisor
 
-The engine checks every choice. Nobody checks the **set** of choices, or its **direction over time**: twelve weeks drifting toward short, pleasant workouts, each week defensible on its own.
+The coach between mesocycles (ADR-0014). The engine checks every choice inside a mesocycle; nobody decides where the next one goes. Left alone, a following mesocycle repeats the last.
 
-- **When it runs.** Between workouts, on a different model, adding no latency for the user.
-- **What it reads.** The shape of the trajectory, the goal and the conclusions. **Never the agent's prose**, which would open a channel of persuasion.
-- **Memory gate.**
-  - Admission is inline code: a conclusion with a source enters as provisional.
-  - Consolidation belongs to the supervisor: confirm, merge, mark suspect or retire, on one criterion, coherence.
-  - This is what catches drift that has certified itself, e.g. *«this suits me»* after six weeks of falling volume.
-- **Teeth.** An observation must point at a measure. The first time, it is injected into the next workout. Ignored a second time, it becomes an engine constraint. Whether it was ignored is decidable, so code checks it.
+- **When it runs.** When a mesocycle ends, before the planner plans the next. Not on the first mesocycle, not on a change.
+- **What it writes.** A direction: one theme for every workout, and what changes from the last (exercises, reps, rest), inside the methodology's ranges, with the reason. The user is told it.
+- **What it reads.** The history, through tools, starting from the last mesocycle; the goal and the conclusions; its own past directions, so the thread runs across mesocycles. **Never the planner's or the entrance's prose.**
+- **What it does not do.** Bind the planner: following the direction is judgement, measured at a declared bar (ADR-0010). Guard against drift or gate memory: after 1.0.0.
 - **Separation.**
   - The agent originates conclusions.
-  - The supervisor originates observations and gates conclusions.
+  - The supervisor originates directions.
   - A human writes the methodology.
 
 ## Evaluation
@@ -160,7 +157,7 @@ The situations are deliberately nasty:
 - **18** that the sentence determines, scored on the document and its volume;
 - **12** that must make it ask; writing a value instead of asking counts double.
 
-**Supervisor.** 40-60 labeled examples on two axes: *does it go into memory?* and *is it dangerous across workouts?* The key row: the same exercise eight times because it is the stated preference must **not** be flagged.
+**Supervisor.** 15-20 scripted histories, each with what the next direction must hold, checked by code: something changes after two alike, reps stay inside the goal's range, the thread of the last direction carries on. The key row: an exercise the user said they love is **kept** while the rest rotates. Beside it, how often the planner follows the direction, at a declared bar.
 
 **Level 2** (after 1.0). A simulated user with a hidden truth written in code, e.g. *skips workouts over 45 minutes*.
 - The system is judged on whether it discovers that truth, by the consequences in the data.

@@ -61,3 +61,7 @@ This ADR resets the agent layer. The engine and its tools stay.
 ## Amended in session 12
 
 **Item 8's default is OpenRouter**, with a measured model, effort and host per node (ADR-0011). Ollama stays selectable with `LLM_BACKEND=ollama`, on the terms above.
+
+## Amended in session 15
+
+**Item 8's "the supervisor runs on a different model" goes** (ADR-0014): its model is chosen by ADR-0011's rule, like every other node's.

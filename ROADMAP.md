@@ -124,20 +124,31 @@ In this order. Measuring first is what stops the methodology being written again
 4. **This workout or from now on.** The entrance tells adaptation, change, declaration and memory apart, and asks when the words do not say; the set at its bars.
 5. **Prompt caching.** The run record counts cached input; the planner's prompt and tools cached on Anthropic; $ a mesocycle before and after in ADR-0011. — **done** `251dacc`
 
+## Session 15 — `1.0.0` — The next mesocycle has a reason
+
+**Demo**: after three mesocycles, the fourth arrives with its reason, and what changed is visible in it.
+
+1. **Between mesocycles, in the methodology.** A section on varying exercises, reps and rest from one mesocycle to the next, from primary sources.
+2. **The supervisor.** A graph (ADR-0014) with tools over the history; when a mesocycle ends, before the planner, it writes the next one's direction, kept with that mesocycle, reading its own past directions.
+3. **The planner plans from the direction, and the user reads it.** The brief holds the direction and the mesocycle that ended, not the per-workout log; the proposal says the direction in a line.
+4. **The supervisor's set.** `trainer eval --suite supervise`: 15-20 scripted histories with what the direction must hold, checked by code, and how often the planner follows it at a declared bar; the model chosen by ADR-0011's rule.
+5. **Portfolio-ready.** The three-mesocycle fixture as a script, the demo in Telegram, the README rewritten around the working system with a GIF of the demo.
+
 ## Later sessions
 
 Their issues are cut when each session opens.
 
 | # | version | demo | scope |
 |---|---|---|---|
-| 15 | **`1.0.0`** | a scripted six-week drift, and the supervisor's observation reaching the next plan | a separate graph on a different model, run between workouts; it reads the trajectory and never the agent's prose; the golden set; an observation ignored twice becomes an engine constraint |
 | 16 | `1.1.0` | a plan in Telegram shows each exercise done: its start and end photos | the two photos free-exercise-db has for 873 of 876 exercises, sent with the plan; an exercise without photos is sent without; nothing generated |
 
-**Portfolio-ready** is session 15. It closes only when the README is rewritten around the working system and shows a GIF of the demo. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
+**Portfolio-ready** is session 15's last issue. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
 - Level 2, a simulated user with hidden truths;
+- the drift guard: observations pointing at a measure, an engine constraint when one is ignored twice (TRAINER.md before ADR-0014);
+- the memory gate: the supervisor marking a conclusion suspect or retiring it, e.g. *«this suits me»* after six weeks of falling volume;
 - diagnosed pathologies;
 - an on-device feature, if a phone model ever earns one.
 - secrets out of `.env`: one file per key in a directory under `TRAINER_HOME` (Docker's `/run/secrets` layout), the environment still winning; no OS keychain, which differs per OS and is absent in a container;
