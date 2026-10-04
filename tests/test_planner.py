@@ -1634,6 +1634,16 @@ def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_its_direction
     assert "102.5" not in briefed, "no per-workout log"
 
 
+def test_a_direction_kept_before_varies_existed_is_briefed_without_an_empty_list() -> None:
+    continuing = plans.Continuing(
+        mesocycle=1,
+        ended=mesocycle_of(plan_of("Barbell_Squat")),
+        direction=mesocycles.Direction(theme="t", changes="the squat goes", why="w"),
+    )
+
+    assert "What changes: the squat goes" in planner.continued(continuing)
+
+
 def test_a_run_nobody_asked_for_says_so_in_its_record(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:

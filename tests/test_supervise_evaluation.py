@@ -157,6 +157,12 @@ def test_the_loved_exercise_is_kept_while_the_rest_rotates() -> None:
     assert failed(loved, ENDED) == [supervise_evaluation.ROTATED]
 
 
+def test_nothing_left_to_rotate_is_not_a_failure_to_rotate() -> None:
+    everything = case_of(keeps=(("Barbell_Squat",), ("Romanian_Deadlift",)), rotates=True)
+
+    assert failed(everything, mesocycle_of(("Barbell_Squat", 8, 90), ("Romanian_Deadlift", 10, 90))) == []
+
+
 def test_an_exercise_they_turned_against_is_left_out() -> None:
     assert failed(case_of(without=("Barbell_Squat",)), ENDED) == [supervise_evaluation.LEFT_OUT]
 

@@ -29,7 +29,7 @@ from trainer import tools
 from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.coach.planner import REFUSED_TURN, REJECTIONS, remembered
+from trainer.coach.planner import REFUSED_TURN, REJECTIONS, changes, remembered
 from trainer.engine import mesocycles, methodology, variation, workouts
 
 logger = logging.getLogger(__name__)
@@ -121,8 +121,7 @@ def brief(
         f"Mesocycle {ended.id} has ended: {len(ended.slots)} workouts a cycle, "
         f"{ended.cycles} cycles, accepted on {ended.accepted_on}. What it prescribed:",
         *(
-            f"- workout {number}{_training(split, number)}: "
-            + "; ".join(_block(prescribed) for prescribed in slot)
+            f"- workout {number}: " + "; ".join(_block(prescribed) for prescribed in slot)
             for number, slot in enumerate(ended.slots, start=1)
         ),
     ]
@@ -131,8 +130,13 @@ def brief(
     else:
         lines.append(
             f"It was planned from your direction: {ended.direction.theme}. "
-            f"Changes ({', '.join(ended.direction.varies)}): {ended.direction.changes} "
-            f"Why: {ended.direction.why}"
+            f"{changes('Changes', ended.direction)} Why: {ended.direction.why}"
+        )
+    if split:
+        lines.append(
+            "The next mesocycle's workouts train, in order: "
+            + "; ".join(f"{number}. {', '.join(groups)}" for number, groups in enumerate(split, start=1))
+            + "."
         )
     if goal is not None:
         lines.append(f"The goal is {goal}: the direction stays inside its column of the ranges.")
@@ -140,12 +144,6 @@ def brief(
         lines.append(remembered(known))
     lines.append("Write the next mesocycle's direction.")
     return "\n".join(lines)
-
-
-def _training(split: Sequence[Sequence[str]], number: int) -> str:
-    """The groups the split gives this workout, when it gives it any."""
-    groups = split[number - 1] if number <= len(split) else ()
-    return f", training {', '.join(groups)}" if groups else ""
 
 
 def _block(prescribed: workouts.PrescribedBlock) -> str:

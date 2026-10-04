@@ -101,8 +101,9 @@ def test_it_starts_from_the_mesocycle_that_ended_with_the_goal_and_its_methodolo
     assert variation.committed().for_supervisor.strip() in system
     assert "## Ranges by goal" in system
     assert "3 x (Barbell_Squat" in briefed
-    for number, slot in enumerate(asked.slots, start=1):
-        assert f"- workout {number}, training {', '.join(slot.groups)}:" in briefed
+    assert "The next mesocycle's workouts train, in order: " + "; ".join(
+        f"{number}. {', '.join(slot.groups)}" for number, slot in enumerate(asked.slots, start=1)
+    ) in briefed
     assert "goal is hypertrophy" in briefed
     assert "It had no direction" in briefed
     assert asked.continuing is not None and asked.continuing.ended.why not in briefed
@@ -210,3 +211,26 @@ def test_it_never_holds_the_tool_that_reads_a_prescriptions_reasons() -> None:
 @pytest.mark.parametrize("tool", ["mesocycle_history", "mesocycle_held", "mesocycle_volume"])
 def test_the_planner_is_not_offered_the_history_tools(tool: str) -> None:
     assert tool not in planner.TOOLS
+
+
+def test_the_next_splits_groups_are_never_put_on_the_ended_mesocycles_workouts(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """The split may have changed since the ended mesocycle was planned."""
+    ran_out(connection, two_slots)
+    ended = mesocycles.active(connection)
+    assert ended is not None
+
+    briefed = supervisor.brief(ended, "hypertrophy", (), (("arms",), ("legs",)))
+
+    assert "- workout 1: " in briefed and "training arms" not in briefed
+    assert "train, in order: 1. arms; 2. legs." in briefed
+
+
+def test_a_past_direction_kept_before_varies_existed_says_no_empty_list() -> None:
+    old = mesocycles.Direction(theme="t", changes="the squat goes", why="w")
+    ended = mesocycles.Mesocycle(id=1, slots=(), cycles=1, why="x", accepted_on="2026-09-01", accepted_after=0, direction=old)
+
+    briefed = supervisor.brief(ended, None)
+
+    assert "Changes: the squat goes" in briefed and "()" not in briefed

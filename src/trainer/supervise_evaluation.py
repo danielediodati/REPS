@@ -383,7 +383,7 @@ def held(
     if missing:
         failures.append((KEPT, f"missing {', '.join(missing)}"))
     kept = {one for any_of in case.keeps for one in any_of}
-    if case.rotates and not (before - kept) - ids:
+    if case.rotates and before - kept and not (before - kept) - ids:
         failures.append((ROTATED, f"every other exercise is back: {', '.join(sorted(before - kept))}"))
     back = sorted(set(case.without) & ids)
     if back:

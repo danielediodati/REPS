@@ -316,6 +316,12 @@ def changed(changing: plans.Changing) -> str:
     )
 
 
+def changes(heading: str, direction: mesocycles.Direction) -> str:
+    """What a direction changes, under `heading`, with what it varies when it was kept with one."""
+    varies = f" ({', '.join(direction.varies)})" if direction.varies else ""
+    return f"{heading}{varies}: {direction.changes}"
+
+
 def continued(continuing: plans.Continuing) -> str:
     """The mesocycle that ended and the direction the next one is planned from."""
     lines = [
@@ -328,7 +334,7 @@ def continued(continuing: plans.Continuing) -> str:
         lines.append(
             "Its direction, written by the coach between mesocycles; plan this one from it:\n"
             f"Theme: {continuing.direction.theme}\n"
-            f"What changes ({', '.join(continuing.direction.varies)}): {continuing.direction.changes}\n"
+            f"{changes('What changes', continuing.direction)}\n"
             f"Why: {continuing.direction.why}"
         )
     lines.append(
