@@ -88,6 +88,16 @@ class Direction(BaseModel):
         description="What changes from the last mesocycle (exercises, reps, rest) and how far, and what is kept.",
     )
     why: str = Field(description="Why, from the history and what they said.")
+    varies: list[Literal["exercises", "reps", "rest"]] = Field(
+        description="Which of exercises, reps and rest the next mesocycle changes; at least one.",
+    )
+
+    @field_validator("varies")
+    @classmethod
+    def _some(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("names nothing that changes")
+        return list(dict.fromkeys(value))
 
     @field_validator("theme", "changes", "why")
     @classmethod
@@ -116,7 +126,8 @@ def brief(
     else:
         lines.append(
             f"It was planned from your direction: {ended.direction.theme}. "
-            f"Changes: {ended.direction.changes} Why: {ended.direction.why}"
+            f"Changes ({', '.join(ended.direction.varies)}): {ended.direction.changes} "
+            f"Why: {ended.direction.why}"
         )
     if goal is not None:
         lines.append(f"The goal is {goal}: the direction stays inside its column of the ranges.")

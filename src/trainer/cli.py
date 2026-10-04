@@ -35,6 +35,8 @@ from trainer import (
     onboarding_evaluation,
     onboarding_set,
     plan,
+    supervise_evaluation,
+    supervise_set,
     tools,
 )
 from trainer.coach import (
@@ -597,7 +599,13 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
-PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE = "plan", "log", "onboard", "adapt"
+PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE = (
+    "plan",
+    "log",
+    "onboard",
+    "adapt",
+    "supervise",
+)
 """The two measurements, under one command.
 
 Session 4's six situations and session 5's thirty reports are checked on
@@ -616,12 +624,13 @@ somebody's notes does.
 @click.option(
     "--suite",
     "suite",
-    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE)),
+    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE)),
     default=PLAN_SUITE,
     show_default=True,
     help="Which measurement to run: the six planning situations, the "
     "logging set's thirty hand-written reports, the onboarding set's "
-    "scripted users, or the adaptation set's requests.",
+    "scripted users, the adaptation set's requests, or the supervisor's "
+    "histories.",
 )
 @click.option(
     "--repetitions",
@@ -688,6 +697,10 @@ def eval_command(
     against a fixture with an active mesocycle, plans every adaptation it
     starts, and holds that plan to its row.
 
+    `--suite supervise` writes each of the supervisor set's histories into a
+    copy, directs the next mesocycle on the supervisor's model, plans it on the
+    planner's, and holds both to the row and to what the direction varies.
+
     No model judges another model's output in any of them.
 
     **This is the one command in the project that reaches a provider**, and
@@ -695,7 +708,7 @@ def eval_command(
     sockets and no credentials, and the checks are covered there against
     recorded runs instead.
 
-    The plan suite's bar is 100%; the log, onboard and adapt suites' are the ones
+    The plan suite's bar is 100%; the others' are the ones
     their sets declare. The command exits non-zero below any of them.
     """
     with _opened() as connection:
@@ -711,6 +724,10 @@ def eval_command(
                 )
             elif suite == ADAPT_SUITE:
                 lines, report = _adapt_suite(
+                    connection, only, repetitions, records, call_budget
+                )
+            elif suite == SUPERVISE_SUITE:
+                lines, report = _supervise_suite(
                     connection, only, repetitions, records, call_budget
                 )
             else:
@@ -867,13 +884,51 @@ def _adapt_suite(
     return adapt_evaluation.render(report, chosen), report
 
 
+def _supervise_suite(
+    connection: sqlite3.Connection,
+    only: tuple[str, ...],
+    repetitions: int,
+    records: Path,
+    call_budget: int,
+) -> tuple[list[str], evaluation.Report]:
+    """The supervisor set's histories, each written into a copy of the catalog in turn."""
+    try:
+        holds = supervise_set.load()
+    except supervise_set.SuperviseSetError as error:
+        raise click.ClickException(str(error)) from error
+    _refuse(supervise_evaluation.problems(connection, holds))
+    chosen = _chosen(holds.cases, only, "history")
+    supervises_on = models.supervisor()
+    models.ready(supervises_on)
+    plans_on = models.planner()
+    models.ready(plans_on)
+    with supervise_evaluation.prepared(connection) as where:
+        report = supervise_evaluation.run(
+            where,
+            holds,
+            chosen,
+            supervises_on=supervises_on,
+            plans_on=plans_on,
+            repetitions=repetitions,
+            records=records,
+            budget=call_budget,
+        )
+    report = supervise_evaluation.barred(report, holds)
+    return supervise_evaluation.render(report, chosen), report
+
+
 def _refuse(problems: Sequence[str]) -> None:
     if problems:
         raise click.ClickException("\n".join(problems))
 
 
 _Named = TypeVar(
-    "_Named", evaluation.Situation, log_set.Row, onboarding_set.Case, adapt_set.Case
+    "_Named",
+    evaluation.Situation,
+    log_set.Row,
+    onboarding_set.Case,
+    adapt_set.Case,
+    supervise_set.Case,
 )
 """What every suite's cases have in common at this boundary: a name typed at `--only`."""
 

@@ -230,7 +230,7 @@ class Talking(BaseChatModel):
 
 
 DIRECTED = supervisor.Direction(
-    theme="density", changes="rest shortened, exercises kept", why="the time is short"
+    theme="density", changes="rest shortened, exercises kept", why="the time is short", varies=["rest"]
 )
 """What the supervisor writes before a following mesocycle is planned."""
 

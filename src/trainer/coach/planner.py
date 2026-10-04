@@ -328,7 +328,7 @@ def continued(continuing: plans.Continuing) -> str:
         lines.append(
             "Its direction, written by the coach between mesocycles; plan this one from it:\n"
             f"Theme: {continuing.direction.theme}\n"
-            f"What changes: {continuing.direction.changes}\n"
+            f"What changes ({', '.join(continuing.direction.varies)}): {continuing.direction.changes}\n"
             f"Why: {continuing.direction.why}"
         )
     lines.append(

@@ -1612,7 +1612,10 @@ def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_its_direction
     asked = plans.next_requested(connection, "2026-09-22")
     assert asked.continuing is not None
     direction = mesocycles.Direction(
-        theme="unilateral strength", changes="the squat goes to a split squat", why="the loads stalled"
+        theme="unilateral strength",
+        changes="the squat goes to a split squat",
+        why="the loads stalled",
+        varies=("exercises",),
     )
     asked = dataclasses.replace(
         asked, continuing=dataclasses.replace(asked.continuing, direction=direction)
@@ -1627,6 +1630,7 @@ def test_the_next_mesocycle_is_briefed_with_the_one_that_ended_and_its_direction
     assert '"Standing_Military_Press"' in briefed, "the mesocycle that ended, whole"
     for said in (direction.theme, direction.changes, direction.why):
         assert said in briefed
+    assert "What changes (exercises):" in briefed
     assert "102.5" not in briefed, "no per-workout log"
 
 

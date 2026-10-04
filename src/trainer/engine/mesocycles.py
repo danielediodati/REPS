@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -10,6 +11,9 @@ from trainer.engine import duration, state, workouts
 
 ASK_FOR_ONE = "plan one with `trainer plan --mesocycle`"
 """The fix every state below names."""
+
+VARIES = ("exercises", "reps", "rest")
+"""What a direction may change from the last mesocycle (ADR-0014 item 2)."""
 
 
 class MesocycleError(RuntimeError):
@@ -23,6 +27,11 @@ class Direction:
     theme: str
     changes: str
     why: str
+    varies: tuple[str, ...] = ()
+    """Which of `VARIES` it changes."""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "varies", tuple(self.varies))
 
 
 @dataclass(frozen=True)
@@ -86,8 +95,15 @@ def record_mesocycle(
                 _write_block(connection, mesocycle_id, slot, position, prescribed)
         if direction is not None:
             connection.execute(
-                "INSERT INTO directions (mesocycle_id, theme, changes, why) VALUES (?, ?, ?, ?)",
-                (mesocycle_id, direction.theme, direction.changes, direction.why),
+                "INSERT INTO directions (mesocycle_id, theme, changes, why, varies) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    mesocycle_id,
+                    direction.theme,
+                    direction.changes,
+                    direction.why,
+                    json.dumps(list(direction.varies)),
+                ),
             )
         connection.execute("COMMIT")
     except Exception:
@@ -203,11 +219,16 @@ def _slots(
 def direction_of(connection: sqlite3.Connection, mesocycle_id: int) -> Direction | None:
     """The direction a mesocycle was planned from, or `None` when it had none."""
     row = connection.execute(
-        "SELECT theme, changes, why FROM directions WHERE mesocycle_id = ?", (mesocycle_id,)
+        "SELECT theme, changes, why, varies FROM directions WHERE mesocycle_id = ?", (mesocycle_id,)
     ).fetchone()
     if row is None:
         return None
-    return Direction(theme=str(row["theme"]), changes=str(row["changes"]), why=str(row["why"]))
+    return Direction(
+        theme=str(row["theme"]),
+        changes=str(row["changes"]),
+        why=str(row["why"]),
+        varies=tuple(json.loads(row["varies"])),
+    )
 
 
 # -- the history, as the supervisor reads it (ADR-0014 item 3) -----------------

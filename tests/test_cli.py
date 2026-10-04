@@ -4298,3 +4298,28 @@ def test_plan_change_that_says_nothing_is_refused(runner: CliRunner, enriched: P
 
     assert result.exit_code == 2
     assert "--change" in result.output
+
+
+# --- eval --suite supervise --------------------------------------------------
+
+
+def test_the_supervise_suite_stops_at_the_credentials_state_too(
+    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LLM_BACKEND", "groq")
+
+    result = runner.invoke(main, ["eval", "--suite", "supervise", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "no Groq credentials" in result.output
+    assert "followed" not in result.output, "it ran the pass anyway"
+
+
+def test_the_supervise_suite_names_its_histories_when_one_is_mistyped(
+    runner: CliRunner, enriched: Path
+) -> None:
+    result = runner.invoke(main, ["eval", "--suite", "supervise", "--only", "alike!"])
+
+    assert result.exit_code != 0
+    assert "no history called 'alike!'" in result.output
+    assert "loves-the-hinge" in result.output

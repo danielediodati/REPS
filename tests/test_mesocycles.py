@@ -502,7 +502,10 @@ def test_with_none_accepted_nothing_has_finished(connection: sqlite3.Connection)
 # -- directions and the history the supervisor reads ---------------------------
 
 DIRECTION = mesocycles.Direction(
-    theme="density", changes="rest shortened, exercises kept", why="two alike, time is short"
+    theme="density",
+    changes="rest shortened, exercises kept",
+    why="two alike, time is short",
+    varies=("rest",),
 )
 
 
@@ -516,6 +519,12 @@ def test_a_direction_is_kept_with_the_mesocycle_it_shaped(connection: sqlite3.Co
     assert kept is not None and kept.id == second
     assert kept.direction == DIRECTION
     assert mesocycles.direction_of(connection, first) is None
+
+
+def test_what_a_direction_varies_is_a_tuple_however_it_was_given() -> None:
+    given = mesocycles.Direction(theme="t", changes="c", why="w", varies=["reps", "rest"])  # type: ignore[arg-type]
+
+    assert given.varies == ("reps", "rest")
 
 
 def test_the_history_is_every_mesocycle_oldest_first_with_its_count_and_direction(

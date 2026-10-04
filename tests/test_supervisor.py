@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import json
+import typing
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ DIRECTION = supervisor.Direction(
     theme="unilateral strength",
     changes="the squat goes to a split squat; reps and rest stay",
     why="two mesocycles alike, the loads have stalled",
+    varies=["exercises"],
 )
 
 PROSE = "PLANNERS-OWN-PROSE"
@@ -125,11 +127,31 @@ def test_its_run_is_kept_like_every_other_with_the_direction_it_wrote(
     assert record.summary(written), "readable by `trainer runs` like any other"
 
 
+def test_what_it_may_vary_is_the_engines_list() -> None:
+    (listed,) = typing.get_args(supervisor.Direction.model_fields["varies"].annotation)
+    assert typing.get_args(listed) == mesocycles.VARIES
+
+
+@pytest.mark.parametrize("varies", [[], ["load"]])
+def test_a_direction_varying_nothing_it_may_is_asked_for_again(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest, varies: list[str]
+) -> None:
+    asked = ended(connection, two_slots)
+    written = json.dumps({"theme": "t", "changes": "c", "why": "w", "varies": varies})
+    model = Scripted(raw=[written], documents=[DIRECTION])
+
+    directed = supervisor.directed(graph_of(model), asked, {})
+
+    assert directed.continuing is not None and directed.continuing.direction is not None
+    assert directed.continuing.direction.varies == ("exercises",)
+    assert len(model.schemas) == 2
+
+
 def test_a_blank_direction_is_asked_for_again(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:
     asked = ended(connection, two_slots)
-    model = Scripted(raw=['{"theme": " ", "changes": "x", "why": "y"}'], documents=[DIRECTION])
+    model = Scripted(raw=['{"theme": " ", "changes": "x", "why": "y", "varies": ["rest"]}'], documents=[DIRECTION])
 
     directed = supervisor.directed(graph_of(model), asked, {})
 

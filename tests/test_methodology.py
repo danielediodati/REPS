@@ -77,3 +77,23 @@ def test_the_ranges_are_their_section_alone() -> None:
     assert ranges.startswith(methodology.RANGES_HEADING)
     assert "| reps per set | 1–3 | 20–40 |" in ranges
     assert "Principles" not in ranges
+
+
+@pytest.mark.parametrize(
+    ("goal", "reps", "rest"),
+    [
+        ("strength", (1, 6), (180, 300)),
+        ("hypertrophy", (6, 30), (60, 180)),
+        ("recomposition", (8, 20), (45, 120)),
+        ("muscular endurance", (15, 30), (30, 90)),
+    ],
+)
+def test_a_goals_reps_and_rest_are_read_off_its_column(
+    goal: str, reps: tuple[int, int], rest: tuple[int, int]
+) -> None:
+    assert methodology.committed().bounds(goal) == methodology.Bounds(reps=reps, rest=rest)
+
+
+def test_a_goal_the_table_has_no_column_for_has_no_bounds() -> None:
+    with pytest.raises(methodology.MethodologyError, match="no column for 'power'"):
+        methodology.committed().bounds("power")
