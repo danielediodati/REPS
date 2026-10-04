@@ -281,6 +281,9 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # in the last one, so the checkpoint has to read those blocks back.
         # It names the two types to register them and calls nothing.
         "coach/checkpoints.py",
+        # Session 15: the supervisor's brief reads the ended mesocycle's
+        # `PrescribedBlock`s, without their reasons; it writes nothing.
+        "coach/supervisor.py",
         # Session 10: a mesocycle's slots are `PrescribedBlock`s, templates
         # the engine keeps and reads; it writes no workout.
         "engine/mesocycles.py",

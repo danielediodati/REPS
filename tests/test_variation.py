@@ -6,10 +6,12 @@ import hashlib
 import re
 from pathlib import Path
 
-from trainer.coach import planner
-from trainer.engine import methodology
+import pytest
 
-VARIATION_PATH = methodology.METHODOLOGY_PATH.with_name("variation.md")
+from trainer.coach import planner
+from trainer.engine import methodology, variation
+
+VARIATION_PATH = variation.VARIATION_PATH
 
 PLANNER_PROMPTS = {
     "PLANNING": "15d8f2b831b6aecc68e7e911e8c38579842c702f2be340f694ebcaf3e6fb2df4",
@@ -59,3 +61,18 @@ def test_the_planner_does_not_read_it() -> None:
     for prompt in (planner.PLANNING, planner.MESOCYCLE_PLANNING):
         assert title not in prompt
         assert "variation.md" not in prompt
+
+
+def test_the_supervisor_reads_it_without_its_sources() -> None:
+    body, sources = _sections(VARIATION_PATH)
+    read = variation.committed().for_supervisor
+
+    assert read.strip() == body.strip()
+    assert sources.strip() not in read
+
+
+def test_a_missing_file_is_named(tmp_path: Path) -> None:
+    missing = tmp_path / "variation.md"
+
+    with pytest.raises(variation.VariationError, match="variation.md"):
+        variation.load(missing)

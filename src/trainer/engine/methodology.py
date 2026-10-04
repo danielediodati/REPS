@@ -33,6 +33,12 @@ class Methodology:
         """The document without its list of sources."""
         return self.text.split(SOURCES_HEADING, 1)[0].rstrip() + "\n"
 
+    @property
+    def ranges(self) -> str:
+        """The ranges section alone, heading included."""
+        _, _, after = self.text.partition(RANGES_HEADING)
+        return RANGES_HEADING + after.split("\n## ", 1)[0].rstrip() + "\n"
+
 
 def parse(text: str) -> Methodology:
     """Read the goals off the header row of the first table under the ranges heading."""

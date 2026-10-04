@@ -507,6 +507,66 @@ def compare_variants(id_a: str, id_b: str) -> dict[str, Any]:
     }
 
 
+def mesocycle_history() -> list[dict[str, Any]]:
+    """Every mesocycle ever accepted, oldest first, as counts and its direction.
+
+    `workouts` is what its cycles asked for and `performed` what was done
+    while it was followed. `changed` means a change rewrote it for the cycles
+    left, so it was followed for none. `direction` is what it was planned
+    from, null for the first and for one planned from nothing.
+    """
+    with reported(), opened() as connection:
+        found = mesocycles.history(connection)
+    return [
+        {
+            "mesocycle_id": past.id,
+            "accepted_on": past.accepted_on,
+            "ended_on": past.ended_on,
+            "slots": past.slots,
+            "cycles": past.cycles,
+            "workouts": past.workouts,
+            "performed": past.performed,
+            "changed": past.changed,
+            "direction": None if past.direction is None else asdict(past.direction),
+        }
+        for past in found
+    ]
+
+
+def mesocycle_held(mesocycle_id: int) -> list[dict[str, Any]]:
+    """What one mesocycle prescribed, workout by workout: each block's rounds,
+    rest in seconds and exercises with their amount. An id never accepted is a
+    failure; `mesocycle_history` lists them.
+    """
+    with reported(), opened() as connection:
+        found = mesocycles.held(connection, mesocycle_id)
+        return [
+            {
+                "workout": number,
+                "blocks": [
+                    {
+                        "rounds": block.block.rounds,
+                        "rest": block.block.rest,
+                        "items": [_prescribed_item(connection, item) for item in block.block.items],
+                    }
+                    for block in blocks
+                ],
+            }
+            for number, blocks in enumerate(found, start=1)
+        ]
+
+
+def mesocycle_volume(mesocycle_id: int) -> list[dict[str, Any]]:
+    """Rounds per movement pattern and per primary muscle for one mesocycle:
+    `per_cycle` is what one cycle of it planned, `performed` what was done in
+    all of it. Pattern rows first, then muscle rows; the two axes count the
+    same round, so they are never added together.
+    """
+    with reported(), opened() as connection:
+        found = mesocycles.volume(connection, mesocycle_id)
+    return [asdict(one) for one in found]
+
+
 TOOLS: tuple[Callable[..., Any], ...] = (
     admissible_set,
     remaining_budget,
@@ -520,6 +580,9 @@ TOOLS: tuple[Callable[..., Any], ...] = (
     prescribed_workout,
     due_workout,
     compare_variants,
+    mesocycle_history,
+    mesocycle_held,
+    mesocycle_volume,
 )
 """The surface, enumerated once.
 

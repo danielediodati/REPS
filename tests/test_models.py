@@ -1225,3 +1225,34 @@ def test_a_local_subgraph_model_is_asked_to_reason(
     monkeypatch.setenv(models.PLANNER_MODEL_ENV, "gpt-oss:120b")
 
     assert cast(Any, models.planner().model).reasoning == models.REASONING
+
+
+def test_the_supervisor_runs_on_its_choice_until_its_set_measures_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    openrouter_logger(monkeypatch)
+
+    chat = models.supervisor()
+
+    assert (chat.name, chat.reasoning, chat.host) == (
+        models.SUPERVISOR_CHOICE.model,
+        models.SUPERVISOR_CHOICE.effort,
+        models.SUPERVISOR_CHOICE.host,
+    )
+    assert chat.setting == models.SUPERVISOR_MODEL_ENV
+
+
+def test_the_supervisor_takes_a_model_effort_and_host_of_its_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    openrouter_logger(
+        monkeypatch,
+        SUPERVISOR_MODEL="qwen/qwen3.8-27b",
+        SUPERVISOR_REASONING="low",
+        SUPERVISOR_HOST="deepinfra",
+    )
+
+    chat = models.supervisor()
+
+    assert (chat.name, chat.reasoning, chat.host) == ("qwen/qwen3.8-27b", "low", "deepinfra")
+    assert models.planner().name == models.PLANNER_CHOICE.model

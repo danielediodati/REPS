@@ -69,3 +69,11 @@ def test_a_header_with_no_row_label_column_is_refused_rather_than_losing_a_goal(
     """Without the blank first cell, the first goal would be read as the row-label column and silently dropped."""
     with pytest.raises(methodology.MethodologyError, match="blank"):
         methodology.parse("## Ranges by goal\n\n| power | stamina |\n|---|---|\n")
+
+
+def test_the_ranges_are_their_section_alone() -> None:
+    ranges = methodology.parse(RANGES).ranges
+
+    assert ranges.startswith(methodology.RANGES_HEADING)
+    assert "| reps per set | 1–3 | 20–40 |" in ranges
+    assert "Principles" not in ranges

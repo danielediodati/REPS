@@ -514,3 +514,90 @@ def test_a_workout_performed_after_its_end_is_counted_past_it(
 
 def test_with_none_accepted_nothing_has_finished(connection: sqlite3.Connection) -> None:
     assert mesocycles.finished(connection) is None
+
+
+# -- directions and the history the supervisor reads ---------------------------
+
+DIRECTION = mesocycles.Direction(
+    theme="density", changes="rest shortened, exercises kept", why="two alike, time is short"
+)
+
+
+def test_a_direction_is_kept_with_the_mesocycle_it_shaped(connection: sqlite3.Connection) -> None:
+    first = mesocycles.record_mesocycle(connection, (slot("Plank"),), cycles=1, why="a", on=TODAY)
+    second = mesocycles.record_mesocycle(
+        connection, (slot("Barbell_Squat"),), cycles=1, why="b", on=TODAY, direction=DIRECTION
+    )
+
+    kept = mesocycles.active(connection)
+    assert kept is not None and kept.id == second
+    assert kept.direction == DIRECTION
+    assert mesocycles.direction_of(connection, first) is None
+
+
+def test_the_history_is_every_mesocycle_oldest_first_with_its_count_and_direction(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    first = accepted(connection, cycles=1)
+    for _ in range(2):
+        _, served = mesocycles.record_served(connection, TODAY)
+        performed(connection, served)
+    second = mesocycles.record_mesocycle(
+        connection, (slot("Barbell_Squat"), slot("Plank")), cycles=3, why="b", on=TODAY,
+        direction=DIRECTION,
+    )
+    performed(connection)
+
+    past = mesocycles.history(connection)
+
+    assert [(one.id, one.workouts, one.performed, one.changed) for one in past] == [
+        (first, 2, 2, False),
+        (second, 6, 1, False),
+    ]
+    assert past[0].ended_on == TODAY and past[1].ended_on is None
+    assert (past[0].direction, past[1].direction) == (None, DIRECTION)
+
+
+def test_a_mesocycle_a_change_rewrote_was_followed_for_none_of_its_workouts(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    """The change keeps the count, so what was performed belongs to the rewritten one."""
+    accepted(connection, cycles=2)
+    performed(connection)
+    mesocycles.record_mesocycle(
+        connection, (slot("Barbell_Squat"), slot("Plank")), cycles=2, why="b", on=TODAY,
+        accepted_after=0,
+    )
+
+    old, new = mesocycles.history(connection)
+
+    assert (old.changed, old.performed) == (True, 0)
+    assert (new.changed, new.performed) == (False, 1)
+
+
+def test_what_a_mesocycle_held_is_read_back_by_id(connection: sqlite3.Connection) -> None:
+    written = (slot("Barbell_Squat"),)
+    identifier = mesocycles.record_mesocycle(connection, written, cycles=1, why="a", on=TODAY)
+    mesocycles.record_mesocycle(connection, (slot("Plank"),), cycles=1, why="b", on=TODAY)
+
+    assert mesocycles.held(connection, identifier) == written
+    with pytest.raises(mesocycles.MesocycleError, match="mesocycle_history"):
+        mesocycles.held(connection, 99)
+
+
+def test_its_volume_is_one_cycle_planned_and_all_of_it_performed(
+    connection: sqlite3.Connection, two_slots: Path
+) -> None:
+    connection.execute(
+        "UPDATE exercises SET movement_pattern = CASE id WHEN 'Plank' THEN 'core' ELSE 'squat' END"
+    )
+    identifier = accepted(connection, cycles=1)
+    for _ in range(2):
+        _, served = mesocycles.record_served(connection, TODAY)
+        performed(connection, served)
+
+    found = {(one.axis, one.key): (one.per_cycle, one.performed) for one in mesocycles.volume(connection, identifier)}
+
+    assert found[("pattern", "squat")] == (3, 0), "the squat was never performed"
+    assert found[("pattern", "core")] == (3, 2), "the plank, once a workout, one round each"
+    assert found[("muscle", "shoulders")] == (6, 2)

@@ -49,6 +49,7 @@ runs on, so a fresh clone still has one provider to think about.
 PLANNER_MODEL_ENV = "PLANNER_MODEL"
 LOGGER_MODEL_ENV = "LOGGER_MODEL"
 ONBOARDING_MODEL_ENV = "ONBOARDING_MODEL"
+SUPERVISOR_MODEL_ENV = "SUPERVISOR_MODEL"
 """Each subgraph's own model, on the provider `LLM_BACKEND` names.
 
 Empty falls back to that provider's model, so one variable still moves both.
@@ -57,6 +58,7 @@ Empty falls back to that provider's model, so one variable still moves both.
 PLANNER_REASONING_ENV = "PLANNER_REASONING"
 LOGGER_REASONING_ENV = "LOGGER_REASONING"
 ONBOARDING_REASONING_ENV = "ONBOARDING_REASONING"
+SUPERVISOR_REASONING_ENV = "SUPERVISOR_REASONING"
 ENTRANCE_REASONING_ENV = "ENTRANCE_REASONING"
 """How hard each node's model reasons, on OpenRouter; empty is the model's default."""
 
@@ -68,6 +70,7 @@ OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
 PLANNER_HOST_ENV = "PLANNER_HOST"
 LOGGER_HOST_ENV = "LOGGER_HOST"
 ONBOARDING_HOST_ENV = "ONBOARDING_HOST"
+SUPERVISOR_HOST_ENV = "SUPERVISOR_HOST"
 ENTRANCE_HOST_ENV = "ENTRANCE_HOST"
 """Each node's own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
 
@@ -124,6 +127,8 @@ PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
 LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ENTRANCE_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
 ONBOARDING_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
+SUPERVISOR_CHOICE = PLANNER_CHOICE
+"""The planner's until the supervisor's set measures one (ticket 15.4)."""
 
 DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
 """The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""
@@ -301,10 +306,18 @@ def onboarding() -> Chat:
     )
 
 
+def supervisor() -> Chat:
+    """The model the supervisor writes directions on: `SUPERVISOR_MODEL`, or its choice on OpenRouter, or the coach's."""
+    return _subgraph(
+        SUPERVISOR_MODEL_ENV, SUPERVISOR_REASONING_ENV, SUPERVISOR_HOST_ENV, SUPERVISOR_CHOICE
+    )
+
+
 _CHOICES = {
     PLANNER_MODEL_ENV: PLANNER_CHOICE,
     LOGGER_MODEL_ENV: LOGGER_CHOICE,
     ONBOARDING_MODEL_ENV: ONBOARDING_CHOICE,
+    SUPERVISOR_MODEL_ENV: SUPERVISOR_CHOICE,
     ENTRANCE_MODEL_ENV: ENTRANCE_CHOICE,
 }
 

@@ -362,10 +362,13 @@ class Changing:
 
 @dataclass(frozen=True)
 class Continuing:
-    """The mesocycle whose cycles have all been performed, and what was performed in them."""
+    """The mesocycle whose cycles have all been performed, what was performed in them, and the next one's direction."""
 
+    mesocycle: int
     ended: Mesocycle
     trained: tuple[mesocycles.Trained, ...]
+    direction: mesocycles.Direction | None = None
+    """Written by the supervisor before the planner runs (ADR-0014), and kept with the mesocycle accepted."""
 
 
 @dataclass(frozen=True)
@@ -619,6 +622,7 @@ def next_requested(connection: sqlite3.Connection, today: str) -> MesocycleReque
     return dataclasses.replace(
         mesocycle_requested(connection, today),
         continuing=Continuing(
+            mesocycle=ended.mesocycle.id,
             ended=Mesocycle(
                 workouts=[from_prescribed(slot) for slot in ended.mesocycle.slots],
                 cycles=ended.mesocycle.cycles,

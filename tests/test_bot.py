@@ -19,6 +19,7 @@ from typing import Any, cast
 
 import pytest
 from langchain_core.messages import AIMessage
+from pydantic import BaseModel
 from telegram import Bot, CallbackQuery, Chat, Message, Update, User
 from telegram.error import InvalidToken, RetryAfter, TimedOut
 
@@ -50,7 +51,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress
+from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, supervisor
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
 from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
@@ -228,6 +229,12 @@ class Talking(BaseChatModel):
         return self.bind(tools=tools, **kwargs)
 
 
+DIRECTED = supervisor.Direction(
+    theme="density", changes="rest shortened, exercises kept", why="the time is short"
+)
+"""What the supervisor writes before a following mesocycle is planned."""
+
+
 def graphs_of(
     plan: planner.Planner | None = None,
     *,
@@ -236,8 +243,9 @@ def graphs_of(
     interview: onboarding.Onboarding | None = None,
     saver: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
+    directs: Scripted | None = None,
 ) -> bot.Graphs:
-    """The three graphs the bot holds, each on a stand-in.
+    """The graphs the bot holds, each on a stand-in.
 
     The entrance hands off to the planner unless a test says otherwise,
     because that is what most of this file is about: what happens once a
@@ -269,6 +277,15 @@ def graphs_of(
         if interview is not None
         else onboarding.build(
             models.Chat(Scripted(), FRONT_PROVIDER, FRONT_MODEL), checkpointer=held
+        ),
+        supervisor=supervisor.build(
+            models.Chat(
+                directs if directs is not None else Scripted(documents=[DIRECTED, DIRECTED]),
+                SCRIPTED,
+                STAND_IN,
+            ),
+            checkpointer=held,
+            archive=kept,
         ),
         archive=kept,
         preparing=preparing,
@@ -670,7 +687,7 @@ def test_the_thread_survives_a_restart(
     `trainer bot` are. The conversation is the checkpointer's (ADR-0004, item
     5), so the second process finds what the first was told."""
     path = tmp_path / "checkpoints.sqlite"
-    written: list[plans.WorkoutPlan | plans.Mesocycle] = [A_MESOCYCLE, A_MESOCYCLE]
+    written: list[BaseModel] = [A_MESOCYCLE, A_MESOCYCLE]
 
     with checkpoints.saver(path) as saver:
         graph = graph_of(Scripted(documents=written[:1]), checkpointer=saver)
@@ -2507,6 +2524,7 @@ def finishing(
     front: Talking | None = None,
     saver: BaseCheckpointSaver[Any] | None = None,
     archive: Path | None = None,
+    directs: Scripted | None = None,
 ) -> bot.Graphs:
     """A chat about to report the workout that completes its mesocycle's last cycle."""
     last = on_its_last_workout(catalogued)
@@ -2521,6 +2539,7 @@ def finishing(
         ),
         saver=held,
         archive=archive,
+        directs=directs,
     )
 
 
@@ -2559,6 +2578,44 @@ def test_the_report_that_completes_the_last_cycle_prepares_the_next_mesocycle(
     assert state["unasked"] is True
     assert state["request"].continuing is not None, "briefed with the mesocycle that ended"
     assert len(planned.seen) == 1, "one planning run, and only one"
+
+
+def test_the_supervisor_directs_the_next_mesocycle_before_it_is_planned_and_it_is_kept(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    planned = Scripted(documents=[NEXT])
+    directs = Scripted(turns=[calling("mesocycle_history")], documents=[DIRECTED])
+    graphs = finishing(catalogued, planned, directs=directs)
+    watched = Channels()
+    asyncio.run(reported_and_prepared(graphs, watched))
+
+    assert len(directs.seen) == 2 and len(planned.seen) == 1
+    first_planned = planned.seen[0][0]
+    assert all(first_planned not in turn for turn in directs.seen), "the supervisor ran first"
+    request = graphs.planner.get_state(planning_on()).values["request"]
+    assert request.continuing.direction == mesocycles.Direction(**DIRECTED.model_dump())
+
+    ((_, buttons),) = watched.offers
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], Channels().chat))
+
+    kept = mesocycles.active(catalogued)
+    assert kept is not None and kept.cycles == 3
+    assert kept.direction == mesocycles.Direction(**DIRECTED.model_dump())
+
+
+def test_a_supervisor_that_falls_over_prepares_nothing_and_says_so(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    planned = Scripted(documents=[NEXT])
+    directs = Scripted(raw=["not json"] * 3)
+    graphs = finishing(catalogued, planned, directs=directs)
+    watched = Channels()
+
+    asyncio.run(reported_and_prepared(graphs, watched))
+
+    assert watched.said[-1] == bot.FAILED
+    assert planned.seen == [] and watched.offers == []
+    assert graphs.preparing == set()
 
 
 def test_a_report_that_does_not_complete_the_last_cycle_prepares_nothing(

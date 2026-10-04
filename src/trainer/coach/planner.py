@@ -940,6 +940,9 @@ def build(
                     why=accepted_plan.why,
                     on=date.today().isoformat(),
                     accepted_after=None if changing is None else changing.accepted_after,
+                    direction=None
+                    if request.continuing is None
+                    else request.continuing.direction,
                 )
             return {"mesocycle": kept} | closed(
                 {**state, "mesocycle": kept}, records.ACCEPTED

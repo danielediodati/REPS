@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
@@ -220,6 +221,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
     messages: Sequence[AnyMessage] = state.get("messages", ())
     emitted = state.get("plan")
     document = state.get("document")
+    direction = state.get("direction")
     return {
         "negotiation": str(state.get("negotiation", "")),
         "run": str(state.get("run", "")),
@@ -250,6 +252,7 @@ def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:
         "performed": None if document is None else document.model_dump(),
         "workout": state.get("workout"),
         "mesocycle": state.get("mesocycle"),
+        "direction": None if direction is None else dataclasses.asdict(direction),
     }
 
 

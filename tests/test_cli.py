@@ -3623,7 +3623,7 @@ def healthy_bot(
     monkeypatch.setattr(
         bot,
         "serve",
-        lambda declared, front, on, logs, saver, store, interviews: polled.append(declared),
+        lambda declared, front, on, logs, saver, store, interviews, directs: polled.append(declared),
     )
     return polled
 
@@ -3930,6 +3930,7 @@ def test_bot_says_which_model_answers_the_entrance(
     assert result.exit_code == 0, result.output
     assert f"entrance:    {models.DEFAULT_ENTRANCE_MODEL} on ollama" in result.output
     assert "onboarding:  " in result.output
+    assert "supervisor:  " in result.output
     assert result.output.isascii()
 
 

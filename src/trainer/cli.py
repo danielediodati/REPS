@@ -955,6 +955,8 @@ def bot_command() -> None:
         models.ready(front)
         interviews = models.onboarding()
         models.ready(interviews)
+        directs = models.supervisor()
+        models.ready(directs)
         name = bot.identified(declared)
 
         # Opened before the block is printed, not after: a block that says
@@ -966,6 +968,7 @@ def bot_command() -> None:
             click.echo(f"logger:      {logs.described}")
             click.echo(f"entrance:    {front.described} on {front.provider}")
             click.echo(f"onboarding:  {interviews.described}")
+            click.echo(f"supervisor:  {directs.described}")
             click.echo(
                 f"context:     {context} tokens"
                 if context is not None
@@ -984,7 +987,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, front, on, logs, saver, store, interviews)
+            bot.serve(declared, front, on, logs, saver, store, interviews, directs)
 
 
 @main.group("runs")
