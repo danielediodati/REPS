@@ -108,7 +108,7 @@ def parse(text: str) -> SuperviseSet:
     declared = raw.get("declared")
     if not isinstance(declared, dict):
         raise SuperviseSetError("the set declares no [declared]")
-    named = {name: _mesocycle(name, meso) for name, meso in dict(raw.get("mesocycles", {})).items()}
+    named = {name: mesocycle(name, meso) for name, meso in dict(raw.get("mesocycles", {})).items()}
     cases = tuple(_case(entry, named) for entry in raw.get("cases", ()))
     names = [case.name for case in cases]
     repeated = sorted({name for name in names if names.count(name) > 1})
@@ -123,7 +123,8 @@ def parse(text: str) -> SuperviseSet:
     )
 
 
-def _mesocycle(name: str, raw: Mapping[str, Any]) -> plans.Mesocycle:
+def mesocycle(name: str, raw: Mapping[str, Any]) -> plans.Mesocycle:
+    """A mesocycle out of its TOML table, its workouts written as `slots`."""
     meso = dict(raw)
     try:
         return plans.Mesocycle.model_validate(

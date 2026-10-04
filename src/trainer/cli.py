@@ -11,6 +11,7 @@ decides how a person should read it.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
@@ -28,6 +29,7 @@ from trainer import (
     __version__,
     adapt_evaluation,
     adapt_set,
+    demo,
     evaluation,
     log,
     log_evaluation,
@@ -1177,6 +1179,24 @@ def config_command(show_groups: bool) -> None:
     click.echo("split:")
     for position, groups in enumerate(declared.split, start=1):
         click.echo(f"  {position}. {', '.join(groups)}")
+
+
+@main.command("demo")
+@click.argument("home", type=click.Path(file_okay=False, path_type=Path))
+def demo_command(home: Path) -> None:
+    """Build the demo in HOME: three mesocycles performed, the last one a report from its end."""
+    click.echo(f"history:  {demo.history_path()}")
+    try:
+        built = demo.build(home, date.today().isoformat())
+    except demo.DemoError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(f"database: {built}")
+    with closing(database.connect(built)) as connection:
+        for one in mesocycles.history(connection):
+            click.echo(f"  mesocycle {one.id}: {one.performed} of {one.workouts} workouts performed")
+    click.echo(f"run the bot with TRAINER_HOME={home}; reporting today's workout ends the last mesocycle")
+    if os.environ.get(database.DATABASE_ENV_VAR):
+        click.echo(f"{database.DATABASE_ENV_VAR} is set and wins over TRAINER_HOME; unset it for the demo")
 
 
 def _print_muscle_groups(mapping: muscle_groups.MuscleGroups) -> None:

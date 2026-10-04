@@ -112,7 +112,7 @@ def staged(
         on += timedelta(days=1)
         mesocycles.record_mesocycle(
             connection,
-            tuple(_prescribed(workout) for workout in mesocycle.workouts),
+            tuple(prescribed(workout) for workout in mesocycle.workouts),
             cycles=mesocycle.cycles,
             why=mesocycle.why,
             on=on.isoformat(),
@@ -123,7 +123,7 @@ def staged(
             served, workout_id = mesocycles.record_served(connection, on.isoformat())
             workouts.record_performed(
                 connection,
-                tuple(_as_prescribed(prescribed) for prescribed in served.blocks),
+                tuple(as_performed(block) for block in served.blocks),
                 on=on.isoformat(),
                 report="as prescribed",
                 workout_id=workout_id,
@@ -131,14 +131,15 @@ def staged(
     return plans.next_requested(connection, today)
 
 
-def _prescribed(workout: plans.WorkoutPlan) -> tuple[workouts.PrescribedBlock, ...]:
+def prescribed(workout: plans.WorkoutPlan) -> tuple[workouts.PrescribedBlock, ...]:
+    """A planned workout in the shape the engine records."""
     return tuple(
         workouts.PrescribedBlock(block=costed, reason=shape.reason)
         for shape, costed in zip(workout.blocks, plans.to_blocks(workout), strict=True)
     )
 
 
-def _as_prescribed(prescribed: workouts.PrescribedBlock) -> workouts.PerformedBlock:
+def as_performed(prescribed: workouts.PrescribedBlock) -> workouts.PerformedBlock:
     """A block performed exactly as it was prescribed."""
     block = prescribed.block
     return workouts.PerformedBlock(

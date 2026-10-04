@@ -1,0 +1,108 @@
+# The demo's history, built by `trainer demo HOME`.
+#
+# - `[declared]` is declared before the first mesocycle; a mesocycle naming a
+#   `goal` declares it again with that goal, the day it is accepted.
+# - Each mesocycle in `history` is accepted with its `direction` and every
+#   workout of it performed as prescribed, except the last workout of the last
+#   one: reporting it in the chat ends the mesocycle, and the supervisor and
+#   the planner open the next.
+# - `[loads]` is the load in kg every set of an exercise was lifted with; an
+#   exercise not in it is recorded with no load.
+# - Every mesocycle is checked by the validator under the declaration in force
+#   before it is written, as the planner's would have been.
+
+[declared]
+cycle_length = 2
+duration_cap_min = 45
+split = [["legs", "core"], ["chest", "back"]]
+equipment = ["barbell", "dumbbell", "body only"]
+goal = "hypertrophy"
+
+[loads]
+Barbell_Squat = 80
+Romanian_Deadlift = 70
+Barbell_Bench_Press_-_Medium_Grip = 60
+Bent_Over_Barbell_Row = 55
+Dumbbell_Lunges = 14
+Standing_Dumbbell_Calf_Raise = 20
+Incline_Dumbbell_Press = 20
+Front_Barbell_Squat = 55
+Split_Squat_with_Dumbbells = 14
+Dumbbell_Bench_Press = 24
+One-Arm_Dumbbell_Row = 26
+Dumbbell_Flyes = 12
+
+[[history]]
+mesocycle = "hypertrophy"
+
+[[history]]
+mesocycle = "angles"
+direction = { theme = "new angles", changes = "every exercise replaced by one reaching the muscle from another angle; reps up from 8 to 10-12, rest down a step", why = "two regions of each muscle left untrained by one exercise", varies = ["exercises", "reps", "rest"] }
+
+[[history]]
+mesocycle = "strength"
+goal = "strength"
+direction = { theme = "the main lifts, heavy", changes = "back to the barbell squat, bench and row of the first mesocycle, a hinge added and the accessories dropped; reps down to 5-6, rest up to 3 minutes", why = "the goal is now strength, which the heavy compound lifts train", varies = ["exercises", "reps", "rest"] }
+
+# -- the mesocycles the history is made of ------------------------------------
+
+[mesocycles.hypertrophy]
+cycles = 4
+why = "a base to build on"
+
+[[mesocycles.hypertrophy.slots]]
+blocks = [
+  { rounds = 4, rest = 120, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 3, rest = 60, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+]
+
+[[mesocycles.hypertrophy.slots]]
+blocks = [
+  { rounds = 4, rest = 120, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 120, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+]
+
+[mesocycles.angles]
+cycles = 4
+why = "new angles on the same muscles"
+
+[[mesocycles.angles.slots]]
+blocks = [
+  { rounds = 4, rest = 90, reason = "the squat, upright", items = [{ exercise_id = "Front_Barbell_Squat", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "one leg", items = [{ exercise_id = "Split_Squat_with_Dumbbells", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+  { rounds = 3, rest = 60, reason = "the lower trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+]
+
+[[mesocycles.angles.slots]]
+blocks = [
+  { rounds = 4, rest = 90, reason = "the press", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "volume", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 90, reason = "the pull", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 60, reason = "the stretch", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 12 } }] },
+]
+
+[mesocycles.strength]
+cycles = 4
+why = "the main lifts, heavy"
+
+[[mesocycles.strength.slots]]
+blocks = [
+  { rounds = 5, rest = 180, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 4, rest = 180, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 3, rest = 180, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 6 } }] },
+]
+
+[[mesocycles.strength.slots]]
+blocks = [
+  { rounds = 5, rest = 180, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 4, rest = 180, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 3, rest = 180, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 6 } }] },
+]
