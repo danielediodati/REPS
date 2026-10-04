@@ -898,11 +898,12 @@ def _supervise_suite(
         raise click.ClickException(str(error)) from error
     _refuse(supervise_evaluation.problems(connection, holds))
     chosen = _chosen(holds.cases, only, "history")
-    supervises_on = models.supervisor()
-    models.ready(supervises_on)
-    plans_on = models.planner()
-    models.ready(plans_on)
     with supervise_evaluation.prepared(connection) as where:
+        _refuse(supervise_evaluation.refused(where, holds, date.today().isoformat()))
+        supervises_on = models.supervisor()
+        models.ready(supervises_on)
+        plans_on = models.planner()
+        models.ready(plans_on)
         report = supervise_evaluation.run(
             where,
             holds,

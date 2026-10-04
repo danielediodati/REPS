@@ -193,6 +193,18 @@ def problems(connection: sqlite3.Connection, holds: supervise_set.SuperviseSet) 
     return tuple(found)
 
 
+def refused(where: Fixture, holds: supervise_set.SuperviseSet, today: str) -> tuple[str, ...]:
+    """What the validator would refuse in the set's mesocycles, asked for as a door would ask under the set's declaration."""
+    for table in TABLES:
+        where.connection.execute(f"DELETE FROM {table}")
+    asked = plans.mesocycle_requested(where.connection, today, declared=onboarding.settled(dict(holds.declared)))
+    return tuple(
+        f"[mesocycles.{name}] {one.rule}: {one.says}"
+        for name, mesocycle in holds.mesocycles.items()
+        for one in plans.validate_mesocycle(where.connection, mesocycle, asked)
+    )
+
+
 def run(
     where: Fixture,
     holds: supervise_set.SuperviseSet,

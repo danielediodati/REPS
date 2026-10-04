@@ -50,17 +50,18 @@ why = "a base to build on"
 [[mesocycles.hypertrophy.slots]]
 blocks = [
   { rounds = 4, rest = 120, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 90, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 90, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 3, rest = 60, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
 ]
 
 [[mesocycles.hypertrophy.slots]]
 blocks = [
   { rounds = 4, rest = 120, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
   { rounds = 4, rest = 120, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 90, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 90, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
 ]
 
 [mesocycles.hinge]
@@ -70,17 +71,18 @@ why = "a base with a hinge"
 [[mesocycles.hinge.slots]]
 blocks = [
   { rounds = 4, rest = 120, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 90, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 10 } }] },
   { rounds = 3, rest = 90, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 3, rest = 60, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
 ]
 
 [[mesocycles.hinge.slots]]
 blocks = [
   { rounds = 4, rest = 120, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
   { rounds = 4, rest = 120, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 90, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 90, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
 ]
 
 [mesocycles.angles]
@@ -90,17 +92,19 @@ why = "new angles on the same muscles"
 [[mesocycles.angles.slots]]
 blocks = [
   { rounds = 4, rest = 90, reason = "the squat, upright", items = [{ exercise_id = "Front_Barbell_Squat", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 90, reason = "one leg", items = [{ exercise_id = "Split_Squat_with_Dumbbells", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 60, reason = "the trunk", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+  { rounds = 4, rest = 90, reason = "one leg", items = [{ exercise_id = "Split_Squat_with_Dumbbells", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+  { rounds = 3, rest = 60, reason = "the lower trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
 ]
 
 [[mesocycles.angles.slots]]
 blocks = [
   { rounds = 4, rest = 90, reason = "the press", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 10 } }] },
   { rounds = 4, rest = 90, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 60, reason = "volume", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 90, reason = "the pull", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 60, reason = "volume", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 90, reason = "the pull", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 60, reason = "the stretch", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 12 } }] },
 ]
 
 [mesocycles.denser]
@@ -109,18 +113,19 @@ why = "the same work in less time"
 
 [[mesocycles.denser.slots]]
 blocks = [
-  { rounds = 4, rest = 90, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 75, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 5, rest = 90, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 75, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 3, rest = 60, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
 ]
 
 [[mesocycles.denser.slots]]
 blocks = [
-  { rounds = 4, rest = 90, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 4, rest = 90, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 3, rest = 75, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 3, rest = 75, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 5, rest = 90, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 5, rest = 90, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 75, reason = "upper chest", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 75, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
 ]
 
 [mesocycles.strength]
@@ -131,6 +136,7 @@ why = "the main lifts, heavy"
 blocks = [
   { rounds = 5, rest = 180, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 5 } }] },
   { rounds = 4, rest = 180, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 3, rest = 180, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 6 } }] },
 ]
 
 [[mesocycles.strength.slots]]
@@ -147,13 +153,14 @@ why = "fewer reps on the same lifts"
 [[mesocycles.heavier.slots]]
 blocks = [
   { rounds = 5, rest = 240, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 4 } }] },
-  { rounds = 4, rest = 180, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 3, rest = 180, reason = "the hinge", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 3, rest = 180, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 6 } }] },
 ]
 
 [[mesocycles.heavier.slots]]
 blocks = [
   { rounds = 5, rest = 240, reason = "the press", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 4 } }] },
-  { rounds = 4, rest = 180, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 3, rest = 180, reason = "the row", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 5 } }] },
   { rounds = 3, rest = 180, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 5 } }] },
 ]
 
@@ -163,18 +170,20 @@ why = "long sets, short rests"
 
 [[mesocycles.endurance.slots]]
 blocks = [
-  { rounds = 3, rest = 60, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 20 } }] },
-  { rounds = 3, rest = 45, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 20 } }] },
-  { rounds = 3, rest = 30, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 25 } }] },
-  { rounds = 3, rest = 30, reason = "the trunk", items = [{ exercise_id = "Air_Bike", prescription = { unit = "reps", amount = 30 } }] },
+  { rounds = 4, rest = 60, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 4, rest = 45, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 4, rest = 30, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 25 } }] },
+  { rounds = 4, rest = 30, reason = "the trunk", items = [{ exercise_id = "Air_Bike", prescription = { unit = "reps", amount = 30 } }] },
+  { rounds = 4, rest = 30, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 60 } }] },
 ]
 
 [[mesocycles.endurance.slots]]
 blocks = [
-  { rounds = 3, rest = 45, reason = "the press", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 20 } }] },
-  { rounds = 3, rest = 45, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 20 } }] },
-  { rounds = 3, rest = 45, reason = "the chest", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 20 } }] },
-  { rounds = 3, rest = 30, reason = "the flye", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 5, rest = 45, reason = "the press", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 5, rest = 45, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 5, rest = 45, reason = "the chest", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 4, rest = 30, reason = "the flye", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 20 } }] },
+  { rounds = 4, rest = 45, reason = "the pull", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 15 } }] },
 ]
 
 [mesocycles.recomposition]
@@ -183,18 +192,20 @@ why = "hypertrophy work at a higher density"
 
 [[mesocycles.recomposition.slots]]
 blocks = [
-  { rounds = 3, rest = 75, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 60, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 45, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 45, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 5, rest = 75, reason = "the squat", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 5, rest = 60, reason = "one leg", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 45, reason = "calves", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 45, reason = "the trunk", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 45, reason = "bracing", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
 ]
 
 [[mesocycles.recomposition.slots]]
 blocks = [
-  { rounds = 3, rest = 75, reason = "the press", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 75, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 60, reason = "volume", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 3, rest = 60, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 5, rest = 75, reason = "the press", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 5, rest = 75, reason = "the row", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "volume", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the pull", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 45, reason = "the stretch", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 12 } }] },
 ]
 
 # -- after mesocycles alike, something changes --------------------------------

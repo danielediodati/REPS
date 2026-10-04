@@ -22,12 +22,14 @@ CATALOG = (
     make_exercise(id="Barbell_Squat", name="Barbell Squat", primary_muscles=("quadriceps",)),
     make_exercise(id="Front_Barbell_Squat", name="Front Barbell Squat", primary_muscles=("quadriceps",)),
     make_exercise(id="Romanian_Deadlift", name="Romanian Deadlift", primary_muscles=("hamstrings",)),
+    make_exercise(id="Barbell_Bench_Press", name="Barbell Bench Press", primary_muscles=("chest",)),
 )
 
 PATTERNS = {
     "Barbell_Squat": ("squat", "hip, knee, ankle", "yes", "high", 3),
     "Front_Barbell_Squat": ("squat", "hip, knee, ankle", "yes", "high", 3),
     "Romanian_Deadlift": ("hip hinge", "hip, lumbar spine", "yes", "medium", 2),
+    "Barbell_Bench_Press": ("horizontal push", "shoulder, elbow", "yes", "medium", 2),
 }
 
 SET = """\
@@ -230,6 +232,18 @@ def test_what_the_set_and_the_catalog_disagree_on_is_a_problem_before_any_run(
     assert any("Bulgarian_Split_Squat" in line for line in found)
     assert any("no goal called power" in line for line in found)
     assert supervise_evaluation.problems(source, supervise_set.parse(SET)) == ()
+
+
+def test_a_mesocycle_the_validator_would_refuse_is_refused_before_any_run(
+    where: supervise_evaluation.Fixture, holds: supervise_set.SuperviseSet
+) -> None:
+    """A history the planner could never have planned teaches it to copy something illegal."""
+    short = supervise_set.parse(SET.replace("duration_cap_min = 15", "duration_cap_min = 45"))
+    untrained = supervise_set.parse(SET.replace('split = [["legs"]]', 'split = [["legs", "chest"]]'))
+
+    assert supervise_evaluation.refused(where, holds, "2026-10-04") == ()
+    assert any("budget: workout 1" in line for line in supervise_evaluation.refused(where, short, "2026-10-04"))
+    assert any("untrained: workout 1" in line for line in supervise_evaluation.refused(where, untrained, "2026-10-04"))
 
 
 # -- a run ----------------------------------------------------------------------

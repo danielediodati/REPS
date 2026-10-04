@@ -4303,8 +4303,18 @@ def test_plan_change_that_says_nothing_is_refused(runner: CliRunner, enriched: P
 # --- eval --suite supervise --------------------------------------------------
 
 
+@pytest.fixture()
+def supervise_set_here(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The committed set, its one exercise this test catalog leaves unenriched swapped for one it enriches."""
+    written = tmp_path / "supervise-set.toml"
+    committed = (Path("docs") / "supervising" / "eval-set.toml").read_text(encoding="utf-8")
+    written.write_text(committed.replace("Air_Bike", "Hanging_Leg_Raise"), encoding="utf-8")
+    monkeypatch.setenv("TRAINER_SUPERVISE_SET", str(written))
+    return written
+
+
 def test_the_supervise_suite_stops_at_the_credentials_state_too(
-    runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
+    runner: CliRunner, enriched: Path, supervise_set_here: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("LLM_BACKEND", "groq")
 
@@ -4316,10 +4326,22 @@ def test_the_supervise_suite_stops_at_the_credentials_state_too(
 
 
 def test_the_supervise_suite_names_its_histories_when_one_is_mistyped(
-    runner: CliRunner, enriched: Path
+    runner: CliRunner, enriched: Path, supervise_set_here: Path
 ) -> None:
     result = runner.invoke(main, ["eval", "--suite", "supervise", "--only", "alike!"])
 
     assert result.exit_code != 0
     assert "no history called 'alike!'" in result.output
     assert "loves-the-hinge" in result.output
+
+
+def test_the_supervise_suite_refuses_a_set_the_validator_would_not_have_planned(
+    runner: CliRunner, enriched: Path, supervise_set_here: Path
+) -> None:
+    text = supervise_set_here.read_text(encoding="utf-8")
+    supervise_set_here.write_text(text.replace("duration_cap_min = 45", "duration_cap_min = 90"), encoding="utf-8")
+
+    result = runner.invoke(main, ["eval", "--suite", "supervise", "--repetitions", "1"])
+
+    assert result.exit_code != 0
+    assert "[mesocycles.hypertrophy] budget: workout 1" in result.output
