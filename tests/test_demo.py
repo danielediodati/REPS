@@ -105,3 +105,37 @@ def test_the_command_says_where_the_home_is_and_how_to_point_the_bot_at_it(tmp_p
     assert f"TRAINER_HOME={home}" in result.output
     assert result.output.isascii()
     assert (home / database.DEFAULT_DATABASE_NAME).exists()
+
+
+def test_a_history_that_is_not_there_is_named_as_a_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(demo.DemoError, match="run it from the repository"):
+        demo.build(tmp_path / "home", TODAY)
+
+
+def test_a_direction_missing_its_theme_is_refused_naming_what_it_needs() -> None:
+    text = demo.history_path().read_text(encoding="utf-8").replace('theme = "new angles"', 'thema = "new angles"')
+
+    with pytest.raises(demo.DemoError, match="a direction has a theme, changes and why"):
+        demo.parse(text)
+
+
+def test_a_direction_varying_what_no_direction_varies_is_refused() -> None:
+    text = demo.history_path().read_text(encoding="utf-8").replace(
+        'varies = ["exercises", "reps", "rest"]', 'varies = ["tempo"]', 1
+    )
+
+    with pytest.raises(demo.DemoError, match="varies some of"):
+        demo.parse(text)
+
+
+def test_the_first_mesocycle_follows_nothing_so_it_has_no_direction() -> None:
+    text = demo.history_path().read_text(encoding="utf-8").replace(
+        '[[history]]\nmesocycle = "hypertrophy"\n',
+        '[[history]]\nmesocycle = "hypertrophy"\n'
+        'direction = { theme = "t", changes = "c", why = "w", varies = ["rest"] }\n',
+    )
+
+    with pytest.raises(demo.DemoError, match="follows nothing"):
+        demo.parse(text)

@@ -57,29 +57,34 @@ def parse(text: str) -> History:
         named = {name: supervise_set.mesocycle(name, one) for name, one in dict(raw.get("mesocycles", {})).items()}
     except supervise_set.SuperviseSetError as error:
         raise DemoError(str(error)) from error
-    accepted = tuple(_accepted(entry, named) for entry in raw.get("history", ()))
+    accepted = tuple(_accepted(at, entry, named) for at, entry in enumerate(raw.get("history", ())))
     if not accepted:
         raise DemoError("the history has no mesocycle")
     loads = {str(name): float(kg) for name, kg in dict(raw.get("loads", {})).items()}
     return History(declared=declared, accepted=accepted, loads=loads)
 
 
-def _accepted(entry: Mapping[str, Any], named: Mapping[str, plans.Mesocycle]) -> Accepted:
+def _accepted(at: int, entry: Mapping[str, Any], named: Mapping[str, plans.Mesocycle]) -> Accepted:
     name = str(entry.get("mesocycle", ""))
     if name not in named:
         raise DemoError(f"no [mesocycles.{name}] in the history")
+    goal = entry.get("goal")
     given = entry.get("direction")
-    direction = (
-        None
-        if given is None
-        else mesocycles.Direction(
+    if given is None:
+        return Accepted(name, named[name], None if goal is None else str(goal))
+    if at == 0:
+        raise DemoError(f"{name}: the first mesocycle of a history follows nothing, so it has no direction")
+    try:
+        direction = mesocycles.Direction(
             theme=str(given["theme"]),
             changes=str(given["changes"]),
             why=str(given["why"]),
             varies=tuple(str(one) for one in given.get("varies", ())),
         )
-    )
-    goal = entry.get("goal")
+    except KeyError as error:
+        raise DemoError(f"{name}: a direction has a theme, changes and why") from error
+    if not direction.varies or not set(direction.varies) <= set(mesocycles.VARIES):
+        raise DemoError(f"{name}: a direction varies some of {', '.join(mesocycles.VARIES)}")
     return Accepted(name, named[name], None if goal is None else str(goal), direction)
 
 
@@ -88,7 +93,7 @@ def build(home: Path, today: str, history: History | None = None) -> Path:
     target = home / database.DEFAULT_DATABASE_NAME
     if target.exists():
         raise DemoError(f"{target} already exists; delete it to build the demo again")
-    told = history if history is not None else parse(history_path().read_text(encoding="utf-8"))
+    told = history if history is not None else _committed()
     building = target.with_name(target.name + ".building")
     building.unlink(missing_ok=True)
     try:
@@ -100,6 +105,16 @@ def build(home: Path, today: str, history: History | None = None) -> Path:
         raise
     building.replace(target)
     return target
+
+
+def _committed() -> History:
+    """The committed history; a state naming where it was looked for when it is not there."""
+    where = history_path()
+    try:
+        text = where.read_text(encoding="utf-8")
+    except OSError as error:
+        raise DemoError(f"the demo's history is not at {where}; run it from the repository") from error
+    return parse(text)
 
 
 def _catalogued(connection: sqlite3.Connection) -> None:
