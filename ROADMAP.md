@@ -134,6 +134,12 @@ In this order. Measuring first is what stops the methodology being written again
 4. **The supervisor's set.** `trainer eval --suite supervise`: 15-20 scripted histories with what the direction must hold, checked by code, and how often the planner follows it at a declared bar; the model chosen by ADR-0011's rule. — **done** `9c732e1`
 5. **Portfolio-ready.** The three-mesocycle fixture as a script, the demo in Telegram, the README rewritten around the working system with a GIF of the demo.
 
+## Session 15b — `1.0.1` — One runner behind every eval suite
+
+**Demo**: `trainer eval --suite <each>` prints what it printed before, and each suite's module is down to its set, its fixture and how it scores one run.
+
+1. **One suite runner.** Fixture, run, quota stop, run record, bars and CLI wiring in one module; the five suites keep only what differs; no paid call to close it.
+
 ## Later sessions
 
 Their issues are cut when each session opens.
