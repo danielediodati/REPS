@@ -108,7 +108,7 @@ def where(database_file: Path, holds: adapt_set.AdaptSet) -> Iterator[adapt_eval
         migrations.migrate(source, migrations.discover())
         catalog.import_exercises(source, CATALOG)
         enrich(source, PATTERNS)
-        with adapt_evaluation.prepared(source, holds) as prepared:
+        with adapt_evaluation.Adapt(holds).fixture(source) as prepared:
             yield prepared
 
 

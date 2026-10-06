@@ -4,28 +4,21 @@ from __future__ import annotations
 
 import json
 import math
-import os
-import shutil
 import sqlite3
-import tempfile
-import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
-from trainer import evaluation, onboarding_set, tools
+from trainer import eval_runner, onboarding_set
 from trainer.coach import checkpoints, conclusions, entrance, logger, models, onboarding
 from trainer.coach import record as run_record
-from trainer.engine import catalog, config, database
+from trainer.engine import catalog, config
 
 FILLED = "filled"
 LATE = "declared late"
@@ -35,9 +28,6 @@ PATH = "path open"
 ONLY = "only changed"
 REMEMBERED = "remembered"
 ROUTED = "routed"
-
-USER = "eval"
-"""Whose conclusions a run keeps, in its own store."""
 
 MAX_ANSWERS = 20
 """Answers a persona gives before the run is counted as never ending."""
@@ -55,29 +45,6 @@ class Fixture:
     path: Path
     checkpoints: Path
     today: str
-
-
-@contextmanager
-def prepared(source: sqlite3.Connection, holds: onboarding_set.OnboardSet) -> Iterator[Fixture]:
-    """A copy of `source` with nothing declared or excluded, named in `TRAINER_DB` while it is open."""
-    directory = Path(tempfile.mkdtemp(prefix="reps-onboard-eval-"))
-    previous = os.environ.get(database.DATABASE_ENV_VAR)
-    connection = database.connect(directory / "eval.sqlite")
-    try:
-        source.backup(connection)
-        connection.execute("DELETE FROM declarations")
-        connection.execute("DELETE FROM exclusions")
-        os.environ[database.DATABASE_ENV_VAR] = str(directory / "eval.sqlite")
-        yield Fixture(
-            connection, directory / "eval.sqlite", directory / "checkpoints.sqlite", holds.today
-        )
-    finally:
-        connection.close()
-        if previous is None:
-            os.environ.pop(database.DATABASE_ENV_VAR, None)
-        else:
-            os.environ[database.DATABASE_ENV_VAR] = previous
-        shutil.rmtree(directory, ignore_errors=True)
 
 
 def problems(connection: sqlite3.Connection, holds: onboarding_set.OnboardSet) -> tuple[str, ...]:
@@ -99,152 +66,108 @@ def problems(connection: sqlite3.Connection, holds: onboarding_set.OnboardSet) -
 
 
 @dataclass(frozen=True)
-class Talked:
-    """One run of a graph as this suite scores it: its record, what was said, and what it forgot."""
+class Interviewed(eval_runner.Talked):
+    """An interview or a change: also what the persona said that was not kept, and what it had to say again."""
 
-    record: Mapping[str, Any]
-    conversation: tuple[tuple[str, str], ...]
-    seconds: float
     forgotten: tuple[str, ...] = ()
     late: tuple[str, ...] = ()
 
-    @property
-    def written(self) -> str:
-        return json.dumps(
-            {"conversation": [list(line) for line in self.conversation], "run": self.record},
-            indent=2,
-            ensure_ascii=False,
-            default=str,
-        )
 
-    @property
-    def calls(self) -> list[Any]:
-        return list(self.record["calls"])
+class Onboard(eval_runner.Suite[onboarding_set.Case, Fixture]):
+    """Scripted users through the interview, and messages through the entrance, in a copy with nothing declared."""
 
-    @property
-    def input_tokens(self) -> int:
-        return int(self.record["tokens"]["input"])
+    def __init__(self, holds: onboarding_set.OnboardSet) -> None:
+        super().__init__(holds.cases)
+        self.holds = holds
 
-    @property
-    def output_tokens(self) -> int:
-        return int(self.record["tokens"]["output"])
+    def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
+        return problems(connection, self.holds)
 
-    @property
-    def dollars(self) -> float | None:
-        dollars = self.record.get("dollars")
-        return None if dollars is None else float(dollars)
+    @contextmanager
+    def fixture(self, connection: sqlite3.Connection) -> Iterator[Fixture]:
+        with eval_runner.copied(connection, emptied=("declarations", "exclusions")) as copy:
+            yield Fixture(copy.connection, copy.path, copy.directory / "checkpoints.sqlite", self.holds.today)
 
+    def chats(self, chosen: Sequence[onboarding_set.Case]) -> Mapping[str, models.Chat]:
+        """The interview's model when an interview or change is chosen, the entrance's when a route is."""
+        chats = {}
+        if any(case.kind != onboarding_set.ROUTE for case in chosen):
+            chats["onboarding"] = models.onboarding()
+        if any(case.kind == onboarding_set.ROUTE for case in chosen):
+            chats["entrance"] = models.entrance()
+        return chats
 
-def run(
-    where: Fixture,
-    chosen: Sequence[onboarding_set.Case],
-    *,
-    talks: models.Chat | None,
-    front: models.Chat | None,
-    repetitions: int = evaluation.REPETITIONS,
-    records: Path | None = None,
-    budget: int = tools.CALL_BUDGET,
-) -> evaluation.Report:
-    """Every case, every repetition: interviews and changes on `talks`, routes on `front`."""
-    into = records if records is not None else evaluation.records_path()
-    held = [case for case in chosen if case.kind != onboarding_set.ROUTE]
-    routes = [case for case in chosen if case.kind == onboarding_set.ROUTE]
-    outcomes: list[evaluation.Outcome] = []
-    stopped: str | None = None
-    if held:
-        assert talks is not None
-        on = talks
-        report = evaluation.measured(
-            [case.name for case in held],
-            repetitions,
-            lambda at, attempt: _scored(
-                held[at], attempt, into, lambda: _interviewed(where, held[at], on, budget)
+    def runs(
+        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+    ) -> eval_runner.Once[onboarding_set.Case]:
+        def once(case: onboarding_set.Case, attempt: int) -> tuple[eval_runner.Outcome, ...]:
+            named = f"{case.name}-{attempt}"
+            if case.kind == onboarding_set.ROUTE:
+                return (
+                    eval_runner.attempted(
+                        case.name, attempt, records, named, lambda: _routed(case, chats["entrance"], budget)
+                    ),
+                )
+            return (
+                eval_runner.attempted(
+                    case.name, attempt, records, named, lambda: _interviewed(where, case, chats["onboarding"], budget)
+                ),
+            )
+
+        return once
+
+    def derived(self, outcome: eval_runner.Outcome) -> list[eval_runner.Outcome]:
+        """An interview or change again, as the cases held to a bar; a route, nothing."""
+        case = next(case for case in self.cases if case.name == outcome.case)
+        return [] if case.kind == onboarding_set.ROUTE else _judged(outcome, case)
+
+    def halves(self) -> tuple[eval_runner.Half, ...]:
+        """100% held by code, and the judgements the set declares."""
+        holds = self.holds
+        return (
+            eval_runner.Half("held", frozenset(case.name for case in holds.held), 100),
+            eval_runner.Half("on time", frozenset(case.name + ON_TIME for case in holds.held), holds.bar_on_time),
+            eval_runner.Half(
+                "remembered",
+                frozenset(case.name + REMEMBERS for case in holds.held if case.remembers),
+                holds.bar_remembered,
             ),
+            eval_runner.Half("routed", frozenset(case.name for case in holds.routes), holds.bar_routed),
         )
-        outcomes.extend(report.outcomes)
-        outcomes.extend(_judged(report.outcomes, held))
-        stopped = report.stopped
-    if routes and stopped is None:
-        assert front is not None
-        door = front
-        report = evaluation.measured(
-            [case.name for case in routes],
-            repetitions,
-            lambda at, attempt: _scored(
-                routes[at], attempt, into, lambda: _routed(where, routes[at], door, budget)
-            ),
-        )
-        outcomes.extend(report.outcomes)
-        stopped = report.stopped
-    elif routes:
-        outcomes.extend(
-            evaluation.Outcome(case.name, attempt, error=str(stopped), skipped=True)
-            for case in routes
-            for attempt in range(1, repetitions + 1)
-        )
-    return evaluation.Report(tuple(outcomes), stopped=stopped)
+
+    def render(self, report: eval_runner.Report, chosen: Sequence[onboarding_set.Case]) -> list[str]:
+        return render(report, chosen)
 
 
-def _scored(
-    case: onboarding_set.Case,
-    attempt: int,
-    records: Path,
-    once: Callable[[], tuple[Talked, tuple[tuple[str, str], ...]]],
-) -> evaluation.Outcome:
-    """One run, its record written, and the checks it failed; a provider failure is a run not made."""
-    try:
-        talked, failures = once()
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        return evaluation.Outcome(case.name, attempt, error=str(error))
-    written = evaluation.write(records, f"{case.name}-{attempt}", talked.written)
-    return evaluation.Outcome(case.name, attempt, failures, talked, written)
-
-
-def _judged(
-    outcomes: Sequence[evaluation.Outcome], held: Sequence[onboarding_set.Case]
-) -> list[evaluation.Outcome]:
-    """Each run again, as the cases held to a bar: whether it declared on time, and what it remembered."""
-    remembering = {case.name for case in held if case.remembers}
-    derived: list[evaluation.Outcome] = []
-    for outcome in outcomes:
-        talked = outcome.record if isinstance(outcome.record, Talked) else None
-        late = talked.late if talked else ()
-        judged: list[tuple[str, tuple[tuple[str, str], ...]]] = [
-            (
-                ON_TIME,
-                ((LATE, f"said again, still undeclared: {', '.join(late)}"),) if late else (),
-            )
-        ]
-        if outcome.case in remembering:
-            forgotten = talked.forgotten if talked else ()
-            judged.append(
-                (REMEMBERS, tuple((REMEMBERED, f"nothing kept from {line!r}") for line in forgotten))
-            )
-        derived.extend(
-            evaluation.Outcome(
-                outcome.case + suffix,
-                outcome.attempt,
-                failures,
-                written=outcome.written,
-                error=outcome.error,
-                skipped=outcome.skipped,
-            )
-            for suffix, failures in judged
+def _judged(outcome: eval_runner.Outcome, case: onboarding_set.Case) -> list[eval_runner.Outcome]:
+    """The run again, as the cases held to a bar: whether it declared on time, and what it remembered."""
+    talked = outcome.record if isinstance(outcome.record, Interviewed) else None
+    late = talked.late if talked else ()
+    judged: list[tuple[str, tuple[tuple[str, str], ...]]] = [
+        (ON_TIME, ((LATE, f"said again, still undeclared: {', '.join(late)}"),) if late else ())
+    ]
+    if case.remembers:
+        forgotten = talked.forgotten if talked else ()
+        judged.append((REMEMBERS, tuple((REMEMBERED, f"nothing kept from {line!r}") for line in forgotten)))
+    return [
+        eval_runner.Outcome(
+            outcome.case + suffix,
+            outcome.attempt,
+            failures,
+            written=outcome.written,
+            error=outcome.error,
+            skipped=outcome.skipped,
         )
-    return derived
+        for suffix, failures in judged
+    ]
 
 
 def _interviewed(
     where: Fixture, case: onboarding_set.Case, on: models.Chat, budget: int
-) -> tuple[Talked, tuple[tuple[str, str], ...]]:
+) -> eval_runner.Scored:
     """One persona through the interview, answering by code, and the checks held at 100%."""
-    started = time.monotonic()
     store = InMemoryStore()
-    thread: RunnableConfig = {
-        "configurable": {"thread_id": f"onboard:{uuid4()}", conclusions.USER: USER}
-    }
+    thread = eval_runner.thread("onboard", remembers=True)
     words = onboarding.vocabulary(where.connection)
     before: dict[str, Any] = {}
     if case.kind == onboarding_set.CHANGE:
@@ -260,42 +183,45 @@ def _interviewed(
 
     conversation: list[tuple[str, str]] = [("user", case.opens)]
     persona = _Persona(case, before)
-    answers = 0
-    with checkpoints.saver(where.checkpoints) as saver:
 
-        def built() -> onboarding.Onboarding:
-            return onboarding.build(
-                on, budget=budget, checkpointer=saver, store=store, opening=opening
-            )
+    def talked() -> tuple[Mapping[str, Any], int]:
+        nonlocal given
+        answers = 0
+        with checkpoints.saver(where.checkpoints) as saver:
 
-        graph = built()
-        while True:
-            final = graph.invoke(given, thread)
-            waiting = final.get("__interrupt__")
-            if not waiting or answers >= MAX_ANSWERS:
-                break
-            question = waiting[0].value
-            conversation.append(("agent", str(question.get("ask", ""))))
-            if question.get("kind") == logger.EXCLUSION:
-                answer: Any = case.confirms
-            elif case.pause_after is not None and answers == case.pause_after:
-                # A day away: the process that held the graph is gone.
-                graph = built()
-                answer = case.back
-            else:
-                answer = persona.answer(final.get("declared", {}))
-            answers += 1
-            conversation.append(("user", str(answer)))
-            given = Command(resume=answer)
-    kept = conclusions.live(store, USER)
-    talked = Talked(
+            def built() -> onboarding.Onboarding:
+                return onboarding.build(on, budget=budget, checkpointer=saver, store=store, opening=opening)
+
+            graph = built()
+            while True:
+                final = graph.invoke(given, thread)
+                waiting = final.get("__interrupt__")
+                if not waiting or answers >= MAX_ANSWERS:
+                    return final, answers
+                question = waiting[0].value
+                conversation.append(("agent", str(question.get("ask", ""))))
+                if question.get("kind") == logger.EXCLUSION:
+                    answer: Any = case.confirms
+                elif case.pause_after is not None and answers == case.pause_after:
+                    # A day away: the process that held the graph is gone.
+                    graph = built()
+                    answer = case.back
+                else:
+                    answer = persona.answer(final.get("declared", {}))
+                answers += 1
+                conversation.append(("user", str(answer)))
+                given = Command(resume=answer)
+
+    (final, answers), seconds = eval_runner.timed(talked)
+    kept = conclusions.live(store, eval_runner.USER)
+    interviewed = Interviewed(
         record=run_record.of(final, budget),
+        seconds=seconds,
         conversation=tuple(conversation),
-        seconds=time.monotonic() - started,
         forgotten=tuple(line for line in case.remembers if not _kept(line, kept)),
         late=tuple(dict.fromkeys(persona.late)),
     )
-    return talked, _held(case, final, before, kept, answers)
+    return eval_runner.Scored(interviewed, _held(case, final, before, kept, answers))
 
 
 @dataclass
@@ -375,60 +301,33 @@ def _held(
     return tuple(failures)
 
 
-def _routed(
-    where: Fixture, case: onboarding_set.Case, on: models.Chat, budget: int
-) -> tuple[Talked, tuple[tuple[str, str], ...]]:
+def _routed(case: onboarding_set.Case, on: models.Chat, budget: int) -> eval_runner.Scored:
     """One message through the entrance, every handoff allowed to start, and where it went."""
-    started = time.monotonic()
     store: BaseStore = InMemoryStore()
     graph = entrance.build(
         on,
         budget=budget,
-        checkpointer=InMemorySaver(serde=checkpoints.Declared()),
+        checkpointer=eval_runner.checkpointer(),
         today=lambda: entrance.NO_MESOCYCLE,
         checking=lambda _name, _asked: None,
         store=store,
     )
-    thread: RunnableConfig = {
-        "configurable": {"thread_id": f"route:{uuid4()}", conclusions.USER: USER}
-    }
-    final = graph.invoke(entrance.heard(case.opens), thread)
+    final, seconds = eval_runner.timed(
+        lambda: graph.invoke(entrance.heard(case.opens), eval_runner.thread("route", remembers=True))
+    )
     handoff = str(final.get("handoff", ""))
     answer = str(final.get("answer", ""))
-    talked = Talked(
+    talked = eval_runner.Talked(
         record=run_record.of(final, budget),
+        seconds=seconds,
         conversation=(("user", case.opens), ("agent", answer)),
-        seconds=time.monotonic() - started,
     )
     if handoff == case.routed:
-        return talked, ()
-    return talked, ((ROUTED, f"handed to {handoff or 'nothing'}: {answer!r}"),)
+        return eval_runner.Scored(talked)
+    return eval_runner.Scored(talked, ((ROUTED, f"handed to {handoff or 'nothing'}: {answer!r}"),))
 
 
-def barred(report: evaluation.Report, holds: onboarding_set.OnboardSet) -> evaluation.Report:
-    """The pass against its bars: 100% held by code, and the judgements the set declares."""
-    return replace(
-        report,
-        halves=(
-            evaluation.Half("held", frozenset(case.name for case in holds.held), 100),
-            evaluation.Half(
-                "on time",
-                frozenset(case.name + ON_TIME for case in holds.held),
-                holds.bar_on_time,
-            ),
-            evaluation.Half(
-                "remembered",
-                frozenset(case.name + REMEMBERS for case in holds.held if case.remembers),
-                holds.bar_remembered,
-            ),
-            evaluation.Half(
-                "routed", frozenset(case.name for case in holds.routes), holds.bar_routed
-            ),
-        ),
-    )
-
-
-def render(report: evaluation.Report, chosen: Sequence[onboarding_set.Case]) -> list[str]:
+def render(report: eval_runner.Report, chosen: Sequence[onboarding_set.Case]) -> list[str]:
     """One matrix per kind of case, the failures, what an onboarding cost, and the bars. ASCII."""
     kinds = (
         (onboarding_set.INTERVIEW, "interviews", [FILLED, QUOTED]),
@@ -438,31 +337,31 @@ def render(report: evaluation.Report, chosen: Sequence[onboarding_set.Case]) -> 
     for kind, heading, columns in kinds:
         names = [case.name for case in chosen if case.kind == kind]
         if names:
-            lines += [heading, *evaluation.matrix(report, names, [*columns, evaluation.NOT_RUN]), ""]
+            lines += [heading, *eval_runner.matrix(report, names, [*columns, eval_runner.NOT_RUN]), ""]
     on_time = [case.name + ON_TIME for case in chosen if case.kind != onboarding_set.ROUTE]
     if on_time:
-        lines += ["on time", *evaluation.matrix(report, on_time, [LATE, evaluation.NOT_RUN]), ""]
+        lines += ["on time", *eval_runner.matrix(report, on_time, [LATE, eval_runner.NOT_RUN]), ""]
     remembering = [case.name + REMEMBERS for case in chosen if case.remembers]
     if remembering:
-        lines += ["memory", *evaluation.matrix(report, remembering, [REMEMBERED, evaluation.NOT_RUN]), ""]
+        lines += ["memory", *eval_runner.matrix(report, remembering, [REMEMBERED, eval_runner.NOT_RUN]), ""]
     routes = [case.name for case in chosen if case.kind == onboarding_set.ROUTE]
     if routes:
-        lines += ["routing", *evaluation.matrix(report, routes, [ROUTED, evaluation.NOT_RUN]), ""]
+        lines += ["routing", *eval_runner.matrix(report, routes, [ROUTED, eval_runner.NOT_RUN]), ""]
     about = {case.name: case.describes for case in chosen}
     about |= {case.name + REMEMBERS: case.describes for case in chosen}
     about |= {case.name + ON_TIME: case.describes for case in chosen}
-    lines += [*evaluation.failures(report, about), ""]
+    lines += [*eval_runner.failures(report, about), ""]
     lines += _per_onboarding(report, chosen)
-    lines += evaluation.totals(report, "held what their case declares")
+    lines += eval_runner.totals(report, "held what their case declares")
     return lines
 
 
 def _per_onboarding(
-    report: evaluation.Report, chosen: Sequence[onboarding_set.Case]
+    report: eval_runner.Report, chosen: Sequence[onboarding_set.Case]
 ) -> list[str]:
     """Dollars and seconds an interview or change took, the figures ADR-0011 compares."""
     held = {case.name for case in chosen if case.kind != onboarding_set.ROUTE}
-    runs = [o.record for o in report.outcomes if o.case in held and isinstance(o.record, Talked)]
+    runs = [o.record for o in report.outcomes if o.case in held and isinstance(o.record, Interviewed)]
     if not runs:
         return []
     seconds = sorted(one.seconds for one in runs)

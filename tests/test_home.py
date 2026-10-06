@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from trainer import evaluation
+from trainer import eval_runner
 from trainer.coach import checkpoints
 from trainer.engine import config, database, home
 
@@ -22,7 +22,7 @@ def no_home(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         database.DATABASE_ENV_VAR,
         checkpoints.CHECKPOINTS_ENV,
-        evaluation.RECORDS_ENV_VAR,
+        eval_runner.RECORDS_ENV_VAR,
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -78,11 +78,11 @@ class TestWhatLandsInIt:
     def test_the_eval_records(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv(home.HOME_ENV_VAR, str(tmp_path))
 
-        assert evaluation.records_path() == tmp_path / "eval-runs"
+        assert eval_runner.records_path() == tmp_path / "eval-runs"
 
-        monkeypatch.setenv(evaluation.RECORDS_ENV_VAR, str(tmp_path / "elsewhere"))
+        monkeypatch.setenv(eval_runner.RECORDS_ENV_VAR, str(tmp_path / "elsewhere"))
 
-        assert evaluation.records_path() == tmp_path / "elsewhere"
+        assert eval_runner.records_path() == tmp_path / "elsewhere"
 
     def test_the_database_and_the_checkpointer_are_not_the_same_file(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

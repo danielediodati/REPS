@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -22,7 +22,7 @@ from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
 from test_logger import scripted
-from trainer import evaluation, log, log_evaluation, log_set, tools
+from trainer import eval_runner, log, log_evaluation, log_set, tools
 from trainer.coach import logger, models
 from trainer.coach import record as run_record
 from trainer.engine import catalog, database, duration, migrations, state, workouts
@@ -147,8 +147,22 @@ def holds() -> log_set.LogSet:
 def where(
     source: sqlite3.Connection, holds: log_set.LogSet
 ) -> Iterator[log_evaluation.Fixture]:
-    with log_evaluation.prepared(source, holds) as built:
+    with log_evaluation.Log(holds).fixture(source) as built:
         yield built
+
+
+def logged(
+    where: log_evaluation.Fixture,
+    chosen: Sequence[log_set.Row],
+    *,
+    on: models.Chat,
+    repetitions: int,
+    records: Path,
+) -> eval_runner.Report:
+    """The rows measured on `on`, against `where`."""
+    return eval_runner.measure(
+        log_evaluation.Log(log_set.parse(SET)), where, chosen, {"logger": on}, repetitions=repetitions, records=records
+    )
 
 
 def row(holds: log_set.LogSet, name: str) -> log_set.Row:
@@ -205,7 +219,7 @@ def test_the_state_the_project_is_in_is_not_the_state_the_set_is_measured_in(
         on="2026-08-01",
     )
 
-    with log_evaluation.prepared(source, holds) as where:
+    with log_evaluation.Log(holds).fixture(source) as where:
         held = where.connection.execute(
             "SELECT id FROM workouts WHERE state = 'prescribed'"
         ).fetchall()
@@ -259,7 +273,7 @@ def test_a_volume_figure_that_its_own_document_does_not_produce(
     """The check that stops a hand-computed figure failing a correct agent."""
     holds = log_set.parse(SET.replace("horizontal push 4, vertical push 3", "horizontal push 9"))
 
-    with log_evaluation.prepared(source, holds) as where:
+    with log_evaluation.Log(holds).fixture(source) as where:
         (problem,) = log_evaluation.verify(where, holds)
 
     assert "U1 says it produces horizontal push 9" in problem
@@ -273,7 +287,7 @@ def test_a_row_that_reports_against_a_workout_that_is_not_the_one_it_names(
         SET.replace('"workout_id": 1,\n  "blocks": [],', '"workout_id": 7,\n  "blocks": [],')
     )
 
-    with log_evaluation.prepared(source, holds) as where:
+    with log_evaluation.Log(holds).fixture(source) as where:
         problems = log_evaluation.verify(where, holds)
 
     assert "U1 is about P1, which is workout 1 here" in problems[0]
@@ -575,7 +589,7 @@ def test_a_document_the_validator_refused_is_still_scored(
         where, expected, record(expected.expects, refused="no such exercise: 'Nope'")
     )
 
-    assert why(failures, evaluation.VALIDATOR) == "no such exercise: 'Nope'"
+    assert why(failures, eval_runner.VALIDATOR) == "no such exercise: 'Nope'"
 
 
 # -- the half that has to ask -------------------------------------------------
@@ -720,11 +734,11 @@ def test_false_confidence_is_what_the_percentage_is_out_of() -> None:
     """A run weighted double takes two off the denominator's worth, so the
     figure below 100% says how badly rather than merely that."""
     outcomes = (
-        evaluation.Outcome("A1", 1, failures=(("asked", "it asked nothing"),), weight=2),
-        evaluation.Outcome("A2", 1),
+        eval_runner.Outcome("A1", 1, failures=(("asked", "it asked nothing"),), weight=2),
+        eval_runner.Outcome("A2", 1),
     )
 
-    report = evaluation.Report(outcomes)
+    report = eval_runner.Report(outcomes)
 
     assert (report.held, report.total, report.against) == (1, 2, 3)
     assert report.percentage == pytest.approx(100 / 3)
@@ -737,11 +751,11 @@ def test_false_confidence_is_what_the_percentage_is_out_of() -> None:
 def test_the_matrix_has_a_table_for_each_half(
     holds: log_set.LogSet,
 ) -> None:
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome("U1", 1),
-            evaluation.Outcome("U2", 1, failures=((log_evaluation.DOCUMENT, "rounds 3, expected 2"),)),
-            evaluation.Outcome("A1", 1, failures=((log_evaluation.ASKED, "it asked nothing"),), weight=2),
+            eval_runner.Outcome("U1", 1),
+            eval_runner.Outcome("U2", 1, failures=((log_evaluation.DOCUMENT, "rounds 3, expected 2"),)),
+            eval_runner.Outcome("A1", 1, failures=((log_evaluation.ASKED, "it asked nothing"),), weight=2),
         )
     )
 
@@ -767,7 +781,7 @@ def test_questions_asked_where_the_report_determined_the_answer_are_counted(
         log.PerformedWorkout(workout_id=1, blocks=[], report="tutto liscio"),
         questions=(("quante?", "non lo so"),),
     )
-    report = evaluation.Report((evaluation.Outcome("U1", 1, record=asked),))
+    report = eval_runner.Report((eval_runner.Outcome("U1", 1, record=asked),))
 
     printed = "\n".join(log_evaluation.render(report, holds.rows))
 
@@ -787,7 +801,7 @@ def test_a_run_of_a_row_scores_it_and_writes_the_record(
     assert expected.expects is not None
     model = scripted(AIMessage(content="chiaro"), emits=expected.expects, times=2)
 
-    report = log_evaluation.run(
+    report = logged(
         where,
         [expected],
         on=stand_in(model),
@@ -825,7 +839,7 @@ def test_a_run_that_waits_on_a_confirmation_resumes_on_declared_types(
     )
     model = scripted(AIMessage(content="chiaro"), emits=proposing)
 
-    log_evaluation.run(
+    logged(
         where, [expected], on=stand_in(model), repetitions=1, records=tmp_path
     )
 
@@ -845,7 +859,7 @@ def test_the_answerer_says_the_same_thing_to_every_question(
         emits=log.PerformedWorkout(workout_id=1, blocks=[], report=expected.report),
     )
 
-    report = log_evaluation.run(
+    report = logged(
         where,
         [expected],
         on=stand_in(model),
@@ -868,8 +882,8 @@ def test_nothing_the_measurement_does_reaches_the_database_it_was_copied_from(
     expected = row(holds, "U2")
     assert expected.expects is not None
 
-    with log_evaluation.prepared(source, holds) as where:
-        log_evaluation.run(
+    with log_evaluation.Log(holds).fixture(source) as where:
+        logged(
             where,
             [expected],
             on=stand_in(
@@ -898,7 +912,7 @@ def test_the_agents_own_tools_can_see_the_fixture(
     Asked through `tools` rather than through the connection, deliberately:
     the connection was never the thing that was wrong.
     """
-    with log_evaluation.prepared(source, holds) as where:
+    with log_evaluation.Log(holds).fixture(source) as where:
         answered = tools.prescribed_workout(where.prescribed["P1"])
 
     assert [item["exercise_id"] for item in answered["blocks"][0]["items"]] == [
@@ -914,7 +928,7 @@ def test_the_environment_is_put_back_and_the_copy_is_deleted(
     reads it."""
     monkeypatch.setenv(database.DATABASE_ENV_VAR, "the-users-own.sqlite")
 
-    with log_evaluation.prepared(source, holds) as where:
+    with log_evaluation.Log(holds).fixture(source) as where:
         assert os.environ[database.DATABASE_ENV_VAR] == str(where.path)
         assert where.path.exists()
         left_behind = where.path
@@ -930,7 +944,7 @@ def test_a_spent_quota_stops_the_log_pass_too(
 
     model = Exhausted()
 
-    report = log_evaluation.run(
+    report = logged(
         where,
         [row(holds, "U1"), row(holds, "U2")],
         on=stand_in(model),
@@ -943,23 +957,23 @@ def test_a_spent_quota_stops_the_log_pass_too(
     assert report.stopped is not None
 
 
-def barred_report(*outcomes: evaluation.Outcome) -> evaluation.Report:
-    return log_evaluation.barred(evaluation.Report(outcomes), log_set.parse(SET))
+def barred_report(*outcomes: eval_runner.Outcome) -> eval_runner.Report:
+    return eval_runner.barred(log_evaluation.Log(log_set.parse(SET)), eval_runner.Report(outcomes))
 
 
 def test_a_pass_at_the_declared_bars_passes_below_100() -> None:
     """Four of five unambiguous runs is the set's 80%; one of two must-ask is 50%."""
-    held = [evaluation.Outcome("U1", n) for n in range(1, 5)]
-    failed = evaluation.Outcome("U2", 1, failures=((log_evaluation.DOCUMENT, "x"),))
-    asked = evaluation.Outcome("A1", 1)
+    held = [eval_runner.Outcome("U1", n) for n in range(1, 5)]
+    failed = eval_runner.Outcome("U2", 1, failures=((log_evaluation.DOCUMENT, "x"),))
+    asked = eval_runner.Outcome("A1", 1)
 
     assert barred_report(*held, failed, asked).passed
 
-    missed = evaluation.Outcome("A1", 2, failures=((log_evaluation.ASKED, "x"),))
+    missed = eval_runner.Outcome("A1", 2, failures=((log_evaluation.ASKED, "x"),))
     report = barred_report(*held, failed, asked, missed)
 
     assert not report.passed, "one of two must-ask runs is 50%, under 60%"
-    printed = "\n".join(evaluation.totals(report, "held"))
+    printed = "\n".join(eval_runner.totals(report, "held"))
     assert "unambiguous: 4 of 5 -- 80%, the bar is 80%" in printed
     assert "must ask: 1 of 2 -- 50%, the bar is 60%" in printed
     assert "Below the bar the set declares." in printed
@@ -968,22 +982,22 @@ def test_a_pass_at_the_declared_bars_passes_below_100() -> None:
 
 def test_false_confidence_counts_double_against_the_must_ask_bar() -> None:
     """Three held and one confident failure is 3 of 5, which is the bar and no more."""
-    held = [evaluation.Outcome("A1", n) for n in range(1, 4)]
-    confident = evaluation.Outcome(
+    held = [eval_runner.Outcome("A1", n) for n in range(1, 4)]
+    confident = eval_runner.Outcome(
         "A1", 4, failures=((log_evaluation.CONFIDENT, "x"),), weight=2
     )
 
     assert barred_report(*held, confident).passed
-    printed = "\n".join(evaluation.totals(barred_report(*held, confident), "held"))
+    printed = "\n".join(eval_runner.totals(barred_report(*held, confident), "held"))
     assert "must ask: 3 of 4 (5 counted) -- 60%" in printed
     assert not barred_report(
         *held[:2],
         confident,
-        evaluation.Outcome("A1", 5, failures=((log_evaluation.CONFIDENT, "x"),), weight=2),
+        eval_runner.Outcome("A1", 5, failures=((log_evaluation.CONFIDENT, "x"),), weight=2),
     ).passed
 
 
 def test_a_half_with_no_runs_is_not_held_against_the_pass() -> None:
     """`--only U1` measures one half; the other has nothing to fall short with."""
-    assert barred_report(evaluation.Outcome("U1", 1)).passed
+    assert barred_report(eval_runner.Outcome("U1", 1)).passed
     assert not barred_report().passed, "an empty pass is not a pass"

@@ -6,16 +6,15 @@ import sqlite3
 import tomllib
 from collections.abc import Mapping
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from trainer import supervise_set
+from trainer import history, supervise_set
 from trainer import plan as plans
 from trainer.coach import onboarding
-from trainer.engine import catalog, config, database, enrichment, graph, mesocycles, migrations, residue, workouts
-from trainer.supervise_evaluation import as_performed, prescribed
+from trainer.engine import catalog, config, database, enrichment, graph, mesocycles, migrations, residue
 
 DEFAULT_PARTS = ("docs", "demo", "history.toml")
 
@@ -126,14 +125,14 @@ def _catalogued(connection: sqlite3.Connection) -> None:
     graph.apply(connection, *graph.load())
 
 
-def _performed(connection: sqlite3.Connection, history: History, today: str) -> None:
+def _performed(connection: sqlite3.Connection, told: History, today: str) -> None:
     """Every mesocycle accepted and performed as prescribed, but for the last workout of the last."""
-    base = dict(history.declared)
-    steps = sum(1 + len(one.mesocycle.workouts) * one.mesocycle.cycles for one in history.accepted) - 1
+    base = dict(told.declared)
+    steps = sum(1 + len(one.mesocycle.workouts) * one.mesocycle.cycles for one in told.accepted) - 1
     on = date.fromisoformat(today) - timedelta(days=steps + 1)
     declaration = onboarding.settled(base)
     config.record(connection, declaration, on.isoformat())
-    for at, one in enumerate(history.accepted):
+    for at, one in enumerate(told.accepted):
         on += timedelta(days=1)
         if one.goal is not None and one.goal != declaration.goal:
             declaration = onboarding.settled({**base, "goal": one.goal})
@@ -144,35 +143,11 @@ def _performed(connection: sqlite3.Connection, history: History, today: str) -> 
             raise DemoError(
                 "; ".join(f"[mesocycles.{one.name}] {violation.rule}: {violation.says}" for violation in refused)
             )
-        mesocycles.record_mesocycle(
+        on = history.performed_as_prescribed(
             connection,
-            tuple(prescribed(workout) for workout in one.mesocycle.workouts),
-            cycles=one.mesocycle.cycles,
-            why=one.mesocycle.why,
-            on=on.isoformat(),
+            one.mesocycle,
+            on,
             direction=one.direction,
+            left=1 if at == len(told.accepted) - 1 else 0,
+            loads=told.loads,
         )
-        total = len(one.mesocycle.workouts) * one.mesocycle.cycles
-        for _ in range(total - 1 if at == len(history.accepted) - 1 else total):
-            on += timedelta(days=1)
-            served, workout_id = mesocycles.record_served(connection, on.isoformat())
-            workouts.record_performed(
-                connection,
-                tuple(_loaded(as_performed(block), history.loads) for block in served.blocks),
-                on=on.isoformat(),
-                report="as prescribed",
-                workout_id=workout_id,
-            )
-
-
-def _loaded(block: workouts.PerformedBlock, loads: Mapping[str, float]) -> workouts.PerformedBlock:
-    """The block with each item's load from `loads`, where it names one."""
-    return replace(
-        block,
-        items=tuple(
-            replace(item, load_kg=loads[item.exercise_id], load_kg_source="reported")
-            if item.exercise_id in loads
-            else item
-            for item in block.items
-        ),
-    )

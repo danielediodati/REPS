@@ -43,34 +43,25 @@ reads is the one the environment names, and not the connection this module
 holds. Handed a fixture nothing pointed at, the agent's first call comes back
 *there is no workout 1*, it emits `workout_id: null`, and thirty rows fail
 against a measurement that never showed the model what it was measuring. That
-is what `prepared` is for, and it is why it and not `fixture` is what a caller
-should reach for.
+is what `eval_runner.copied` is for.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import shutil
 import sqlite3
-import tempfile
-import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from trainer import evaluation, log, log_set, tools
-from trainer.coach import checkpoints, logger, models
+from trainer import eval_runner, log, log_set
+from trainer.coach import logger, models
 from trainer.coach import record as run_record
-from trainer.engine import database, workouts
+from trainer.engine import workouts
 
 DOCUMENT = "document"
 """A column of the matrix: the emitted document against the one the row
@@ -154,88 +145,19 @@ class Fixture:
         return open_workout.id, open_workout.prescribed_on
 
 
-@contextmanager
-def prepared(
-    source: sqlite3.Connection, holds: log_set.LogSet
-) -> Iterator[Fixture]:
-    """The fixture, and the environment the agent's tools will read it through.
+EMPTIED = ("workouts", "exclusions")
+"""Whatever the real state holds is not this measurement's. An exclusion left
+standing would take exercises out of what `search_exercises` answers with, and
+a workout left in would take an id the set expects."""
 
-    **Both, together, or the measurement is of nothing.** The tools resolve
-    their own connection from `TRAINER_DB` (`tools.opened`), so a fixture the
-    environment does not name is a fixture the model cannot see. Pointed at
-    here rather than by the caller because forgetting it does not fail loudly:
-    it fails as thirty wrong documents.
 
-    The variable is put back afterwards and the copy is deleted with the
-    directory it was made in, so a run leaves nothing behind but its records.
+def _built(copy: eval_runner.Copy, holds: log_set.LogSet) -> Fixture:
+    """The copy filled with the set's own state: its prescriptions, and one load.
+
+    The prescriptions are the *only* workouts in it, which is what makes
+    `workout_id: 1` mean P1 for everybody who runs this.
     """
-    directory = Path(tempfile.mkdtemp(prefix="reps-log-eval-"))
-    previous = os.environ.get(database.DATABASE_ENV_VAR)
-    try:
-        where = fixture(source, holds, directory / "eval.sqlite")
-        os.environ[database.DATABASE_ENV_VAR] = str(where.path)
-        try:
-            yield where
-        finally:
-            where.connection.close()
-    finally:
-        if previous is None:
-            os.environ.pop(database.DATABASE_ENV_VAR, None)
-        else:
-            os.environ[database.DATABASE_ENV_VAR] = previous
-        shutil.rmtree(directory, ignore_errors=True)
-
-
-def fixture(
-    source: sqlite3.Connection, holds: log_set.LogSet, path: Path
-) -> Fixture:
-    """The set's own database: this catalog, its four prescriptions, one load.
-
-    A copy, so the project database is read once and never written -- and so
-    the workouts the set needs can be the *only* workouts in it, which is what
-    makes `workout_id: 1` mean P1 for everybody who runs this.
-
-    A file rather than an in-memory database, because the agent's tools open
-    the path `TRAINER_DB` names and an in-memory copy has no path to name.
-    `prepared` is what points the environment at it.
-    """
-    connection = database.connect(path)
-    try:
-        prescribed, prescribed_on = _built(connection, source, holds)
-    except BaseException:
-        # Closed before it is thrown away, because on Windows an open SQLite
-        # file cannot be deleted: `prepared` removes the directory with
-        # `ignore_errors`, and a connection left open here would leave a copy
-        # of the whole database in the temp directory on every failure.
-        connection.close()
-        raise
-    return Fixture(
-        connection=connection,
-        path=path,
-        today=holds.today,
-        prescribed=prescribed,
-        prescribed_on=prescribed_on,
-    )
-
-
-def _built(
-    connection: sqlite3.Connection,
-    source: sqlite3.Connection,
-    holds: log_set.LogSet,
-) -> tuple[dict[str, int], dict[str, str]]:
-    """The copy, emptied of the user's state and filled with the set's.
-
-    The two mappings are the fixture's own facts: which id each prescription
-    was written under, and the day it was prescribed on.
-    """
-    source.backup(connection)
-    connection.execute("PRAGMA foreign_keys = ON")
-
-    # Whatever the real state holds is not this measurement's. An exclusion
-    # left standing would take exercises out of what `search_exercises`
-    # answers with, and a workout left in would take an id the set expects.
-    connection.execute("DELETE FROM workouts")
-    connection.execute("DELETE FROM exclusions")
+    connection = copy.connection
     # **And the counter with them.** `workouts.id` is AUTOINCREMENT, so the
     # ids it hands out go on climbing past every row that was ever deleted:
     # against a database somebody has actually logged workouts in, the first
@@ -259,7 +181,13 @@ def _built(
         prescribed_on[prescription.name] = on
 
     _history(connection, holds)
-    return prescribed, prescribed_on
+    return Fixture(
+        connection=connection,
+        path=copy.path,
+        today=holds.today,
+        prescribed=prescribed,
+        prescribed_on=prescribed_on,
+    )
 
 
 def _history(connection: sqlite3.Connection, holds: log_set.LogSet) -> None:
@@ -408,41 +336,12 @@ def _produced(
 
 
 @dataclass(frozen=True)
-class Read:
-    """One run of the logger graph, as this suite scores it.
+class Read(eval_runner.Recorded):
+    """One run of the logger graph, as this suite scores it: the document, and the questions it asked."""
 
-    `evaluation.Ran` is the same idea for the planner: what the run produced,
-    and what it cost. Neither suite reads the other's, and `evaluation.Costed`
-    is the little both of them answer to.
-    """
-
-    record: Mapping[str, Any]
     document: log.PerformedWorkout
     questions: tuple[tuple[str, str], ...]
     refused: str | None
-    seconds: float
-
-    @property
-    def written(self) -> str:
-        """The run as it is written down -- ADR-0007's document, unchanged."""
-        return run_record.document(self.record)
-
-    @property
-    def calls(self) -> list[Any]:
-        return list(self.record["calls"])
-
-    @property
-    def input_tokens(self) -> int:
-        return int(self.record["tokens"]["input"])
-
-    @property
-    def output_tokens(self) -> int:
-        return int(self.record["tokens"]["output"])
-
-    @property
-    def dollars(self) -> float | None:
-        dollars = self.record.get("dollars")
-        return None if dollars is None else float(dollars)
 
 
 # -- scoring one run ----------------------------------------------------------
@@ -542,7 +441,7 @@ def _wrote(
 
     failures = []
     if record.refused is not None:
-        failures.append((evaluation.VALIDATOR, record.refused))
+        failures.append((eval_runner.VALIDATOR, record.refused))
     difference = _difference(where, row.expects, record.document)
     if difference is not None:
         failures.append((DOCUMENT, difference))
@@ -701,65 +600,74 @@ def _exclusion(
 # -- running them -------------------------------------------------------------
 
 
-def run(
-    where: Fixture,
-    chosen: Sequence[log_set.Row],
-    *,
-    on: models.Chat,
-    repetitions: int = evaluation.REPETITIONS,
-    records: Path | None = None,
-    budget: int = tools.CALL_BUDGET,
-) -> evaluation.Report:
-    """Every row, every repetition, against the logger graph.
+class Log(eval_runner.Suite[log_set.Row, Fixture]):
+    """The set's reports against the logger graph, in a copy holding the set's prescriptions.
 
-    `repetitions` is `evaluation.REPETITIONS` for the reason the six
-    situations run three times: a model is a distribution, and one green run
-    measures nothing for a labelled row either.
-
-    **A checkpointer in memory, and no archive.** The graph needs somewhere to
-    hold a run that is waiting on a question; these threads are of no interest
-    once the run is scored, and a pass is a measurement rather than thirty
-    evenings somebody had.
+    Every question is answered `UNANSWERED` and every proposed exclusion is
+    declined: the run must reach its document, and the set records no answers
+    to give it.
     """
-    into = records if records is not None else evaluation.records_path()
-    graph = logger.build(
-        on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared())
-    )
-    return evaluation.measured(
-        [row.name for row in chosen],
-        repetitions,
-        lambda at, attempt: _once(where, chosen[at], attempt, graph, into, budget),
-    )
+
+    what = "report"
+
+    def __init__(self, holds: log_set.LogSet) -> None:
+        super().__init__(holds.rows)
+        self.holds = holds
+
+    def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
+        return missing(connection, self.holds)
+
+    @contextmanager
+    def fixture(self, connection: sqlite3.Connection) -> Iterator[Fixture]:
+        with eval_runner.copied(connection, emptied=EMPTIED) as copy:
+            yield _built(copy, self.holds)
+
+    def checked(self, where: Fixture) -> Sequence[str]:
+        return verify(where, self.holds)
+
+    def chats(self, chosen: Sequence[log_set.Row]) -> Mapping[str, models.Chat]:
+        return {"logger": models.logger()}
+
+    def runs(
+        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+    ) -> eval_runner.Once[log_set.Row]:
+        graph = logger.build(chats["logger"], budget=budget, checkpointer=eval_runner.checkpointer())
+        return lambda row, attempt: (_logged(where, row, attempt, graph, records, budget),)
+
+    def halves(self) -> tuple[eval_runner.Half, ...]:
+        return (
+            eval_runner.Half(
+                "unambiguous",
+                frozenset(row.name for row in self.holds.unambiguous),
+                self.holds.bar_unambiguous,
+            ),
+            eval_runner.Half(
+                "must ask",
+                frozenset(row.name for row in self.holds.must_ask),
+                self.holds.bar_must_ask,
+            ),
+        )
+
+    def render(self, report: eval_runner.Report, chosen: Sequence[log_set.Row]) -> list[str]:
+        return render(report, chosen)
 
 
-def _once(
+def _logged(
     where: Fixture,
     row: log_set.Row,
     attempt: int,
     graph: logger.Logger,
     records: Path,
     budget: int,
-) -> evaluation.Outcome:
+) -> eval_runner.Outcome:
     awaiting, prescribed_on = where.awaiting(row)
-    try:
-        read = _invoked(graph, where, row, awaiting, prescribed_on, budget)
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        # Every way a provider can fail in the middle of a pass: no
-        # credentials, a request it refused, a rate limit, a server that went
-        # away. Caught broadly for the reason the plan suite catches broadly
-        # -- the run lands in the *not run* column and counts against the
-        # metric there, and a pass that lost its other twenty-nine rows to one
-        # transport error would measure nothing.
-        if isinstance(error, models.ProviderFailed) and error.emitted:
-            lost = {"error": str(error), "emitted": list(error.emitted)}
-            evaluation.write(records, f"{row.name}-{attempt}-lost", json.dumps(lost, indent=2))
-        return evaluation.Outcome(row.name, attempt, error=str(error))
 
-    written = evaluation.write(records, f"{row.name}-{attempt}", read.written)
-    failures, weight = score(where, row, read)
-    return evaluation.Outcome(row.name, attempt, failures, read, written, weight=weight)
+    def run() -> eval_runner.Scored:
+        read = _invoked(graph, where, row, awaiting, prescribed_on, budget)
+        failures, weight = score(where, row, read)
+        return eval_runner.Scored(read, failures, weight)
+
+    return eval_runner.attempted(row.name, attempt, records, f"{row.name}-{attempt}", run)
 
 
 def _invoked(
@@ -770,59 +678,33 @@ def _invoked(
     prescribed_on: str | None,
     budget: int,
 ) -> Read:
-    """One run of the graph, answered the way the set answers, and timed.
+    """One run of the graph, answered the way the set answers, and timed."""
 
-    The clock is read around the whole invocation rather than summed from the
-    record's per-node seconds: what a person waits for is the run, and the
-    gaps between nodes are part of that wait.
+    def answered() -> dict[str, Any]:
+        thread = eval_runner.thread("log")
+        given: Any = logger.starting(row.report, where.today, awaiting, prescribed_on)
+        while True:
+            final = graph.invoke(given, thread)
+            waiting = final.get("__interrupt__")
+            if not waiting:
+                return dict(final)
+            question = waiting[0].value
+            given = Command(
+                resume=False if question.get("kind") == logger.EXCLUSION else UNANSWERED
+            )
 
-    Every question is answered `UNANSWERED` and every proposed exclusion is
-    declined: the run must reach its document, and the set records no answers
-    to give it.
-    """
-    started = time.monotonic()
-    thread: RunnableConfig = {"configurable": {"thread_id": f"log:{uuid4()}"}}
-    given: Any = logger.starting(row.report, where.today, awaiting, prescribed_on)
-    while True:
-        final = graph.invoke(given, thread)
-        waiting = final.get("__interrupt__")
-        if not waiting:
-            break
-        question = waiting[0].value
-        given = Command(
-            resume=False if question.get("kind") == logger.EXCLUSION else UNANSWERED
-        )
+    final, seconds = eval_runner.timed(answered)
     document = final["document"]
     if document is None:
-        # Nothing that parses as a document at all. The row is scored on what
-        # was emitted, and there is nothing to score -- so it is reported the
-        # way an unreachable provider is, under its own name.
+        # Nothing that parses as a document at all: reported the way an
+        # unreachable provider is, under its own name.
         raise LogEvaluationError(final["refused"] or "it emitted no document")
     return Read(
         record=run_record.of(final, budget),
+        seconds=seconds,
         document=document,
         questions=tuple(final.get("questions", ())),
         refused=final["refused"],
-        seconds=time.monotonic() - started,
-    )
-
-
-def barred(report: evaluation.Report, holds: log_set.LogSet) -> evaluation.Report:
-    """The pass measured against the two bars the set declares, one per half."""
-    return replace(
-        report,
-        halves=(
-            evaluation.Half(
-                "unambiguous",
-                frozenset(row.name for row in holds.unambiguous),
-                holds.bar_unambiguous,
-            ),
-            evaluation.Half(
-                "must ask",
-                frozenset(row.name for row in holds.must_ask),
-                holds.bar_must_ask,
-            ),
-        ),
     )
 
 
@@ -834,7 +716,7 @@ class LogEvaluationError(RuntimeError):
 
 
 def render(
-    report: evaluation.Report, chosen: Sequence[log_set.Row]
+    report: eval_runner.Report, chosen: Sequence[log_set.Row]
 ) -> list[str]:
     """Two matrices, the number, and what it cost. ASCII.
 
@@ -849,35 +731,35 @@ def render(
     if determined:
         lines.append(f"{len(determined)} the report determines")
         lines.extend(
-            evaluation.matrix(
+            eval_runner.matrix(
                 report,
                 [row.name for row in determined],
-                [DOCUMENT, VOLUME, evaluation.VALIDATOR, evaluation.NOT_RUN],
+                [DOCUMENT, VOLUME, eval_runner.VALIDATOR, eval_runner.NOT_RUN],
             )
         )
         lines.append("")
     if open_ended:
         lines.append(f"{len(open_ended)} that must make it ask")
         lines.extend(
-            evaluation.matrix(
+            eval_runner.matrix(
                 report,
                 [row.name for row in open_ended],
-                [ASKED, CONFIDENT, evaluation.NOT_RUN],
+                [ASKED, CONFIDENT, eval_runner.NOT_RUN],
             )
         )
         lines.append("")
 
     lines.extend(
-        evaluation.failures(report, {row.name: row.describes for row in chosen})
+        eval_runner.failures(report, {row.name: row.describes for row in chosen})
     )
     lines.append("")
     lines.extend(_notes(report, chosen))
-    lines.extend(evaluation.totals(report, "held the outcome its row declared"))
+    lines.extend(eval_runner.totals(report, "held the outcome its row declared"))
     return lines
 
 
 def _notes(
-    report: evaluation.Report, chosen: Sequence[log_set.Row]
+    report: eval_runner.Report, chosen: Sequence[log_set.Row]
 ) -> list[str]:
     """Two facts that are not failures, and are worth the line they take.
 

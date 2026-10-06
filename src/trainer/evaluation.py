@@ -31,7 +31,7 @@ did.
 **The database is named in the environment.** Every tool on the surface opens
 its own connection from `TRAINER_DB` (`tools.opened`), so the database the
 *model* reads is the one the environment names and not the connection this
-module holds. `pointed_at_the_database` is what makes those the same file, and
+module holds. `eval_runner.pointed_at` is what makes those the same file, and
 CLAUDE.md asks for it because a fixture nothing points at is invisible to the
 agent.
 """
@@ -39,70 +39,26 @@ agent.
 from __future__ import annotations
 
 import dataclasses
-import json
-import math
-import os
 import sqlite3
-import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Protocol
-from uuid import uuid4
+from typing import Any
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
-
-from trainer import tools
+from trainer import eval_runner
 from trainer import plan as plans
-from trainer.coach import checkpoints, models, planner
+from trainer.coach import models, planner
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
     catalog,
     constraints,
-    database,
     duration,
-    home,
     muscle_groups,
 )
 
-REPETITIONS = 3
-"""How many times each situation runs, unless told otherwise.
-
-Three because a model is a distribution: one run measures nothing, two cannot
-tell a coin from a certainty, and every run past that costs a full agent loop
-against a rate-limited tier. `--repetitions` raises it when the question is
-worth the wait.
-"""
-
-VALIDATOR = "validator"
-"""A column of the matrix, not an invariant: the door refused a plan for a
-reason none of the six names. Not reachable today, and reported rather than
-swallowed, because the validator and the invariants disagreeing is the
-interesting thing."""
-
-NOT_RUN = "not run"
-"""A column of the matrix: runs that never reached the provider. They hold
-nothing and they count against the metric, but they are not a failure of any
-invariant either."""
-
-RECORDS_ENV_VAR = "TRAINER_EVAL_RUNS"
-"""Overrides where the records are written, the way `TRAINER_DB` does for the database."""
-
-DEFAULT_RECORDS_NAME = "eval-runs"
-
-
-def records_path() -> Path:
-    """Where each run's record is written. A failure names the file, because
-    *invariant 3 failed* is a fact and the record is the only thing that says
-    why."""
-    override = os.environ.get(RECORDS_ENV_VAR)
-    if override:
-        return Path(override).expanduser()
-    return home.inside(DEFAULT_RECORDS_NAME)
 
 TURNED_DOWN_BECAUSE = "I don't feel like it"
 """What the user says when they turn down the first mesocycle of the after-a-refusal situation."""
@@ -225,11 +181,12 @@ def _half_of(
     return tuple(exercise.id for exercise in standing[::2])
 
 
+
 # -- one run of the graph -----------------------------------------------------
 
 
 @dataclass(frozen=True)
-class Ran:
+class Ran(eval_runner.Recorded):
     """One run of the planner graph: ticket 03's record, and what it cost.
 
     The record is what is written to disk **and** what every number the matrix
@@ -241,7 +198,6 @@ class Ran:
     round trip through JSON would be measuring the round trip.
     """
 
-    record: Mapping[str, Any]
     request: plans.MesocycleRequest
     """What the graph planned against: the situation's slots with today's
     standing exclusions and the declared cap folded in, which is the space the
@@ -253,13 +209,6 @@ class Ran:
     spent: int
     """What the run actually paid, which is not the budget: a turn's calls are
     answered as a batch, so the last one can carry the count past it."""
-
-    seconds: float
-
-    @property
-    def document(self) -> str:
-        """The record as it is written down -- ticket 03's, unchanged."""
-        return run_record.document(self.record)
 
     @property
     def attempts(self) -> int:
@@ -277,23 +226,6 @@ class Ran:
             for violation in attempts[-1]["violations"]
         )
 
-    @property
-    def calls(self) -> list[Any]:
-        """Every tool call the run made, as the record holds them."""
-        return list(self.record["calls"])
-
-    @property
-    def input_tokens(self) -> int:
-        return int(self.record["tokens"]["input"])
-
-    @property
-    def output_tokens(self) -> int:
-        return int(self.record["tokens"]["output"])
-
-    @property
-    def dollars(self) -> float | None:
-        dollars = self.record.get("dollars")
-        return None if dollars is None else float(dollars)
 
 
 # -- the six invariants -------------------------------------------------------
@@ -510,176 +442,8 @@ def _prescribed(workout: plans.WorkoutPlan) -> set[str]:
     return {item.exercise_id for block in workout.blocks for item in block.items}
 
 
+
 # -- running them -------------------------------------------------------------
-
-
-class Costed(Protocol):
-    """What the cost lines read off a run, whichever graph made it.
-
-    A protocol and not either suite's class, because this module is what both
-    report through: named as one of them, the other would be a union that
-    grows with every graph.
-    """
-
-    @property
-    def calls(self) -> list[Any]: ...
-
-    @property
-    def input_tokens(self) -> int: ...
-
-    @property
-    def output_tokens(self) -> int: ...
-
-    @property
-    def dollars(self) -> float | None: ...
-
-    @property
-    def seconds(self) -> float: ...
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """One run, and what held.
-
-    `case` is what the run was of -- one of the six situations here, one of
-    the thirty reports in `log_evaluation`. Both suites keep their outcomes in
-    this shape because both are *a model run many times and checked by code*,
-    and a second copy of the counting would be a second answer to *what
-    percentage held*.
-    """
-
-    case: str
-    attempt: int
-    failures: tuple[tuple[str, str], ...] = ()
-    record: Costed | None = None
-    """One run of the planner graph here, one of the logger graph in
-    `log_evaluation`. Both answer what this report reads of them -- the calls
-    and the tokens -- and neither suite reads the other's."""
-
-    written: Path | None = None
-    error: str | None = None
-    """The run never finished -- no credentials, the provider refusing, a rate
-    limit. It holds no invariant, because a measurement that quietly skipped
-    the runs it could not make would report on the easy ones. It is not a
-    *failure* of any of them either, which is why the matrix gives it a column
-    of its own rather than blanking the ones it says nothing about."""
-
-    also: tuple[Costed, ...] = ()
-    """Runs made to set this one up and not measured -- the plan that gets
-    turned down, on the refusal situation. They hold no invariants and they
-    are not counted towards the metric, but they were paid for, so they count
-    towards the cost."""
-
-    weight: int = 1
-    """How much this run counts **against** the metric when it fails.
-
-    One everywhere except the failure ROADMAP.md § Session 5 and TRAINER.md's
-    golden-set rules single out: a report that could not be answered, answered
-    confidently anyway. It is weighted double because it is the error the
-    whole must-ask half exists to detect -- a system that knows it does not
-    know is the thing being measured, and a wrong value written without
-    hesitation costs more than a question left unasked. A run that held is
-    never weighted: the weight is a cost, and nothing was paid.
-    """
-
-    skipped: bool = False
-    """Never attempted: the pass stopped before it (`Report.stopped` says why)."""
-
-    @property
-    def held(self) -> bool:
-        return self.error is None and not self.failures
-
-    @property
-    def records(self) -> tuple[Costed, ...]:
-        return (*self.also, *((self.record,) if self.record else ()))
-
-
-@dataclass(frozen=True)
-class Half:
-    """Rows scored together against a bar their set declares."""
-
-    name: str
-    cases: frozenset[str]
-    bar: int
-
-
-@dataclass(frozen=True)
-class Report:
-    outcomes: tuple[Outcome, ...] = field(default_factory=tuple)
-    stopped: str | None = None
-    """The state that ended the pass early, when one did."""
-    halves: tuple[Half, ...] = ()
-    """Declared bars, each over its own rows; none means every run must hold."""
-
-    @property
-    def total(self) -> int:
-        return len(self.outcomes)
-
-    @property
-    def held(self) -> int:
-        return sum(1 for outcome in self.outcomes if outcome.held)
-
-    @property
-    def against(self) -> int:
-        """What the percentage is out of, once weights are counted.
-
-        Runs, plus one more for every failure weighted double. `total` stays
-        the number of runs, because *how many runs held* and *what the metric
-        is out of* are two different facts and the report prints both. With
-        every weight at one -- which is every run of the six situations --
-        the two are the same number and the figure is unchanged.
-        """
-        return sum(
-            outcome.weight if not outcome.held else 1 for outcome in self.outcomes
-        )
-
-    @property
-    def percentage(self) -> float:
-        return 100.0 * self.held / self.against if self.against else 0.0
-
-    @property
-    def passed(self) -> bool:
-        """Every declared bar, or 100% without one; and at least one run."""
-        if not self.halves:
-            return self.total > 0 and self.held == self.total
-        return self.total > 0 and all(
-            100 * self.of(half).held >= half.bar * self.of(half).against
-            for half in self.halves
-        )
-
-    def of(self, half: Half) -> Report:
-        """The runs of one half, as a report of their own."""
-        return Report(
-            tuple(outcome for outcome in self.outcomes if outcome.case in half.cases)
-        )
-
-    @property
-    def calls(self) -> int:
-        return sum(len(r.calls) for o in self.outcomes for r in o.records)
-
-    @property
-    def input_tokens(self) -> int:
-        """Every run that was paid for, measured or not.
-
-        The refusal situation makes two: the plan that gets turned down and
-        the one that answers it. Only the second is measured; both are on the
-        bill, and this number is what a pass is budgeted against."""
-        return sum(r.input_tokens for o in self.outcomes for r in o.records)
-
-    @property
-    def output_tokens(self) -> int:
-        return sum(r.output_tokens for o in self.outcomes for r in o.records)
-
-    @property
-    def runs(self) -> tuple[Costed, ...]:
-        """Every run that was paid for, measured or not."""
-        return tuple(r for o in self.outcomes for r in o.records)
-
-    @property
-    def dollars(self) -> float | None:
-        """What the priced runs cost, or `None` when the provider priced none."""
-        priced = [r.dollars for r in self.runs if r.dollars is not None]
-        return sum(priced) if priced else None
 
 
 def check(
@@ -707,170 +471,98 @@ def check(
     return tuple(failures)
 
 
-@contextmanager
-def pointed_at_the_database() -> Iterator[Path]:
-    """`TRAINER_DB` naming the database this pass measures, for as long as it runs.
-
-    The tools open their own connection from that variable, so the database
-    the *model* reads is the one the environment names. Left to the default
-    the two are the same file only because both fell back to the home, and a
-    coincidence is not what CLAUDE.md's standing rule asks for -- a fixture
-    nothing points at is invisible to the agent, and the pass measures a model
-    answering *there is no such workout* thirty times.
-
-    Put back afterwards, because a command that moved it would change where
-    every later one in the same process reads.
-    """
-    path = database.database_path().resolve()
-    previous = os.environ.get(database.DATABASE_ENV_VAR)
-    os.environ[database.DATABASE_ENV_VAR] = str(path)
-    try:
-        yield path
-    finally:
-        if previous is None:
-            os.environ.pop(database.DATABASE_ENV_VAR, None)
-        else:
-            os.environ[database.DATABASE_ENV_VAR] = previous
-
-
-def run(
-    connection: sqlite3.Connection,
-    chosen: Sequence[Situation],
-    *,
-    on: models.Chat,
-    repetitions: int = REPETITIONS,
-    records: Path | None = None,
-    budget: int = tools.CALL_BUDGET,
-) -> Report:
-    """Every situation, every repetition, against the planner graph.
-
-    `on` is the model the graph runs on, handed in rather than built here:
-    nothing in this module reaches a provider on its own, and the caller is
-    what decides which one is being measured.
-
-    The graph is compiled once. A run is one `invoke` of it and carries
-    everything it knows in its own state, so a second compilation per run
-    would buy nothing.
-
-    **A checkpointer in memory, and no resume.** The graph stops at the plan
-    and waits for somebody to accept it (ADR-0005), which needs somewhere to
-    wait; nothing here answers, so no run reaches the node that writes. That is
-    what keeps a measurement of eighteen runs from leaving eighteen phantom
-    prescribed workouts in the state it is measuring. In memory because these
-    threads are of no interest once the run is scored.
-
-    **And no archive.** A pass is a measurement, not an evening: its runs in
-    the home would be the history session 11 reads to ask how many plans an
-    evening takes. The records this suite keeps are its own, under `records`.
-    """
-    where = records if records is not None else records_path()
-    graph = planner.build(
-        on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared())
-    )
-    return measured(
-        [situation.name for situation in chosen],
-        repetitions,
-        lambda at, attempt: _once(
-            connection, chosen[at], attempt, graph, budget, where
-        ),
-    )
-
-
-def measured(
-    cases: Sequence[str], repetitions: int, once: Callable[[int, int], Outcome]
-) -> Report:
-    """Every case, every repetition, until the provider's day runs out.
-
-    `once` takes the case's position and the attempt. The runs a spent quota
-    leaves are counted as not made rather than attempted: each would be refused
-    the same way, and all it would add is the same line again.
-    """
-    outcomes: list[Outcome] = []
-    for at, case in enumerate(cases):
-        for attempt in range(1, repetitions + 1):
-            try:
-                outcomes.append(once(at, attempt))
-            except models.QuotaSpent as spent:
-                outcomes.extend(
-                    Outcome(left, again, error=str(spent), skipped=True)
-                    for position, left in enumerate(cases)
-                    for again in range(1, repetitions + 1)
-                    if (position, again) >= (at, attempt)
-                )
-                return Report(tuple(outcomes), stopped=str(spent))
-    return Report(tuple(outcomes))
-
-
 NOTHING_TO_REFUSE = (
     "the plan that was to be turned down did not parse, so there was nothing "
     "to refuse and the second run would not have been this situation"
 )
-"""Why the refusal situation can fail before it starts. See `_once`."""
+"""Why the refusal situation can fail before it starts."""
 
 
-def _once(
+class NothingToRefuse(Exception):
+    """The plan that was to be turned down did not parse."""
+
+
+class Plan(eval_runner.Suite[Situation, sqlite3.Connection]):
+    """The six situations against the planner graph, on the project database.
+
+    **A checkpointer in memory, and no resume.** The graph stops at the plan
+    and waits for somebody to accept it (ADR-0005); nothing here answers, so
+    no run reaches the node that writes, and a pass leaves no phantom
+    prescribed workouts in the state it measures.
+    """
+
+    what = "situation"
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        super().__init__(situations(connection))
+
+    @contextmanager
+    def fixture(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        with eval_runner.pointed_at():
+            yield connection
+
+    def chats(self, chosen: Sequence[Situation]) -> Mapping[str, models.Chat]:
+        return {"planner": models.planner()}
+
+    def runs(
+        self,
+        where: sqlite3.Connection,
+        chats: Mapping[str, models.Chat],
+        *,
+        records: Path,
+        budget: int,
+    ) -> eval_runner.Once[Situation]:
+        # Compiled once: a run carries everything it knows in its own state.
+        graph = planner.build(chats["planner"], budget=budget, checkpointer=eval_runner.checkpointer())
+        return lambda situation, attempt: (
+            _planned(where, situation, attempt, graph, budget, records),
+        )
+
+    def render(self, report: eval_runner.Report, chosen: Sequence[Situation]) -> list[str]:
+        return render(report, chosen)
+
+
+def _planned(
     connection: sqlite3.Connection,
     situation: Situation,
     attempt: int,
     graph: planner.Planner,
     budget: int,
     records: Path,
-) -> Outcome:
+) -> eval_runner.Outcome:
+    """One situation planned and checked; on the refusal situation, the plan turned down first."""
     request = _today(connection, situation.request)
     also: list[Ran] = []
-    try:
+
+    def run() -> eval_runner.Scored:
+        asked = request
         if situation.after_a_refusal:
-            # Two turns, not a conversation. The first plan exists only to be
-            # turned down, and what is measured is what comes back after --
-            # but it was paid for, so it is kept and it counts towards cost.
-            first = _invoked(graph, request, budget)
+            # Two turns, not a conversation: the first plan exists only to be
+            # turned down, but it was paid for, so it counts towards cost.
+            first = _invoked(graph, asked, budget)
             also.append(first)
-            write(records, f"{situation.name}-{attempt}-turned-down", first.document)
+            eval_runner.write(records, f"{situation.name}-{attempt}-turned-down", first.written)
             if first.plan is None:
-                # Nothing came back that could be turned down. With no
-                # refusals to carry, `brief` says nothing about one at all --
-                # not even the user's reason, which travels with the plan --
-                # so the second run is an ordinary planning run. Measured as
-                # situation 5 it would put a green row under a situation that
-                # never happened, which at a bar of 100% is the one failure
-                # this file exists to make impossible.
-                return Outcome(
-                    situation.name, attempt, error=NOTHING_TO_REFUSE, also=tuple(also)
-                )
-            request = dataclasses.replace(
-                request,
+                # With nothing to carry, the second run would be an ordinary
+                # planning run, and a green row under a situation that never
+                # happened.
+                raise NothingToRefuse(NOTHING_TO_REFUSE)
+            asked = dataclasses.replace(
+                asked,
                 refusals=plans.mesocycle_turned_down((), first.plan, TURNED_DOWN_BECAUSE),
             )
-        ran = _invoked(graph, request, budget)
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        # Every way a provider can fail in the middle of a pass: no
-        # credentials, a request it refused, a rate limit, a server that went
-        # away. Caught broadly on purpose -- the run lands in the *not run*
-        # column and counts against the metric there, and a pass that lost its
-        # other seventeen runs to one transport error would measure nothing.
-        if isinstance(error, models.ProviderFailed) and error.emitted:
-            lost = {"error": str(error), "emitted": list(error.emitted)}
-            write(records, f"{situation.name}-{attempt}-lost", json.dumps(lost, indent=2))
-        return Outcome(situation.name, attempt, error=str(error), also=tuple(also))
+        ran = _invoked(graph, asked, budget)
+        # Checked against the slots the graph planned against: `_today`
+        # folded the standing exclusions and the declared cap into them.
+        failures = check(connection, dataclasses.replace(situation, slots=ran.request.slots), ran)
+        if ran.refused and not failures:
+            # The validator refused a plan every invariant says is fine: the
+            # two disagreeing is recorded under its own column.
+            failures = tuple((eval_runner.VALIDATOR, f"{rule}: {says}") for rule, says in ran.refused)
+        return eval_runner.Scored(ran, failures)
 
-    written = write(records, f"{situation.name}-{attempt}", ran.document)
-
-    # Checked against the slots the graph actually planned against, not the
-    # ones the situation declared: `_today` folded the standing exclusions and
-    # the declared cap into them, and measuring the others would measure a
-    # space the model was never shown.
-    failures = check(
-        connection, dataclasses.replace(situation, slots=ran.request.slots), ran
-    )
-    if ran.refused and not failures:
-        # The validator refused a plan every invariant says is fine. The two
-        # disagreeing is the interesting thing, so it is recorded rather than
-        # swallowed -- under its own name, and `VALIDATOR` is a column of the
-        # matrix so it cannot be a failure nothing shows.
-        failures = tuple((VALIDATOR, f"{rule}: {says}") for rule, says in ran.refused)
-    return Outcome(situation.name, attempt, failures, ran, written, also=tuple(also))
+    outcome = eval_runner.attempted(situation.name, attempt, records, f"{situation.name}-{attempt}", run)
+    return dataclasses.replace(outcome, also=tuple(also))
 
 
 def _today(
@@ -901,39 +593,24 @@ def _today(
 def _invoked(
     graph: planner.Planner, request: plans.MesocycleRequest, budget: int
 ) -> Ran:
-    """One run of the graph, and the wall time somebody waited for it.
-
-    The clock is read around the whole invocation rather than summed from the
-    record's per-node seconds: what a person waits for is the run, and the
-    gaps between nodes are part of that wait.
-    """
-    started = time.monotonic()
-    thread: RunnableConfig = {"configurable": {"thread_id": f"eval:{uuid4()}"}}
-    final = graph.invoke(planner.starting(request), thread)
+    """One run of the graph, timed around the whole invocation, which is what a person waits for."""
+    final, seconds = eval_runner.timed(
+        lambda: graph.invoke(planner.starting(request), eval_runner.thread("eval"))
+    )
     return Ran(
         record=run_record.of(final, budget),
+        seconds=seconds,
         request=final["request"],
         plan=final["plan"],
         spent=final.get("spent", 0),
-        seconds=time.monotonic() - started,
     )
 
-
-def write(records: Path, name: str, document: str) -> Path:
-    """One record to disk. The directory is made here rather than when the run
-    starts, so a pass that never reaches a provider leaves nothing behind --
-    the suite invokes this command to check it stops at the credentials state,
-    and an empty `eval-runs/` in the repo after every `pytest` is litter."""
-    records.mkdir(parents=True, exist_ok=True)
-    written = records / f"{name}.json"
-    written.write_text(document, encoding="utf-8")
-    return written
 
 
 # -- the matrix ---------------------------------------------------------------
 
 
-def render(report: Report, chosen: Sequence[Situation]) -> list[str]:
+def render(report: eval_runner.Report, chosen: Sequence[Situation]) -> list[str]:
     """The situation-by-invariant matrix, the number, and what it cost. ASCII.
 
     One column per invariant, plus `validator` -- a refusal no invariant names
@@ -942,17 +619,17 @@ def render(report: Report, chosen: Sequence[Situation]) -> list[str]:
     about the two that did run, and blanking their verdicts would hide real
     failures behind an unrelated transport error.
     """
-    columns = [TERMINATES, *(invariant.name for invariant in INVARIANTS), VALIDATOR, NOT_RUN]
+    columns = [TERMINATES, *(invariant.name for invariant in INVARIANTS), eval_runner.VALIDATOR, eval_runner.NOT_RUN]
     cases = [situation.name for situation in chosen]
     return [
-        *matrix(report, cases, columns),
+        *eval_runner.matrix(report, cases, columns),
         "",
         "what the planner spent getting there:",
         *numbers(report, cases),
         "",
-        *failures(report),
+        *eval_runner.failures(report),
         "",
-        *totals(report, "held every invariant"),
+        *eval_runner.totals(report, "held every invariant"),
     ]
 
 
@@ -966,7 +643,7 @@ built on the right model.
 """
 
 
-def numbers(report: Report, cases: Sequence[str]) -> list[str]:
+def numbers(report: eval_runner.Report, cases: Sequence[str]) -> list[str]:
     """One row per situation: what each run took, and the rule that refused it.
 
     **Every run's own figure, never an average.** A situation that reached a
@@ -1009,127 +686,3 @@ def numbers(report: Report, cases: Sequence[str]) -> list[str]:
         )
     return lines
 
-
-def matrix(report: Report, cases: Sequence[str], columns: Sequence[str]) -> list[str]:
-    """One row per case, one column per check, `N failed` in the cells.
-
-    Shared with the log suite, which has different cases and different columns
-    and the same question to answer: *of the runs of this case, how many broke
-    this check*. The distribution is the point -- a cell saying `1 failed` out
-    of three runs is a different fact from one saying `3 failed`, and a
-    pass/fail cell would print them the same.
-    """
-    width = max((len(case) for case in cases), default=0) + 2
-    # Each column as wide as it needs to be, and no narrower than the number
-    # under it: `false confidence` is 16 characters, and a fixed 14 would put
-    # every cell in its row half a column to the right of its heading.
-    widths = {name: max(14, len(name) + 2) for name in columns}
-
-    lines = ["".ljust(width) + "  ".join(f"{n:^{widths[n]}}" for n in columns)]
-    for case in cases:
-        runs = [outcome for outcome in report.outcomes if outcome.case == case]
-        measured = [outcome for outcome in runs if outcome.error is None]
-        cells = []
-        for name in columns:
-            if name == NOT_RUN:
-                missed = sum(1 for outcome in runs if outcome.error is not None)
-                said = str(missed) if missed else "-"
-            elif not measured:
-                said = "-"
-            else:
-                broke = sum(
-                    1 for o in measured if any(n == name for n, _ in o.failures)
-                )
-                said = "ok" if not broke else f"{broke} failed"
-            cells.append(f"{said:^{widths[name]}}")
-        lines.append(case.ljust(width) + "  ".join(cells))
-    return lines
-
-
-def failures(report: Report, about: Mapping[str, str] | None = None) -> list[str]:
-    """Every failure, one to a line, with the record that says why.
-
-    `about` says what a case *is*, for a suite whose names do not: `U11` is a
-    row number and `no-equipment` is a description, so the log suite passes
-    its headings and the six situations do not need to.
-    """
-    said = about or {}
-    lines = []
-    for outcome in report.outcomes:
-        named = outcome.case
-        if outcome.case in said:
-            named = f"{outcome.case} ({said[outcome.case]})"
-        if outcome.error is not None and not outcome.skipped:
-            lines.append(f"{named} #{outcome.attempt}: {outcome.error}")
-        for name, why in outcome.failures:
-            where = outcome.written or "(not written)"
-            lines.append(f"{named} #{outcome.attempt} {name}: {why}")
-            lines.append(f"    {where}")
-    return lines
-
-
-def _money(report: Report) -> str:
-    """Dollars in all and a run, as the provider priced them, and seconds a run. ASCII."""
-    runs = report.runs
-    seconds = f"{sum(r.seconds for r in runs) / len(runs):.1f}s a run"
-    if report.dollars is None:
-        return f"dollars not reported by the provider, {seconds}"
-    priced = sum(1 for r in runs if r.dollars is not None)
-    spent = (
-        f"${report.dollars:.4f} in all"
-        if priced == len(runs)
-        else f"${report.dollars:.4f} over {priced} of {len(runs)} runs "
-        f"({len(runs) - priced} not reported)"
-    )
-    return f"{spent}, ${report.dollars / priced:.4f} a run, {seconds}"
-
-
-def totals(report: Report, held: str) -> list[str]:
-    """The number, what it cost, and the bar it is measured against.
-
-    `held` is what holding meant -- every invariant, or the outcome the row
-    declared. The bar is the same either way and it is not a knob: a labelled
-    row is an expected outcome somebody wrote down before the run, so a row
-    that fails is either the agent being wrong or the row being wrong, and
-    both are things to go and read.
-    """
-    lines = []
-    # Floored, never rounded. At 249 of 250 a rounded figure prints 100% on
-    # the line above "the bar is 100%" and then exits non-zero -- the one
-    # number this command exists to produce, contradicting itself.
-    counted = (
-        ""
-        if report.against == report.total
-        else f", out of {report.against} with false confidence counted double"
-    )
-    lines.append(
-        f"{report.held} of {report.total} runs {held} "
-        f"-- {math.floor(report.percentage)}%{counted}"
-    )
-    for half in report.halves:
-        part = report.of(half)
-        if part.total:
-            doubled = (
-                "" if part.against == part.total else f" ({part.against} counted)"
-            )
-            lines.append(
-                f"  {half.name}: {part.held} of {part.total}{doubled} -- "
-                f"{math.floor(part.percentage)}%, the bar is {half.bar}%"
-            )
-    lines.append(
-        f"cost: {report.calls} tool calls, {report.input_tokens} tokens in, "
-        f"{report.output_tokens} out"
-    )
-    if report.runs:
-        lines.append(f"      {_money(report)}")
-    if report.stopped is not None:
-        skipped = sum(1 for outcome in report.outcomes if outcome.skipped)
-        lines.append("")
-        lines.append(f"Stopped with {skipped} runs not made: {report.stopped}.")
-    elif report.halves and not report.passed:
-        lines.append("")
-        lines.append("Below the bar the set declares.")
-    elif not report.passed:
-        lines.append("")
-        lines.append("The bar is 100%. Anything below it is a bug, not a knob.")
-    return lines

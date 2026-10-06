@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from uuid import uuid4
 
 import click
@@ -30,6 +30,8 @@ from trainer import (
     adapt_evaluation,
     adapt_set,
     demo,
+    eval_runner,
+    eval_set,
     evaluation,
     log,
     log_evaluation,
@@ -622,6 +624,16 @@ somebody's notes does.
 """
 
 
+SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] = {
+    PLAN_SUITE: evaluation.Plan,
+    LOG_SUITE: lambda _: log_evaluation.Log(log_set.load()),
+    ONBOARD_SUITE: lambda _: onboarding_evaluation.Onboard(onboarding_set.load()),
+    ADAPT_SUITE: lambda _: adapt_evaluation.Adapt(adapt_set.load()),
+    SUPERVISE_SUITE: lambda _: supervise_evaluation.Supervise(supervise_set.load()),
+}
+"""Each suite, built from its set; a set that cannot be read is refused here, before the provider."""
+
+
 @main.command("eval")
 @click.option(
     "--suite",
@@ -639,7 +651,7 @@ somebody's notes does.
     "repetitions",
     metavar="N",
     type=click.IntRange(min=1),
-    default=evaluation.REPETITIONS,
+    default=eval_runner.REPETITIONS,
     show_default=True,
     help="How many times each situation or report runs. A model is a "
     "distribution, so one run measures nothing.",
@@ -716,26 +728,17 @@ def eval_command(
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
-            if suite == LOG_SUITE:
-                lines, report = _log_suite(
-                    connection, only, repetitions, records, call_budget
+            try:
+                lines, report = eval_runner.run(
+                    SUITES[suite](connection),
+                    connection,
+                    only=only,
+                    repetitions=repetitions,
+                    records=records,
+                    budget=call_budget,
                 )
-            elif suite == ONBOARD_SUITE:
-                lines, report = _onboard_suite(
-                    connection, only, repetitions, records, call_budget
-                )
-            elif suite == ADAPT_SUITE:
-                lines, report = _adapt_suite(
-                    connection, only, repetitions, records, call_budget
-                )
-            elif suite == SUPERVISE_SUITE:
-                lines, report = _supervise_suite(
-                    connection, only, repetitions, records, call_budget
-                )
-            else:
-                lines, report = _plan_suite(
-                    connection, only, repetitions, records, call_budget
-                )
+            except (eval_set.SetError, eval_runner.Refused) as error:
+                raise click.ClickException(str(error)) from error
 
     for line in lines:
         # The reports, the questions and the exclusions in this output were
@@ -744,212 +747,6 @@ def eval_command(
         click.echo(_ascii(line))
     if not report.passed:
         raise SystemExit(1)
-
-
-def _plan_suite(
-    connection: sqlite3.Connection,
-    only: tuple[str, ...],
-    repetitions: int,
-    records: Path,
-    call_budget: int,
-) -> tuple[list[str], evaluation.Report]:
-    """The six situations against the planner graph, on the provider `LLM_BACKEND` names.
-
-    The provider's state is checked once, before anything runs. A server
-    nobody started or a key nobody set is a precondition with a fix, not
-    eighteen rows of *not run* under a matrix of dashes.
-
-    What the pass costs this laptop is sampled while it runs, because on a
-    local model the minutes and the memory are half of what ticket 01 set out
-    to find out.
-    """
-    chosen = _chosen(evaluation.situations(connection), only, "situation")
-    on = models.planner()
-    models.ready(on)
-    with evaluation.pointed_at_the_database(), memory.sampling(on) as sampled:
-        report = evaluation.run(
-            connection,
-            chosen,
-            on=on,
-            repetitions=repetitions,
-            records=records,
-            budget=call_budget,
-        )
-    return [*evaluation.render(report, chosen), *sampled.lines()], report
-
-
-def _log_suite(
-    connection: sqlite3.Connection,
-    only: tuple[str, ...],
-    repetitions: int,
-    records: Path,
-    call_budget: int,
-) -> tuple[list[str], evaluation.Report]:
-    """The thirty reports, against a database built for them.
-
-    Everything that can be wrong without a model is checked first: an id the
-    catalog does not have, a row whose expected document reports against the
-    wrong workout, a volume figure its own document does not produce. Thirty
-    agent runs cost minutes and money, and every one of them measures nothing
-    if the set and the catalog disagree.
-
-    Then the provider, and only then, for the reason the plan suite checks it
-    at all: a key nobody set is a precondition with a fix, not thirty rows of
-    *not run* under a matrix of dashes. After the set, because a set that
-    disagrees with the catalog is worth saying on a machine with no key.
-    """
-    holds = log_set.load()
-    _refuse(log_evaluation.missing(connection, holds))
-    chosen = _chosen(holds.rows, only, "report")
-    with log_evaluation.prepared(connection, holds) as where:
-        _refuse(log_evaluation.verify(where, holds))
-        on = models.logger()
-        models.ready(on)
-        report = log_evaluation.run(
-            where,
-            chosen,
-            on=on,
-            repetitions=repetitions,
-            records=records,
-            budget=call_budget,
-        )
-    report = log_evaluation.barred(report, holds)
-    return log_evaluation.render(report, chosen), report
-
-
-def _onboard_suite(
-    connection: sqlite3.Connection,
-    only: tuple[str, ...],
-    repetitions: int,
-    records: Path,
-    call_budget: int,
-) -> tuple[list[str], evaluation.Report]:
-    """The scripted users and the messages to route, against a copy with nothing declared."""
-    try:
-        holds = onboarding_set.load()
-    except onboarding_set.OnboardSetError as error:
-        raise click.ClickException(str(error)) from error
-    _refuse(onboarding_evaluation.problems(connection, holds))
-    chosen = _chosen(holds.cases, only, "case")
-    talks = front = None
-    if any(case.kind != onboarding_set.ROUTE for case in chosen):
-        talks = models.onboarding()
-        models.ready(talks)
-    if any(case.kind == onboarding_set.ROUTE for case in chosen):
-        front = models.entrance()
-        models.ready(front)
-    with onboarding_evaluation.prepared(connection, holds) as where:
-        report = onboarding_evaluation.run(
-            where,
-            chosen,
-            talks=talks,
-            front=front,
-            repetitions=repetitions,
-            records=records,
-            budget=call_budget,
-        )
-    report = onboarding_evaluation.barred(report, holds)
-    return onboarding_evaluation.render(report, chosen), report
-
-
-def _adapt_suite(
-    connection: sqlite3.Connection,
-    only: tuple[str, ...],
-    repetitions: int,
-    records: Path,
-    call_budget: int,
-) -> tuple[list[str], evaluation.Report]:
-    """The adaptation set's messages, against a copy holding its declaration and mesocycle."""
-    try:
-        holds = adapt_set.load()
-    except adapt_set.AdaptSetError as error:
-        raise click.ClickException(str(error)) from error
-    _refuse(adapt_evaluation.problems(connection, holds))
-    chosen = _chosen(holds.cases, only, "case")
-    front = models.entrance()
-    models.ready(front)
-    plans_on = None
-    if any(case.planned for case in chosen):
-        plans_on = models.planner()
-        models.ready(plans_on)
-    with adapt_evaluation.prepared(connection, holds) as where:
-        report = adapt_evaluation.run(
-            where,
-            chosen,
-            front=front,
-            plans_on=plans_on,
-            repetitions=repetitions,
-            records=records,
-            budget=call_budget,
-        )
-    report = adapt_evaluation.barred(report, holds)
-    return adapt_evaluation.render(report, chosen), report
-
-
-def _supervise_suite(
-    connection: sqlite3.Connection,
-    only: tuple[str, ...],
-    repetitions: int,
-    records: Path,
-    call_budget: int,
-) -> tuple[list[str], evaluation.Report]:
-    """The supervisor set's histories, each written into a copy of the catalog in turn."""
-    try:
-        holds = supervise_set.load()
-    except supervise_set.SuperviseSetError as error:
-        raise click.ClickException(str(error)) from error
-    _refuse(supervise_evaluation.problems(connection, holds))
-    chosen = _chosen(holds.cases, only, "history")
-    with supervise_evaluation.prepared(connection) as where:
-        _refuse(supervise_evaluation.refused(where, holds, date.today().isoformat()))
-        supervises_on = models.supervisor()
-        models.ready(supervises_on)
-        plans_on = models.planner()
-        models.ready(plans_on)
-        report = supervise_evaluation.run(
-            where,
-            holds,
-            chosen,
-            supervises_on=supervises_on,
-            plans_on=plans_on,
-            repetitions=repetitions,
-            records=records,
-            budget=call_budget,
-        )
-    report = supervise_evaluation.barred(report, holds)
-    return supervise_evaluation.render(report, chosen), report
-
-
-def _refuse(problems: Sequence[str]) -> None:
-    if problems:
-        raise click.ClickException("\n".join(problems))
-
-
-_Named = TypeVar(
-    "_Named",
-    evaluation.Situation,
-    log_set.Row,
-    onboarding_set.Case,
-    adapt_set.Case,
-    supervise_set.Case,
-)
-"""What every suite's cases have in common at this boundary: a name typed at `--only`."""
-
-
-def _chosen(
-    available: Sequence[_Named], only: tuple[str, ...], what: str
-) -> tuple[_Named, ...]:
-    if not only:
-        return tuple(available)
-    known = {case.name: case for case in available}
-    for name in only:
-        if name not in known:
-            raise click.ClickException(
-                f"no {what} called {name!r}; they are {', '.join(known)}"
-            )
-    # Named twice is named once. Left in, the case runs twice the repetitions
-    # against a paid provider and prints two identical rows.
-    return tuple(known[name] for name in dict.fromkeys(only))
 
 
 @main.command("mcp")

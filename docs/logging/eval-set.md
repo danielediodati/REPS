@@ -67,7 +67,7 @@ figure below was computed from the rounds and each exercise's own
   `state.last_performed_load` answers *I don't know* and the jump flag cannot
   fire.
 - **The runner is `trainer eval --suite log`**, and everything above is what
-  `log_evaluation.prepared` builds: a throwaway copy of the project database
+  `log_evaluation.Log.fixture` builds: a throwaway copy of the project database
   holding these four prescriptions and that one performed workout, with
   `TRAINER_DB` pointed at it so the agent's own tools read it too. Added after
   the rows were written, and it changes none of them.

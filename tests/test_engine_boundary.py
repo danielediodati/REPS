@@ -261,9 +261,6 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
     and which says exactly what that exception covers.
     """
     assert _importers_of("trainer.engine.workouts") == {
-        # Session 14: the adaptation set's mesocycle is written into its
-        # fixture as the `PrescribedBlock`s a kept one is.
-        "adapt_evaluation.py",
         "cli.py",
         # Session 7: a plan becomes a prescribed workout when the user accepts
         # it (ADR-0005), and the node after the resume is what writes it.
@@ -281,8 +278,9 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         # in the last one, so the checkpoint has to read those blocks back.
         # It names the two types to register them and calls nothing.
         "coach/checkpoints.py",
-        # Session 15: the demo's home is a history performed. See the next test.
-        "demo.py",
+        # Session 15b: a made-up past, the demo's home and the supervisor's
+        # set's histories, performed as prescribed. See the next test.
+        "history.py",
         # Session 15: the supervisor's brief reads the ended mesocycle's
         # `PrescribedBlock`s, without their reasons; it writes nothing.
         "coach/supervisor.py",
@@ -292,9 +290,6 @@ def test_only_the_cli_and_the_document_reach_the_writer_module() -> None:
         "log.py",
         "log_evaluation.py",
         "log_set.py",
-        # Session 15: the supervisor's set writes each history into its
-        # fixture, a throwaway copy. See the next test.
-        "supervise_evaluation.py",
         # Session 10: a served workout renders the way a proposed one does,
         # so `plan.from_prescribed` reads a slot's blocks back into the wire
         # shape. It writes nothing.
@@ -386,12 +381,19 @@ def test_only_the_cli_and_an_accepted_plan_call_a_writer() -> None:
         "coach/planner.py",
         "coach/logger.py",
         "log_evaluation.py",
-        # Session 15: a history is performed workouts, so its fixture is
-        # built by writing them, into a copy deleted with its temp directory.
+        # Session 15: a made-up past is performed workouts. Who may write one
+        # is the next test.
+        "history.py",
+    }
+
+
+def test_only_the_demo_and_the_supervisors_set_make_up_a_past() -> None:
+    """`history.py` writes performed workouts, so its callers are held as a writer's are."""
+    assert _callers_of(("performed_as_prescribed",)) == {
+        # Into a copy deleted with its temp directory;
         # `test_supervise_evaluation.py` holds that the source stays unwritten.
         "supervise_evaluation.py",
-        # Session 15: the demo's history is performed workouts too, written
-        # into a database `trainer demo` creates and refuses to build over.
+        # Into a database `trainer demo` creates and refuses to build over.
         "demo.py",
     }
 
@@ -437,10 +439,8 @@ def test_only_an_accepted_mesocycle_is_kept() -> None:
         # The adaptation set is measured against an active mesocycle, written
         # into a throwaway copy, as `log_evaluation.py` writes its prescriptions.
         "adapt_evaluation.py",
-        # And the supervisor's set writes each history's mesocycles the same way.
-        "supervise_evaluation.py",
-        # The demo's home, into a database `trainer demo` creates.
-        "demo.py",
+        # And a made-up past, the supervisor's set's and the demo's.
+        "history.py",
     }
 
 
@@ -450,9 +450,6 @@ def test_only_a_door_serves_todays_workout() -> None:
     assert _callers_of(("record_served",)) == {
         "cli.py",
         "coach/bot.py",
-        # A history in the supervisor's set is served and performed into a
-        # throwaway copy, as a door would.
-        "supervise_evaluation.py",
-        # And the demo's history, into a database `trainer demo` creates.
-        "demo.py",
+        # A made-up past is served and performed, as a door would.
+        "history.py",
     }

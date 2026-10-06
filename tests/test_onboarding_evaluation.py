@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage
 
 from conftest import enrich
 from test_planner import CATALOG, PATTERNS, Scripted
-from trainer import evaluation, onboarding_evaluation, onboarding_set
+from trainer import eval_runner, onboarding_evaluation, onboarding_set
 from trainer.coach import conclusions, entrance, models, onboarding
 from trainer.engine import catalog, database, migrations
 
@@ -91,7 +91,7 @@ def holds() -> onboarding_set.OnboardSet:
 def where(
     source: sqlite3.Connection, holds: onboarding_set.OnboardSet
 ) -> Iterator[onboarding_evaluation.Fixture]:
-    with onboarding_evaluation.prepared(source, holds) as prepared:
+    with onboarding_evaluation.Onboard(holds).fixture(source) as prepared:
         yield prepared
 
 
@@ -118,10 +118,15 @@ def ran(
     case: onboarding_set.Case,
     tmp_path: Path,
     *turns: AIMessage,
-) -> evaluation.Report:
+) -> eval_runner.Report:
     on = chat(*turns)
-    return onboarding_evaluation.run(
-        where, [case], talks=on, front=on, repetitions=1, records=tmp_path / "records"
+    return eval_runner.measure(
+        onboarding_evaluation.Onboard(onboarding_set.parse(SET)),
+        where,
+        [case],
+        {"onboarding": on, "entrance": on},
+        repetitions=1,
+        records=tmp_path / "records",
     )
 
 
@@ -129,7 +134,7 @@ def case_of(holds: onboarding_set.OnboardSet, name: str) -> onboarding_set.Case:
     return next(case for case in holds.cases if case.name == name)
 
 
-def failed(report: evaluation.Report, case: str) -> list[str]:
+def failed(report: eval_runner.Report, case: str) -> list[str]:
     (outcome,) = [o for o in report.outcomes if o.case == case]
     assert outcome.error is None, outcome.error
     return [name for name, _ in outcome.failures]
@@ -166,7 +171,7 @@ def test_a_persona_answered_by_its_replies_holds_every_check_and_its_memory(
     assert failed(report, "terse") == []
     assert failed(report, "terse remembers") == []
     (outcome,) = [o for o in report.outcomes if o.case == "terse"]
-    assert isinstance(outcome.record, onboarding_evaluation.Talked)
+    assert isinstance(outcome.record, onboarding_evaluation.Interviewed)
     assert ("user", "il ginocchio si lamenta") in outcome.record.conversation
     assert ("user", "no") in outcome.record.conversation
     assert outcome.written is not None and outcome.written.exists()
@@ -205,7 +210,7 @@ def test_a_persona_gives_what_it_has_not_said_before_repeating_an_undeclared_rep
 
     assert failed(report, "terse") == []
     (outcome,) = [o for o in report.outcomes if o.case == "terse"]
-    assert isinstance(outcome.record, onboarding_evaluation.Talked)
+    assert isinstance(outcome.record, onboarding_evaluation.Interviewed)
     said = [line for who, line in outcome.record.conversation if who == "user"]
     assert said[1:] == [reply.says for reply in case_of(holds, "terse").replies]
 
@@ -239,7 +244,7 @@ def test_a_paused_persona_comes_back_to_a_graph_built_again(
 
     assert failed(report, "away") == []
     (outcome,) = [o for o in report.outcomes if o.case == "away"]
-    assert isinstance(outcome.record, onboarding_evaluation.Talked)
+    assert isinstance(outcome.record, onboarding_evaluation.Interviewed)
     assert ("user", "eccomi, dove eravamo?") in outcome.record.conversation
 
 
@@ -295,11 +300,11 @@ def test_a_quota_spent_on_the_interviews_counts_every_route_as_a_run_not_made(
 
     on = models.Chat(Spent(), "scripted", "a-stand-in")
 
-    report = onboarding_evaluation.run(
+    report = eval_runner.measure(
+        onboarding_evaluation.Onboard(holds),
         where,
         [case_of(holds, "bought"), case_of(holds, "gym")],
-        talks=on,
-        front=on,
+        {"onboarding": on, "entrance": on},
         repetitions=2,
         records=tmp_path / "records",
     )
@@ -309,17 +314,40 @@ def test_a_quota_spent_on_the_interviews_counts_every_route_as_a_run_not_made(
     assert len(routed) == 2 and all(o.skipped for o in routed)
 
 
+def test_an_interview_a_spent_quota_stopped_counts_against_the_on_time_and_memory_bars_too(
+    where: onboarding_evaluation.Fixture, holds: onboarding_set.OnboardSet, tmp_path: Path
+) -> None:
+    class Spent(Scripted):
+        def _generate(self, *args: Any, **kwargs: Any) -> Any:
+            raise models.QuotaSpent("the day's quota is spent")
+
+    on = models.Chat(Spent(), "scripted", "a-stand-in")
+
+    report = eval_runner.measure(
+        onboarding_evaluation.Onboard(holds),
+        where,
+        [case_of(holds, "terse")],
+        {"onboarding": on},
+        repetitions=2,
+        records=tmp_path / "records",
+    )
+
+    judged = [o for o in report.outcomes if o.case in ("terse on time", "terse remembers")]
+    assert len(judged) == 4 and all(o.skipped and not o.held for o in judged)
+    assert not report.passed
+
+
 def test_a_memory_below_its_bar_fails_the_pass_while_the_held_half_holds(
     holds: onboarding_set.OnboardSet,
 ) -> None:
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome("terse", 1),
-            evaluation.Outcome("terse remembers", 1, ((onboarding_evaluation.REMEMBERED, "no"),)),
+            eval_runner.Outcome("terse", 1),
+            eval_runner.Outcome("terse remembers", 1, ((onboarding_evaluation.REMEMBERED, "no"),)),
         )
     )
 
-    barred = onboarding_evaluation.barred(report, holds)
+    barred = eval_runner.barred(onboarding_evaluation.Onboard(holds), report)
 
     held, _, remembered, _ = barred.halves
     assert barred.of(held).held == 1
@@ -337,7 +365,7 @@ def test_the_rendered_pass_is_ascii_with_a_matrix_per_kind(
         calls((onboarding.CHOOSE, {"path": "keep", "why": "Va bene."})),
     )
 
-    lines = onboarding_evaluation.render(onboarding_evaluation.barred(report, holds), [case_of(holds, "bought")])
+    lines = onboarding_evaluation.render(report, [case_of(holds, "bought")])
 
     text = "\n".join(lines)
     assert "changes" in text and onboarding_evaluation.ONLY in text

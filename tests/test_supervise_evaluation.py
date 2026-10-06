@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
 from test_planner import Scripted
-from trainer import evaluation, supervise_evaluation, supervise_set
+from trainer import eval_runner, supervise_evaluation, supervise_set
 from trainer import plan as plans
 from trainer.coach import models, supervisor
 from trainer.engine import catalog, database, mesocycles, methodology, migrations
@@ -85,8 +85,10 @@ def holds() -> supervise_set.SuperviseSet:
 
 
 @pytest.fixture()
-def where(source: sqlite3.Connection) -> Iterator[supervise_evaluation.Fixture]:
-    with supervise_evaluation.prepared(source) as prepared:
+def where(
+    source: sqlite3.Connection, holds: supervise_set.SuperviseSet
+) -> Iterator[supervise_evaluation.Fixture]:
+    with supervise_evaluation.Supervise(holds).fixture(source) as prepared:
         yield prepared
 
 
@@ -269,12 +271,11 @@ def test_a_run_directs_from_what_they_said_plans_from_the_direction_and_holds_bo
     next_one = mesocycle_of(("Front_Barbell_Squat", 8, 120), ("Romanian_Deadlift", 10, 90))
     plans_on = Scripted(turns=[AIMessage(content="ready")], documents=[next_one])
 
-    report = supervise_evaluation.run(
+    report = eval_runner.measure(
+        supervise_evaluation.Supervise(holds),
         where,
-        holds,
         holds.cases,
-        supervises_on=chat(directs),
-        plans_on=chat(plans_on),
+        {"supervisor": chat(directs), "planner": chat(plans_on)},
         repetitions=1,
         records=tmp_path / "records",
     )
@@ -291,9 +292,8 @@ def test_a_run_directs_from_what_they_said_plans_from_the_direction_and_holds_bo
         "loved-1-plan.json",
     ]
 
-    barred = supervise_evaluation.barred(report, holds)
-    lines = supervise_evaluation.render(barred, holds.cases)
-    assert barred.passed
+    lines = supervise_evaluation.render(report, holds.cases)
+    assert report.passed
     assert "  held: 1 of 1 -- 100%, the bar is 80%" in lines
     assert "  followed: 1 of 1 -- 100%, the bar is 80%" in lines
     assert any("loved #1: new squat | varies exercises" in line for line in lines)
@@ -305,30 +305,29 @@ def test_a_supervisor_that_falls_over_is_a_run_not_made_and_the_pass_goes_on(
 ) -> None:
     broken = Scripted(turns=[AIMessage(content="enough")], raw=["not a direction"] * 3)
 
-    report = supervise_evaluation.run(
+    report = eval_runner.measure(
+        supervise_evaluation.Supervise(holds),
         where,
-        holds,
         holds.cases,
-        supervises_on=chat(broken),
-        plans_on=chat(Scripted()),
+        {"supervisor": chat(broken), "planner": chat(Scripted())},
         repetitions=1,
         records=tmp_path / "records",
     )
 
     (outcome,) = report.outcomes
     assert outcome.case == "loved" and outcome.error is not None
-    assert not supervise_evaluation.barred(report, holds).passed
+    assert not report.passed
 
 
 def test_plans_that_did_not_follow_hold_the_pass_below_its_bar() -> None:
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome("loved", 1),
-            evaluation.Outcome("loved" + supervise_evaluation.FOLLOWS, 1, ((supervise_evaluation.FOLLOWED, "no"),)),
+            eval_runner.Outcome("loved", 1),
+            eval_runner.Outcome("loved" + supervise_evaluation.FOLLOWS, 1, ((supervise_evaluation.FOLLOWED, "no"),)),
         )
     )
 
-    assert not supervise_evaluation.barred(report, supervise_set.parse(SET)).passed
+    assert not eval_runner.barred(supervise_evaluation.Supervise(supervise_set.parse(SET)), report).passed
 
 
 def test_one_rep_fewer_on_every_item_is_fewer_however_the_means_round() -> None:

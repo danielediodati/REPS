@@ -4,38 +4,28 @@ from __future__ import annotations
 
 import json
 import math
-import os
-import shutil
 import sqlite3
-import tempfile
-import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
-from trainer import adapt_set, evaluation, tools
+from trainer import adapt_set, eval_runner, history
 from trainer import plan as plans
-from trainer.coach import checkpoints, conclusions, entrance, models, onboarding, planner
+from trainer.coach import conclusions, entrance, models, onboarding, planner
 from trainer.coach import record as run_record
 from trainer.engine import (
     catalog,
     config,
-    database,
     duration,
     exclusions,
     mesocycles,
     muscle_groups,
-    workouts,
 )
-from trainer.onboarding_evaluation import Talked
 
 ROUTED = "routed"
 PLANNED = "planned"
@@ -51,7 +41,6 @@ COLUMNS = (PLANNED, ASKED_FOR, LEFT_OUT, EQUIPMENT, MINUTES, WORKOUT, LONGER, TO
 PLAN = " plan"
 """Appended to a case's name for its adapted plan, the half code holds against the set's bar."""
 
-USER = "eval"
 RETEST = timedelta(weeks=6)
 """How far off a case's exclusion is re-tested: well past the run."""
 
@@ -70,50 +59,66 @@ class Fixture:
     cap: int
 
 
-@contextmanager
-def prepared(source: sqlite3.Connection, holds: adapt_set.AdaptSet) -> Iterator[Fixture]:
-    """A copy of `source` holding only the set's declaration and mesocycle, named in `TRAINER_DB` while it is open."""
-    directory = Path(tempfile.mkdtemp(prefix="reps-adapt-eval-"))
-    previous = os.environ.get(database.DATABASE_ENV_VAR)
-    connection = database.connect(directory / "eval.sqlite")
-    try:
-        source.backup(connection)
-        for table in (
-            "served",
-            "workout_exercises",
-            "workout_blocks",
-            "workouts",
-            "mesocycle_exercises",
-            "mesocycle_blocks",
-            "mesocycles",
-            "declarations",
-            "exclusions",
-        ):
-            connection.execute(f"DELETE FROM {table}")
-        declared = onboarding.settled(dict(holds.declared))
-        config.record(connection, declared, holds.today)
-        mesocycles.record_mesocycle(
-            connection,
-            tuple(
-                tuple(
-                    workouts.PrescribedBlock(block=costed, reason=shape.reason)
-                    for shape, costed in zip(workout.blocks, plans.to_blocks(workout), strict=True)
-                )
-                for workout in holds.mesocycle.workouts
-            ),
-            cycles=holds.mesocycle.cycles,
-            why=holds.mesocycle.why,
-            on=holds.today,
+EMPTIED = (
+    "served",
+    "workout_exercises",
+    "workout_blocks",
+    "workouts",
+    "mesocycle_exercises",
+    "mesocycle_blocks",
+    "mesocycles",
+    "declarations",
+    "exclusions",
+)
+
+
+class Adapt(eval_runner.Suite[adapt_set.Case, Fixture]):
+    """Messages through the entrance against an active mesocycle, and every adaptation planned and held."""
+
+    def __init__(self, holds: adapt_set.AdaptSet) -> None:
+        super().__init__(holds.cases)
+        self.holds = holds
+
+    def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
+        return problems(connection, self.holds)
+
+    @contextmanager
+    def fixture(self, connection: sqlite3.Connection) -> Iterator[Fixture]:
+        """A copy holding only the set's declaration and mesocycle."""
+        with eval_runner.copied(connection, emptied=EMPTIED) as copy:
+            declared = onboarding.settled(dict(self.holds.declared))
+            config.record(copy.connection, declared, self.holds.today)
+            mesocycles.record_mesocycle(
+                copy.connection,
+                tuple(history.prescribed(workout) for workout in self.holds.mesocycle.workouts),
+                cycles=self.holds.mesocycle.cycles,
+                why=self.holds.mesocycle.why,
+                on=self.holds.today,
+            )
+            yield Fixture(copy.connection, copy.path, declared.duration_cap_min)
+
+    def chats(self, chosen: Sequence[adapt_set.Case]) -> Mapping[str, models.Chat]:
+        """The entrance's model, and the planner's when a chosen case is planned."""
+        chats = {"entrance": models.entrance()}
+        if any(case.planned for case in chosen):
+            chats["planner"] = models.planner()
+        return chats
+
+    def runs(
+        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+    ) -> eval_runner.Once[adapt_set.Case]:
+        return lambda case, attempt: _adapted(where, case, attempt, chats, budget, records)
+
+    def halves(self) -> tuple[eval_runner.Half, ...]:
+        """On the adapted plans, and on where messages go."""
+        holds = self.holds
+        return (
+            eval_runner.Half("held", frozenset(case.name + PLAN for case in holds.cases if case.planned), holds.bar_held),
+            eval_runner.Half("routed", frozenset(case.name for case in holds.cases), holds.bar_routed),
         )
-        os.environ[database.DATABASE_ENV_VAR] = str(directory / "eval.sqlite")
-        yield Fixture(connection, directory / "eval.sqlite", declared.duration_cap_min)
-    finally:
-        connection.close()
-        if previous is None:
-            os.environ.pop(database.DATABASE_ENV_VAR, None)
-        else:
-            os.environ[database.DATABASE_ENV_VAR] = previous
-        shutil.rmtree(directory, ignore_errors=True)
+
+    def render(self, report: eval_runner.Report, chosen: Sequence[adapt_set.Case]) -> list[str]:
+        return render(report, chosen)
 
 
 @contextmanager
@@ -165,77 +170,59 @@ def problems(connection: sqlite3.Connection, holds: adapt_set.AdaptSet) -> tuple
     return tuple(found)
 
 
-def run(
-    where: Fixture,
-    chosen: Sequence[adapt_set.Case],
-    *,
-    front: models.Chat,
-    plans_on: models.Chat | None,
-    repetitions: int = evaluation.REPETITIONS,
-    records: Path | None = None,
-    budget: int = tools.CALL_BUDGET,
-) -> evaluation.Report:
-    """Every case, every repetition: the message on `front`, and an adaptation planned on `plans_on`."""
-    into = records if records is not None else evaluation.records_path()
-    planned: list[evaluation.Outcome] = []
-    report = evaluation.measured(
-        [case.name for case in chosen],
-        repetitions,
-        lambda at, attempt: _once(where, chosen[at], attempt, front, plans_on, budget, into, planned),
-    )
-    return replace(report, outcomes=(*report.outcomes, *planned))
-
-
-def _once(
+def _adapted(
     where: Fixture,
     case: adapt_set.Case,
     attempt: int,
-    front: models.Chat,
-    plans_on: models.Chat | None,
+    chats: Mapping[str, models.Chat],
     budget: int,
     records: Path,
-    planned: list[evaluation.Outcome],
-) -> evaluation.Outcome:
-    """One message routed and scored; when it started an adaptation, the plan too, into `planned`."""
+) -> tuple[eval_runner.Outcome, ...]:
+    """One message routed and scored; when it started an adaptation, the plan too."""
     with excluding(where, case) as retest:
-        try:
-            talked, final = _routed(case, front, budget)
-        except Exception as error:
-            if (quota := models.spent(error)) is not None:
-                raise quota from error
-            return evaluation.Outcome(case.name, attempt, error=str(error))
-        written = evaluation.write(records, f"{case.name}-{attempt}", talked.written)
-        failures = routing(case, final)
-        acted = bool(final.get("handoff"))
-        weight = 2 if failures and case.goes == adapt_set.ASK and acted else 1
-        routed = evaluation.Outcome(case.name, attempt, failures, talked, written, weight=weight)
-        if case.planned and final.get("handoff") == entrance.ADAPT_THIS_WORKOUT:
-            assert plans_on is not None
-            planned.append(
-                _planned(where, case, attempt, dict(final.get("asked", {})), plans_on, budget, records, retest)
-            )
-    return routed
+        heard: dict[str, Any] = {}
+
+        def route() -> eval_runner.Scored:
+            talked, final = _routed(case, chats["entrance"], budget)
+            heard.update(final)
+            failures = routing(case, final)
+            acted = bool(final.get("handoff"))
+            weight = 2 if failures and case.goes == adapt_set.ASK and acted else 1
+            return eval_runner.Scored(talked, failures, weight)
+
+        routed = eval_runner.attempted(case.name, attempt, records, f"{case.name}-{attempt}", route)
+        if routed.error is not None or not (
+            case.planned and heard.get("handoff") == entrance.ADAPT_THIS_WORKOUT
+        ):
+            return (routed,)
+        planned = eval_runner.attempted(
+            case.name + PLAN,
+            attempt,
+            records,
+            f"{case.name}-{attempt}-plan",
+            lambda: _planned(where, case, dict(heard.get("asked", {})), chats["planner"], budget, retest),
+            typed=True,
+        )
+        return (routed, planned)
 
 
 def _routed(
     case: adapt_set.Case, on: models.Chat, budget: int
-) -> tuple[Talked, Mapping[str, Any]]:
+) -> tuple[eval_runner.Talked, Mapping[str, Any]]:
     """One message through the entrance, reading today's workout and checking requests off the fixture."""
-    started = time.monotonic()
     store = InMemoryStore()
-    graph = entrance.build(
-        on,
-        budget=budget,
-        checkpointer=InMemorySaver(serde=checkpoints.Declared()),
-        store=store,
-    )
-    thread: RunnableConfig = {"configurable": {"thread_id": f"adapt:{uuid4()}", conclusions.USER: USER}}
-    final = dict(graph.invoke(entrance.heard(case.says), thread))
-    final["kept"] = [one.quote for one in conclusions.live(store, USER)]
-    talked = Talked(
+    graph = entrance.build(on, budget=budget, checkpointer=eval_runner.checkpointer(), store=store)
+
+    def heard() -> dict[str, Any]:
+        final = dict(graph.invoke(entrance.heard(case.says), eval_runner.thread("adapt", remembers=True)))
+        final["kept"] = [one.quote for one in conclusions.live(store, eval_runner.USER)]
+        return final
+
+    final, seconds = eval_runner.timed(heard)
+    talked = eval_runner.Talked(
         record=run_record.of(final, budget),
+        seconds=seconds,
         conversation=(("user", case.says), ("agent", str(final.get("answer", "")))),
-        seconds=time.monotonic() - started,
     )
     return talked, final
 
@@ -260,32 +247,23 @@ def routing(case: adapt_set.Case, final: Mapping[str, Any]) -> tuple[tuple[str, 
 def _planned(
     where: Fixture,
     case: adapt_set.Case,
-    attempt: int,
     asked: Mapping[str, Any],
     on: models.Chat,
     budget: int,
-    records: Path,
     retest: str,
-) -> evaluation.Outcome:
+) -> eval_runner.Scored:
     """The adaptation the entrance started, planned, and held against the row."""
-    name = case.name + PLAN
-    started = time.monotonic()
-    try:
-        request = entrance.requested(where.connection, entrance.ADAPT_THIS_WORKOUT, asked)
-        assert isinstance(request, plans.Request)
-        graph = planner.build(on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared()))
-        thread: RunnableConfig = {"configurable": {"thread_id": f"adapt-plan:{uuid4()}"}}
-        final = graph.invoke(planner.starting(request), thread)
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        return evaluation.Outcome(name, attempt, error=f"{type(error).__name__}: {error}")
-    talked = Talked(
-        record=run_record.of(final, budget),
-        conversation=(("user", case.says),),
-        seconds=time.monotonic() - started,
+    request = entrance.requested(where.connection, entrance.ADAPT_THIS_WORKOUT, asked)
+    assert isinstance(request, plans.Request)
+    graph = planner.build(on, budget=budget, checkpointer=eval_runner.checkpointer())
+    final, seconds = eval_runner.timed(
+        lambda: graph.invoke(planner.starting(request), eval_runner.thread("adapt-plan"))
     )
-    written = evaluation.write(records, f"{case.name}-{attempt}-plan", talked.written)
+    talked = eval_runner.Talked(
+        record=run_record.of(final, budget),
+        seconds=seconds,
+        conversation=(("user", case.says),),
+    )
     failures = held(
         where.connection,
         case,
@@ -294,7 +272,7 @@ def _planned(
         cap=where.cap,
         retest=retest,
     )
-    return evaluation.Outcome(name, attempt, failures, talked, written)
+    return eval_runner.Scored(talked, failures)
 
 
 def held(
@@ -372,39 +350,28 @@ def _group(mapping: muscle_groups.MuscleGroups, muscle: str) -> str | None:
         return None
 
 
-def barred(report: evaluation.Report, holds: adapt_set.AdaptSet) -> evaluation.Report:
-    """The pass against the bars the set declares: on the adapted plans and on where messages go."""
-    return replace(
-        report,
-        halves=(
-            evaluation.Half("held", frozenset(case.name + PLAN for case in holds.cases if case.planned), holds.bar_held),
-            evaluation.Half("routed", frozenset(case.name for case in holds.cases), holds.bar_routed),
-        ),
-    )
-
-
-def render(report: evaluation.Report, chosen: Sequence[adapt_set.Case]) -> list[str]:
+def render(report: eval_runner.Report, chosen: Sequence[adapt_set.Case]) -> list[str]:
     """Where each message went, what each plan held, the failures, and $ and s per message. ASCII."""
     names = [case.name for case in chosen]
-    lines = ["routing", *evaluation.matrix(report, names, [ROUTED, evaluation.NOT_RUN]), ""]
+    lines = ["routing", *eval_runner.matrix(report, names, [ROUTED, eval_runner.NOT_RUN]), ""]
     planned = [case.name + PLAN for case in chosen if case.planned]
     if planned:
-        lines += ["adapted plans", *evaluation.matrix(report, planned, [*COLUMNS, evaluation.NOT_RUN]), ""]
+        lines += ["adapted plans", *eval_runner.matrix(report, planned, [*COLUMNS, eval_runner.NOT_RUN]), ""]
     about = {case.name: f"{case.says} -> {case.goes}" for case in chosen}
     about |= {case.name + PLAN: case.says for case in chosen}
-    lines += [*evaluation.failures(report, about), ""]
+    lines += [*eval_runner.failures(report, about), ""]
     lines += per_message(report, chosen)
-    lines += evaluation.totals(report, "held what their row declares")
+    lines += eval_runner.totals(report, "held what their row declares")
     return lines
 
 
-def per_message(report: evaluation.Report, chosen: Sequence[adapt_set.Case]) -> list[str]:
+def per_message(report: eval_runner.Report, chosen: Sequence[adapt_set.Case]) -> list[str]:
     """Dollars and seconds each message took, its plan included, averaged over its runs."""
     lines = ["per message"]
     for case in chosen:
-        runs: dict[int, list[Talked]] = {}
+        runs: dict[int, list[eval_runner.Talked]] = {}
         for outcome in report.outcomes:
-            if outcome.case in (case.name, case.name + PLAN) and isinstance(outcome.record, Talked):
+            if outcome.case in (case.name, case.name + PLAN) and isinstance(outcome.record, eval_runner.Talked):
                 runs.setdefault(outcome.attempt, []).append(outcome.record)
         if not runs:
             lines.append(f"  {case.name}: not run")

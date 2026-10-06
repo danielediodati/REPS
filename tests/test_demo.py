@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from trainer import cli, demo
 from trainer import plan as plans
 from trainer.engine import config, database, mesocycles, state, workouts
-from trainer.supervise_evaluation import as_performed
+from trainer.history import as_performed
 
 TODAY = "2026-10-04"
 

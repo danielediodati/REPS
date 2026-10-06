@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from trainer import eval_set
 from trainer import plan as plans
 from trainer.engine import mesocycles
 
@@ -23,7 +22,7 @@ FEWER, MORE = "fewer", "more"
 CHECKS = ("changes", "keeps", "rotates", "without", "ranges", "varies", "rest", "reps")
 
 
-class SuperviseSetError(ValueError):
+class SuperviseSetError(eval_set.SetError):
     """A set that cannot be run as written, saying where."""
 
 
@@ -82,26 +81,17 @@ class SuperviseSet:
 
 def path() -> Path:
     """Where the set is read from: `TRAINER_SUPERVISE_SET`, or the committed one."""
-    override = os.environ.get(SUPERVISE_SET_ENV_VAR)
-    return Path(override).expanduser() if override else Path.cwd().joinpath(*DEFAULT_PARTS)
+    return eval_set.path(SUPERVISE_SET_ENV_VAR, DEFAULT_PARTS)
 
 
 def load(where: Path | None = None) -> SuperviseSet:
     """The set, off disk; refused naming the file when it is not there."""
-    target = where if where is not None else path()
-    try:
-        text = target.read_text(encoding="utf-8")
-    except OSError as error:
-        raise SuperviseSetError(f"the supervisor's eval set is not at {target}") from error
-    return parse(text)
+    return eval_set.load(where, SUPERVISE_SET_ENV_VAR, DEFAULT_PARTS, "supervisor's eval set", parse, SuperviseSetError)
 
 
 def parse(text: str) -> SuperviseSet:
     """A set out of its TOML, every case checked against what the runner can score."""
-    try:
-        raw = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise SuperviseSetError(f"the set is not TOML: {error}") from error
+    raw = eval_set.toml(text, SuperviseSetError)
     bars = raw.get("bars")
     if not isinstance(bars, dict) or not {"held", "followed"} <= bars.keys():
         raise SuperviseSetError("the set declares no [bars] with held and followed")
@@ -110,10 +100,7 @@ def parse(text: str) -> SuperviseSet:
         raise SuperviseSetError("the set declares no [declared]")
     named = {name: mesocycle(name, meso) for name, meso in dict(raw.get("mesocycles", {})).items()}
     cases = tuple(_case(entry, named) for entry in raw.get("cases", ()))
-    names = [case.name for case in cases]
-    repeated = sorted({name for name in names if names.count(name) > 1})
-    if repeated:
-        raise SuperviseSetError(f"cases named twice: {', '.join(repeated)}")
+    eval_set.unique([case.name for case in cases], SuperviseSetError)
     return SuperviseSet(
         bar_held=int(bars["held"]),
         bar_followed=int(bars["followed"]),

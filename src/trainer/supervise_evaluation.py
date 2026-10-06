@@ -3,30 +3,23 @@
 from __future__ import annotations
 
 import math
-import os
-import shutil
 import sqlite3
-import tempfile
-import time
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, timedelta
 from fractions import Fraction
 from pathlib import Path
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 
-from trainer import evaluation, supervise_set, tools
+from trainer import eval_runner, history, supervise_set
 from trainer import plan as plans
-from trainer.coach import checkpoints, conclusions, models, onboarding, planner, supervisor
+from trainer.coach import conclusions, models, onboarding, planner, supervisor
 from trainer.coach import record as run_record
-from trainer.engine import catalog, config, database, mesocycles, methodology, workouts
-from trainer.onboarding_evaluation import Talked
+from trainer.engine import catalog, config, mesocycles, methodology
 
 PLANNED = "planned"
 CHANGED = "changed"
@@ -45,8 +38,6 @@ FOLLOWS = " followed"
 REPS_MOVE = 1
 REST_MOVE = 10
 """How far the mean reps per item, and the mean rest per block in seconds, must move for `rest` and `reps` to hold."""
-
-USER = "eval"
 
 TABLES = (
     "served",
@@ -70,23 +61,45 @@ class Fixture:
     path: Path
 
 
-@contextmanager
-def prepared(source: sqlite3.Connection) -> Iterator[Fixture]:
-    """A copy of `source`, its catalog kept, named in `TRAINER_DB` while it is open."""
-    directory = Path(tempfile.mkdtemp(prefix="reps-supervise-eval-"))
-    previous = os.environ.get(database.DATABASE_ENV_VAR)
-    connection = database.connect(directory / "eval.sqlite")
-    try:
-        source.backup(connection)
-        os.environ[database.DATABASE_ENV_VAR] = str(directory / "eval.sqlite")
-        yield Fixture(connection, directory / "eval.sqlite")
-    finally:
-        connection.close()
-        if previous is None:
-            os.environ.pop(database.DATABASE_ENV_VAR, None)
-        else:
-            os.environ[database.DATABASE_ENV_VAR] = previous
-        shutil.rmtree(directory, ignore_errors=True)
+class Supervise(eval_runner.Suite[supervise_set.Case, Fixture]):
+    """Each history written into a copy of the catalog in turn, directed, and planned from."""
+
+    what = "history"
+
+    def __init__(self, holds: supervise_set.SuperviseSet) -> None:
+        super().__init__(holds.cases)
+        self.holds = holds
+
+    def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
+        return problems(connection, self.holds)
+
+    @contextmanager
+    def fixture(self, connection: sqlite3.Connection) -> Iterator[Fixture]:
+        """A copy of the database, its catalog kept."""
+        with eval_runner.copied(connection) as copy:
+            yield Fixture(copy.connection, copy.path)
+
+    def checked(self, where: Fixture) -> Sequence[str]:
+        return refused(where, self.holds, date.today().isoformat())
+
+    def chats(self, chosen: Sequence[supervise_set.Case]) -> Mapping[str, models.Chat]:
+        return {"supervisor": models.supervisor(), "planner": models.planner()}
+
+    def runs(
+        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+    ) -> eval_runner.Once[supervise_set.Case]:
+        return lambda case, attempt: _supervised(where, self.holds, case, attempt, chats, budget, records)
+
+    def halves(self) -> tuple[eval_runner.Half, ...]:
+        """What each row holds, and how often the plan followed."""
+        holds = self.holds
+        return (
+            eval_runner.Half("held", frozenset(case.name for case in holds.cases), holds.bar_held),
+            eval_runner.Half("followed", frozenset(case.name + FOLLOWS for case in holds.cases), holds.bar_followed),
+        )
+
+    def render(self, report: eval_runner.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
+        return render(report, chosen)
 
 
 def declared(holds: supervise_set.SuperviseSet, case: supervise_set.Case) -> config.TrainingConfig:
@@ -109,54 +122,8 @@ def staged(
     on = date.fromisoformat(today) - timedelta(days=days + 1)
     config.record(connection, declared(holds, case), on.isoformat())
     for past, mesocycle in zip(case.history, meant, strict=True):
-        on += timedelta(days=1)
-        mesocycles.record_mesocycle(
-            connection,
-            tuple(prescribed(workout) for workout in mesocycle.workouts),
-            cycles=mesocycle.cycles,
-            why=mesocycle.why,
-            on=on.isoformat(),
-            direction=past.direction,
-        )
-        for _ in range(len(mesocycle.workouts) * mesocycle.cycles):
-            on += timedelta(days=1)
-            served, workout_id = mesocycles.record_served(connection, on.isoformat())
-            workouts.record_performed(
-                connection,
-                tuple(as_performed(block) for block in served.blocks),
-                on=on.isoformat(),
-                report="as prescribed",
-                workout_id=workout_id,
-            )
+        on = history.performed_as_prescribed(connection, mesocycle, on + timedelta(days=1), direction=past.direction)
     return plans.next_requested(connection, today)
-
-
-def prescribed(workout: plans.WorkoutPlan) -> tuple[workouts.PrescribedBlock, ...]:
-    """A planned workout in the shape the engine records."""
-    return tuple(
-        workouts.PrescribedBlock(block=costed, reason=shape.reason)
-        for shape, costed in zip(workout.blocks, plans.to_blocks(workout), strict=True)
-    )
-
-
-def as_performed(prescribed: workouts.PrescribedBlock) -> workouts.PerformedBlock:
-    """A block performed exactly as it was prescribed."""
-    block = prescribed.block
-    return workouts.PerformedBlock(
-        items=tuple(
-            workouts.PerformedItem(
-                exercise_id=item.exercise_id,
-                unit="reps" if item.reps is not None else "seconds",
-                amount=item.reps if item.reps is not None else int(item.seconds or 0),
-                amount_source="reported",
-            )
-            for item in block.items
-        ),
-        rounds=block.rounds,
-        rounds_source="reported",
-        rest=block.rest,
-        rest_source="reported",
-    )
 
 
 def remembering(case: supervise_set.Case) -> BaseStore:
@@ -164,7 +131,7 @@ def remembering(case: supervise_set.Case) -> BaseStore:
     store = InMemoryStore()
     for said in case.said:
         store.put(
-            conclusions.namespace(USER),
+            conclusions.namespace(eval_runner.USER),
             str(uuid.uuid5(uuid.NAMESPACE_URL, f"{said.conclusion}\n{said.quote}")),
             {"conclusion": said.conclusion, "quote": said.quote, "state": conclusions.PROVISIONAL, "on": "2026-01-01"},
             index=False,
@@ -206,95 +173,74 @@ def refused(where: Fixture, holds: supervise_set.SuperviseSet, today: str) -> tu
     )
 
 
-def run(
-    where: Fixture,
-    holds: supervise_set.SuperviseSet,
-    chosen: Sequence[supervise_set.Case],
-    *,
-    supervises_on: models.Chat,
-    plans_on: models.Chat,
-    repetitions: int = evaluation.REPETITIONS,
-    records: Path | None = None,
-    budget: int = tools.CALL_BUDGET,
-) -> evaluation.Report:
-    """Every history, every repetition: directed on `supervises_on`, then planned on `plans_on`."""
-    into = records if records is not None else evaluation.records_path()
-    following: list[evaluation.Outcome] = []
-    report = evaluation.measured(
-        [case.name for case in chosen],
-        repetitions,
-        lambda at, attempt: _once(
-            where, holds, chosen[at], attempt, supervises_on, plans_on, budget, into, following
-        ),
-    )
-    return replace(report, outcomes=(*report.outcomes, *following))
-
-
-def _once(
+def _supervised(
     where: Fixture,
     holds: supervise_set.SuperviseSet,
     case: supervise_set.Case,
     attempt: int,
-    supervises_on: models.Chat,
-    plans_on: models.Chat,
+    chats: Mapping[str, models.Chat],
     budget: int,
     records: Path,
-    following: list[evaluation.Outcome],
-) -> evaluation.Outcome:
-    """One history directed and planned; whether the plan followed the direction goes into `following`."""
+) -> tuple[eval_runner.Outcome, ...]:
+    """One history directed and planned from; then whether the plan followed the direction."""
     today = date.today().isoformat()
     request = staged(where, holds, case, today)
     assert request.continuing is not None
     store = remembering(case)
-    thread: RunnableConfig = {"configurable": {"thread_id": f"supervise:{uuid.uuid4()}", conclusions.USER: USER}}
-    started = time.monotonic()
-    graph = supervisor.build(
-        supervises_on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared()), store=store
-    )
-    try:
-        request = supervisor.directed(graph, request, thread)
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        return evaluation.Outcome(case.name, attempt, error=f"{type(error).__name__}: {error}")
-    assert request.continuing is not None and request.continuing.direction is not None
-    direction = request.continuing.direction
-    directing = Talked(
-        record=run_record.of(graph.get_state(thread).values, budget),
-        conversation=(("direction", _said(direction)),),
-        seconds=time.monotonic() - started,
-    )
-    evaluation.write(records, f"{case.name}-{attempt}-direction", directing.written)
+    directed: list[plans.MesocycleRequest] = []
 
-    started = time.monotonic()
-    try:
+    def direct() -> eval_runner.Scored:
+        graph = supervisor.build(
+            chats["supervisor"], budget=budget, checkpointer=eval_runner.checkpointer(), store=store
+        )
+        thread = eval_runner.thread("supervise", remembers=True)
+        asked, seconds = eval_runner.timed(lambda: supervisor.directed(graph, request, thread))
+        assert asked.continuing is not None and asked.continuing.direction is not None
+        directed.append(asked)
+        return eval_runner.Scored(
+            eval_runner.Talked(
+                record=run_record.of(graph.get_state(thread).values, budget),
+                seconds=seconds,
+                conversation=(("direction", _said(asked.continuing.direction)),),
+            )
+        )
+
+    directing = eval_runner.attempted(
+        case.name, attempt, records, f"{case.name}-{attempt}-direction", direct, typed=True
+    )
+    if directing.error is not None:
+        return (directing,)
+    (asked,) = directed
+    assert asked.continuing is not None and asked.continuing.direction is not None
+    ended, direction = asked.continuing.ended, asked.continuing.direction
+    failures: list[tuple[str, str]] = []
+
+    def plan() -> eval_runner.Scored:
         planning = planner.build(
-            plans_on, budget=budget, checkpointer=InMemorySaver(serde=checkpoints.Declared()), store=store
+            chats["planner"], budget=budget, checkpointer=eval_runner.checkpointer(), store=store
         )
-        final = planning.invoke(
-            planner.starting(request, unasked=True),
-            {"configurable": {"thread_id": f"supervise-plan:{uuid.uuid4()}", conclusions.USER: USER}},
+        final, seconds = eval_runner.timed(
+            lambda: planning.invoke(
+                planner.starting(asked, unasked=True), eval_runner.thread("supervise-plan", remembers=True)
+            )
         )
-    except Exception as error:
-        if (quota := models.spent(error)) is not None:
-            raise quota from error
-        following.append(evaluation.Outcome(case.name + FOLLOWS, attempt, error=f"{type(error).__name__}: {error}"))
-        return evaluation.Outcome(case.name, attempt, error=f"{type(error).__name__}: {error}", record=directing)
-    planned = Talked(
-        record=run_record.of(final, budget),
-        conversation=(("direction", _said(direction)),),
-        seconds=time.monotonic() - started,
+        planned = eval_runner.Talked(
+            record=run_record.of(final, budget),
+            seconds=seconds,
+            conversation=(("direction", _said(direction)),),
+        )
+        made = final.get("plan")
+        made = made if isinstance(made, plans.Mesocycle) else None
+        bounds = methodology.committed().bounds(declared(holds, case).goal)
+        failures.extend(held(case, ended, direction, made, tuple(final.get("violations", ())), bounds))
+        return eval_runner.Scored(planned, followed(ended, direction, made))
+
+    follows = eval_runner.attempted(
+        case.name + FOLLOWS, attempt, records, f"{case.name}-{attempt}-plan", plan, typed=True
     )
-    written = evaluation.write(records, f"{case.name}-{attempt}-plan", planned.written)
-    plan = final.get("plan")
-    plan = plan if isinstance(plan, plans.Mesocycle) else None
-    ended = request.continuing.ended
-    bounds = methodology.committed().bounds(declared(holds, case).goal)
-    failures = held(case, ended, direction, plan, tuple(final.get("violations", ())), bounds)
-    following.append(
-        evaluation.Outcome(case.name + FOLLOWS, attempt, followed(ended, direction, plan), planned, written)
-    )
-    return evaluation.Outcome(case.name, attempt, failures, directing, written)
+    if follows.error is not None:
+        return (eval_runner.Outcome(case.name, attempt, error=follows.error, record=directing.record), follows)
+    return (eval_runner.Outcome(case.name, attempt, tuple(failures), directing.record, follows.written), follows)
 
 
 def _said(direction: mesocycles.Direction) -> str:
@@ -440,50 +386,39 @@ def followed(
     return ((FOLLOWED, f"the direction varies {', '.join(missed)}; the plan changed {', '.join(changed) or 'nothing'}"),)
 
 
-def barred(report: evaluation.Report, holds: supervise_set.SuperviseSet) -> evaluation.Report:
-    """The pass against the bars the set declares: what each row holds, and how often the plan followed."""
-    return replace(
-        report,
-        halves=(
-            evaluation.Half("held", frozenset(case.name for case in holds.cases), holds.bar_held),
-            evaluation.Half("followed", frozenset(case.name + FOLLOWS for case in holds.cases), holds.bar_followed),
-        ),
-    )
-
-
-def render(report: evaluation.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
+def render(report: eval_runner.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
     """What each row held, whether each plan followed, the failures, and $ and s per history. ASCII."""
     names = [case.name for case in chosen]
-    lines = ["held", *evaluation.matrix(report, names, [*COLUMNS, evaluation.NOT_RUN]), ""]
+    lines = ["held", *eval_runner.matrix(report, names, [*COLUMNS, eval_runner.NOT_RUN]), ""]
     lines += [
         "followed",
-        *evaluation.matrix(report, [name + FOLLOWS for name in names], [FOLLOWED, evaluation.NOT_RUN]),
+        *eval_runner.matrix(report, [name + FOLLOWS for name in names], [FOLLOWED, eval_runner.NOT_RUN]),
         "",
     ]
-    lines += [*evaluation.failures(report), ""]
+    lines += [*eval_runner.failures(report), ""]
     lines += directions(report, chosen)
     lines += per_history(report, chosen)
-    lines += evaluation.totals(report, "held what their row declares")
+    lines += eval_runner.totals(report, "held what their row declares")
     return lines
 
 
-def directions(report: evaluation.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
+def directions(report: eval_runner.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
     """Each direction written, one line a run, so the theme can be read beside the numbers."""
     lines = ["directions"]
     for case in chosen:
         for outcome in report.outcomes:
-            if outcome.case == case.name and isinstance(outcome.record, Talked):
+            if outcome.case == case.name and isinstance(outcome.record, eval_runner.Talked):
                 lines.append(f"  {case.name} #{outcome.attempt}: {outcome.record.conversation[0][1]}")
     return [*lines, ""]
 
 
-def per_history(report: evaluation.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
+def per_history(report: eval_runner.Report, chosen: Sequence[supervise_set.Case]) -> list[str]:
     """Dollars and seconds each history took, direction and plan, averaged over its runs."""
     lines = ["per history"]
     for case in chosen:
-        runs: dict[int, list[Talked]] = {}
+        runs: dict[int, list[eval_runner.Talked]] = {}
         for outcome in report.outcomes:
-            if outcome.case in (case.name, case.name + FOLLOWS) and isinstance(outcome.record, Talked):
+            if outcome.case in (case.name, case.name + FOLLOWS) and isinstance(outcome.record, eval_runner.Talked):
                 runs.setdefault(outcome.attempt, []).append(outcome.record)
         if not runs:
             lines.append(f"  {case.name}: not run")

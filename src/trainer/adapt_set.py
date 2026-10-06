@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from trainer import eval_set
 from trainer import plan as plans
 from trainer.coach import entrance
 
@@ -24,7 +23,7 @@ ASKING = (ASK, TRIAGE)
 """Where nothing may start and the answer is a question."""
 
 
-class AdaptSetError(ValueError):
+class AdaptSetError(eval_set.SetError):
     """A set that cannot be run as written, saying where."""
 
 
@@ -63,26 +62,17 @@ class AdaptSet:
 
 def path() -> Path:
     """Where the set is read from: `TRAINER_ADAPT_SET`, or the committed one."""
-    override = os.environ.get(ADAPT_SET_ENV_VAR)
-    return Path(override).expanduser() if override else Path.cwd().joinpath(*DEFAULT_PARTS)
+    return eval_set.path(ADAPT_SET_ENV_VAR, DEFAULT_PARTS)
 
 
 def load(where: Path | None = None) -> AdaptSet:
     """The set, off disk; refused naming the file when it is not there."""
-    target = where if where is not None else path()
-    try:
-        text = target.read_text(encoding="utf-8")
-    except OSError as error:
-        raise AdaptSetError(f"the adaptation eval set is not at {target}") from error
-    return parse(text)
+    return eval_set.load(where, ADAPT_SET_ENV_VAR, DEFAULT_PARTS, "adaptation eval set", parse, AdaptSetError)
 
 
 def parse(text: str) -> AdaptSet:
     """A set out of its TOML, every case checked against what the runner can score."""
-    try:
-        raw = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise AdaptSetError(f"the set is not TOML: {error}") from error
+    raw = eval_set.toml(text, AdaptSetError)
     bars = raw.get("bars")
     if not isinstance(bars, dict) or not {"held", "routed"} <= bars.keys():
         raise AdaptSetError("the set declares no [bars] with held and routed")
@@ -100,10 +90,7 @@ def parse(text: str) -> AdaptSet:
     except ValidationError as error:
         raise AdaptSetError(f"the [mesocycle] is not a mesocycle: {error}") from error
     cases = tuple(_case(entry) for entry in raw.get("cases", ()))
-    names = [case.name for case in cases]
-    repeated = sorted({name for name in names if names.count(name) > 1})
-    if repeated:
-        raise AdaptSetError(f"cases named twice: {', '.join(repeated)}")
+    eval_set.unique([case.name for case in cases], AdaptSetError)
     return AdaptSet(
         today=str(raw.get("today", "")),
         bar_held=int(bars["held"]),

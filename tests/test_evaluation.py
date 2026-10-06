@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from pathlib import Path
 from types import EllipsisType
@@ -26,7 +26,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
-from trainer import evaluation, tools
+from trainer import eval_runner, evaluation, tools
 from trainer import plan as plans
 from trainer.coach import models, planner
 from trainer.coach import record as run_record
@@ -178,7 +178,7 @@ def failing(
     return dict(evaluation.check(connection, situation(request), run))
 
 
-def rendered(report: evaluation.Report) -> str:
+def rendered(report: eval_runner.Report) -> str:
     return "\n".join(evaluation.render(report, (situation(LEGS_AND_CORE),)))
 
 
@@ -440,18 +440,18 @@ def test_the_ratio_of_compound_to_isolation_is_not_an_invariant(
 # -- the report ---------------------------------------------------------------
 
 
-def held(name: str, attempt: int = 1) -> evaluation.Outcome:
-    return evaluation.Outcome(name, attempt)
+def held(name: str, attempt: int = 1) -> eval_runner.Outcome:
+    return eval_runner.Outcome(name, attempt)
 
 
-def broke(name: str, attempt: int = 1) -> evaluation.Outcome:
-    return evaluation.Outcome(name, attempt, failures=(("time", "it ran over"),))
+def broke(name: str, attempt: int = 1) -> eval_runner.Outcome:
+    return eval_runner.Outcome(name, attempt, failures=(("time", "it ran over"),))
 
 
 def test_the_bar_is_every_run(connection: sqlite3.Connection) -> None:
     """Every run counts. One green run out of two is not half a pass, it is
     not a pass."""
-    report = evaluation.Report((held("a"), broke("a", 2)))
+    report = eval_runner.Report((held("a"), broke("a", 2)))
 
     assert report.total == 2
     assert report.held == 1
@@ -460,7 +460,7 @@ def test_the_bar_is_every_run(connection: sqlite3.Connection) -> None:
 
 
 def test_a_pass_is_every_run_holding() -> None:
-    report = evaluation.Report((held("a"), held("a", 2)))
+    report = eval_runner.Report((held("a"), held("a", 2)))
 
     assert report.percentage == 100.0
     assert report.passed is True
@@ -469,13 +469,13 @@ def test_a_pass_is_every_run_holding() -> None:
 def test_an_empty_pass_is_not_a_pass() -> None:
     """Nothing ran, so nothing held. Reporting 100% would be the easiest way
     to make this command lie."""
-    assert evaluation.Report(()).passed is False
+    assert eval_runner.Report(()).passed is False
 
 
 def test_a_run_that_never_finished_counts_against_the_metric() -> None:
     """A measurement that quietly skipped the runs it could not make would
     report on the easy ones."""
-    report = evaluation.Report((evaluation.Outcome("a", 1, error="no credentials"),))
+    report = eval_runner.Report((eval_runner.Outcome("a", 1, error="no credentials"),))
 
     assert report.held == 0
     assert report.passed is False
@@ -496,9 +496,9 @@ def test_the_matrix_names_the_situation_the_invariant_and_the_record(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
     written = tmp_path / "a-situation-1.json"
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome(
+            eval_runner.Outcome(
                 "a-situation",
                 1,
                 failures=(("time", "it runs 60 min against 45"),),
@@ -522,7 +522,7 @@ def test_the_report_says_what_the_pass_cost(connection: sqlite3.Connection) -> N
         one(item("Plank")),
         messages=[spoke(input_tokens=1200, output_tokens=90, calls=("admissible_set",))],
     )
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, record=run),))
 
     printed = rendered(report)
 
@@ -538,8 +538,8 @@ def test_the_pass_says_what_it_cost_in_dollars_and_seconds_a_run(
         ran(one(item("Plank")), messages=[spoke(dollars=0.03)], seconds=10.0),
         ran(one(item("Plank")), messages=[spoke(dollars=0.01)], seconds=30.0),
     ]
-    report = evaluation.Report(
-        tuple(evaluation.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
+    report = eval_runner.Report(
+        tuple(eval_runner.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
     )
 
     printed = rendered(report)
@@ -550,7 +550,7 @@ def test_the_pass_says_what_it_cost_in_dollars_and_seconds_a_run(
 
 def test_a_pass_no_run_priced_says_not_reported(connection: sqlite3.Connection) -> None:
     run = ran(one(item("Plank")), messages=[spoke()], seconds=5.0)
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, record=run),))
 
     printed = rendered(report)
 
@@ -565,8 +565,8 @@ def test_a_pass_partly_priced_names_the_runs_it_could_not_price(
         ran(one(item("Plank")), messages=[spoke(dollars=0.02)]),
         ran(one(item("Plank")), messages=[spoke()]),
     ]
-    report = evaluation.Report(
-        tuple(evaluation.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
+    report = eval_runner.Report(
+        tuple(eval_runner.Outcome("a-situation", n, record=r) for n, r in enumerate(runs))
     )
 
     printed = rendered(report)
@@ -587,7 +587,7 @@ def test_the_matrix_says_what_each_run_took(connection: sqlite3.Connection) -> N
         seconds=42.0,
         spent=7,
     )
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, record=run),))
 
     printed = rendered(report)
 
@@ -607,7 +607,7 @@ def test_a_run_still_refused_at_the_last_attempt_names_the_rule(
         one(item("Barbell_Curl")),
         refusals=[(plans.Violation(plans.ADMISSIBLE, "it needs a barbell"),)],
     )
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=run),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, record=run),))
 
     assert plans.ADMISSIBLE in rendered(report)
 
@@ -617,11 +617,11 @@ def test_a_run_that_was_never_made_leaves_the_planner_columns_blank(
 ) -> None:
     """It holds no figures because it produced none, and a zero there would
     read as a run that took no time."""
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, error="no key"),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, error="no key"),))
 
     printed = rendered(report)
 
-    assert evaluation.NOT_RUN in printed
+    assert eval_runner.NOT_RUN in printed
     assert printed.isascii()
 
 
@@ -632,10 +632,10 @@ def test_the_runs_figures_are_each_shown_rather_than_averaged(
     fact from one that always needs two, and a mean prints them the same."""
     once = ran(one(item("Plank")), refusals=[()])
     thrice = ran(one(item("Plank")), refusals=[(), (), ()])
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome("a-situation", 1, record=once),
-            evaluation.Outcome("a-situation", 2, record=thrice),
+            eval_runner.Outcome("a-situation", 1, record=once),
+            eval_runner.Outcome("a-situation", 2, record=thrice),
         )
     )
 
@@ -650,7 +650,7 @@ def test_a_run_that_spent_more_than_its_budget_is_reported_not_failed(
     worth seeing; it is not a run to fail, and the matrix shows what was
     actually spent."""
     over = ran(one(item("Bodyweight_Squat")), one(item("Plank")), spent=16)
-    report = evaluation.Report((evaluation.Outcome("a-situation", 1, record=over),))
+    report = eval_runner.Report((eval_runner.Outcome("a-situation", 1, record=over),))
 
     assert "terminates" not in failing(connection, LEGS_AND_CORE, over)
     assert "16" in rendered(report)
@@ -665,18 +665,18 @@ def test_a_run_that_never_happened_gets_its_own_column_not_the_whole_row(
     """A rate limit on the second of three repetitions says nothing about the
     two that did run. Blanking their verdicts would hide real failures behind
     an unrelated transport error."""
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome("a-situation", 1, failures=(("time", "over"),)),
-            evaluation.Outcome("a-situation", 2, error="rate limited"),
-            evaluation.Outcome("a-situation", 3, failures=(("time", "over"),)),
+            eval_runner.Outcome("a-situation", 1, failures=(("time", "over"),)),
+            eval_runner.Outcome("a-situation", 2, error="rate limited"),
+            eval_runner.Outcome("a-situation", 3, failures=(("time", "over"),)),
         )
     )
 
     matrix = evaluation.render(report, (situation(LEGS_AND_CORE),))[1]
 
     assert "2 failed" in matrix, matrix
-    assert evaluation.NOT_RUN in rendered(report)
+    assert eval_runner.NOT_RUN in rendered(report)
 
 
 def test_a_refusal_the_invariants_do_not_name_still_shows_in_the_matrix(
@@ -685,17 +685,17 @@ def test_a_refusal_the_invariants_do_not_name_still_shows_in_the_matrix(
     """The validator and the invariants disagreeing is the interesting thing.
     A failure with no column would print a row of `ok` above a line saying the
     run did not hold."""
-    report = evaluation.Report(
+    report = eval_runner.Report(
         (
-            evaluation.Outcome(
-                "a-situation", 1, failures=((evaluation.VALIDATOR, "it refused"),)
+            eval_runner.Outcome(
+                "a-situation", 1, failures=((eval_runner.VALIDATOR, "it refused"),)
             ),
         )
     )
 
     printed = rendered(report)
 
-    assert evaluation.VALIDATOR in printed
+    assert eval_runner.VALIDATOR in printed
     assert "1 failed" in printed
 
 
@@ -704,7 +704,7 @@ def test_the_percentage_never_rounds_up_to_a_pass() -> None:
     is 100%*, and then exits non-zero -- the one number this command exists to
     produce, contradicting itself."""
     outcomes = tuple(held("a", n) for n in range(249)) + (broke("a", 249),)
-    report = evaluation.Report(outcomes)
+    report = eval_runner.Report(outcomes)
 
     printed = rendered(report)
 
@@ -724,12 +724,26 @@ def test_the_cost_counts_the_run_that_was_only_made_to_be_turned_down(
     measured = ran(
         one(item("Plank")), messages=[spoke(input_tokens=2000, output_tokens=200)]
     )
-    report = evaluation.Report(
-        (evaluation.Outcome("refused", 1, record=measured, also=(turned_down,)),)
+    report = eval_runner.Report(
+        (eval_runner.Outcome("refused", 1, record=measured, also=(turned_down,)),)
     )
 
     assert report.input_tokens == 3000
     assert report.output_tokens == 300
+
+
+def planned(
+    connection: sqlite3.Connection,
+    chosen: Sequence[evaluation.Situation],
+    *,
+    on: models.Chat,
+    repetitions: int,
+    records: Path,
+) -> eval_runner.Report:
+    """The plan suite's situations measured on `on`, against `connection`."""
+    return eval_runner.measure(
+        evaluation.Plan(connection), connection, chosen, {"planner": on}, repetitions=repetitions, records=records
+    )
 
 
 # --- the measurement never writes --------------------------------------------
@@ -749,7 +763,7 @@ def test_the_measurement_leaves_the_workout_count_unchanged(
     both = cycle_of(plan_of("Bodyweight_Squat"), plan_of("Bodyweight_Squat"))
     on = models.Chat(Scripted(documents=[both] * 10), "scripted", "a-stand-in")
 
-    report = evaluation.run(
+    report = planned(
         connection,
         chosen,
         on=on,
@@ -779,8 +793,9 @@ def test_a_setup_run_with_no_plan_is_not_measured_as_the_situation(
         Scripted(raw=['{"workouts": "squats"}'] * 10), "scripted", "a-stand-in"
     )
 
-    report = evaluation.run(
-        connection, (refusal,), on=on, repetitions=1, records=tmp_path / "records"
+    report = planned(
+        connection,
+        (refusal,), on=on, repetitions=1, records=tmp_path / "records"
     )
 
     (outcome,) = report.outcomes
@@ -802,8 +817,9 @@ def test_a_run_lost_to_the_provider_keeps_what_it_emitted(
         Scripted(raw=['{"workouts": [{"blo'] * 10), "scripted", "a-stand-in"
     )
 
-    report = evaluation.run(
-        connection, chosen, on=on, repetitions=1, records=tmp_path / "records"
+    report = planned(
+        connection,
+        chosen, on=on, repetitions=1, records=tmp_path / "records"
     )
 
     (outcome,) = report.outcomes
@@ -824,8 +840,9 @@ def test_every_run_leaves_the_record_the_failure_names(
     both = cycle_of(plan_of("Bodyweight_Squat"), plan_of("Bodyweight_Squat"))
     on = models.Chat(Scripted(documents=[both] * 5), "scripted", "a-stand-in")
 
-    report = evaluation.run(
-        connection, chosen, on=on, repetitions=1, records=tmp_path / "records"
+    report = planned(
+        connection,
+        chosen, on=on, repetitions=1, records=tmp_path / "records"
     )
 
     (outcome,) = report.outcomes
@@ -843,7 +860,7 @@ def test_the_database_the_model_reads_is_the_one_the_environment_names(
     monkeypatch.delenv(database.DATABASE_ENV_VAR, raising=False)
     monkeypatch.chdir(database_file.parent)
 
-    with evaluation.pointed_at_the_database() as pointed:
+    with eval_runner.pointed_at() as pointed:
         import os
 
         assert os.environ[database.DATABASE_ENV_VAR] == str(pointed)
@@ -865,7 +882,7 @@ def test_a_spent_quota_stops_the_pass_and_says_so(
     model = Exhausted()
     chosen = evaluation.situations(connection)[:2]
 
-    report = evaluation.run(
+    report = planned(
         connection,
         chosen,
         on=models.Chat(cast(Any, model), "groq", "qwen/qwen3.8-27b"),
@@ -877,7 +894,7 @@ def test_a_spent_quota_stops_the_pass_and_says_so(
     assert report.total == 4 and report.held == 0
     assert report.stopped is not None and "daily" in report.stopped
     printed = "\n".join(
-        evaluation.failures(report) + evaluation.totals(report, "held")
+        eval_runner.failures(report) + eval_runner.totals(report, "held")
     )
     assert report.stopped in printed
     assert "a bug" not in printed
@@ -935,7 +952,7 @@ def test_the_refused_situation_briefs_the_mesocycle_it_turned_down(
     second = cycle_of(plan_of("Lunge"), plan_of("Plank"))
     model = Scripted(documents=[*[first] * 3, *[second] * 3])
 
-    report = evaluation.run(
+    report = planned(
         connection,
         (refusal,),
         on=models.Chat(model, "scripted", "a-stand-in"),
@@ -962,7 +979,7 @@ def test_a_standing_exclusion_reaches_every_slot_the_model_plans(
     chosen = evaluation.situations(connection)[:1]
     both = cycle_of(plan_of("Lunge"), plan_of("Plank"))
 
-    report = evaluation.run(
+    report = planned(
         connection,
         chosen,
         on=models.Chat(Scripted(documents=[both] * 5), "scripted", "a-stand-in"),

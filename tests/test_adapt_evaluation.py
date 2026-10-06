@@ -15,7 +15,7 @@ from langchain_core.messages import AIMessage
 
 from conftest import enrich, make_exercise
 from test_planner import Scripted
-from trainer import adapt_evaluation, adapt_set, evaluation
+from trainer import adapt_evaluation, adapt_set, eval_runner
 from trainer import plan as plans
 from trainer.coach import conclusions, entrance, models, planner
 from trainer.engine import catalog, database, exclusions, mesocycles, migrations
@@ -112,7 +112,7 @@ def holds() -> adapt_set.AdaptSet:
 def where(
     source: sqlite3.Connection, holds: adapt_set.AdaptSet
 ) -> Iterator[adapt_evaluation.Fixture]:
-    with adapt_evaluation.prepared(source, holds) as prepared:
+    with adapt_evaluation.Adapt(holds).fixture(source) as prepared:
         yield prepared
 
 
@@ -144,25 +144,25 @@ def ran(
     tmp_path: Path,
     *turns: AIMessage,
     emitted: tuple[plans.WorkoutPlan, ...] = (),
-) -> evaluation.Report:
+) -> eval_runner.Report:
     plans_on = chat(Scripted(turns=[says("ho quello che serve")] * 3, documents=list(emitted)))
-    return adapt_evaluation.run(
+    return eval_runner.measure(
+        adapt_evaluation.Adapt(adapt_set.parse(SET)),
         where,
         [case],
-        front=chat(Scripted(turns=list(turns))),
-        plans_on=plans_on,
+        {"entrance": chat(Scripted(turns=list(turns))), "planner": plans_on},
         repetitions=1,
         records=tmp_path / "records",
     )
 
 
-def outcome_of(report: evaluation.Report, case: str) -> evaluation.Outcome:
+def outcome_of(report: eval_runner.Report, case: str) -> eval_runner.Outcome:
     (outcome,) = [o for o in report.outcomes if o.case == case]
     assert outcome.error is None, outcome.error
     return outcome
 
 
-def failed(report: evaluation.Report, case: str) -> list[str]:
+def failed(report: eval_runner.Report, case: str) -> list[str]:
     return [name for name, _ in outcome_of(report, case).failures]
 
 
@@ -374,16 +374,16 @@ def test_a_plan_the_validator_refused_or_that_never_parsed_fails_planned(
 
 
 def test_the_plans_and_the_routes_are_held_at_the_sets_bars(holds: adapt_set.AdaptSet) -> None:
-    def outcome(case: str, held: bool) -> evaluation.Outcome:
-        return evaluation.Outcome(case, 1, () if held else (("x", "y"),))
+    def outcome(case: str, held: bool) -> eval_runner.Outcome:
+        return eval_runner.Outcome(case, 1, () if held else (("x", "y"),))
 
     routes = [outcome(case.name, n != 0) for n, case in enumerate(holds.cases)]
-    held_plan = evaluation.Report((*routes, outcome("hinge plan", True)))
-    broken_plan = evaluation.Report((*routes, outcome("hinge plan", False)))
+    held_plan = eval_runner.Report((*routes, outcome("hinge plan", True)))
+    broken_plan = eval_runner.Report((*routes, outcome("hinge plan", False)))
 
-    assert adapt_evaluation.barred(held_plan, holds).passed
-    assert not adapt_evaluation.barred(broken_plan, holds).passed
-    assert adapt_evaluation.barred(broken_plan, dataclasses.replace(holds, bar_held=0)).passed
+    assert eval_runner.barred(adapt_evaluation.Adapt(holds), held_plan).passed
+    assert not eval_runner.barred(adapt_evaluation.Adapt(holds), broken_plan).passed
+    assert eval_runner.barred(adapt_evaluation.Adapt(dataclasses.replace(holds, bar_held=0)), broken_plan).passed
 
 
 def test_the_rendered_pass_is_ascii_with_cost_per_message(
@@ -392,7 +392,7 @@ def test_the_rendered_pass_is_ascii_with_cost_per_message(
     bought = case_of(holds, "bought")
     report = ran(where, bought, tmp_path, calls((entrance.CHANGE_DECLARATION, {"said": bought.says})), says("Aggiorno."))
 
-    lines = adapt_evaluation.render(adapt_evaluation.barred(report, holds), [bought])
+    lines = adapt_evaluation.render(report, [bought])
 
     assert all(line.isascii() for line in lines)
     assert any(line.startswith("  bought: $") for line in lines)
