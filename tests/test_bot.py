@@ -11,7 +11,7 @@ import json
 import logging
 import sqlite3
 import threading
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -126,6 +126,11 @@ def channel(say: bot.Say | None = None, offer: bot.Offer | None = None) -> bot.C
         offer=offer if offer is not None else watched.chat.offer,
         draft=watched.chat.draft,
     )
+
+
+async def finished(step: Awaitable[None]) -> None:
+    """Await `step`: before Python 3.14 `asyncio.run` takes only a coroutine."""
+    await step
 
 
 async def never(thread: str, text: str, chat: bot.Chat) -> None:
@@ -1621,7 +1626,7 @@ def test_the_buttons_reach_telegram_as_a_keyboard() -> None:
     sent = Sent()
 
     offer = bot._offering(cast(Any, sent), CHAT)
-    asyncio.run(offer("il piano", [("ok|chat:1|abc", "Va bene")]))
+    asyncio.run(finished(offer("il piano", [("ok|chat:1|abc", "Va bene")])))
 
     (chat_id, text, markup) = sent.offers[0]
     assert (chat_id, text) == (CHAT, "il piano")
@@ -1894,7 +1899,7 @@ def test_a_plan_is_sent_in_the_dialect_it_was_written_in() -> None:
     sent = Sent()
 
     offer = bot._offering(cast(Any, sent), CHAT)
-    asyncio.run(offer("il piano", [("ok|chat:1|abc", "Va bene")]))
+    asyncio.run(finished(offer("il piano", [("ok|chat:1|abc", "Va bene")])))
 
     assert sent.modes == [bot.PARSE_MODE]
 
@@ -1905,7 +1910,7 @@ def test_progress_carries_no_markup() -> None:
     sent = Sent()
 
     draft = bot._drafting(cast(Any, sent), CHAT)
-    asyncio.run(draft("cerco «bench*press» in catalogo"))
+    asyncio.run(finished(draft("cerco «bench*press» in catalogo")))
 
     assert sent.drafts == [(CHAT, sent.drafts[0][1], "cerco «bench*press» in catalogo")]
     assert sent.modes == [], "a draft was sent with a parse mode"

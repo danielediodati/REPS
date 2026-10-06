@@ -249,11 +249,11 @@ def checkpointed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def refused_for_credit() -> Exception:
     """OpenRouter's own refusal when the credits are spent, with no request sent."""
-    import httpx
+    import httpx2
     import openai
 
-    response = httpx.Response(
-        402, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx2.Response(
+        402, request=httpx2.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     )
     return openai.APIStatusError("Insufficient credits", response=response, body=None)
 
