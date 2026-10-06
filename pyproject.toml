@@ -1,6 +1,6 @@
 [project]
 name = "reps-trainer"
-version = "0.15.0"
+version = "1.0.0rc1"
 description = "Reasoning Engine for Personal Strength"
 readme = "README.md"
 license = "MIT"

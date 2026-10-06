@@ -2034,7 +2034,7 @@ wheels = [
 
 [[package]]
 name = "reps-trainer"
-version = "0.15.0"
+version = "1.0.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
