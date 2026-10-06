@@ -24,6 +24,15 @@ The entrance reads a message that arrives while the planner works, and:
 - A stopped run leaves a run record. Whether that is a new ending or ADR-0007's *cut* is settled here and written into CONTEXT.md and ADR-0007.
 - ADR-0006 describes `Turns` as one run per thread and the queue behind it; correct it.
 
+## From 02
+
+| Fact | Where it bites |
+|---|---|
+| `Negotiation._ran` iterates `planner.stream` one super-step at a time, on a worker thread | the natural stop point: a flag checked in that loop stops between graph steps |
+| `open` mints a new negotiation id unless `carrying` names one; the bot's `carrying` is `entrance.carried(final)`, the entrance turn's ids | "the new one opens in the same negotiation" means passing the stopped run's `negotiation` and `follows` |
+| `open` over a pending proposal supersedes it and writes no ending (ADR-0007's *cut*) | a stopped run needs an explicit write, or it is indistinguishable from a superseded one |
+| `bot.answering` checks the pending id before it opens a draft; `Negotiation.answer` checks again | a stop must not leave a proposal pending, or a tap on it resumes a stopped run |
+
 ## Acceptance criteria
 
 - [ ] On scripted models: a correction mid-run stops the run, the corrected plan is the one offered, and the stopped run has a record.

@@ -139,7 +139,7 @@ In this order. Measuring first is what stops the methodology being written again
 **Demo** (recorded at `1.0.0`): *«anzi, ho solo 30 minuti»* sent while a plan is being written stops it, and the 30-minute plan arrives instead.
 
 1. **One suite runner.** Fixture, run, quota stop, run record, bars and CLI wiring in one module; the five suites keep only what differs; no paid call to close it. — **done** `c2ea32f`
-2. **One Negotiation, two doors.** "At most one plan" moves out of the bot into a module both the bot and the CLI call, tested without Telegram; nothing the user sees changes.
+2. **One Negotiation, two doors.** "At most one plan" moves out of the bot into a module both the bot and the CLI call, tested without Telegram; nothing the user sees changes. — **done** `1ae3b23`
 3. **The entrance reads a message mid-plan.** A question is answered at once, a correction or a new ask stops the run in flight, a report still waits.
 4. **One roster of node models.** Which model each node runs on, its effort and host, in one table that the bot, the CLI and the evals read whole; no node changes model.
 5. **The front page.** MIT licence, a logo, a README worth opening, and badges: tests and coverage from a GitHub Action, release, licence, and the stack.
