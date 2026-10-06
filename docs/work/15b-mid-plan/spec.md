@@ -1,6 +1,6 @@
 # Session 15b — A message mid-plan is read, not queued
 
-**Demo** (recorded after the session): *«anzi, ho solo 30 minuti»* sent while a plan is being written stops it, and the 30-minute plan arrives instead.
+**Demo** (recorded at `1.0.0`, session 15c): *«anzi, ho solo 30 minuti»* sent while a plan is being written stops it, and the 30-minute plan arrives instead.
 
 | Question | Answer |
 |---|---|
@@ -10,7 +10,8 @@
 | 03, mid-plan | Today a message arriving while the planner works is queued blindly. The entrance reads it: a question is answered at once, a correction or a new ask stops the run in flight. |
 | 04, the node models | Which model each node runs on is written in five places, and two of them fall back differently. One roster in `models.py`, read by everyone. |
 | Credits | 01, 02 and 04: none, closed on scripted models. 03: estimated before any paid run, on the user's go. |
-| Version | `1.0.1`, the user's call. |
+| 05, the front page | MIT licence, a logo, a README worth opening, badges. The repository stays private until `1.0.0`, so the live badges show only to its owner until then. |
+| Version | `1.0.0rc1`. `1.0.0` is session 15c: the recorded demo, the repository made public, and the fixes found using the rc. |
 
 ## Tickets
 
@@ -20,3 +21,4 @@
 | 02 | One Negotiation, two doors | — |
 | 03 | The entrance reads a message mid-plan | 02 |
 | 04 | One roster of node models | — |
+| 05 | The front page | 01-04 |

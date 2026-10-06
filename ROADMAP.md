@@ -124,7 +124,7 @@ In this order. Measuring first is what stops the methodology being written again
 4. **This workout or from now on.** The entrance tells adaptation, change, declaration and memory apart, and asks when the words do not say; the set at its bars. — **done** `4a5af5f`
 5. **Prompt caching.** The run record counts cached input; the planner's prompt and tools cached on Anthropic; $ a mesocycle before and after in ADR-0011. — **done** `251dacc`
 
-## Session 15 — `1.0.0` — The next mesocycle has a reason
+## Session 15 — `0.15.0` — The next mesocycle has a reason
 
 **Demo**: after three mesocycles, the fourth arrives with its reason, and what changed is visible in it.
 
@@ -132,16 +132,23 @@ In this order. Measuring first is what stops the methodology being written again
 2. **The supervisor.** A graph (ADR-0014) with tools over the history; when a mesocycle ends, before the planner, it writes the next one's direction, kept with that mesocycle, reading its own past directions. — **done** `46fd078`
 3. **The planner plans from the direction, and the user reads it.** The brief holds the direction and the mesocycle that ended, not the per-workout log; the proposal says the direction in a line. — **done** `b14f581`
 4. **The supervisor's set.** `trainer eval --suite supervise`: 15-20 scripted histories with what the direction must hold, checked by code, and how often the planner follows it at a declared bar; the model chosen by ADR-0011's rule. — **done** `9c732e1`
-5. **Portfolio-ready.** The three-mesocycle fixture as a script, the demo in Telegram, the README rewritten around the working system with a GIF of the demo.
+5. **The demo's home.** The three-mesocycle fixture as a script, and the README describing the working system; the recorded demo and its GIF move to `1.0.0`.
 
-## Session 15b — `1.0.1` — A message mid-plan is read, not queued
+## Session 15b — `1.0.0rc1` — A message mid-plan is read, not queued
 
-**Demo** (recorded after the session): *«anzi, ho solo 30 minuti»* sent while a plan is being written stops it, and the 30-minute plan arrives instead.
+**Demo** (recorded at `1.0.0`): *«anzi, ho solo 30 minuti»* sent while a plan is being written stops it, and the 30-minute plan arrives instead.
 
 1. **One suite runner.** Fixture, run, quota stop, run record, bars and CLI wiring in one module; the five suites keep only what differs; no paid call to close it.
 2. **One Negotiation, two doors.** "At most one plan" moves out of the bot into a module both the bot and the CLI call, tested without Telegram; nothing the user sees changes.
 3. **The entrance reads a message mid-plan.** A question is answered at once, a correction or a new ask stops the run in flight, a report still waits.
 4. **One roster of node models.** Which model each node runs on, its effort and host, in one table that the bot, the CLI and the evals read whole; no node changes model.
+5. **The front page.** MIT licence, a logo, a README worth opening, and badges: tests and coverage from a GitHub Action, release, licence, and the stack.
+
+## Session 15c — `1.0.0` — Portfolio-ready
+
+**Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *«anzi, ho solo 30 minuti»* mid-plan brings the 30-minute plan. Recorded, with a GIF in the README.
+
+Its issues are cut when it opens: the recorded demo, the repository made public, and the fixes found using `1.0.0rc1`.
 
 ## Later sessions
 
@@ -151,7 +158,7 @@ Their issues are cut when each session opens.
 |---|---|---|---|
 | 16 | `1.1.0` | a plan in Telegram shows each exercise done: its start and end photos | the two photos free-exercise-db has for 873 of 876 exercises, sent with the plan; an exercise without photos is sent without; nothing generated |
 
-**Portfolio-ready** is session 15's last issue. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
+**Portfolio-ready** is session 15c, `1.0.0`. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
