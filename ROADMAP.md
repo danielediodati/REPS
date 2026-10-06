@@ -132,7 +132,7 @@ In this order. Measuring first is what stops the methodology being written again
 2. **The supervisor.** A graph (ADR-0014) with tools over the history; when a mesocycle ends, before the planner, it writes the next one's direction, kept with that mesocycle, reading its own past directions. — **done** `46fd078`
 3. **The planner plans from the direction, and the user reads it.** The brief holds the direction and the mesocycle that ended, not the per-workout log; the proposal says the direction in a line. — **done** `b14f581`
 4. **The supervisor's set.** `trainer eval --suite supervise`: 15-20 scripted histories with what the direction must hold, checked by code, and how often the planner follows it at a declared bar; the model chosen by ADR-0011's rule. — **done** `9c732e1`
-5. **The demo's home.** The three-mesocycle fixture as a script, and the README describing the working system; the recorded demo and its GIF move to `1.0.0`.
+5. **The demo's home.** The three-mesocycle fixture as a script, and the README describing the working system; the recorded demo and its GIF move to `1.0.0`. — **done** `a557ba5`
 
 ## Session 15b — `1.0.0rc1` — A message mid-plan is read, not queued
 
