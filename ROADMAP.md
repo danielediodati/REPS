@@ -141,6 +141,7 @@ In this order. Measuring first is what stops the methodology being written again
 1. **One suite runner.** Fixture, run, quota stop, run record, bars and CLI wiring in one module; the five suites keep only what differs; no paid call to close it.
 2. **One Negotiation, two doors.** "At most one plan" moves out of the bot into a module both the bot and the CLI call, tested without Telegram; nothing the user sees changes.
 3. **The entrance reads a message mid-plan.** A question is answered at once, a correction or a new ask stops the run in flight, a report still waits.
+4. **One roster of node models.** Which model each node runs on, its effort and host, in one table that the bot, the CLI and the evals read whole; no node changes model.
 
 ## Later sessions
 
