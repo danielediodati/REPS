@@ -799,20 +799,13 @@ def bot_command() -> None:
         # file rather than in whatever terminal happened to be attached.
         log_file = logfile.start((bot.TOKEN_ENV, bot.OWNER_ENV))
         declared = bot.settings()
-        on = models.planner()
-        models.ready(on)
-        context = models.context_length(on)
         # Every model, because every one is asked for in the conversation: the
         # entrance answers the turn and a subgraph does the work, and a model
         # nobody pulled is knowable now rather than mid-conversation.
-        logs = models.logger()
-        models.ready(logs)
-        front = models.entrance()
-        models.ready(front)
-        interviews = models.onboarding()
-        models.ready(interviews)
-        directs = models.supervisor()
-        models.ready(directs)
+        cast = models.roster()
+        models.ready_all(cast)
+        on = cast["planner"]
+        context = models.context_length(on)
         name = bot.identified(declared)
 
         # Opened before the block is printed, not after: a block that says
@@ -821,10 +814,10 @@ def bot_command() -> None:
         with checkpoints.saver() as saver, conclusions.opened() as store:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.described}")
-            click.echo(f"logger:      {logs.described}")
-            click.echo(f"entrance:    {front.described} on {front.provider}")
-            click.echo(f"onboarding:  {interviews.described}")
-            click.echo(f"supervisor:  {directs.described}")
+            click.echo(f"logger:      {cast['logger'].described}")
+            click.echo(f"entrance:    {cast['entrance'].described} on {cast['entrance'].provider}")
+            click.echo(f"onboarding:  {cast['onboarding'].described}")
+            click.echo(f"supervisor:  {cast['supervisor'].described}")
             click.echo(
                 f"context:     {context} tokens"
                 if context is not None
@@ -843,7 +836,7 @@ def bot_command() -> None:
             )
             click.echo("long-polling; ctrl-c to stop")
 
-            bot.serve(declared, front, on, logs, saver, store, interviews, directs)
+            bot.serve(declared, cast, saver, store)
 
 
 @main.group("runs")
@@ -1513,7 +1506,7 @@ def _accepted(
     record_path: Path | None,
 ) -> negotiations.Accepted:
     """A request opened on the negotiation and its proposal kept: printing a plan is keeping it."""
-    on = models.planner()
+    on = models.chat_for("planner")
     models.ready(on)
     with checkpoints.saver() as saver:
         archive = run_record.archive()
@@ -1716,7 +1709,7 @@ def _read(
     is raised: it is what you open to find out why the model emitted what it
     did, and a refusal is exactly the case you want it for.
     """
-    on = models.logger()
+    on = models.chat_for("logger")
     models.ready(on)
     if not said:
         said = str(click.prompt("What did you do", type=str))

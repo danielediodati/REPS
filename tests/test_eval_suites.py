@@ -34,8 +34,7 @@ def says(line: str) -> AIMessage:
 def scripted(monkeypatch: pytest.MonkeyPatch, **script: Any) -> None:
     """One scripted model behind every node, and a clock that stands still."""
     model = Scripted(**script)
-    for node in ("planner", "logger", "entrance", "onboarding", "supervisor"):
-        monkeypatch.setattr(models, node, lambda: models.Chat(model, "scripted", "a-stand-in"))
+    monkeypatch.setattr(models, "chat_for", lambda node: models.Chat(model, "scripted", "a-stand-in"))
     monkeypatch.setattr(time, "monotonic", lambda: 0.0)
 
 

@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
 
@@ -45,11 +44,11 @@ class Fake(eval_runner.Suite[Case, eval_runner.Copy]):
     def fixture(self, connection: sqlite3.Connection) -> AbstractContextManager[eval_runner.Copy]:
         return eval_runner.copied(connection)
 
-    def chats(self, chosen: Sequence[Case]) -> Mapping[str, models.Chat]:
-        return {"model": models.Chat(cast(Any, None), "scripted", "a-stand-in")}
+    def nodes(self, chosen: Sequence[Case]) -> Sequence[models.Node]:
+        return ()
 
     def runs(
-        self, where: eval_runner.Copy, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: eval_runner.Copy, chats: models.Roster, *, records: Path, budget: int
     ) -> eval_runner.Once[Case]:
         def once(case: Case, attempt: int) -> tuple[eval_runner.Outcome, ...]:
             own = eval_runner.attempted(
@@ -153,7 +152,7 @@ def test_trainer_db_is_put_back_and_the_copy_deleted_after_a_failure(
 
     class Broken(Fake):
         def runs(
-            self, where: eval_runner.Copy, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+            self, where: eval_runner.Copy, chats: models.Roster, *, records: Path, budget: int
         ) -> eval_runner.Once[Case]:
             seen.append(where.path)
             assert os.environ[database.DATABASE_ENV_VAR] == str(where.path)

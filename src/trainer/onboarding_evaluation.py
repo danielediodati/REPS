@@ -88,17 +88,17 @@ class Onboard(eval_runner.Suite[onboarding_set.Case, Fixture]):
         with eval_runner.copied(connection, emptied=("declarations", "exclusions")) as copy:
             yield Fixture(copy.connection, copy.path, copy.directory / "checkpoints.sqlite", self.holds.today)
 
-    def chats(self, chosen: Sequence[onboarding_set.Case]) -> Mapping[str, models.Chat]:
-        """The interview's model when an interview or change is chosen, the entrance's when a route is."""
-        chats = {}
+    def nodes(self, chosen: Sequence[onboarding_set.Case]) -> Sequence[models.Node]:
+        """The interview when an interview or change is chosen, the entrance when a route is."""
+        nodes: list[models.Node] = []
         if any(case.kind != onboarding_set.ROUTE for case in chosen):
-            chats["onboarding"] = models.onboarding()
+            nodes.append("onboarding")
         if any(case.kind == onboarding_set.ROUTE for case in chosen):
-            chats["entrance"] = models.entrance()
-        return chats
+            nodes.append("entrance")
+        return nodes
 
     def runs(
-        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: Fixture, chats: models.Roster, *, records: Path, budget: int
     ) -> eval_runner.Once[onboarding_set.Case]:
         def once(case: onboarding_set.Case, attempt: int) -> tuple[eval_runner.Outcome, ...]:
             named = f"{case.name}-{attempt}"

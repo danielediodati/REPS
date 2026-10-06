@@ -839,4 +839,4 @@ def _answer(
 
 def studio() -> Entrance:
     """The entrance on the model `ENTRANCE_MODEL` names, as `langgraph dev` serves it."""
-    return build(models.entrance(), archive=records.archive())
+    return build(models.chat_for("entrance"), archive=records.archive())

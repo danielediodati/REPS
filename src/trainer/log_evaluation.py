@@ -49,7 +49,7 @@ is what `eval_runner.copied` is for.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -625,11 +625,11 @@ class Log(eval_runner.Suite[log_set.Row, Fixture]):
     def checked(self, where: Fixture) -> Sequence[str]:
         return verify(where, self.holds)
 
-    def chats(self, chosen: Sequence[log_set.Row]) -> Mapping[str, models.Chat]:
-        return {"logger": models.logger()}
+    def nodes(self, chosen: Sequence[log_set.Row]) -> Sequence[models.Node]:
+        return ("logger",)
 
     def runs(
-        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: Fixture, chats: models.Roster, *, records: Path, budget: int
     ) -> eval_runner.Once[log_set.Row]:
         graph = logger.build(chats["logger"], budget=budget, checkpointer=eval_runner.checkpointer())
         return lambda row, attempt: (_logged(where, row, attempt, graph, records, budget),)

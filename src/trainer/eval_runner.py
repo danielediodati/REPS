@@ -386,12 +386,12 @@ class Suite(Generic[C, W]):
         """What disagrees with the fixture, before anything is paid for."""
         return ()
 
-    def chats(self, chosen: Sequence[C]) -> Mapping[str, models.Chat]:
-        """The models these cases run on, by the role each plays."""
+    def nodes(self, chosen: Sequence[C]) -> Sequence[models.Node]:
+        """The nodes these cases run, whose models the roster gives."""
         raise NotImplementedError
 
     def runs(
-        self, where: W, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: W, chats: models.Roster, *, records: Path, budget: int
     ) -> Once[C]:
         """How one attempt at a case is made and scored."""
         raise NotImplementedError
@@ -427,9 +427,8 @@ def run(
     chosen = picked(suite.cases, only, suite.what)
     with suite.fixture(connection) as where:
         _refuse(suite.checked(where))
-        chats = suite.chats(chosen)
-        for chat in chats.values():
-            models.ready(chat)
+        chats = models.roster(suite.nodes(chosen))
+        models.ready_all(chats)
         with _sampling(chats) as sampled:
             report = measure(suite, where, chosen, chats, repetitions=repetitions, records=records, budget=budget)
     return [*suite.render(report, chosen), *sampled()], report
@@ -439,7 +438,7 @@ def measure(
     suite: Suite[C, W],
     where: W,
     chosen: Sequence[C],
-    chats: Mapping[str, models.Chat],
+    chats: models.Roster,
     *,
     repetitions: int = REPETITIONS,
     records: Path | None = None,
@@ -509,7 +508,7 @@ def picked(available: Sequence[C], only: Sequence[str], what: str) -> tuple[C, .
 
 
 @contextmanager
-def _sampling(chats: Mapping[str, models.Chat]) -> Iterator[Callable[[], list[str]]]:
+def _sampling(chats: models.Roster) -> Iterator[Callable[[], list[str]]]:
     """Memory sampled while the pass runs, on the first model's host; its line, or none off Ollama."""
     first = next(iter(chats.values()), None)
     if first is None:

@@ -1,0 +1,7682 @@
+{
+ "groq / entrance - / bare": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / coach's measured model": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / coach's models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / one host for all": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / own and coach's": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / own efforts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / own hosts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance - / own models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "groq / entrance groq / bare": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / coach's measured model": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / coach's models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / one host for all": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / own and coach's": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / own efforts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / own hosts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance groq / own models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "groq / entrance ollama / bare": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / coach's measured model": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / coach's models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / one host for all": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / own and coach's": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / own efforts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / own hosts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance ollama / own models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "groq / entrance openrouter / bare": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / coach's measured model": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / coach's models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / one host for all": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / own and coach's": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / own efforts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / own hosts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-entrance"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-entrance",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "GROQ_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "GROQ_MODEL"
+  }
+ },
+ "groq / entrance openrouter / own models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "ollama / entrance - / bare": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / coach's measured model": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / coach's models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / one host for all": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / own and coach's": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / own efforts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / own hosts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance - / own models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "ollama / entrance groq / bare": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / coach's measured model": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / coach's models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / one host for all": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / own and coach's": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / own efforts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / own hosts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance groq / own models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "ollama / entrance ollama / bare": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / coach's measured model": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / coach's models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / one host for all": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / own and coach's": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / own efforts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / own hosts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance ollama / own models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / bare": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / coach's measured model": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / coach's models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "coach-local",
+   "name": "coach-local",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / one host for all": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / own and coach's": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / own efforts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / own hosts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-entrance"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-entrance",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OLLAMA_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "gpt-oss:20b",
+   "name": "gpt-oss:20b",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OLLAMA_MODEL"
+  }
+ },
+ "ollama / entrance openrouter / own models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "low",
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance - / bare": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance - / coach's measured model": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance - / coach's models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance - / one host for all": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance - / own and coach's": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance - / own efforts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance - / own hosts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-entrance"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-entrance",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-logger"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-logger",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-onboarding"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-onboarding",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-planner"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-planner",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-supervisor"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-supervisor",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance - / own models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance groq / bare": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance groq / coach's measured model": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance groq / coach's models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "coach/groq",
+   "name": "coach/groq",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance groq / one host for all": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance groq / own and coach's": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance groq / own efforts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance groq / own hosts": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "qwen/qwen3.8-27b",
+   "name": "qwen/qwen3.8-27b",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-logger"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-logger",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-onboarding"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-onboarding",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-planner"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-planner",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-supervisor"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-supervisor",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance groq / own models": {
+  "entrance": {
+   "class": "ChatGroq",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "groq",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / bare": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / coach's measured model": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / coach's models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / one host for all": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / own and coach's": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / own efforts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / own hosts": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "llama3.1",
+   "name": "llama3.1",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-logger"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-logger",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-onboarding"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-onboarding",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-planner"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-planner",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-supervisor"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-supervisor",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance ollama / own models": {
+  "entrance": {
+   "class": "ChatOllama",
+   "extra_body": null,
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": null,
+   "provider": "ollama",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / bare": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / coach's measured model": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / coach's models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / one host for all": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "everyone"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "everyone",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / own and coach's": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "coach/openrouter",
+   "name": "coach/openrouter",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "OPENROUTER_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / own efforts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "parasail"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "parasail",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "anthropic"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "anthropic",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "openai"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "medium"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "medium",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / own hosts": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-entrance"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-entrance",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-logger"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-logger",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-onboarding"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "high"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-onboarding",
+   "model": "deepseek/deepseek-v4-flash",
+   "name": "deepseek/deepseek-v4-flash",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "high",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-planner"
+     ],
+     "require_parameters": true
+    },
+    "reasoning": {
+     "effort": "none"
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-planner",
+   "model": "anthropic/claude-haiku-4.5",
+   "name": "anthropic/claude-haiku-4.5",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "none",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "allow_fallbacks": false,
+     "order": [
+      "host-supervisor"
+     ],
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "host-supervisor",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ },
+ "openrouter / entrance openrouter / own models": {
+  "entrance": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/entrance",
+   "name": "own/entrance",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ENTRANCE_REASONING",
+   "setting": "ENTRANCE_MODEL"
+  },
+  "logger": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/logger",
+   "name": "own/logger",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "LOGGER_REASONING",
+   "setting": "LOGGER_MODEL"
+  },
+  "onboarding": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/onboarding",
+   "name": "own/onboarding",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "ONBOARDING_REASONING",
+   "setting": "ONBOARDING_MODEL"
+  },
+  "planner": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/planner",
+   "name": "own/planner",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "PLANNER_REASONING",
+   "setting": "PLANNER_MODEL"
+  },
+  "supervisor": {
+   "class": "OpenRouterChat",
+   "extra_body": {
+    "provider": {
+     "require_parameters": true
+    },
+    "usage": {
+     "include": true
+    }
+   },
+   "host": "",
+   "model": "own/supervisor",
+   "name": "own/supervisor",
+   "ollama_reasoning": "n/a",
+   "provider": "openrouter",
+   "reasoning": "",
+   "reasoning_setting": "SUPERVISOR_REASONING",
+   "setting": "SUPERVISOR_MODEL"
+  }
+ }
+}

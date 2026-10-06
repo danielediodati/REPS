@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
@@ -501,13 +501,13 @@ class Plan(eval_runner.Suite[Situation, sqlite3.Connection]):
         with eval_runner.pointed_at():
             yield connection
 
-    def chats(self, chosen: Sequence[Situation]) -> Mapping[str, models.Chat]:
-        return {"planner": models.planner()}
+    def nodes(self, chosen: Sequence[Situation]) -> Sequence[models.Node]:
+        return ("planner",)
 
     def runs(
         self,
         where: sqlite3.Connection,
-        chats: Mapping[str, models.Chat],
+        chats: models.Roster,
         *,
         records: Path,
         budget: int,

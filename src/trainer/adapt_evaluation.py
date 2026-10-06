@@ -97,15 +97,12 @@ class Adapt(eval_runner.Suite[adapt_set.Case, Fixture]):
             )
             yield Fixture(copy.connection, copy.path, declared.duration_cap_min)
 
-    def chats(self, chosen: Sequence[adapt_set.Case]) -> Mapping[str, models.Chat]:
-        """The entrance's model, and the planner's when a chosen case is planned."""
-        chats = {"entrance": models.entrance()}
-        if any(case.planned for case in chosen):
-            chats["planner"] = models.planner()
-        return chats
+    def nodes(self, chosen: Sequence[adapt_set.Case]) -> Sequence[models.Node]:
+        """The entrance, and the planner when a chosen case is planned."""
+        return ("entrance", "planner") if any(case.planned for case in chosen) else ("entrance",)
 
     def runs(
-        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: Fixture, chats: models.Roster, *, records: Path, budget: int
     ) -> eval_runner.Once[adapt_set.Case]:
         return lambda case, attempt: _adapted(where, case, attempt, chats, budget, records)
 
@@ -174,7 +171,7 @@ def _adapted(
     where: Fixture,
     case: adapt_set.Case,
     attempt: int,
-    chats: Mapping[str, models.Chat],
+    chats: models.Roster,
     budget: int,
     records: Path,
 ) -> tuple[eval_runner.Outcome, ...]:

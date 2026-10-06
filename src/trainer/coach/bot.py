@@ -1785,27 +1785,18 @@ def _drafting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Draft:
 
 
 def graphs(
-    front: models.Chat,
-    on: models.Chat,
-    logs: models.Chat,
+    cast: models.Roster,
     saver: BaseCheckpointSaver[Any],
     archive: Path,
     store: BaseStore | None = None,
-    interviews: models.Chat | None = None,
-    directs: models.Chat | None = None,
 ) -> Graphs:
-    """The graphs, each on the model that answers it (ADR-0006, item 3).
-
-    `front` is the entrance's, `on` the planner's, `logs` the logger's,
-    `interviews` onboarding's, the entrance's when not given, and `directs`
-    the supervisor's, the planner's when not given.
-    """
-    plans_on = planner.build(on, checkpointer=saver, archive=archive, store=store)
+    """The graphs, each on the model the roster gives its node (ADR-0006, item 3)."""
+    plans_on = planner.build(cast["planner"], checkpointer=saver, archive=archive, store=store)
     preparing: set[str] = set()
     stopping: dict[str, threading.Event] = {}
     return Graphs(
         entrance=entrance.build(
-            front,
+            cast["entrance"],
             checkpointer=saver,
             archive=archive,
             prepared=prepared(plans_on, preparing),
@@ -1814,13 +1805,13 @@ def graphs(
         ),
         planner=plans_on,
         logger=logger_graph.build(
-            logs, checkpointer=saver, archive=archive, store=store
+            cast["logger"], checkpointer=saver, archive=archive, store=store
         ),
         onboarding=onboarding.build(
-            interviews or front, checkpointer=saver, archive=archive, store=store
+            cast["onboarding"], checkpointer=saver, archive=archive, store=store
         ),
         supervisor=supervisor_graph.build(
-            directs or on, checkpointer=saver, archive=archive, store=store
+            cast["supervisor"], checkpointer=saver, archive=archive, store=store
         ),
         archive=archive,
         preparing=preparing,
@@ -1830,13 +1821,9 @@ def graphs(
 
 def serve(
     declared: Settings,
-    front: models.Chat,
-    on: models.Chat,
-    logs: models.Chat,
+    cast: models.Roster,
     saver: BaseCheckpointSaver[Any],
     store: BaseStore,
-    interviews: models.Chat | None = None,
-    directs: models.Chat | None = None,
 ) -> None:
     """Long-poll until interrupted, holding the models, the checkpointer, the store and the graphs.
 
@@ -1849,7 +1836,7 @@ def serve(
     -- and opened inside this call the whole block has already been printed,
     telling the user the process is healthy immediately before it is not.
     """
-    built = graphs(front, on, logs, saver, run_record.archive(), store, interviews, directs)
+    built = graphs(cast, saver, run_record.archive(), store)
     coach = Turns(
         owner_id=declared.owner_id,
         run=talking(built),

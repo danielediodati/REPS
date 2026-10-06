@@ -1655,11 +1655,10 @@ def test_a_plan_the_shape_check_refuses_writes_nothing(
 
 
 def scripted_graph(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> Any:
-    """Put a scripted chat model where the planner and logger graphs build real ones.
+    """Put a scripted chat model where every graph builds a real one.
 
-    `models.planner` and `models.logger` are the seams the commands come
-    through, and the provider and the model name travel with them into the
-    run record.
+    `models.chat_for` is the seam the commands come through, and the provider
+    and the model name travel with it into the run record.
 
     Each scripted turn must be a message of its own. `add_messages` keys on
     the message id, so the same `AIMessage` handed back twice is read as an
@@ -1679,8 +1678,7 @@ def stand_in(monkeypatch: pytest.MonkeyPatch, builder: Callable[[], Any]) -> Non
     """Every node's model built by `builder`, on any provider."""
     from trainer.coach import models
 
-    for node in ("planner", "logger", "entrance", "onboarding"):
-        monkeypatch.setattr(models, node, builder)
+    monkeypatch.setattr(models, "chat_for", lambda node: builder())
 
 
 def test_plan_asks_a_model_when_no_file_is_given(
@@ -3620,11 +3618,12 @@ def healthy_bot(
 
     monkeypatch.setattr(Bot, "get_me", known)
     polled: list[object] = []
-    monkeypatch.setattr(
-        bot,
-        "serve",
-        lambda declared, front, on, logs, saver, store, interviews, directs: polled.append(declared),
-    )
+
+    def served(declared: object, cast: models.Roster, saver: object, store: object) -> None:
+        assert set(cast) == set(models.NODES), "serve was handed every node's model"
+        polled.append(declared)
+
+    monkeypatch.setattr(bot, "serve", served)
     return polled
 
 
@@ -3950,8 +3949,8 @@ def test_bot_starts_on_the_key_and_telegram_alone(
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
     monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
-    chosen = (models.PLANNER_CHOICE, models.LOGGER_CHOICE, models.ENTRANCE_CHOICE)
-    listed = (*chosen, models.SUPERVISOR_CHOICE)
+    chosen = (models.NODES["planner"].choice, models.NODES["logger"].choice, models.NODES["entrance"].choice)
+    listed = (*chosen, models.NODES["supervisor"].choice)
     monkeypatch.setattr(
         models, "openrouter_listing", lambda key: {c.model: {"supported_parameters": ["reasoning"]} for c in listed}
     )

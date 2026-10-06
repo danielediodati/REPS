@@ -235,6 +235,18 @@ def test_the_brief_carries_every_live_conclusion_with_its_quote() -> None:
 # -- through the bot, across a restart ------------------------------------------
 
 
+def cast_of(front: models.Chat, plans: Scripted) -> models.Roster:
+    """Every node on a stand-in: the talking ones on `front`, the planning ones on `plans`."""
+    on = models.Chat(plans, SCRIPTED, STAND_IN)
+    return {
+        "entrance": front,
+        "onboarding": front,
+        "planner": on,
+        "supervisor": on,
+        "logger": models.Chat(Scripted(), SCRIPTED, STAND_IN),
+    }
+
+
 def test_i_hate_pressing_survives_a_restart_and_reaches_the_next_mesocycles_brief(
     tmp_path: Path, catalogued: sqlite3.Connection, declared: Path
 ) -> None:
@@ -245,9 +257,7 @@ def test_i_hate_pressing_survives_a_restart_and_reaches_the_next_mesocycles_brie
     told = Talking(turns=[remembering("hates pressing", HATE), AIMessage(content="capito")])
     with checkpoints.saver(checkpoints_file) as saver, conclusions.opened(store_file) as store:
         first = bot.graphs(
-            models.Chat(told, "front", "a-small-fast-one"),
-            models.Chat(Scripted(), SCRIPTED, STAND_IN),
-            models.Chat(Scripted(), SCRIPTED, STAND_IN),
+            cast_of(models.Chat(told, "front", "a-small-fast-one"), Scripted()),
             saver,
             run_record.archive(),
             store,
@@ -257,9 +267,7 @@ def test_i_hate_pressing_survives_a_restart_and_reaches_the_next_mesocycles_brie
     planning = Scripted(documents=[A_MESOCYCLE])
     with checkpoints.saver(checkpoints_file) as saver, conclusions.opened(store_file) as store:
         second = bot.graphs(
-            models.Chat(Talking(handoff=entrance.PLAN_MESOCYCLE), "front", "a-small-fast-one"),
-            models.Chat(planning, SCRIPTED, STAND_IN),
-            models.Chat(Scripted(), SCRIPTED, STAND_IN),
+            cast_of(models.Chat(Talking(handoff=entrance.PLAN_MESOCYCLE), "front", "a-small-fast-one"), planning),
             saver,
             run_record.archive(),
             store,

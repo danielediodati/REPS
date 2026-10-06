@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import sqlite3
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -82,11 +82,11 @@ class Supervise(eval_runner.Suite[supervise_set.Case, Fixture]):
     def checked(self, where: Fixture) -> Sequence[str]:
         return refused(where, self.holds, date.today().isoformat())
 
-    def chats(self, chosen: Sequence[supervise_set.Case]) -> Mapping[str, models.Chat]:
-        return {"supervisor": models.supervisor(), "planner": models.planner()}
+    def nodes(self, chosen: Sequence[supervise_set.Case]) -> Sequence[models.Node]:
+        return ("supervisor", "planner")
 
     def runs(
-        self, where: Fixture, chats: Mapping[str, models.Chat], *, records: Path, budget: int
+        self, where: Fixture, chats: models.Roster, *, records: Path, budget: int
     ) -> eval_runner.Once[supervise_set.Case]:
         return lambda case, attempt: _supervised(where, self.holds, case, attempt, chats, budget, records)
 
@@ -178,7 +178,7 @@ def _supervised(
     holds: supervise_set.SuperviseSet,
     case: supervise_set.Case,
     attempt: int,
-    chats: Mapping[str, models.Chat],
+    chats: models.Roster,
     budget: int,
     records: Path,
 ) -> tuple[eval_runner.Outcome, ...]:

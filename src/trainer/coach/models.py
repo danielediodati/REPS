@@ -8,9 +8,9 @@ import logging
 import os
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import groq
 import ollama
@@ -46,33 +46,11 @@ points the planner at Groq. Either of them empty falls back to what the coach
 runs on, so a fresh clone still has one provider to think about.
 """
 
-PLANNER_MODEL_ENV = "PLANNER_MODEL"
-LOGGER_MODEL_ENV = "LOGGER_MODEL"
-ONBOARDING_MODEL_ENV = "ONBOARDING_MODEL"
-SUPERVISOR_MODEL_ENV = "SUPERVISOR_MODEL"
-"""Each subgraph's own model, on the provider `LLM_BACKEND` names.
-
-Empty falls back to that provider's model, so one variable still moves both.
-"""
-
-PLANNER_REASONING_ENV = "PLANNER_REASONING"
-LOGGER_REASONING_ENV = "LOGGER_REASONING"
-ONBOARDING_REASONING_ENV = "ONBOARDING_REASONING"
-SUPERVISOR_REASONING_ENV = "SUPERVISOR_REASONING"
-ENTRANCE_REASONING_ENV = "ENTRANCE_REASONING"
-"""How hard each node's model reasons, on OpenRouter; empty is the model's default."""
-
 EFFORTS = ("none", "low", "medium", "high")
+"""What a node's `<NODE>_REASONING` may ask for on OpenRouter; empty is the model's default."""
 
 OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
 """The one host OpenRouter may route to, by its slug; empty keeps OpenRouter's routing."""
-
-PLANNER_HOST_ENV = "PLANNER_HOST"
-LOGGER_HOST_ENV = "LOGGER_HOST"
-ONBOARDING_HOST_ENV = "ONBOARDING_HOST"
-SUPERVISOR_HOST_ENV = "SUPERVISOR_HOST"
-ENTRANCE_HOST_ENV = "ENTRANCE_HOST"
-"""Each node's own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
 
 OLLAMA = "ollama"
 GROQ = "groq"
@@ -123,14 +101,72 @@ class Choice:
     host: str
 
 
-PLANNER_CHOICE = Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
-LOGGER_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-ENTRANCE_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-ONBOARDING_CHOICE = Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-SUPERVISOR_CHOICE = Choice("openai/gpt-6-luna", "", "openai")
-"""Its default effort: the supervisor's set was measured without one."""
+Node = Literal["planner", "logger", "entrance", "onboarding", "supervisor"]
 
-DEFAULT_OPENROUTER_MODEL = PLANNER_CHOICE.model
+
+@dataclass(frozen=True)
+class Seat:
+    """One node's settings, its measured choice on OpenRouter, and where it falls back to off it."""
+
+    model: str
+    """The variable naming its own model, on its provider; empty falls back to the coach's there."""
+
+    reasoning: str
+    """The variable asking how hard its model reasons, on OpenRouter."""
+
+    host: str
+    """The variable naming its own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
+
+    choice: Choice
+    backend: str = ""
+    """The variable naming its own provider, or empty for `LLM_BACKEND`'s."""
+
+    local: str = ""
+    """Its own default on Ollama, or empty for the coach's model."""
+
+    thinks: bool = True
+    """Whether Ollama is asked to reason on it; a model with no thinking phase refuses the request."""
+
+
+NODES: dict[Node, Seat] = {
+    "planner": Seat(
+        "PLANNER_MODEL",
+        "PLANNER_REASONING",
+        "PLANNER_HOST",
+        Choice("anthropic/claude-haiku-4.5", "none", "anthropic"),
+    ),
+    "logger": Seat(
+        "LOGGER_MODEL",
+        "LOGGER_REASONING",
+        "LOGGER_HOST",
+        Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
+    ),
+    "entrance": Seat(
+        ENTRANCE_MODEL_ENV,
+        "ENTRANCE_REASONING",
+        "ENTRANCE_HOST",
+        Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
+        backend=ENTRANCE_BACKEND_ENV,
+        local=DEFAULT_ENTRANCE_MODEL,
+        thinks=False,
+    ),
+    "onboarding": Seat(
+        "ONBOARDING_MODEL",
+        "ONBOARDING_REASONING",
+        "ONBOARDING_HOST",
+        Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
+    ),
+    # Its default effort: the supervisor's set was measured without one.
+    "supervisor": Seat(
+        "SUPERVISOR_MODEL",
+        "SUPERVISOR_REASONING",
+        "SUPERVISOR_HOST",
+        Choice("openai/gpt-6-luna", "", "openai"),
+    ),
+}
+"""Every node the coach runs, by name: the one place a node's model is configured (ADR-0011)."""
+
+DEFAULT_OPENROUTER_MODEL = NODES["planner"].choice.model
 """The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""
 
 DEFAULT_MAX_TOKENS = 1000
@@ -255,15 +291,19 @@ class Chat:
         return said + (f" via {self.host}" if self.host else "")
 
 
+Roster = Mapping[Node, Chat]
+"""The model each node runs on, by name."""
+
+
 def backend() -> str:
     """Which provider the coach runs on, and a state for one nobody built."""
     return _built(BACKEND_ENV, os.environ.get(BACKEND_ENV) or OPENROUTER)
 
 
-def entrance_backend() -> str:
-    """Which provider the entrance talks on: its own, or the coach's when it names none."""
-    named = os.environ.get(ENTRANCE_BACKEND_ENV)
-    return _built(ENTRANCE_BACKEND_ENV, named) if named else backend()
+def _backend_of(seat: Seat) -> str:
+    """Which provider a node runs on: its own, or the coach's when it names none."""
+    named = os.environ.get(seat.backend) if seat.backend else None
+    return _built(seat.backend, named) if named else backend()
 
 
 def _built(variable: str, named: str) -> str:
@@ -277,88 +317,71 @@ def _built(variable: str, named: str) -> str:
 
 def chat() -> Chat:
     """The chat model the environment names, on whichever provider it names."""
-    if backend() == GROQ:
+    return _coachs(backend())
+
+
+def chat_for(node: Node) -> Chat:
+    """The model a node runs on: its own setting, or its choice on OpenRouter, or its fallback off it."""
+    seat = NODES[node]
+    on = _backend_of(seat)
+    if on == OPENROUTER:
+        return _openrouter_node(seat)
+    effort = effort_of(seat.reasoning)
+    named = os.environ.get(seat.model) or (seat.local if on == OLLAMA else "")
+    if not named:
+        found = _coachs(on)
+        if seat.backend:
+            # A node on a provider of its own is fixed on its own line, not the coach's.
+            found = dataclasses.replace(found, setting=seat.model)
+    elif on == GROQ:
+        found = Chat(groq_model(named), GROQ, named, seat.model)
+    else:
+        thinking = REASONING if seat.thinks else None
+        found = Chat(ollama_model(named, reasoning=thinking), OLLAMA, named, seat.model)
+    return dataclasses.replace(found, reasoning=effort, reasoning_setting=seat.reasoning)
+
+
+def _coachs(on: str) -> Chat:
+    """The coach's model on a provider, which a node without its own falls back to."""
+    if on == GROQ:
         return Chat(groq_model(), GROQ, groq_model_name(), GROQ_MODEL_ENV)
-    if backend() == OPENROUTER:
-        return Chat(
-            openrouter_model(),
-            OPENROUTER,
-            openrouter_model_name(),
-            OPENROUTER_MODEL_ENV,
-        )
+    if on == OPENROUTER:
+        return Chat(openrouter_model(), OPENROUTER, openrouter_model_name(), OPENROUTER_MODEL_ENV)
     return Chat(ollama_model(), OLLAMA, model_name(), MODEL_ENV)
 
 
-def planner() -> Chat:
-    """The model the planner reasons on: `PLANNER_MODEL`, or its choice on OpenRouter, or the coach's."""
-    return _subgraph(PLANNER_MODEL_ENV, PLANNER_REASONING_ENV, PLANNER_HOST_ENV, PLANNER_CHOICE)
+def roster(nodes: Iterable[Node] = tuple(NODES)) -> dict[Node, Chat]:
+    """The model each of `nodes` runs on, every node by default."""
+    return {node: chat_for(node) for node in nodes}
 
 
-def logger() -> Chat:
-    """The model the logger extracts on: `LOGGER_MODEL`, or its choice on OpenRouter, or the coach's."""
-    return _subgraph(LOGGER_MODEL_ENV, LOGGER_REASONING_ENV, LOGGER_HOST_ENV, LOGGER_CHOICE)
+def ready_all(cast: Roster) -> None:
+    """Stop with the fix when any node's provider cannot answer it."""
+    for on in cast.values():
+        ready(on)
 
 
-def onboarding() -> Chat:
-    """The model the interview runs on: `ONBOARDING_MODEL`, or its choice on OpenRouter, or the coach's."""
-    return _subgraph(
-        ONBOARDING_MODEL_ENV, ONBOARDING_REASONING_ENV, ONBOARDING_HOST_ENV, ONBOARDING_CHOICE
-    )
-
-
-def supervisor() -> Chat:
-    """The model the supervisor writes directions on: `SUPERVISOR_MODEL`, or its choice on OpenRouter, or the coach's."""
-    return _subgraph(
-        SUPERVISOR_MODEL_ENV, SUPERVISOR_REASONING_ENV, SUPERVISOR_HOST_ENV, SUPERVISOR_CHOICE
-    )
-
-
-_CHOICES = {
-    PLANNER_MODEL_ENV: PLANNER_CHOICE,
-    LOGGER_MODEL_ENV: LOGGER_CHOICE,
-    ONBOARDING_MODEL_ENV: ONBOARDING_CHOICE,
-    SUPERVISOR_MODEL_ENV: SUPERVISOR_CHOICE,
-    ENTRANCE_MODEL_ENV: ENTRANCE_CHOICE,
-}
-
-
-def _subgraph(setting: str, reasoning_setting: str, host_setting: str, choice: Choice) -> Chat:
-    if backend() == OPENROUTER:
-        return _openrouter_node(setting, reasoning_setting, host_setting, choice)
-    named = os.environ.get(setting)
-    effort = effort_of(reasoning_setting)
-    if not named:
-        found = chat()
-    elif backend() == GROQ:
-        found = Chat(groq_model(named), GROQ, named, setting)
-    else:
-        found = Chat(ollama_model(named), OLLAMA, named, setting)
-    return dataclasses.replace(found, reasoning=effort, reasoning_setting=reasoning_setting)
-
-
-def _openrouter_node(
-    setting: str, reasoning_setting: str, host_setting: str, choice: Choice
-) -> Chat:
+def _openrouter_node(seat: Seat) -> Chat:
     """A node on OpenRouter: what the environment names, or else its measured choice."""
-    own = os.environ.get(setting)
+    own = os.environ.get(seat.model)
     coachs = os.environ.get(OPENROUTER_MODEL_ENV)
-    named = own or coachs or choice.model
+    named = own or coachs or seat.choice.model
     # The measured effort and host belong to the measured model; another may
     # take neither.
-    measured = named == choice.model
-    effort = effort_of(reasoning_setting) or (choice.effort if measured else "")
+    measured = named == seat.choice.model
+    effort = effort_of(seat.reasoning) or (seat.choice.effort if measured else "")
     host = (
-        os.environ.get(host_setting)
+        os.environ.get(seat.host)
         or os.environ.get(OPENROUTER_PROVIDER_ENV)
-        or (choice.host if measured else "")
+        or (seat.choice.host if measured else "")
     )
     return Chat(
         openrouter_model(named, effort, host),
         OPENROUTER,
         named,
-        OPENROUTER_MODEL_ENV if coachs and not own else setting,
+        OPENROUTER_MODEL_ENV if coachs and not own else seat.model,
         effort,
-        reasoning_setting,
+        seat.reasoning,
         host,
     )
 
@@ -369,27 +392,6 @@ def effort_of(variable: str) -> str:
     if asked and asked not in EFFORTS:
         raise ModelError(f"{variable} is {asked!r}; it is one of {', '.join(EFFORTS)}, or empty")
     return asked
-
-
-def entrance() -> Chat:
-    """The model the entrance holds the conversation on, which is its own (ADR-0006).
-
-    Falls back to the coach's provider and to that provider's default for it:
-    its measured choice on OpenRouter, a smaller model than the planner's on
-    Ollama, because this is the node the user waits on.
-    """
-    if entrance_backend() == OPENROUTER:
-        return _openrouter_node(
-            ENTRANCE_MODEL_ENV, ENTRANCE_REASONING_ENV, ENTRANCE_HOST_ENV, ENTRANCE_CHOICE
-        )
-    effort = effort_of(ENTRANCE_REASONING_ENV)
-    if entrance_backend() == GROQ:
-        named = os.environ.get(ENTRANCE_MODEL_ENV) or groq_model_name()
-        found = Chat(groq_model(named), GROQ, named, ENTRANCE_MODEL_ENV)
-    else:
-        named = os.environ.get(ENTRANCE_MODEL_ENV) or DEFAULT_ENTRANCE_MODEL
-        found = Chat(ollama_model(named, reasoning=None), OLLAMA, named, ENTRANCE_MODEL_ENV)
-    return dataclasses.replace(found, reasoning=effort, reasoning_setting=ENTRANCE_REASONING_ENV)
 
 
 def model_name() -> str:
@@ -738,7 +740,7 @@ def _openrouter_ready(on: Chat) -> None:
     entry = served.get(on.name, served.get(on.name.rsplit(":", 1)[0]))
     if entry is None:
         # Hundreds of names, so the page is the way out rather than the list.
-        choice = _CHOICES.get(on.setting)
+        choice = next((seat.choice for seat in NODES.values() if seat.model == on.setting), None)
         raise ModelError(
             f"OpenRouter does not route to {on.name}; set "
             f"{on.setting or OPENROUTER_MODEL_ENV} to one listed at "
