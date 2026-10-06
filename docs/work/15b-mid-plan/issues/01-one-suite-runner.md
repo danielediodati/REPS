@@ -1,8 +1,8 @@
 # One suite runner
 
-Status: needs-triage
+Status: ready-for-agent
 
-Read first: `spec.md`; ADR-0010 (bars), ADR-0011 (each node measured at its bar); CONTEXT.md (Run, Run record). The interface of the runner is not designed yet: grill it with the user before writing code.
+Read first: `spec.md`; ADR-0010 (bars), ADR-0011 (each node measured at its bar); CONTEXT.md (Run, Run record).
 
 ## Where it stands
 
