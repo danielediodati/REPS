@@ -54,6 +54,7 @@ from trainer.coach import (
     planner,
     runs,
 )
+from trainer.coach import negotiation as negotiations
 from trainer.coach import record as run_record
 from trainer.engine import (
     admissible,
@@ -1465,7 +1466,8 @@ def _asked(
     one would plan today's workout against what was said the last time the
     command was run.
     """
-    emitted, written = _ran(request, call_budget, record_path)
+    kept = _accepted(request, call_budget, record_path)
+    emitted, written = kept.plan, kept.record
     assert isinstance(emitted, plan.WorkoutPlan)
     blocks = plan.to_blocks(emitted)
     return emitted, [
@@ -1482,7 +1484,8 @@ def _asked_mesocycle(
     record_path: Path | None,
 ) -> list[str]:
     """One run of the planner graph for a mesocycle, accepted, and how it reads."""
-    emitted, written = _ran(request, call_budget, record_path)
+    kept = _accepted(request, call_budget, record_path)
+    emitted, written = kept.plan, kept.record
     assert isinstance(emitted, plan.Mesocycle)
     lines = [f"mesocycle: {emitted.cycles} cycles -- {emitted.why}"]
     for slot, (workout, asked) in enumerate(
@@ -1504,12 +1507,12 @@ def _asked_mesocycle(
     ]
 
 
-def _ran(
+def _accepted(
     request: plan.Request | plan.MesocycleRequest,
     call_budget: int,
     record_path: Path | None,
-) -> tuple[plan.WorkoutPlan | plan.Mesocycle, dict[str, Any]]:
-    """The planner graph run once and resumed as accepted, and the run's record."""
+) -> negotiations.Accepted:
+    """A request opened on the negotiation and its proposal kept: printing a plan is keeping it."""
     on = models.planner()
     models.ready(on)
     with checkpoints.saver() as saver:
@@ -1517,23 +1520,19 @@ def _ran(
         graph = planner.build(
             on, budget=call_budget, checkpointer=saver, archive=archive
         )
+        talks = negotiations.Negotiation(graph, archive, budget=call_budget)
         thread: RunnableConfig = {"configurable": {"thread_id": f"plan:{uuid4()}"}}
         try:
-            final = graph.invoke(planner.starting(request), thread)
-            refused = final["violations"]
-            emitted = final["plan"]
-            if not refused:
-                final = graph.invoke(Command(resume=planner.accepted()), thread)
-        except Exception:
-            run_record.failed(graph, thread, call_budget, archive)
-            raise
+            settled = talks.open(thread, request)
+            if isinstance(settled, negotiations.Proposed):
+                settled = talks.answer(thread, settled.id, planner.accepted())
         finally:
             if record_path is not None:
                 _copied(graph, thread, archive, record_path)
-        if refused:
-            raise click.ClickException(plan.refusal(refused))
-        assert emitted is not None, "a run with no violations emitted a plan"
-        return emitted, run_record.of(final, call_budget)
+        if isinstance(settled, negotiations.Refused):
+            raise click.ClickException(plan.refusal(settled.violations))
+        assert isinstance(settled, negotiations.Accepted), "a fresh thread supersedes nothing"
+        return settled
 
 
 def _copied(

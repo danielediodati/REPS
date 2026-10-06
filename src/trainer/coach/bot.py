@@ -38,6 +38,7 @@ from trainer.coach import (
     planner,
     progress,
 )
+from trainer.coach import negotiation as negotiations
 from trainer.coach import logger as logger_graph
 from trainer.coach import record as run_record
 from trainer.coach import supervisor as supervisor_graph
@@ -547,10 +548,25 @@ class Graphs:
     """
 
     preparing: set[str] = field(default_factory=set)
-    """The chat threads whose next mesocycle is being prepared right now."""
+    """The planner threads whose next mesocycle is being prepared right now."""
 
     background: set[asyncio.Task[None]] = field(default_factory=set)
     """The preparations in flight, held so the loop does not drop them."""
+
+    negotiation: negotiations.Negotiation = field(init=False)
+    """The plan proposals on the planner, which the bot renders and never reads off its state."""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "negotiation",
+            negotiations.Negotiation(
+                self.planner,
+                self.archive,
+                supervisor=self.supervisor,
+                preparing=self.preparing,
+            ),
+        )
 
 
 def talking(graphs: Graphs) -> Run:
@@ -690,9 +706,8 @@ async def _planning(
 ) -> None:
     """The planner, asked for a mesocycle, a change or an adaptation, behind the turn the entrance has already answered.
 
-    A run started here supersedes any plan the thread was still waiting on.
-    Invoking with fresh input drops the pending proposal, and a tap on it
-    afterwards finds an interrupt id that no longer matches.
+    A request opened here supersedes any plan the thread was still waiting on,
+    and a tap on that one is answered as superseded.
 
     Assembling the request is a synchronous read of SQLite and of the
     declaration, and it is the half that can be refused -- so it happens
@@ -711,18 +726,21 @@ async def _planning(
         logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
         await chat.say(BLOCKED)
         return
-    given = dict(planner.starting(request)) | entrance.carried(final)
-    await _proposing(graphs, thread, given, chat)
+    await _proposing(graphs, thread, request, chat, entrance.carried(final))
 
 
-async def _proposing(graphs: Graphs, thread: str, given: Any, chat: Chat) -> None:
-    """One run of the planner, streamed, and what it leaves the chat holding."""
-    settled = await _ending(
-        graphs.planner,
-        given,
-        under(thread, PLANNING),
+async def _proposing(
+    graphs: Graphs,
+    thread: str,
+    request: plans.Request | plans.MesocycleRequest,
+    chat: Chat,
+    carrying: Mapping[str, Any] | None = None,
+) -> None:
+    """A request opened on the negotiation, streamed, and what it leaves the chat holding."""
+    on = _reading(under(thread, PLANNING))
+    settled = await _streaming(
+        lambda posted: graphs.negotiation.open(on, request, carrying, posted),
         chat,
-        graphs.archive,
         progress.Progress(progress.PLAN),
     )
     await told(graphs, settled, thread, chat)
@@ -858,7 +876,7 @@ async def interviewed(
         await chat.say(BLOCKED)
         return
     await _relay(graphs, thread, entrance.ONBOARDED, chat)
-    await _proposing(graphs, thread, planner.starting(request), chat)
+    await _proposing(graphs, thread, request, chat)
 
 
 async def _changed(
@@ -885,7 +903,7 @@ async def _changed(
         return
     await chat.say(str(final.get("why", "")) or FAILED)
     if request is not None:
-        await _proposing(graphs, thread, planner.starting(request), chat)
+        await _proposing(graphs, thread, request, chat)
 
 
 def _onboarded(final: Mapping[str, Any]) -> None:
@@ -915,7 +933,31 @@ async def streamed(
     chat: Chat,
     lines: progress.Progress,
 ) -> dict[str, Any]:
-    """One run, with its progress in the chat while it happens.
+    """One run of a graph, with its progress in the chat while it happens; its last `values`, as `invoke` returns them."""
+
+    def run(posted: negotiations.Progress) -> dict[str, Any]:
+        final: dict[str, Any] = {}
+        for mode, chunk in graph.stream(given, on, stream_mode=["updates", "values"]):
+            if mode == "values":
+                final = chunk
+            else:
+                posted(chunk)
+        return final
+
+    return await _streaming(run, chat, lines)
+
+
+@dataclass(frozen=True)
+class _Finished[T]:
+    result: T
+
+
+async def _streaming[T](
+    work: Callable[[negotiations.Progress], T],
+    chat: Chat,
+    lines: progress.Progress,
+) -> T:
+    """Synchronous work that streams updates, run off the loop with its progress in the chat.
 
     The stream is the point: the tools the planner calls and the violations it
     is sent back are the refusal loop of ADR-0004, and without them on screen
@@ -925,64 +967,51 @@ async def streamed(
     `checkpoints.saver()`, a `SqliteSaver`, which has no async methods at all
     -- the first thing `astream` does is ask it for `aget_tuple`, and it
     refuses. The async saver is not a swap either: it has no *sync* methods,
-    and `trainer plan` invokes this same graph synchronously against the same
+    and `trainer plan` drives this same graph synchronously against the same
     file. One checkpointer serves both doors, so the door that is async is the
     one that adapts.
-
-    Which is what the call it replaced already did. `asyncio.to_thread` around
-    `invoke` was there because a round trip to the model is minutes on Ollama
-    and would otherwise stop the process long-polling Telegram; the thread is
-    the same, and what is new is that it reports as it goes instead of only at
-    the end.
-
-    The last `values` chunk carries what `invoke` would have returned, the
-    pending interrupt included, so `told` reads the same shape either way.
 
     `lines` is handed in because the two subgraphs share four node names and
     mean different things by three of them: a draft saying *scrivo il piano*
     while a report is being read is a lie about what the machine is doing.
     """
-    final: dict[str, Any] = {}
     loop = asyncio.get_running_loop()
     arriving: asyncio.Queue[Any] = asyncio.Queue()
-    done = object()
 
     def pump() -> None:
-        """The graph, run off the loop, posting each chunk back to it.
+        """The work, run off the loop, posting each update and then its result back to it.
 
         `call_soon_threadsafe` rather than touching the queue directly: this
         runs on a worker thread, and an asyncio queue is not safe to put to
-        from one. What the run raises is posted like any other item, so it is
+        from one. What the work raises is posted like any other item, so it is
         raised again on the loop where the caller can see it, instead of dying
         inside a thread nobody is waiting on.
         """
+        def posted(chunk: dict[str, Any]) -> None:
+            loop.call_soon_threadsafe(arriving.put_nowait, chunk)
+
         try:
-            for emitted in graph.stream(given, on, stream_mode=["updates", "values"]):
-                loop.call_soon_threadsafe(arriving.put_nowait, emitted)
+            result = work(posted)
         except BaseException as error:  # noqa: BLE001 -- re-raised on the loop
             loop.call_soon_threadsafe(arriving.put_nowait, error)
         else:
-            loop.call_soon_threadsafe(arriving.put_nowait, done)
+            loop.call_soon_threadsafe(arriving.put_nowait, _Finished(result))
 
     async with drafting(chat.draft, lines) as update:
         pumping = asyncio.create_task(asyncio.to_thread(pump))
         try:
             while True:
                 item = await arriving.get()
-                if item is done:
-                    break
+                if isinstance(item, _Finished):
+                    return cast(T, item.result)
                 if isinstance(item, BaseException):
                     raise item
-                mode, chunk = cast(tuple[str, dict[str, Any]], item)
-                if mode == "values":
-                    final = chunk
-                elif lines.reading(chunk):
+                if lines.reading(item):
                     await update()
         finally:
             # The thread has already posted its last item by the time either
             # exit is reached, so this collects it rather than waiting on it.
             await pumping
-    return final
 
 
 @asynccontextmanager
@@ -1079,18 +1108,21 @@ def answering(graphs: Graphs) -> Resume:
         if tap.action in dict(CONFIRM):
             await _confirming(graphs, thread, tap, chat)
             return
-        pending = graphs.planner.get_state(
-            _reading(under(thread, PLANNING))
-        ).interrupts
-        if not pending or pending[0].id != tap.proposal:
-            # The thread has moved on, or this plan was already answered. A
-            # tap on it is a question about a plan that is no longer the one
-            # in hand, and silence would read as a bot that is down.
-            await _relay(graphs, thread, entrance.SUPERSEDED, chat)
+        on = _reading(under(thread, PLANNING))
+        held = await asyncio.to_thread(graphs.negotiation.pending, on)
+        if held is None or held.id != tap.proposal:
+            # Checked before the draft opens, so a stale tap draws no
+            # *Ci penso* for a plan nobody is working on.
+            await told(graphs, negotiations.Superseded(), thread, chat)
             return
         # Streamed like any other run: a refusal plans the whole workout
         # again, which is the same minutes of silence a question costs.
-        await _proposing(graphs, thread, Command(resume=_answer(tap)), chat)
+        settled = await _streaming(
+            lambda posted: graphs.negotiation.answer(on, tap.proposal, _answer(tap), posted),
+            chat,
+            progress.Progress(progress.PLAN),
+        )
+        await told(graphs, settled, thread, chat)
 
     return resume
 
@@ -1149,42 +1181,43 @@ def _answer(tap: Tap) -> planner.Answer:
 
 
 async def told(
-    graphs: Graphs, final: Mapping[str, Any], thread: str, chat: Chat
+    graphs: Graphs,
+    settled: negotiations.Outcome | Mapping[str, Any],
+    thread: str,
+    chat: Chat,
 ) -> None:
-    """What the chat is left holding when a planning run stops: a plan, the workout, or neither.
+    """What the chat is left holding when a negotiation step stops: a plan, the workout, or neither.
 
-    An ordinary message in every case. The draft the run was writing into is a
-    thirty-second preview and is gone by the time the user reads this, which is
-    the difference between watching a run and being told what it decided.
-
-    The plan itself is rendered here and the other two are the entrance's to
-    say: a plan is a document with a shape, and *it is yours now* is a
-    sentence.
+    A mapping is a planner run's final state, read as the outcome it is.
     """
-    waiting = final.get("__interrupt__")
-    if waiting:
-        proposed = final["plan"]
-        if isinstance(proposed, plans.Mesocycle):
-            text = mesocycle_proposal(proposed, final["request"])
-            buttons: Sequence[tuple[str, str]] = MESOCYCLE_BUTTONS
-        else:
-            text = proposal(proposed, final["request"].budget_min)
-            buttons = BUTTONS
-        await chat.offer(
-            text,
-            [
-                (carried(Tap(action, thread, waiting[0].id)), label)
-                for action, label in buttons
-            ],
-        )
-    elif final.get("workout") is not None:
-        await _relay(graphs, thread, entrance.PRESCRIBED, chat)
-    elif final.get("mesocycle") is not None:
-        await _relay(graphs, thread, entrance.KEPT, chat)
-    else:
-        # Every attempt refused by the validator. There is no plan to offer,
-        # and saying nothing would leave the user waiting on a run that ended.
-        await _relay(graphs, thread, entrance.NO_PLAN, chat)
+    if isinstance(settled, Mapping):
+        settled = negotiations.outcome(settled)
+    match settled:
+        case negotiations.Proposed(plan=proposed, request=request, id=answerable):
+            if isinstance(proposed, plans.Mesocycle):
+                assert isinstance(request, plans.MesocycleRequest)
+                text = mesocycle_proposal(proposed, request)
+                buttons: Sequence[tuple[str, str]] = MESOCYCLE_BUTTONS
+            else:
+                assert isinstance(request, plans.Request)
+                text = proposal(proposed, request.budget_min)
+                buttons = BUTTONS
+            await chat.offer(
+                text,
+                [(carried(Tap(action, thread, answerable)), label) for action, label in buttons],
+            )
+        case negotiations.Accepted(workout=written) if written is not None:
+            await _relay(graphs, thread, entrance.PRESCRIBED, chat)
+        case negotiations.Accepted():
+            await _relay(graphs, thread, entrance.KEPT, chat)
+        case negotiations.Superseded():
+            # The thread has moved on, or this plan was already answered, and
+            # silence would read as a bot that is down.
+            await _relay(graphs, thread, entrance.SUPERSEDED, chat)
+        case negotiations.Refused():
+            # No plan to offer, and saying nothing would leave the user
+            # waiting on a run that ended.
+            await _relay(graphs, thread, entrance.NO_PLAN, chat)
 
 
 async def reported(
@@ -1209,98 +1242,54 @@ async def reported(
 
 def prepared(plans_on: planner.Planner, preparing: set[str]) -> Callable[[str], bool]:
     """Whether a chat thread's next mesocycle is being prepared, or waits unanswered."""
+    talks = negotiations.Negotiation(plans_on, preparing=preparing)
 
     def waiting(thread: str) -> bool:
-        if thread in preparing:
+        on = _reading(under(thread, PLANNING))
+        if talks.preparing(on):
             return True
-        held = plans_on.get_state(_reading(under(thread, PLANNING)))
-        return bool(held.interrupts) and bool(held.values.get("unasked"))
+        held = talks.pending(on)
+        return held is not None and held.unasked
 
     return waiting
 
 
-def _next() -> plans.MesocycleRequest | None:
-    """The next mesocycle's request, when the report just written ended the last cycle."""
-    with tools.reported(), tools.opened() as connection:
-        ended = mesocycles.finished(connection)
-        if ended is None or ended.past:
-            return None
-        return plans.next_requested(connection, date.today().isoformat())
+_next = negotiations.next_request
 
 
 async def _preparing(graphs: Graphs, thread: str, chat: Chat) -> None:
-    """The next mesocycle, planned in the background when the last cycle has just ended (ADR-0008 item 5).
+    """The next mesocycle, prepared in the background when the last cycle has just ended (ADR-0008 item 5).
 
     A task and not a turn: the queue in `Turns` is released once the report is
     answered, so a message arriving while the planner works is answered.
     """
-    if thread in graphs.preparing or await asyncio.to_thread(_asked_for, graphs, thread):
-        return
-    try:
-        request = await asyncio.to_thread(_next)
-    except tools.ToolFailure as state:
-        logger.warning("%s cannot prepare the next mesocycle: %s", thread, state, exc_info=True)
-        return
-    if request is None:
-        return
-    graphs.preparing.add(thread)
-    task = asyncio.create_task(_prepare(graphs, thread, request, chat))
+    task = asyncio.create_task(_prepare(graphs, thread, chat))
     graphs.background.add(task)
     task.add_done_callback(graphs.background.discard)
 
 
-def _asked_for(graphs: Graphs, thread: str) -> bool:
-    """Whether a new mesocycle is already offered on this thread and unanswered.
-
-    That one is the next mesocycle, and preparing another would supersede it.
-    A pending adaptation or change is not: the day and the mesocycle it was
-    for have just ended.
-    """
-    held = graphs.planner.get_state(_reading(under(thread, PLANNING)))
-    request = held.values.get("request")
-    return (
-        bool(held.interrupts)
-        and isinstance(request, plans.MesocycleRequest)
-        and request.changing is None
-    )
-
-
-async def _unseen(text: str) -> None:
-    """The draft of a run nobody is waiting on: nothing is sent."""
-
-
-async def _prepare(
-    graphs: Graphs, thread: str, request: plans.MesocycleRequest, chat: Chat
-) -> None:
-    """One planning run nobody asked for, on the thread a requested one uses, and its offer."""
-    quiet = Chat(say=chat.say, offer=chat.offer, draft=_unseen)
+async def _prepare(graphs: Graphs, thread: str, chat: Chat) -> None:
+    """One negotiation nobody asked for, on the thread a requested one uses, and its offer."""
     try:
-        # Its direction rides in the request, and the planner keeps it with
-        # the mesocycle it accepts (ADR-0014).
-        request = await asyncio.to_thread(
-            supervisor_graph.directed,
-            graphs.supervisor,
-            request,
+        settled = await asyncio.to_thread(
+            graphs.negotiation.prepare,
+            _reading(under(thread, PLANNING)),
             _reading(under(thread, SUPERVISING)),
-            graphs.archive,
         )
-        settled = await _ending(
-            graphs.planner,
-            planner.starting(request, unasked=True),
-            under(thread, PLANNING),
-            quiet,
-            graphs.archive,
-            progress.Progress(progress.PLAN),
-        )
-        if settled.get("__interrupt__"):
-            await _relay(graphs, thread, _following(request), chat)
-        await told(graphs, settled, thread, quiet)
+    except tools.ToolFailure as state:
+        logger.warning("%s cannot prepare the next mesocycle: %s", thread, state, exc_info=True)
+        return
     except Exception:
         logger.exception("preparing the next mesocycle on %s failed", thread)
         with contextlib.suppress(Exception):
             await chat.say(FAILED)
-    finally:
-        graphs.preparing.discard(thread)
+        return
+    if settled is None:
+        return
+    if isinstance(settled, negotiations.Proposed):
+        assert isinstance(settled.request, plans.MesocycleRequest)
+        await _relay(graphs, thread, _following(settled.request), chat)
+    await told(graphs, settled, thread, chat)
 
 
 def _following(request: plans.MesocycleRequest) -> str:
@@ -1317,14 +1306,12 @@ async def _reoffered(graphs: Graphs, thread: str, chat: Chat) -> None:
     While it is still being prepared there is nothing to offer yet: it arrives
     by itself, which is what the entrance has already said.
     """
-    if thread in graphs.preparing:
+    on = _reading(under(thread, PLANNING))
+    if graphs.negotiation.preparing(on):
         return
-    held = await asyncio.to_thread(
-        graphs.planner.get_state, _reading(under(thread, PLANNING))
-    )
-    if not held.interrupts:
-        return
-    await told(graphs, {**held.values, "__interrupt__": held.interrupts}, thread, chat)
+    held = await asyncio.to_thread(graphs.negotiation.pending, on)
+    if held is not None:
+        await told(graphs, held, thread, chat)
 
 
 async def _asked(waiting: Any, thread: str, chat: Chat) -> None:
