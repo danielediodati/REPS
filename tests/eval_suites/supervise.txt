@@ -1,0 +1,29 @@
+exit 1
+held
+                    planned         changed           kept          rotated         left out         ranges          varies          trend          not run    
+loves-the-hinge     1 failed           ok              ok              ok              ok              ok              ok              ok              -       
+alike-twice            -               -               -               -               -               -               -               -               1       
+
+followed
+                             followed        not run    
+loves-the-hinge followed        ok              -       
+alike-twice followed            -               -       
+
+loves-the-hinge #1 planned: slots: the mesocycle has 3 workouts and the cycle has 2 slots: one workout per slot, in the split's order
+    <tmp>/records/loves-the-hinge-1-plan.json
+alike-twice #1: IndexError: pop from empty list
+
+directions
+  loves-the-hinge #1: new squat | varies exercises | the squat goes to a front squat | why: two alike
+
+per history
+  loves-the-hinge: $0.0000, 0-0s over 1 runs
+  alike-twice: not run
+
+1 of 3 runs held what their row declares -- 33%
+  held: 0 of 2 -- 0%, the bar is 80%
+  followed: 1 of 1 -- 100%, the bar is 80%
+cost: 0 tool calls, 0 tokens in, 0 out
+      dollars not reported by the provider, 0.0s a run
+
+Below the bar the set declares.

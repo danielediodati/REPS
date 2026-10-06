@@ -1,0 +1,24 @@
+exit 1
+routing
+                    routed         not run    
+bought-barbell        ok              -       
+thirty                ok              -       
+
+adapted plans
+                planned        asked for        left out       equipment        minutes         workout          longer           told          not run    
+thirty plan        ok              ok              ok              ok           1 failed           ok              ok              ok              -       
+
+thirty plan (oggi ho 30 minuti invece di 45) #1 minutes: runs 16 min against 30 asked
+    <tmp>/records/thirty-1-plan.json
+
+per message
+  bought-barbell: $0.0000, 0-0s over 1 runs
+  thirty: $0.0000, 0-0s over 1 runs
+
+2 of 3 runs held what their row declares -- 66%
+  held: 0 of 1 -- 0%, the bar is 90%
+  routed: 2 of 2 -- 100%, the bar is 80%
+cost: 2 tool calls, 0 tokens in, 0 out
+      dollars not reported by the provider, 0.0s a run
+
+Below the bar the set declares.

@@ -1,0 +1,19 @@
+exit 1
+                terminates         time        constraints     preferences      equipment      not degenerate     validator        not run    
+no-equipment     1 failed           ok              ok              ok              ok               ok               ok              -       
+refused             -               -               -               -               -                -                -               1       
+
+what the planner spent getting there:
+                attempts      seconds      tool calls    refused by 
+no-equipment       3             0             0           shape    
+refused            -             -             -             -      
+
+no-equipment #1 terminates: it emitted nothing that parses as a mesocycle
+    <tmp>/records/no-equipment-1.json
+refused #1: the plan that was to be turned down did not parse, so there was nothing to refuse and the second run would not have been this situation
+
+0 of 2 runs held every invariant -- 0%
+cost: 0 tool calls, 0 tokens in, 0 out
+      dollars not reported by the provider, 0.0s a run
+
+The bar is 100%. Anything below it is a bug, not a knob.

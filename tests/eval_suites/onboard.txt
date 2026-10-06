@@ -1,0 +1,22 @@
+exit 0
+changes
+                      filled          quoted        path open      only changed      not run    
+bought-dumbbells        ok              ok              ok              ok              -       
+
+on time
+                           declared late      not run    
+bought-dumbbells on time        ok               -       
+
+routing
+                  routed         not run    
+joined-a-gym        ok              -       
+
+
+per onboarding: dollars not reported, 0-0s over 1 runs
+
+3 of 3 runs held what their case declares -- 100%
+  held: 1 of 1 -- 100%, the bar is 100%
+  on time: 1 of 1 -- 100%, the bar is 80%
+  routed: 1 of 1 -- 100%, the bar is 80%
+cost: 4 tool calls, 0 tokens in, 0 out
+      dollars not reported by the provider, 0.0s a run

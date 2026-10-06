@@ -1,0 +1,19 @@
+exit 1
+1 the report determines
+       document         volume        validator        not run    
+U1        ok              ok              ok              -       
+
+1 that must make it ask
+        asked        false confidence      not run    
+A1     1 failed             ok                -       
+
+A1 (how many rounds) #1 asked: it asked nothing, and "qualche serie" gives a direction and no number.
+    <tmp>/records/A1-1.json
+
+1 of 2 runs held the outcome its row declared -- 50%
+  unambiguous: 1 of 1 -- 100%, the bar is 80%
+  must ask: 0 of 1 -- 0%, the bar is 60%
+cost: 0 tool calls, 0 tokens in, 0 out
+      dollars not reported by the provider, 0.0s a run
+
+Below the bar the set declares.
