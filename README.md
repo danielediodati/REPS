@@ -10,7 +10,7 @@ REPS is not a plan generator: **it is a loop**. You report a workout in your own
 
 ## Status
 
-**`0.14.0` adapts this workout to anything you say about it.** Session 15, for `0.15.0`, is built on `main` and not yet released: when a mesocycle ends, a supervisor writes where the next one goes, and the planner plans from it.
+**`0.15.0` gives the next mesocycle a reason.** When a mesocycle ends, a supervisor writes where the next one goes, and the planner plans from it. Session 15b, for `1.0.0rc1`, opens next: a message sent while a plan is being written is read instead of queued.
 
 ## What it does
 
