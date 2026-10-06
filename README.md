@@ -39,7 +39,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## Status
 
-**`0.15.0` gives the next mesocycle a reason.** When a mesocycle ends, a supervisor writes where the next one goes, and the planner plans from it. Session 15b, for `1.0.0rc1`, opens next: a message sent while a plan is being written is read instead of queued.
+**`1.0.0rc1` reads a message sent mid-plan.** A question is answered at once, a correction or a new ask stops the plan being written and the new one arrives instead, a report waits for it. Session 15c, for `1.0.0`, opens next: the recorded demo, the repository made public, and the fixes found using this release candidate.
 
 ## What it does
 
