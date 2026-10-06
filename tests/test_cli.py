@@ -14,7 +14,6 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from conftest import serving
 from langchain_core.messages import AIMessage
 
 from trainer import __version__, cli
@@ -2188,12 +2187,10 @@ def test_eval_stops_at_the_credentials_state_rather_than_a_socket(
     is the state and its fix rather than eighteen rows of *not run* under a
     matrix of dashes.
     """
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["eval", "--repetitions", "1"])
 
     assert result.exit_code != 0
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "no-equipment" not in result.output, "it ran the pass anyway"
 
 
@@ -2213,7 +2210,6 @@ def test_eval_leaves_no_records_directory_behind_when_it_never_runs(
     """The suite invokes this command to check it stops at the credentials
     state. A directory made before the first request is litter in whatever
     working directory pytest happened to start in."""
-    monkeypatch.setenv("LLM_BACKEND", "groq")
     records = tmp_path / "eval-runs"
 
     runner.invoke(main, ["eval", "--repetitions", "1", "--records", str(records)])
@@ -2318,12 +2314,10 @@ def test_the_log_suite_stops_at_the_credentials_state_too(
     one that comes out: the set parses, the fixture is built, and the rows
     agree with the catalog. Then it stops, because there are no credentials --
     with the state and its fix, and no matrix of dashes under it."""
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["eval", "--suite", "log", "--repetitions", "1"])
 
     assert result.exit_code != 0
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "the report determines" not in result.output, "it ran the pass anyway"
 
 
@@ -2353,7 +2347,7 @@ def test_a_set_that_disagrees_with_the_catalog_is_refused_before_it_spends(
 
     assert result.exit_code != 0
     assert "U1 says it produces squat 9" in result.output
-    assert "no Groq credentials" not in result.output
+    assert "no OpenRouter credentials" not in result.output
 
 
 def test_a_set_naming_an_exercise_the_catalog_does_not_have(
@@ -2390,12 +2384,10 @@ def test_a_log_set_that_cannot_be_read_says_so_as_a_state(
 def test_the_onboard_suite_stops_at_the_credentials_state_too(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["eval", "--suite", "onboard", "--repetitions", "1"])
 
     assert result.exit_code != 0
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "interviews" not in result.output, "it ran the pass anyway"
 
 
@@ -2447,12 +2439,10 @@ def test_the_onboard_suite_runs_a_change_against_its_fixture_and_prints_its_matr
 def test_the_adapt_suite_stops_at_the_credentials_state_too(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["eval", "--suite", "adapt", "--repetitions", "1"])
 
     assert result.exit_code != 0
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "routing" not in result.output, "it ran the pass anyway"
 
 
@@ -2868,8 +2858,8 @@ def test_log_needs_a_file_that_exists(
 def test_log_with_no_file_reaches_for_a_model_rather_than_a_file(
     runner: CliRunner, enriched: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A bare `trainer log` is the interactive path, and it runs on whichever
-    provider `LLM_BACKEND` names now. The suite has no credentials, so it gets
+    """A bare `trainer log` is the interactive path, and it runs on the
+    logger's model. The suite has no credentials, so it gets
     as far as the state that says so -- which is the proof it went looking for
     a model and not for `--from`.
 
@@ -2877,11 +2867,9 @@ def test_log_with_no_file_reaches_for_a_model_rather_than_a_file(
     user writes out their whole workout and then loses it to an error that was
     already true when they started typing.
     """
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["log"], input="panca bene, tutto come scritto\n")
 
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "What did you do" not in result.output
 
 
@@ -3591,27 +3579,18 @@ def healthy_bot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> list[object]:
     """Every check `trainer bot` makes, passing; returns what `serve` was handed."""
-    import ollama
     from telegram import Bot, User
 
     from trainer.coach import bot
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:a-stand-in")
     monkeypatch.setenv("TELEGRAM_OWNER_ID", "6421")
-    monkeypatch.setenv("LLM_BACKEND", "ollama")
-    monkeypatch.setenv("OLLAMA_MODEL", "gpt-oss:20b")
-    monkeypatch.setenv("OLLAMA_CONTEXT_LENGTH", "8192")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "a-stand-in")
     monkeypatch.setenv("TRAINER_CHECKPOINTS", str(tmp_path / "checkpoints.sqlite"))
-
-    class Listing:
-        """Both models this machine would need: the planner's and the entrance's."""
-
-        models = [
-            type("Listed", (), {"model": "gpt-oss:20b"})(),
-            type("Listed", (), {"model": models.DEFAULT_ENTRANCE_MODEL})(),
-        ]
-
-    monkeypatch.setattr(ollama.Client, "list", lambda self: Listing())
+    listed = {seat.choice.model for seat in models.NODES.values()}
+    monkeypatch.setattr(
+        models, "openrouter_listing", lambda key: {name: {"supported_parameters": ["reasoning"]} for name in listed}
+    )
 
     async def known(self: Any, *args: Any, **kwargs: Any) -> User:
         return User(id=1, is_bot=True, first_name="REPS", username="reps_coach_bot")
@@ -3634,9 +3613,8 @@ def test_bot_says_what_it_runs_on_before_it_polls(
     result = runner.invoke(main, ["bot"])
 
     assert result.exit_code == 0, result.output
-    assert "provider:    ollama" in result.output
-    assert "model:       gpt-oss:20b" in result.output
-    assert "context:     8192 tokens" in result.output
+    assert "provider:    openrouter" in result.output
+    assert f"model:       {models.NODES['planner'].choice.model}" in result.output
     assert "bot:         @reps_coach_bot" in result.output
     assert "thread chat:6421" in result.output
     assert "store.sqlite" in result.output, "the memory is kept next to the checkpoints"
@@ -3654,82 +3632,6 @@ def test_bot_opens_its_log_in_the_home_and_says_where(
     assert result.exit_code == 0, result.output
     assert f"log:         {machine_home / 'trainer.log'}" in result.output
     assert (machine_home / "trainer.log").exists()
-
-
-def test_bot_with_ollama_down_stops_with_the_fix(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
-) -> None:
-    import ollama
-
-    def unreachable(self: Any) -> Any:
-        raise ConnectionError("Failed to connect to Ollama.")
-
-    monkeypatch.setattr(ollama.Client, "list", unreachable)
-
-    result = runner.invoke(main, ["bot"])
-
-    assert result.exit_code == 1
-    assert "start Ollama" in result.output
-    assert "provider:" not in result.output
-    assert healthy_bot == []
-
-
-def test_bot_with_the_model_not_pulled_names_the_pull(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
-) -> None:
-    monkeypatch.setenv("OLLAMA_MODEL", "qwen3.5:9b")
-
-    result = runner.invoke(main, ["bot"])
-
-    assert result.exit_code == 1
-    assert "ollama pull qwen3.5:9b" in result.output
-    assert healthy_bot == []
-
-
-def test_bot_with_no_context_length_says_what_a_short_context_does(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
-) -> None:
-    monkeypatch.delenv("OLLAMA_CONTEXT_LENGTH")
-
-    result = runner.invoke(main, ["bot"])
-
-    assert result.exit_code == 1
-    assert "OLLAMA_CONTEXT_LENGTH" in result.output
-    assert "truncated" in result.output
-    assert healthy_bot == []
-
-
-def test_bot_on_groq_with_no_key_stops_with_the_groq_state(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
-) -> None:
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
-    result = runner.invoke(main, ["bot"])
-
-    assert result.exit_code == 1
-    assert "GROQ_API_KEY" in result.output
-    assert healthy_bot == []
-
-
-def test_bot_on_groq_with_a_key_never_asks_ollama(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
-) -> None:
-    import ollama
-
-    def refuse(self: Any) -> Any:
-        raise AssertionError("Groq must not be checked against a local server")
-
-    monkeypatch.setattr(ollama.Client, "list", refuse)
-    serving(monkeypatch, models.DEFAULT_GROQ_MODEL)  # noqa: F821 -- see conftest
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-    monkeypatch.setenv("GROQ_API_KEY", "a-stand-in")
-    monkeypatch.delenv("OLLAMA_CONTEXT_LENGTH")
-
-    result = runner.invoke(main, ["bot"])
-
-    assert result.exit_code == 0, result.output
-    assert "provider:    groq" in result.output
-    assert len(healthy_bot) == 1
 
 
 def test_bot_with_a_token_telegram_refuses_names_botfather(
@@ -3876,8 +3778,7 @@ def test_runs_answers_with_a_provider_that_cannot_be_built(
 
     scripted_graph(monkeypatch, documents=[plan_of("Barbell_Squat")])
     runner.invoke(main, ["plan", "--equipment", "barbell", "--time", "45", "--group", "legs"])
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
     listed = runner.invoke(main, ["runs", "list"])
     shown = runner.invoke(main, ["runs", "show", listed.output.split()[0]])
@@ -3927,7 +3828,7 @@ def test_bot_says_which_model_answers_the_entrance(
     result = runner.invoke(main, ["bot"])
 
     assert result.exit_code == 0, result.output
-    assert f"entrance:    {models.DEFAULT_ENTRANCE_MODEL} on ollama" in result.output
+    assert f"entrance:    {models.chat_for('entrance').described}\n" in result.output
     assert "onboarding:  " in result.output
     assert "supervisor:  " in result.output
     assert result.output.isascii()
@@ -3942,7 +3843,7 @@ def test_bot_starts_on_the_key_and_telegram_alone(
 
     from trainer.coach import bot
 
-    for name in ("LLM_BACKEND", "ENTRANCE_BACKEND", "OPENROUTER_MODEL", "OPENROUTER_PROVIDER",
+    for name in ("OPENROUTER_MODEL", "OPENROUTER_PROVIDER",
                  "PLANNER_MODEL", "LOGGER_MODEL", "ENTRANCE_MODEL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "a-stand-in")
@@ -3974,13 +3875,14 @@ def test_bot_checks_the_entrance_model_before_it_starts(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, healthy_bot: list[object]
 ) -> None:
     """Knowable before anything is typed. Left to the first message, a model
-    nobody pulled arrives as a run that fell over on the greeting."""
-    monkeypatch.setenv(models.ENTRANCE_MODEL_ENV, "a-model-nobody-pulled")
+    nobody routes to arrives as a run that fell over on the greeting."""
+    monkeypatch.setenv(models.NODES["entrance"].model, "a/model-nobody-routes")
 
     result = runner.invoke(main, ["bot"])
 
     assert result.exit_code == 1
-    assert "ollama pull a-model-nobody-pulled" in result.output
+    assert "OpenRouter does not route to a/model-nobody-routes" in result.output
+    assert "ENTRANCE_MODEL" in result.output
     assert healthy_bot == [], "it polled anyway"
 
 
@@ -4316,12 +4218,10 @@ def supervise_set_here(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_the_supervise_suite_stops_at_the_credentials_state_too(
     runner: CliRunner, enriched: Path, supervise_set_here: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LLM_BACKEND", "groq")
-
     result = runner.invoke(main, ["eval", "--suite", "supervise", "--repetitions", "1"])
 
     assert result.exit_code != 0
-    assert "no Groq credentials" in result.output
+    assert "no OpenRouter credentials" in result.output
     assert "followed" not in result.output, "it ran the pass anyway"
 
 

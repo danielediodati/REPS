@@ -636,5 +636,5 @@ def performed(
 
 
 def studio() -> Logger:
-    """The logger graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it."""
+    """The logger graph on the logger's model, as `langgraph dev` serves it."""
     return build(models.chat_for("logger"), archive=records.archive())

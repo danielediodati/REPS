@@ -104,3 +104,4 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 - **OpenRouter's shared pool is what fails, not a host's uptime.** A 429 with `limit_source: upstream_provider_shared_pool` hit DeepInfra and AkashML at busy hours at 96–99.5% uptime. Pin a host by the run records, not by the listing.
 - **New OpenRouter accounts are held to 20 requests a minute per model.** One report is several calls.
 - **Amends ADR-0004 item 8** (the default is no longer Ollama) **and ADR-0006 item 3** (the entrance's model is this table's on OpenRouter; `llama3.1` stays Ollama's).
+- **Item 3 amended in session 15b** (ADR-0015): OpenRouter is the only provider; Ollama and Groq are no longer selectable.

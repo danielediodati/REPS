@@ -1038,7 +1038,7 @@ def build(
 
 
 def studio() -> Planner:
-    """The planner graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it.
+    """The planner graph on the planner's model, as `langgraph dev` serves it.
 
     On the home's archive, like the two real doors and unlike the eval suites:
     a run driven from Studio is one run somebody had, against the real catalog

@@ -874,7 +874,7 @@ def test_the_database_the_model_reads_is_the_one_the_environment_names(
 def test_a_spent_quota_stops_the_pass_and_says_so(
     connection: sqlite3.Connection, tmp_path: Path
 ) -> None:
-    """On 2026-09-21 Groq's free day ran out after 11 of 90 runs. The other 79
+    """On 2026-09-21 a provider's day ran out after 11 of 90 runs. The other 79
     went out anyway, each refused the same way, and the pass ended calling the
     10% it came to a bug -- about a quota."""
     from conftest import Exhausted
@@ -885,14 +885,14 @@ def test_a_spent_quota_stops_the_pass_and_says_so(
     report = planned(
         connection,
         chosen,
-        on=models.Chat(cast(Any, model), "groq", "qwen/qwen3.8-27b"),
+        on=models.Chat(cast(Any, model), models.OPENROUTER, "qwen/qwen3.8-27b"),
         repetitions=2,
         records=tmp_path / "records",
     )
 
     assert model.calls == 1
     assert report.total == 4 and report.held == 0
-    assert report.stopped is not None and "daily" in report.stopped
+    assert report.stopped is not None and "credits" in report.stopped
     printed = "\n".join(
         eval_runner.failures(report) + eval_runner.totals(report, "held")
     )

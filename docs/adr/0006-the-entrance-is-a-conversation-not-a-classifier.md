@@ -37,3 +37,7 @@ This ADR replaces the router. It does not touch the engine, the planner graph or
 ## Amended in session 12
 
 **On OpenRouter the entrance runs `openai/gpt-oss-120b` at low effort on Cerebras** (ADR-0011): 0.3–1.2 s a turn, against a minute on `llama3.1` here. `llama3.1` stays the default on Ollama.
+
+## Amended in session 15b
+
+**The entrance runs on OpenRouter only** (ADR-0015). `ENTRANCE_BACKEND` and the `llama3.1` default are gone; `ENTRANCE_MODEL` still gives it a model of its own.

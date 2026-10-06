@@ -125,8 +125,8 @@ def timing(on: models.Chat) -> Callable[[str, Node], Node]:
 
     The seconds are the thing being measured, and the model is beside them
     because from ADR-0006 there is no one model per run: the entrance answers
-    its own node on a small fast model and the subgraph it opens answers the
-    rest on the one `LLM_BACKEND` names. Read off the top of the document
+    its own node on a model of its own and the subgraph it opens answers the
+    rest on another. Read off the top of the document
     instead, a planning run would report the entrance's model for work the
     planner did.
 

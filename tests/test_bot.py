@@ -2208,8 +2208,8 @@ def test_the_run_document_names_the_model_that_answered_each_node(
     catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
 ) -> None:
     """From ADR-0006 there is no one model per run. The entrance answers its
-    own node on a small fast model and the planner answers the rest on the one
-    `LLM_BACKEND` names, and the document says which did which."""
+    own node on a model of its own and the planner answers the rest on its
+    own, and the document says which did which."""
     graph = graph_of(
         Scripted(documents=[A_MESOCYCLE]),
         checkpointer=InMemorySaver(),

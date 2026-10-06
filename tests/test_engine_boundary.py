@@ -37,7 +37,7 @@ FORBIDDEN_PREFIXES = (
     "httpx",
     "aiohttp",
     # models -- every provider SDK this project has used or might reach for.
-    # `groq` is the one in use; `anthropic` stays because the guard is about
+    # `openai` is the one in use; the others stay because the guard is about
     # what `engine/` may never import, not about what is installed today.
     "groq",
     "openai",

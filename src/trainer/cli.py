@@ -49,7 +49,6 @@ from trainer.coach import (
     conclusions,
     logfile,
     logger,
-    memory,
     models,
     planner,
     runs,
@@ -693,7 +692,7 @@ def eval_command(
     """Run a measurement against the real model, and check it by code.
 
     `--suite plan` asks the planner graph for a mesocycle in each of the six
-    adverse situations, on the provider `LLM_BACKEND` names, and checks the six
+    adverse situations, on the planner's model, and checks the six
     invariants on every workout of every run. Not *good plan / bad plan* --
     properties that must hold always. It also reports what the planner itself spent: attempts to a valid plan, wall
     time, tool calls, and the rule still refusing a run that never got there.
@@ -781,14 +780,10 @@ def bot_command() -> None:
     else is ignored. Both settings are read from the environment, never from
     the declarations, which are what you declare about your training.
 
-    Two models answer it (ADR-0006): the entrance holds the conversation on
-    the one `ENTRANCE_MODEL` names, and the planner and the logger it reaches
-    run on `LLM_BACKEND`'s.
+    Each node answers on its own model, all of them on OpenRouter.
 
-    Everything the bot needs is checked before it starts, and only for the
-    providers selected: on OpenRouter the key and each model's listing; on
-    Ollama the server, both models and `OLLAMA_CONTEXT_LENGTH`; on Groq the
-    key; and the token, with Telegram.
+    Everything the bot needs is checked before it starts: the OpenRouter key
+    and each model's listing, and the token, with Telegram.
 
     What happens then goes to a rotating log in the home, never to the token or
     the owner id, and it is the file the chat names when a run cannot start or
@@ -801,11 +796,10 @@ def bot_command() -> None:
         declared = bot.settings()
         # Every model, because every one is asked for in the conversation: the
         # entrance answers the turn and a subgraph does the work, and a model
-        # nobody pulled is knowable now rather than mid-conversation.
+        # OpenRouter does not route to is knowable now rather than mid-conversation.
         cast = models.roster()
         models.ready_all(cast)
         on = cast["planner"]
-        context = models.context_length(on)
         name = bot.identified(declared)
 
         # Opened before the block is printed, not after: a block that says
@@ -815,14 +809,9 @@ def bot_command() -> None:
             click.echo(f"provider:    {on.provider}")
             click.echo(f"model:       {on.described}")
             click.echo(f"logger:      {cast['logger'].described}")
-            click.echo(f"entrance:    {cast['entrance'].described} on {cast['entrance'].provider}")
+            click.echo(f"entrance:    {cast['entrance'].described}")
             click.echo(f"onboarding:  {cast['onboarding'].described}")
             click.echo(f"supervisor:  {cast['supervisor'].described}")
-            click.echo(
-                f"context:     {context} tokens"
-                if context is not None
-                else f"context:     {on.provider}'s own"
-            )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
             click.echo(f"memory:      {conclusions.store_path()}")
             click.echo(f"log:         {log_file}")
@@ -1201,8 +1190,8 @@ def plan_command(
     minutes off the declared cap, and the equipment off what you declared you
     have. Every option below overrides one of those for today.
 
-    The planner graph is asked for the plan, on the provider `LLM_BACKEND`
-    names, using the same tools `trainer mcp` serves and inside a budget of
+    The planner graph is asked for the plan, on the planner's model, using
+    the same tools `trainer mcp` serves and inside a budget of
     tool calls; when the budget runs out it is asked to emit with what it has.
     With `--from FILE` no model is involved at all and a hand-written plan is
     checked instead -- the same rules, the same rendering, the agent left out.

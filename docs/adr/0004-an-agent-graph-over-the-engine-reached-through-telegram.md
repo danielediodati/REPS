@@ -65,3 +65,7 @@ This ADR resets the agent layer. The engine and its tools stay.
 ## Amended in session 15
 
 **Item 8's "the supervisor runs on a different model" goes** (ADR-0014): its model is chosen by ADR-0011's rule, like every other node's.
+
+## Amended in session 15b
+
+**Item 8's provider is OpenRouter alone** (ADR-0015). Groq and Ollama are no longer selectable.

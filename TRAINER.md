@@ -63,7 +63,7 @@ Telegram  <->  bot on the PC (long polling)
 
 memory writer --> LangGraph store (only with a source)
 supervisor: a separate graph, run when a mesocycle ends, before the planner
-models: Ollama locally, or Groq (LLM_BACKEND)
+models: one per node, all on OpenRouter (ADR-0011, ADR-0015)
 ```
 
 ### Engine: the analytic layer

@@ -321,9 +321,8 @@ def test_the_live_run_of_a_negotiation_that_already_closed_one_is_not_read_twice
 def test_the_reader_needs_no_provider_no_graph_and_no_model(
     catalogued: sqlite3.Connection, archive: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`LLM_BACKEND` naming a provider that cannot be built is the state you
-    reach for this tool in."""
-    monkeypatch.setenv("LLM_BACKEND", "groq")
+    """A provider that cannot be built is the state you reach for this tool in."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     graph = negotiating(archive, plan_of("Barbell_Squat"))
     graph.invoke(planner.starting(BARBELL_45), THREAD)
     graph.invoke(Command(resume=planner.accepted()), THREAD)

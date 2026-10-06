@@ -132,20 +132,6 @@ def database_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     yield path
 
 
-def serving(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
-    """What Groq answers when it is asked for its models, without a network.
-
-    `models.ready` checks the name against what Groq actually serves, so every
-    test that takes the Groq path has to say what that is -- and the suite has
-    no sockets, which is the point. Stood in for at this project's own seam
-    rather than at the SDK's, so nothing here has to know the shape of
-    somebody else's client.
-    """
-    from trainer.coach import models
-
-    monkeypatch.setattr(models, "groq_models", lambda key: set(names))
-
-
 def make_exercise(**overrides: Any) -> Exercise:
     """A catalog row, with only the fields a test cares about spelled out.
 
@@ -261,26 +247,15 @@ def checkpointed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
-DAILY_QUOTA = (
-    "Error code: 429 - {'error': {'message': 'Rate limit reached for model "
-    "`qwen/qwen3.8-27b` in organization `org_x` service tier `on_demand` on "
-    "tokens per day (TPD): Limit 200000, Used 198660, Requested 3303. Please "
-    "try again in 14m8.016s. Need more tokens? Upgrade to Dev Tier today at "
-    "https://console.groq.com/settings/billing', 'type': 'tokens', 'code': "
-    "'rate_limit_exceeded'}}"
-)
-"""What Groq raised on 2026-09-21 when the free tier's day ran out, verbatim."""
-
-
-def refused_by_groq(message: str = DAILY_QUOTA) -> Exception:
-    """Groq's own rate-limit error, carrying `message`, with no request sent."""
-    import groq
+def refused_for_credit() -> Exception:
+    """OpenRouter's own refusal when the credits are spent, with no request sent."""
     import httpx
+    import openai
 
     response = httpx.Response(
-        429, request=httpx.Request("POST", "https://api.groq.com/openai/v1/chat")
+        402, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     )
-    return groq.RateLimitError(message, response=response, body=None)
+    return openai.APIStatusError("Insufficient credits", response=response, body=None)
 
 
 class Exhausted:
@@ -297,4 +272,4 @@ class Exhausted:
 
     def invoke(self, *args: Any, **kwargs: Any) -> Any:
         self.calls += 1
-        raise refused_by_groq()
+        raise refused_for_credit()

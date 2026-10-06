@@ -1,100 +1,38 @@
-"""The chat models the coach runs on, and the state of the provider behind them."""
+"""The chat models the coach runs on, all of them on OpenRouter, and the state of the provider behind them."""
 
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import logging
 import os
-import re
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import groq
-import ollama
 import openai
 from langchain_core.language_models import BaseChatModel
 from langchain_core.outputs import ChatResult
-from langchain_groq import ChatGroq
-from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-BACKEND_ENV = "LLM_BACKEND"
-MODEL_ENV = "OLLAMA_MODEL"
-CONTEXT_ENV = "OLLAMA_CONTEXT_LENGTH"
-BASE_URL_ENV = "OLLAMA_BASE_URL"
-
-GROQ_MODEL_ENV = "GROQ_MODEL"
-API_KEY_ENV = "GROQ_API_KEY"
-MAX_TOKENS_ENV = "GROQ_MAX_TOKENS"
+OPENROUTER = "openrouter"
+"""The one provider; what the run record names as each model's."""
 
 OPENROUTER_MODEL_ENV = "OPENROUTER_MODEL"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 
-ENTRANCE_BACKEND_ENV = "ENTRANCE_BACKEND"
-ENTRANCE_MODEL_ENV = "ENTRANCE_MODEL"
-"""The entrance's own provider and model (ADR-0006, item 3).
-
-Two settings and not one, because the entrance is the node latency is felt on
-and the planner is the node that needs the reasoning: the useful arrangement
-on this laptop is a small local model answering hello while `LLM_BACKEND`
-points the planner at Groq. Either of them empty falls back to what the coach
-runs on, so a fresh clone still has one provider to think about.
-"""
-
 EFFORTS = ("none", "low", "medium", "high")
-"""What a node's `<NODE>_REASONING` may ask for on OpenRouter; empty is the model's default."""
+"""What a node's `<NODE>_REASONING` may ask for; empty is the model's default."""
 
 OPENROUTER_PROVIDER_ENV = "OPENROUTER_PROVIDER"
 """The one host OpenRouter may route to, by its slug; empty keeps OpenRouter's routing."""
 
-OLLAMA = "ollama"
-GROQ = "groq"
-OPENROUTER = "openrouter"
-BACKENDS = (OLLAMA, GROQ, OPENROUTER)
-"""What `LLM_BACKEND` may name; any other value is refused by name rather than ignored."""
-
-DEFAULT_MODEL = "gpt-oss:20b"
-
-DEFAULT_ENTRANCE_MODEL = "llama3.1"
-"""The local model the entrance talks on, when `ENTRANCE_MODEL` does not name one.
-
-Not `DEFAULT_MODEL`. The entrance is read and answered on every turn, and
-`gpt-oss:20b` on this laptop's CPU is half a minute to say hello -- worse than
-the silence ADR-0006 replaces. `llama3.1` is the model the roadmap's own risk
-note records as running on the Radeon 860M while `gpt-oss:20b` terminates its
-Vulkan backend, so on the machine this was written for the entrance is the
-node that gets the GPU.
-"""
-
-DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
-"""The Groq model, when `GROQ_MODEL` does not name one.
-
-Its structured output runs in **strict** mode, where constrained decoding
-makes the emitted document conform to the schema by construction rather than
-by luck -- a document that comes back malformed is a whole run thrown away.
-
-**This name was believed retired, and it is not.** Asked on 2026-09-18, Groq
-serves it and a run of `trainer plan` on it emitted a plan in 1090 output
-tokens. What is retired is `qwen/qwen3.6-27b`, one minor version below, which
-is what an installation's `.env` may still name -- and that is the 404 nobody
-could see coming, because nothing checked.
-
-`openai/gpt-oss-20b` was tried in its place, for holding the model fixed
-across the two providers. It does not fit the free tier: it reasons before it
-answers, `max_tokens` caps the completion with the reasoning inside it, and at
-1000 the whole budget went to thinking and the emission came back empty. Above
-about 5600 the request is refused whole -- 8000 tokens per minute, input
-included. A default that only works on a paid tier is not a default.
-"""
 
 @dataclass(frozen=True)
 class Choice:
-    """A node's measured configuration on OpenRouter: model, effort and host (ADR-0011)."""
+    """A node's measured configuration: model, effort and host (ADR-0011)."""
 
     model: str
     effort: str
@@ -106,26 +44,18 @@ Node = Literal["planner", "logger", "entrance", "onboarding", "supervisor"]
 
 @dataclass(frozen=True)
 class Seat:
-    """One node's settings, its measured choice on OpenRouter, and where it falls back to off it."""
+    """One node's settings and its measured choice."""
 
     model: str
-    """The variable naming its own model, on its provider; empty falls back to the coach's there."""
+    """The variable naming its own model; empty falls back to `OPENROUTER_MODEL`, then the choice."""
 
     reasoning: str
-    """The variable asking how hard its model reasons, on OpenRouter."""
+    """The variable asking how hard its model reasons."""
 
     host: str
-    """The variable naming its own host on OpenRouter, winning over `OPENROUTER_PROVIDER`."""
+    """The variable naming its own host, winning over `OPENROUTER_PROVIDER`."""
 
     choice: Choice
-    backend: str = ""
-    """The variable naming its own provider, or empty for `LLM_BACKEND`'s."""
-
-    local: str = ""
-    """Its own default on Ollama, or empty for the coach's model."""
-
-    thinks: bool = True
-    """Whether Ollama is asked to reason on it; a model with no thinking phase refuses the request."""
 
 
 NODES: dict[Node, Seat] = {
@@ -142,13 +72,10 @@ NODES: dict[Node, Seat] = {
         Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
     ),
     "entrance": Seat(
-        ENTRANCE_MODEL_ENV,
+        "ENTRANCE_MODEL",
         "ENTRANCE_REASONING",
         "ENTRANCE_HOST",
         Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
-        backend=ENTRANCE_BACKEND_ENV,
-        local=DEFAULT_ENTRANCE_MODEL,
-        thinks=False,
     ),
     "onboarding": Seat(
         "ONBOARDING_MODEL",
@@ -166,51 +93,11 @@ NODES: dict[Node, Seat] = {
 }
 """Every node the coach runs, by name: the one place a node's model is configured (ADR-0011)."""
 
-DEFAULT_OPENROUTER_MODEL = NODES["planner"].choice.model
-"""The coach's OpenRouter model, when `OPENROUTER_MODEL` does not name one."""
-
-DEFAULT_MAX_TOKENS = 1000
-"""How much the model may write in one turn, by default.
-
-One thousand because that is Groq's free-tier ceiling on output tokens per
-minute, and a request whose declared `max_tokens` exceeds it is refused before
-any of it runs -- a 429 about a limit nobody has reached yet.
-
-**It is shared with reasoning.** The default model reasons before it answers
-and `max_tokens` caps the completion, thinking included, so the document is
-written out of whatever is left. An observed run emitted a six-block plan in
-676 tokens all in, so this fits -- but not by much, and a run that reasons
-harder loses the document to truncation rather than to a rule. That is why the
-truncation state names `GROQ_MAX_TOKENS`: on a paid tier it is the number to
-raise first.
-"""
-
-NO_CREDENTIALS = (
-    f"no Groq credentials: set {API_KEY_ENV} in .env (copy .env.example) or in "
-    "the environment"
-)
-"""A state with the way out, checked before any request goes out.
-
-Left to the SDK this arrives as a 401 after a network round-trip, or as a
-connection error on a machine that is offline -- neither of which names the
-thing that is actually missing.
-"""
-
 NO_OPENROUTER_CREDENTIALS = (
     f"no OpenRouter credentials: set {OPENROUTER_KEY_ENV} in .env (copy "
     ".env.example) or in the environment"
 )
-
-REASONING = "low"
-"""How hard `gpt-oss` reasons before it answers.
-
-Asked of every model that plans, and of none that talks. Ollama refuses the
-setting outright on a model that has no thinking phase -- `llama3.1` answers
-`"llama3.1" does not support thinking` with a 400, which is the first turn of
-the conversation lost -- and the entrance would not want it anyway: it reads
-prose and writes prose, and the seconds spent reasoning are the seconds the
-user is looking at an empty chat.
-"""
+"""A state with the way out, checked before any request goes out."""
 
 
 class ModelError(RuntimeError):
@@ -218,20 +105,11 @@ class ModelError(RuntimeError):
 
 
 class QuotaSpent(ModelError):
-    """The provider will take no more requests today, stated with when it will."""
-
-
-_PER_DAY = re.compile(r"per day \(")
-_MODEL = re.compile(r"for model `([^`]+)`")
-_AGAIN = re.compile(r"try again in ((?:\d+h)?(?:\d+m)?\d+)(?:\.\d+)?s")
+    """The provider will take no more requests, stated with the way out."""
 
 
 def spent(error: BaseException) -> QuotaSpent | None:
-    """The state a refused request is in, when what refused it is the day's quota.
-
-    Only the day's: a per-minute limit is waited out by the SDK, and the next
-    request may well go through.
-    """
+    """The state a refused request is in, when what refused it is spent credit."""
     if isinstance(error, QuotaSpent):
         return error
     if isinstance(error, openai.APIStatusError) and error.status_code == 402:
@@ -239,18 +117,7 @@ def spent(error: BaseException) -> QuotaSpent | None:
             "OpenRouter's credits are spent; top up at "
             "https://openrouter.ai/settings/credits"
         )
-    said = str(error)
-    if not isinstance(error, groq.RateLimitError) or not _PER_DAY.search(said):
-        return None
-    model = _MODEL.search(said)
-    again = _AGAIN.search(said)
-    return QuotaSpent(
-        "Groq's daily token quota"
-        + (f" for {model.group(1)}" if model else "")
-        + " is spent"
-        + (f"; try again in {again.group(1)}s" if again else "")
-        + ", or run fewer with --only"
-    )
+    return None
 
 
 @dataclass(frozen=True)
@@ -258,20 +125,15 @@ class Chat:
     """The model one run talks to, and what the run record calls it.
 
     The name and the provider travel with the model because the record is
-    written from them: asked of the model afterwards they are two different
-    attributes on two different classes, and the caller would have to know
-    which provider it built to read either.
+    written from them: asked of the model afterwards they are attributes the
+    caller would have to know the class of to read.
     """
 
     model: BaseChatModel
     provider: str
     name: str
     setting: str = ""
-    """Which variable named this model, so a state about it names the line to edit.
-
-    Two nodes now name two models (ADR-0006), and a 404 on the entrance's
-    answered with *set `GROQ_MODEL`* sends the reader to the planner's line.
-    """
+    """Which variable named this model, so a state about it names the line to edit."""
 
     reasoning: str = ""
     """The effort asked of the model, or empty for its default."""
@@ -295,74 +157,9 @@ Roster = Mapping[Node, Chat]
 """The model each node runs on, by name."""
 
 
-def backend() -> str:
-    """Which provider the coach runs on, and a state for one nobody built."""
-    return _built(BACKEND_ENV, os.environ.get(BACKEND_ENV) or OPENROUTER)
-
-
-def _backend_of(seat: Seat) -> str:
-    """Which provider a node runs on: its own, or the coach's when it names none."""
-    named = os.environ.get(seat.backend) if seat.backend else None
-    return _built(seat.backend, named) if named else backend()
-
-
-def _built(variable: str, named: str) -> str:
-    if named not in BACKENDS:
-        raise ModelError(
-            f"{variable} names {named!r}, and the providers built are "
-            f"{', '.join(BACKENDS)}"
-        )
-    return named
-
-
-def chat() -> Chat:
-    """The chat model the environment names, on whichever provider it names."""
-    return _coachs(backend())
-
-
 def chat_for(node: Node) -> Chat:
-    """The model a node runs on: its own setting, or its choice on OpenRouter, or its fallback off it."""
+    """The model a node runs on: what the environment names, or else its measured choice."""
     seat = NODES[node]
-    on = _backend_of(seat)
-    if on == OPENROUTER:
-        return _openrouter_node(seat)
-    effort = effort_of(seat.reasoning)
-    named = os.environ.get(seat.model) or (seat.local if on == OLLAMA else "")
-    if not named:
-        found = _coachs(on)
-        if seat.backend:
-            # A node on a provider of its own is fixed on its own line, not the coach's.
-            found = dataclasses.replace(found, setting=seat.model)
-    elif on == GROQ:
-        found = Chat(groq_model(named), GROQ, named, seat.model)
-    else:
-        thinking = REASONING if seat.thinks else None
-        found = Chat(ollama_model(named, reasoning=thinking), OLLAMA, named, seat.model)
-    return dataclasses.replace(found, reasoning=effort, reasoning_setting=seat.reasoning)
-
-
-def _coachs(on: str) -> Chat:
-    """The coach's model on a provider, which a node without its own falls back to."""
-    if on == GROQ:
-        return Chat(groq_model(), GROQ, groq_model_name(), GROQ_MODEL_ENV)
-    if on == OPENROUTER:
-        return Chat(openrouter_model(), OPENROUTER, openrouter_model_name(), OPENROUTER_MODEL_ENV)
-    return Chat(ollama_model(), OLLAMA, model_name(), MODEL_ENV)
-
-
-def roster(nodes: Iterable[Node] = tuple(NODES)) -> dict[Node, Chat]:
-    """The model each of `nodes` runs on, every node by default."""
-    return {node: chat_for(node) for node in nodes}
-
-
-def ready_all(cast: Roster) -> None:
-    """Stop with the fix when any node's provider cannot answer it."""
-    for on in cast.values():
-        ready(on)
-
-
-def _openrouter_node(seat: Seat) -> Chat:
-    """A node on OpenRouter: what the environment names, or else its measured choice."""
     own = os.environ.get(seat.model)
     coachs = os.environ.get(OPENROUTER_MODEL_ENV)
     named = own or coachs or seat.choice.model
@@ -386,78 +183,23 @@ def _openrouter_node(seat: Seat) -> Chat:
     )
 
 
+def roster(nodes: Iterable[Node] = tuple(NODES)) -> dict[Node, Chat]:
+    """The model each of `nodes` runs on, every node by default."""
+    return {node: chat_for(node) for node in nodes}
+
+
+def ready_all(cast: Roster) -> None:
+    """Stop with the fix when any node's model cannot be answered."""
+    for on in cast.values():
+        ready(on)
+
+
 def effort_of(variable: str) -> str:
     """The effort a variable asks for, or empty; any value outside `EFFORTS` is refused by name."""
     asked = os.environ.get(variable, "")
     if asked and asked not in EFFORTS:
         raise ModelError(f"{variable} is {asked!r}; it is one of {', '.join(EFFORTS)}, or empty")
     return asked
-
-
-def model_name() -> str:
-    """The local model the environment names."""
-    return os.environ.get(MODEL_ENV) or DEFAULT_MODEL
-
-
-def groq_model_name() -> str:
-    """The Groq model the environment names."""
-    return os.environ.get(GROQ_MODEL_ENV) or DEFAULT_GROQ_MODEL
-
-
-def openrouter_model_name() -> str:
-    """The OpenRouter model the environment names."""
-    return os.environ.get(OPENROUTER_MODEL_ENV) or DEFAULT_OPENROUTER_MODEL
-
-
-def max_tokens() -> int:
-    """How much the model may write, from the environment or the default.
-
-    Checked rather than trusted, because this value is interpolated into the
-    rate-limit and truncation messages: `GROQ_MAX_TOKENS=2k` would raise a
-    `ValueError` *while handling* the 429 it was meant to explain, and the
-    user would get a traceback about a codec-shaped mistake instead of the
-    state with its way out.
-    """
-    declared = os.environ.get(MAX_TOKENS_ENV)
-    if not declared:
-        return DEFAULT_MAX_TOKENS
-    try:
-        asked = int(declared)
-    except ValueError:
-        raise ModelError(
-            f"{MAX_TOKENS_ENV} is {declared!r}; it is a whole number of tokens"
-        ) from None
-    if asked < 1:
-        raise ModelError(f"{MAX_TOKENS_ENV} is {asked}; it is at least one token")
-    return asked
-
-
-def ollama_model(
-    named: str | None = None, reasoning: str | None = REASONING
-) -> ChatOllama:
-    """The Ollama chat model the environment names, or another this machine has.
-
-    `reasoning` of `None` leaves the setting off the request altogether, which
-    is what a model with no thinking phase needs.
-    """
-    return ChatOllama(
-        model=named or model_name(),
-        base_url=os.environ.get(BASE_URL_ENV) or None,
-        num_ctx=_context_length(),
-        reasoning=reasoning,
-    )
-
-
-def groq_model(named: str | None = None) -> ChatGroq:
-    """The Groq chat model the environment names, or another Groq serves."""
-    key = os.environ.get(API_KEY_ENV)
-    if not key:
-        raise ModelError(NO_CREDENTIALS)
-    return ChatGroq(
-        model=named or groq_model_name(),
-        api_key=SecretStr(key),
-        max_tokens=max_tokens(),
-    )
 
 
 TIMEOUT_S = 180
@@ -620,10 +362,8 @@ class OpenRouterChat(ChatOpenAI):
         return result
 
 
-def openrouter_model(
-    named: str | None = None, reasoning: str = "", host: str | None = None
-) -> ChatOpenAI:
-    """The OpenRouter chat model the environment names, or another it routes to; `host` pins one."""
+def openrouter_model(named: str, reasoning: str = "", host: str | None = None) -> ChatOpenAI:
+    """The OpenRouter chat model by that name; `host` pins one host, `None` leaves it to `OPENROUTER_PROVIDER`."""
     key = os.environ.get(OPENROUTER_KEY_ENV)
     if not key:
         raise ModelError(NO_OPENROUTER_CREDENTIALS)
@@ -638,7 +378,7 @@ def openrouter_model(
     if reasoning:
         body["reasoning"] = {"effort": reasoning}
     return OpenRouterChat(
-        model=named or openrouter_model_name(),
+        model=named,
         api_key=SecretStr(key),
         base_url=OPENROUTER_URL,
         extra_body=body,
@@ -648,76 +388,14 @@ def openrouter_model(
 
 
 def ready(on: Chat) -> None:
-    """Stop with the fix when the provider cannot answer the run that is about to start.
+    """Stop with the fix when OpenRouter cannot answer the run that is about to start.
 
-    Checked before the graph runs rather than left to the first call. An
-    unreachable server arrives mid-run as a connection error and a model
-    nobody pulled as a 404, and neither names the command that fixes it --
-    and on Groq the 404 is a model that was retired between releases, which
-    reads as *the run is broken* rather than *this name is gone*.
+    Checked before the graph runs rather than left to the first call: a model
+    retired between releases arrives mid-run as a 404 that reads as *the run
+    is broken* rather than *this name is gone*.
     """
-    if on.reasoning and on.provider != OPENROUTER:
-        raise ModelError(
-            f"{on.reasoning_setting} is {on.reasoning!r}, and an effort is sent only "
-            f"on OpenRouter; leave it empty on {on.provider}"
-        )
-    if on.provider == GROQ:
-        _groq_ready(on)
-        return
     if on.provider == OPENROUTER:
         _openrouter_ready(on)
-        return
-    if on.provider != OLLAMA:
-        # A provider nobody built has no state of its own to be in. Written as
-        # *anything that is not Groq is local*, a stand-in would be checked
-        # against a server it has nothing to do with.
-        return
-    client = ollama.Client(host=os.environ.get(BASE_URL_ENV) or None)
-    try:
-        listed = client.list().models
-    except (ConnectionError, ollama.ResponseError) as error:
-        raise ModelError(
-            f"Ollama cannot be reached ({error}); start Ollama, or point "
-            f"{BASE_URL_ENV} at the server"
-        ) from error
-    pulled = {_tagged(model.model) for model in listed if model.model}
-    if _tagged(on.name) not in pulled:
-        raise ModelError(f"Ollama does not have {on.name}; run `ollama pull {on.name}`")
-
-
-def groq_models(key: str) -> set[str]:
-    """Every model Groq serves this key, as it names them.
-
-    Its own function because it is the one thing in this module that reaches
-    the network, and because that makes it the seam the suite stands in for --
-    the alternative is a test that knows the shape of somebody's SDK.
-    """
-    import groq
-
-    return {model.id for model in groq.Groq(api_key=key).models.list().data}
-
-
-def _groq_ready(on: Chat) -> None:
-    """The model Groq serves under that name, or the state that says it does not."""
-    key = os.environ.get(API_KEY_ENV)
-    if not key:
-        raise ModelError(NO_CREDENTIALS)
-    try:
-        served = groq_models(key)
-    except Exception as error:
-        # Every way the check itself can fail -- offline, a key Groq refuses,
-        # the endpoint moved -- and none of them is a statement about the
-        # model name. Reported as reaching Groq, which is what went wrong.
-        raise ModelError(f"Groq cannot be reached ({error})") from error
-    if on.name not in served:
-        # The fix names the default rather than three of the list, which is
-        # sorted alphabetically and opens on a text-to-speech model: a state
-        # whose way out does not work is worse than the 404 it replaced.
-        raise ModelError(
-            f"Groq does not serve {on.name}; set {on.setting or GROQ_MODEL_ENV} to "
-            f"{DEFAULT_GROQ_MODEL}, or leave it empty for the same, or pick "
-            f"another of: {', '.join(sorted(served))}"
-        )
 
 
 def openrouter_listing(key: str) -> dict[str, dict[str, Any]]:
@@ -763,46 +441,3 @@ def _takes(on: Chat, entry: dict[str, Any]) -> None:
             f"{on.name} takes {', '.join(efforts)} as an effort, not {on.reasoning!r}; "
             f"set {on.reasoning_setting} to one of them"
         )
-
-
-MEASURED_CONTEXT = 8192
-"""The context length session 6 measured the planner at, 6 valid plans of 6."""
-
-SHORT_CONTEXT = (
-    f"set it to {MEASURED_CONTEXT} in .env -- below that the "
-    "admissible set is truncated and plans are refused for no visible reason"
-)
-
-
-def context_length(on: Chat) -> int | None:
-    """The context the local model plans with, refused when unset or short; `None` off Ollama."""
-    if on.provider != OLLAMA:
-        return None
-    declared = _context_length()
-    if declared is None:
-        raise ModelError(f"{CONTEXT_ENV} is not set; {SHORT_CONTEXT}")
-    if declared < MEASURED_CONTEXT:
-        raise ModelError(f"{CONTEXT_ENV} is {declared}; {SHORT_CONTEXT}")
-    return declared
-
-
-def _tagged(name: str) -> str:
-    """A model name with its tag, the way `ollama list` always reports one.
-
-    Ollama resolves a bare name to `:latest`, so `llama3.1` and
-    `llama3.1:latest` are one model. Compared as written, a model that is
-    there reads as missing, and the fix offered is a pull that changes nothing.
-    """
-    return name if ":" in name else f"{name}:latest"
-
-
-def _context_length() -> int | None:
-    declared = os.environ.get(CONTEXT_ENV)
-    if not declared:
-        return None
-    try:
-        return int(declared)
-    except ValueError:
-        raise ModelError(
-            f"{CONTEXT_ENV} is {declared!r}; it is a whole number of tokens, such as 16384"
-        ) from None

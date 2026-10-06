@@ -25,7 +25,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 
 from trainer import tools
-from trainer.coach import checkpoints, conclusions, memory, models
+from trainer.coach import checkpoints, conclusions, models
 from trainer.coach import record as run_record
 from trainer.engine import database, home
 
@@ -429,9 +429,8 @@ def run(
         _refuse(suite.checked(where))
         chats = models.roster(suite.nodes(chosen))
         models.ready_all(chats)
-        with _sampling(chats) as sampled:
-            report = measure(suite, where, chosen, chats, repetitions=repetitions, records=records, budget=budget)
-    return [*suite.render(report, chosen), *sampled()], report
+        report = measure(suite, where, chosen, chats, repetitions=repetitions, records=records, budget=budget)
+    return suite.render(report, chosen), report
 
 
 def measure(
@@ -505,17 +504,6 @@ def picked(available: Sequence[C], only: Sequence[str], what: str) -> tuple[C, .
             raise Refused(f"no {what} called {name!r}; they are {', '.join(known)}")
     # Named twice is named once: left in, it runs twice against a paid provider.
     return tuple(known[name] for name in dict.fromkeys(only))
-
-
-@contextmanager
-def _sampling(chats: models.Roster) -> Iterator[Callable[[], list[str]]]:
-    """Memory sampled while the pass runs, on the first model's host; its line, or none off Ollama."""
-    first = next(iter(chats.values()), None)
-    if first is None:
-        yield list
-        return
-    with memory.sampling(first) as sampler:
-        yield sampler.lines
 
 
 def _refuse(problems: Sequence[str]) -> None:

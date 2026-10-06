@@ -343,5 +343,5 @@ def directed(
 
 
 def studio() -> Supervisor:
-    """The supervisor graph on the provider `LLM_BACKEND` names, as `langgraph dev` serves it."""
+    """The supervisor graph on the supervisor's model, as `langgraph dev` serves it."""
     return build(models.chat_for("supervisor"), archive=records.archive())

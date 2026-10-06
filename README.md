@@ -1,6 +1,6 @@
 # REPS
 
-> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on OpenRouter, Groq or a local model.
+> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on models reached through OpenRouter.
 
 REPS is not a plan generator: **it is a loop**. You report a workout in your own words; when that ends a mesocycle, a supervisor reads the ones before it and decides where the next goes, and the planner plans it from there.
 
@@ -105,17 +105,11 @@ uv run trainer runs show 20260918-190412-3f9a          # what each run called, s
 uv run trainer mcp                                     # the engine's tools over MCP
 ```
 
-## Providers and models
+## Models
 
-`LLM_BACKEND` names the provider, in `.env`.
+Every model is reached through OpenRouter ([ADR-0015](docs/adr/0015-openrouter-is-the-only-provider.md)); `OPENROUTER_API_KEY` in `.env` is all it needs. `OPENROUTER_MODEL` moves every node to one model; `OPENROUTER_PROVIDER` pins one host for all.
 
-| `LLM_BACKEND` | what it needs |
-|---|---|
-| `openrouter` (default) | `OPENROUTER_API_KEY`. Each node runs its measured choice (below). `OPENROUTER_MODEL` moves every node to one model; `OPENROUTER_PROVIDER` pins one host for all. |
-| `groq` | `GROQ_API_KEY`. `GROQ_MODEL` and `GROQ_MAX_TOKENS` override the rest. |
-| `ollama` | Ollama running and the model pulled: `ollama pull gpt-oss:20b`. `OLLAMA_MODEL`, `OLLAMA_CONTEXT_LENGTH` (at least 8192 for the bot) and `OLLAMA_BASE_URL` override the rest. |
-
-On OpenRouter each node runs the cheapest configuration that cleared its suite's bar ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)):
+Each node runs the cheapest configuration that cleared its suite's bar ([ADR-0011](docs/adr/0011-each-node-runs-the-cheapest-configuration-that-clears-its-bar.md)):
 
 | Node | Model, effort, host | Measured |
 |---|---|---|
@@ -127,7 +121,7 @@ On OpenRouter each node runs the cheapest configuration that cleared its suite's
 
 **A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
 
-`PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. `ENTRANCE_BACKEND` puts the entrance on another provider. A missing key, an unreachable server or a model nobody pulled is reported before the run starts, with the command that fixes it.
+`PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. A missing key, an unreachable OpenRouter or a model it does not route to is reported before the run starts, with the fix.
 
 ## Where things live
 
