@@ -170,6 +170,12 @@ CARRIED = (PLAN_MESOCYCLE, ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE, CHANGE_DECLARAT
 CHECKED = (ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE)
 """The handoffs whose request is assembled before they start, so a misread goes back to the model."""
 
+PLANS = (PLAN_MESOCYCLE, *CHECKED)
+"""The handoffs that open a planner run: one called while a plan is written replaces it."""
+
+WRITES = (LOG_WORKOUT, SET_UP, CHANGE_DECLARATION)
+"""The handoffs that write what the planner reads: one called while a plan is written waits for it."""
+
 SERVING = (
     "Today's workout is read off their mesocycle and goes into the chat right "
     "after your message. Tell them here it is, and say nothing about what is in it."
@@ -235,6 +241,24 @@ STARTED = {
 }
 """What a handoff call is answered with: not words for the user, but what the
 model is told so it can find its own."""
+
+MID_PLAN = """
+
+Right now the planner is still writing what they asked for before. If this
+message corrects that ask, or asks for something else to be planned, call the
+handoff for the ask as it now stands, whole: the plan being written is dropped
+for it. If it is a question, answer it; the plan carries on. If they are
+reporting training or changing what they declared, call that handoff: it is
+done once the plan arrives."""
+"""What the prompt adds while a plan is being written on the thread."""
+
+REPLACING = "The plan that was being written is dropped for this one. "
+"""What a planning handoff's answer opens with while a plan is being written."""
+
+AFTER_THE_PLAN = (
+    "That waits for the plan being written, and is done as soon as it arrives. "
+    "Tell them so."
+)
 
 ONE_AT_A_TIME = (
     "That one was not started: one thing at a time, and the first call of this "
@@ -541,11 +565,13 @@ def build(
     checking: Callable[[str, Mapping[str, Any]], str | None] | None = None,
     prepared: Callable[[str], bool] | None = None,
     store: BaseStore | None = None,
+    planning: Callable[[str], bool] | None = None,
 ) -> Entrance:
     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
 
     `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
     `prepared` says whether the next mesocycle is waiting, or being prepared, on a thread.
+    `planning` says whether a plan the user asked for is being written on a thread.
     `store` is where `remember` keeps a conclusion; without one it is not offered.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
@@ -570,6 +596,10 @@ def build(
         for tool in HANDOFFS
         if tool.__name__ in CHECKED
     ]
+
+    def on_thread(asks: Callable[[str], bool] | None) -> bool:
+        thread = get_config().get("configurable", {}).get("thread_id")
+        return asks is not None and thread is not None and asks(str(thread))
 
     def talk(state: EntranceState) -> dict[str, Any]:
         """One turn of the conversation, with the tools bound only while they are still useful.
@@ -596,7 +626,8 @@ def build(
             within = state.get("spent", 0) < budget
             definitions = [*(reads + bounded if within else []), *free]
         bound = model.bind_tools(definitions) if definitions else model
-        reply = bound.invoke([SystemMessage(TALKING), *state.get("messages", []), *asked])
+        prompt = TALKING + (MID_PLAN if not situation and on_thread(planning) else "")
+        reply = bound.invoke([SystemMessage(prompt), *state.get("messages", []), *asked])
         return born | {"budget": budget, "messages": [*asked, reply]}
 
     def read(state: EntranceState) -> dict[str, Any]:
@@ -655,8 +686,16 @@ def build(
         spent = 0
 
         def waiting() -> bool:
-            thread = get_config().get("configurable", {}).get("thread_id")
-            return prepared is not None and thread is not None and prepared(str(thread))
+            return on_thread(prepared)
+
+        mid_plan = on_thread(planning)
+
+        def started(name: str) -> str:
+            if not mid_plan:
+                return STARTED[name]
+            if name in WRITES:
+                return AFTER_THE_PLAN
+            return REPLACING + STARTED[name]
 
         for call in reply.tool_calls:
             name = call["name"]
@@ -673,13 +712,13 @@ def build(
             elif name == PLAN_MESOCYCLE and waiting():
                 said, taken = WAITING_MESOCYCLE, PREPARED
             elif name not in CHECKED:
-                said, taken = STARTED[name], name
+                said, taken = started(name), name
             elif state.get("spent", 0) + spent >= budget:
                 said = SPENT
             else:
                 refused = checked(name, call["args"])
                 if refused is None:
-                    said, taken, asked = STARTED[name], name, dict(call["args"])
+                    said, taken, asked = started(name), name, dict(call["args"])
                 elif refused == NO_MESOCYCLE and waiting():
                     said, taken = WAITING_MESOCYCLE, PREPARED
                 else:

@@ -61,9 +61,12 @@ REFUSED = "refused"
 """The validator refused every attempt the run had."""
 
 FAILED = "failed"
-"""The run raised, and whoever caught it wrote the ending the node could not.
+"""The run raised, and whoever caught it wrote the ending the node could not."""
 
-These five are every way a run can finish. A run still waiting on an
+STOPPED = "stopped"
+"""The run was stopped between graph steps because the user asked again.
+
+These six are every way a run can finish. A run still waiting on an
 answer has no ending, and neither has one that was cut: where the reader found
 it is the reader's to derive (ADR-0007, item 7).
 """
@@ -208,6 +211,22 @@ def failed(
         keep({**state, "ending": FAILED, "ended": now()}, budget, archive)
     except Exception:
         logger.exception("the run that fell over could not be written down")
+
+
+def stopped(
+    graph: Graph,
+    config: RunnableConfig,
+    budget: int,
+    archive: Path | None = None,
+) -> dict[str, Any]:
+    """The run left behind by a stop, ended as stopped and written down; its record."""
+    held = graph.get_state(config).values
+    if held.get("ending"):
+        return of(held, budget)
+    state = {**held, "ending": STOPPED, "ended": now()}
+    if archive is not None and state.get("run"):
+        keep(state, budget, archive)
+    return of(state, budget)
 
 
 def of(state: Mapping[str, Any], budget: int) -> dict[str, Any]:

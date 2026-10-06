@@ -569,3 +569,78 @@ def test_an_adaptation_past_the_budget_is_not_started(connection: sqlite3.Connec
     assert final["handoff"] == ""
     told = [m.text for m in final["messages"] if isinstance(m, ToolMessage)]
     assert told == [entrance.SPENT]
+
+
+# -- a message while a plan is being written -----------------------------------
+
+ON_A_THREAD: RunnableConfig = {"configurable": {"thread_id": "chat:1"}}
+
+
+def told_by(final: dict[str, Any]) -> list[str]:
+    return [m.text for m in final["messages"] if isinstance(m, ToolMessage)]
+
+
+def test_while_a_plan_is_written_the_model_is_told_so(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[says("Lo stacco: 3 serie.")])
+    asked: list[str] = []
+
+    def planning(thread: str) -> bool:
+        asked.append(thread)
+        return True
+
+    graph_of(model, planning=planning, checkpointer=InMemorySaver()).invoke(
+        entrance.heard("quanto ho fatto di stacco?"), ON_A_THREAD
+    )
+
+    assert asked and asked[0] == "chat:1"
+    prompt = model.seen[0][0]
+    assert isinstance(prompt, SystemMessage) and entrance.MID_PLAN in prompt.text
+
+
+def test_with_no_plan_in_flight_the_model_is_told_nothing(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(turns=[says("Ciao.")])
+
+    graph_of(model, planning=lambda thread: False, checkpointer=InMemorySaver()).invoke(
+        entrance.heard(CIAO), ON_A_THREAD
+    )
+
+    assert entrance.MID_PLAN not in model.seen[0][0].text
+
+
+def test_a_report_while_a_plan_is_written_waits_for_it(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calling(entrance.LOG_WORKOUT), says("Lo segno appena finisco.")])
+
+    final = graph_of(model, planning=lambda thread: True, checkpointer=InMemorySaver()).invoke(
+        entrance.heard("ho fatto squat, 4 serie"), ON_A_THREAD
+    )
+
+    assert final["handoff"] == entrance.LOG_WORKOUT
+    assert told_by(final) == [entrance.AFTER_THE_PLAN]
+
+
+def test_a_new_ask_while_a_plan_is_written_replaces_it(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calling(entrance.PLAN_MESOCYCLE), says("Ricomincio.")])
+
+    final = graph_of(model, planning=lambda thread: True, checkpointer=InMemorySaver()).invoke(
+        entrance.heard("anzi, rifammi il mesociclo"), ON_A_THREAD
+    )
+
+    assert final["handoff"] == entrance.PLAN_MESOCYCLE
+    assert told_by(final) == [entrance.REPLACING + entrance.STARTED[entrance.PLAN_MESOCYCLE]]
+
+
+def test_todays_workout_while_a_plan_is_written_drops_nothing(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(turns=[calling(entrance.TODAYS_WORKOUT), says("Eccolo.")])
+
+    final = graph_of(
+        model,
+        planning=lambda thread: True,
+        today=lambda: entrance.SERVING,
+        checkpointer=InMemorySaver(),
+    ).invoke(entrance.heard("cosa faccio oggi?"), ON_A_THREAD)
+
+    assert told_by(final) == [entrance.SERVING]

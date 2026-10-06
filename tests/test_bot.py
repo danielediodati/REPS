@@ -260,6 +260,7 @@ def graphs_of(
     held = saver if saver is not None else InMemorySaver()
     plans_on = plan if plan is not None else graph_of(Scripted(), checkpointer=held)
     preparing: set[str] = set()
+    stopping: dict[str, threading.Event] = {}
     return bot.Graphs(
         entrance=entrance.build(
             models.Chat(
@@ -270,6 +271,7 @@ def graphs_of(
             checkpointer=held,
             archive=kept,
             prepared=bot.prepared(plans_on, preparing),
+            planning=bot.planning(preparing, stopping),
         ),
         planner=plans_on,
         logger=log if log is not None else logger_graph_of(Scripted(), checkpointer=held),
@@ -289,6 +291,7 @@ def graphs_of(
         ),
         archive=kept,
         preparing=preparing,
+        stopping=stopping,
     )
 
 
@@ -299,6 +302,7 @@ def turns_of(graphs: bot.Graphs) -> bot.Turns:
         run=bot.talking(graphs),
         resume=bot.answering(graphs),
         relay=bot.relaying(graphs),
+        interject=bot.interjecting(graphs),
     )
 
 
@@ -3008,3 +3012,117 @@ def test_only_thirty_minutes_today_is_an_adaptation_and_leaves_the_file_alone(
         {"configurable": {"thread_id": bot.under(bot.thread_for(CHAT), bot.ONBOARDING)}}
     )
     assert not interview.values, "no onboarding ran"
+
+
+# -- a message while a plan is being written -----------------------------------
+
+
+class Held(Scripted):
+    """A planner whose first turn waits to be let go, saying when it has started."""
+
+    entered: Any = None
+    went_on: Any = None
+
+    def _generate(self, messages: Any, *args: Any, **kwargs: Any) -> Any:
+        self.entered.set()
+        assert self.went_on.wait(5), "the planner was never let go"
+        return super()._generate(messages, *args, **kwargs)
+
+
+def held_planner(*documents: BaseModel) -> Held:
+    return Held(entered=threading.Event(), went_on=threading.Event(), documents=list(documents))
+
+
+async def mid_plan(
+    coach: bot.Turns, model: Held, watched: Channels, then: Callable[[], Any]
+) -> None:
+    """The owner asks for a plan, and `then` happens while the planner is on its first call."""
+    first = asyncio.create_task(
+        coach.arriving(OWNER, CHAT, "preparami un mesociclo", watched.chat)
+    )
+    for _ in range(500):
+        if model.entered.is_set():
+            break
+        await asyncio.sleep(0.01)
+    assert model.entered.is_set(), "the planner never started"
+    await then()
+    model.went_on.set()
+    await first
+
+
+def test_a_correction_mid_plan_stops_the_run_and_its_plan_is_the_one_offered(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    model = held_planner(A_MESOCYCLE)
+    graph = graph_of(model, checkpointer=InMemorySaver(), archive=tmp_path / "runs")
+    graphs = graphs_of(graph, archive=tmp_path / "runs")
+    coach = turns_of(graphs)
+    watched = Channels()
+
+    async def correcting() -> None:
+        await coach.arriving(OWNER, CHAT, "anzi, rifallo da capo", watched.chat)
+        assert watched.offers == [], "nothing offered while the correction is read"
+
+    asyncio.run(mid_plan(coach, model, watched, correcting))
+
+    assert watched.said == [SAYS, SAYS], "both messages answered by the entrance"
+    (offer,) = watched.offers
+    assert "4 cicli" in offer[0]
+    (stopped,) = [one for one in documents(tmp_path / "runs") if one["ending"] == "stopped"]
+    asyncio.run(coach.tapped(OWNER, CHAT, offer[1][0][0], Channels().chat))
+    (kept,) = [
+        one for one in documents(tmp_path / "runs") if one["ending"] == run_record.ACCEPTED
+    ]
+    assert kept["negotiation"] == stopped["negotiation"], "the same negotiation"
+    assert kept["follows"] == stopped["run"]
+
+
+def test_a_question_mid_plan_is_answered_before_the_plan_arrives(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    model = held_planner(A_MESOCYCLE)
+    front = Talking(handoff=entrance.PLAN_MESOCYCLE)
+    graphs = graphs_of(graph_of(model, checkpointer=InMemorySaver()), front=front)
+    coach = turns_of(graphs)
+    watched = Channels()
+
+    async def asking_meanwhile() -> None:
+        front.handoff, front.says = "", "Tre serie, l'ultima volta."
+        await coach.arriving(OWNER, CHAT, "quanto ho fatto di stacco?", watched.chat)
+        assert watched.said == [SAYS, "Tre serie, l'ultima volta."], "answered at once"
+        assert watched.offers == []
+
+    asyncio.run(mid_plan(coach, model, watched, asking_meanwhile))
+
+    (offer,) = watched.offers
+    assert "4 cicli" in offer[0], "and the plan still arrives"
+
+
+def test_a_report_mid_plan_waits_for_the_plan(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    identifier = prescribe(catalogued)
+    logging_model = scripted(
+        AIMessage(content="chiaro"),
+        emits=report(workout_id=identifier, report="squat, 4 giri"),
+    )
+    model = held_planner(A_MESOCYCLE)
+    front = Talking(handoff=entrance.PLAN_MESOCYCLE)
+    graphs = graphs_of(
+        graph_of(model, checkpointer=InMemorySaver()),
+        front=front,
+        log=logger_graph_of(logging_model, checkpointer=InMemorySaver()),
+    )
+    coach = turns_of(graphs)
+    watched = Channels()
+
+    async def reporting_meanwhile() -> None:
+        front.handoff = entrance.LOG_WORKOUT
+        await coach.arriving(OWNER, CHAT, "ieri squat, 4 giri", watched.chat)
+        assert logging_model.seen == [], "queued, not read"
+
+    asyncio.run(mid_plan(coach, model, watched, reporting_meanwhile))
+
+    assert len(watched.offers) == 1, "the plan was not stopped"
+    assert watched.said == [SAYS, SAYS, entrance.LOGGED]
+    assert workout_states(catalogued) == ["performed"]

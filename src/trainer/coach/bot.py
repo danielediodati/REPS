@@ -7,6 +7,7 @@ import contextlib
 import logging
 import os
 import random
+import threading
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -357,8 +358,20 @@ whatever a run it is holding could not say for itself -- and none of those is
 a run.
 """
 
-Turn = str | Tap
-"""One piece of work on a thread: something the user wrote, or a button they tapped."""
+@dataclass(frozen=True)
+class Later:
+    """Work a message decided on while the thread was busy, run once the turn in flight is done."""
+
+    work: Callable[[Chat], Awaitable[None]]
+    first: bool = False
+    """Ahead of what is already queued: the run that replaces a stopped one."""
+
+
+Turn = str | Tap | Later
+"""One piece of work on a thread: something the user wrote, a button they tapped, or work already decided."""
+
+Interject = Callable[[str, str, Chat], Awaitable[str | Later | None]]
+"""A message arriving while the thread is busy, read now: answered (`None`), work for later, or the text to queue."""
 
 Waiting = tuple[Turn, Chat]
 """A turn queued behind a run, with the chat it arrived on."""
@@ -377,7 +390,9 @@ class Turns:
 
     The turn-taking and nothing else. It was `Coach` until ADR-0006, which
     needed the word for the node that does the coaching: what this holds is
-    whether the thread is busy and what arrived while it was.
+    whether the thread is busy and what arrived while it was. A message that
+    arrives meanwhile goes to `interject` first, which may answer it, stop the
+    run in flight, or hand it back to be queued.
     """
 
     def __init__(
@@ -386,11 +401,13 @@ class Turns:
         run: Run,
         resume: Resume | None = None,
         relay: Relay | None = None,
+        interject: Interject | None = None,
     ) -> None:
         self._owner_id = owner_id
         self._run = run
         self._resume = resume
         self._relay = relay
+        self._interject = interject
         self._threads: dict[str, _Conversation] = {}
 
     async def started(self, user_id: int, chat_id: int, chat: Chat) -> None:
@@ -407,12 +424,11 @@ class Turns:
     async def arriving(
         self, user_id: int, chat_id: int, text: str, chat: Chat
     ) -> None:
-        """One message, run now or queued behind the run already in flight.
+        """One message, run now, or read while the run in flight goes on.
 
-        Queued rather than dropped, and never a second run on the same thread:
-        on Ollama a run is minutes, and cancelling one to start another throws
-        all of them away. *"Actually, 30 minutes"* is not this -- it is ticket
-        03's interrupt, which resumes the run instead of racing it.
+        Never a second run on the same thread: what `interject` hands back is
+        queued behind the one in flight, or ahead of the queue when it replaces
+        a run it stopped.
         """
         if not self._answers(user_id):
             return
@@ -437,6 +453,22 @@ class Turns:
 
     async def _turn(self, thread: str, turn: Turn, chat: Chat) -> None:
         conversation = self._threads.setdefault(thread, _Conversation())
+        if conversation.busy and isinstance(turn, str) and self._interject is not None:
+            decided = await self._interjected(thread, turn, chat)
+            if decided is None:
+                return
+            if isinstance(decided, Later):
+                if not conversation.busy:
+                    # The run it was read against ended while it was read.
+                    await self._turn(thread, decided, chat)
+                elif decided.first:
+                    conversation.waiting.insert(0, (decided, chat))
+                else:
+                    conversation.waiting.append((decided, chat))
+                return
+            if not conversation.busy:
+                await self._turn(thread, decided, chat)
+                return
         if conversation.busy:
             # Queued before the acknowledgement is attempted, not after: a chat
             # that cannot be written to must not also cost the message.
@@ -478,11 +510,23 @@ class Turns:
             if isinstance(turn, Tap):
                 assert self._resume is not None, "a tap reached a coach with no graph"
                 await self._resume(thread, turn, chat)
+            elif isinstance(turn, Later):
+                await turn.work(chat)
             else:
                 await self._run(thread, turn, chat)
         except Exception:
             logger.exception("the run on %s failed", thread)
             await self._tell(thread, chat, FAILED)
+
+    async def _interjected(self, thread: str, text: str, chat: Chat) -> str | Later | None:
+        """The message read while the thread is busy, with its failure said instead of raised."""
+        assert self._interject is not None
+        try:
+            return await self._interject(thread, text, chat)
+        except Exception:
+            logger.exception("the message mid-run on %s failed", thread)
+            await self._tell(thread, chat, FAILED)
+            return None
 
     async def _tell(self, thread: str, chat: Chat, line: str) -> None:
         """One line into the chat, whose failure is never the caller's problem.
@@ -550,6 +594,9 @@ class Graphs:
     preparing: set[str] = field(default_factory=set)
     """The planner threads whose next mesocycle is being prepared right now."""
 
+    stopping: dict[str, threading.Event] = field(default_factory=dict)
+    """The planner threads with a run in flight, each with the flag that stops it."""
+
     background: set[asyncio.Task[None]] = field(default_factory=set)
     """The preparations in flight, held so the loop does not drop them."""
 
@@ -565,6 +612,7 @@ class Graphs:
                 self.archive,
                 supervisor=self.supervisor,
                 preparing=self.preparing,
+                stopping=self.stopping,
             ),
         )
 
@@ -600,21 +648,77 @@ def talking(graphs: Graphs) -> Run:
             return
         final = await _entrance(graphs, thread, entrance.heard(text))
         await _spoken(final, thread, chat)
-        handoff = str(final.get("handoff", ""))
-        if handoff == entrance.TODAYS_WORKOUT:
-            await _serving(thread, chat)
-        elif handoff == entrance.PREPARED:
-            await _reoffered(graphs, thread, chat)
-        elif handoff in (entrance.PLAN_MESOCYCLE, *entrance.CHECKED):
-            await _planning(graphs, thread, final, chat)
-        elif handoff == entrance.LOG_WORKOUT:
-            await _logging(graphs, thread, text, final, chat)
-        elif handoff == entrance.SET_UP:
-            await _onboarding(graphs, thread, text, final, chat)
-        elif handoff == entrance.CHANGE_DECLARATION:
-            await _changing(graphs, thread, text, final, chat)
+        await _handed_on(graphs, thread, text, final, chat)
 
     return run
+
+
+async def _handed_on(
+    graphs: Graphs,
+    thread: str,
+    text: str,
+    final: Mapping[str, Any],
+    chat: Chat,
+    following: bool = False,
+) -> None:
+    """The subgraph the entrance's turn reached for, run; `following` opens a plan after a stopped run."""
+    handoff = str(final.get("handoff", ""))
+    if handoff == entrance.TODAYS_WORKOUT:
+        await _serving(thread, chat)
+    elif handoff == entrance.PREPARED:
+        await _reoffered(graphs, thread, chat)
+    elif handoff in entrance.PLANS:
+        await _planning(graphs, thread, final, chat, following)
+    elif handoff == entrance.LOG_WORKOUT:
+        await _logging(graphs, thread, text, final, chat)
+    elif handoff == entrance.SET_UP:
+        await _onboarding(graphs, thread, text, final, chat)
+    elif handoff == entrance.CHANGE_DECLARATION:
+        await _changing(graphs, thread, text, final, chat)
+
+
+def interjecting(graphs: Graphs) -> Interject:
+    """A message arriving while a plan is written, read by the entrance instead of queued.
+
+    Anything else the thread is busy with -- a report, an interview, a tap --
+    hands the text back to be queued, as does a message an interview or a
+    logger question is waiting on.
+    """
+
+    async def interject(thread: str, text: str, chat: Chat) -> str | Later | None:
+        on = _reading(under(thread, PLANNING))
+        if (
+            not graphs.negotiation.running(on)
+            or graphs.negotiation.preparing(on)
+            or await asyncio.to_thread(_interviewing, graphs, thread)
+            or await asyncio.to_thread(_asking, graphs, thread) is not None
+        ):
+            return text
+        final = await _entrance(graphs, thread, entrance.heard(text))
+        await _spoken(final, thread, chat)
+        handoff = str(final.get("handoff", ""))
+        if handoff in entrance.PLANS:
+            graphs.negotiation.stop(on)
+            return Later(
+                lambda later: _handed_on(graphs, thread, text, final, later, following=True),
+                first=True,
+            )
+        if handoff in entrance.WRITES:
+            return Later(lambda later: _handed_on(graphs, thread, text, final, later))
+        await _handed_on(graphs, thread, text, final, chat)
+        return None
+
+    return interject
+
+
+def planning(preparing: set[str], stopping: Mapping[str, threading.Event]) -> Callable[[str], bool]:
+    """Whether a plan the user asked for is being written on a chat thread."""
+
+    def asked(thread: str) -> bool:
+        on = under(thread, PLANNING)
+        return on in stopping and on not in preparing
+
+    return asked
 
 
 def relaying(graphs: Graphs) -> Relay:
@@ -702,12 +806,17 @@ def _served() -> str | None:
 
 
 async def _planning(
-    graphs: Graphs, thread: str, final: Mapping[str, Any], chat: Chat
+    graphs: Graphs,
+    thread: str,
+    final: Mapping[str, Any],
+    chat: Chat,
+    following: bool = False,
 ) -> None:
     """The planner, asked for a mesocycle, a change or an adaptation, behind the turn the entrance has already answered.
 
     A request opened here supersedes any plan the thread was still waiting on,
-    and a tap on that one is answered as superseded.
+    and a tap on that one is answered as superseded. `following` opens it in
+    the negotiation of the run it replaced, as the run after it.
 
     Assembling the request is a synchronous read of SQLite and of the
     declaration, and it is the half that can be refused -- so it happens
@@ -726,7 +835,12 @@ async def _planning(
         logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
         await chat.say(BLOCKED)
         return
-    await _proposing(graphs, thread, request, chat, entrance.carried(final))
+    carrying = entrance.carried(final)
+    if following:
+        carrying |= await asyncio.to_thread(
+            graphs.negotiation.continuing, _reading(under(thread, PLANNING))
+        )
+    await _proposing(graphs, thread, request, chat, carrying)
 
 
 async def _proposing(
@@ -1218,6 +1332,10 @@ async def told(
             # No plan to offer, and saying nothing would leave the user
             # waiting on a run that ended.
             await _relay(graphs, thread, entrance.NO_PLAN, chat)
+        case negotiations.Stopped():
+            # The entrance said so when it stopped it, and its replacement is
+            # next in the queue.
+            pass
 
 
 async def reported(
@@ -1684,6 +1802,7 @@ def graphs(
     """
     plans_on = planner.build(on, checkpointer=saver, archive=archive, store=store)
     preparing: set[str] = set()
+    stopping: dict[str, threading.Event] = {}
     return Graphs(
         entrance=entrance.build(
             front,
@@ -1691,6 +1810,7 @@ def graphs(
             archive=archive,
             prepared=prepared(plans_on, preparing),
             store=store,
+            planning=planning(preparing, stopping),
         ),
         planner=plans_on,
         logger=logger_graph.build(
@@ -1704,6 +1824,7 @@ def graphs(
         ),
         archive=archive,
         preparing=preparing,
+        stopping=stopping,
     )
 
 
@@ -1734,5 +1855,6 @@ def serve(
         run=talking(built),
         resume=answering(built),
         relay=relaying(built),
+        interject=interjecting(built),
     )
     application(declared, coach).run_polling()

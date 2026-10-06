@@ -113,7 +113,7 @@ _Avoid_: conversation, which says the same thing loosely.
 **Entrance**: the node the user talks to. It holds the conversation on a model of its own, answers what the engine's read tools can answer, and reaches the planner and the logger as tools (ADR-0006). It states no training fact a tool did not give it, and it decides nothing the engine decides.
 _Avoid_: router, which is what it replaced, and supervisor, which is session 15's.
 
-**Situation**: one thing that happened, named by the machine for the entrance to say in its own words — a plan accepted, a message arriving mid-run, a plan the thread has moved past. The name is the machine's and the sentence is the model's; a situation whose words are fixed is a constant by another name.
+**Situation**: one thing that happened, named by the machine for the entrance to say in its own words — a plan accepted, a message queued behind a run, a plan the thread has moved past. The name is the machine's and the sentence is the model's; a situation whose words are fixed is a constant by another name.
 
 **Run**: one thing a graph was asked for, pursued to an end — a proposal from the request being assembled to the user's answer, or one report read into a document. It survives a restart, it can wait days on a pending question, and it is over once it is answered. A plan turned down ends the run that offered it; the plan that follows belongs to another.
 _Avoid_: calling one invocation of the graph a run, or one message in the queue.
@@ -121,7 +121,7 @@ _Avoid_: calling one invocation of the graph a run, or one message in the queue.
 **Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for a mesocycle*, a change to it, or an adaptation. The machine opens one when a mesocycle's last cycle ends. What a refusal leaves behind belongs to it, never to the run that was refused.
 _Avoid_: request, which is what a single run is given.
 
-**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, or fallen over. *Done* is a run with nothing to accept or turn down, which is what reading a report is. A run that is waiting on an answer has no ending, and neither has one that was cut.
+**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, fallen over, or stopped. *Done* is a run with nothing to accept or turn down, which is what reading a report is. *Stopped* is a run the user replaced mid-plan with a correction or a new ask; the run that replaces it follows it in the same negotiation. A run that is waiting on an answer has no ending, and neither has one that was cut.
 
 **Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
 

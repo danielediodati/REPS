@@ -196,3 +196,79 @@ def test_preparing_is_nothing_when_no_mesocycle_has_ended(
 
     assert talks.prepare(PLANNING, DIRECTING) is None
     assert planned.seen == []
+
+
+def test_a_run_stopped_between_steps_offers_nothing_and_is_written_as_stopped(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    planned = Scripted(documents=[plan_of("Barbell_Squat")])
+    talks = negotiation_of(planned, tmp_path)
+    seen: list[bool] = []
+
+    def watching(chunk: dict[str, object]) -> None:
+        seen.append(talks.running(PLANNING))
+        talks.stop(PLANNING)
+
+    stopped = talks.open(PLANNING, BARBELL_45, progress=watching)
+
+    assert isinstance(stopped, negotiations.Stopped)
+    assert stopped.record["ending"] == "stopped"
+    assert seen[0], "running while it streams"
+    assert not talks.running(PLANNING)
+    assert talks.pending(PLANNING) is None, "a stopped run leaves nothing to tap"
+    assert len(planned.seen) == 1, "nothing after the call already sent"
+    assert planned.documents, "the plan was never emitted"
+    (written,) = (tmp_path / "runs" / stopped.record["negotiation"]).iterdir()
+    assert '"ending": "stopped"' in written.read_text(encoding="utf-8")
+
+
+def test_stopping_with_nothing_in_flight_stops_nothing(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    talks = negotiation_of(Scripted(documents=[plan_of("Barbell_Squat")]), tmp_path)
+
+    assert not talks.running(PLANNING)
+    assert not talks.stop(PLANNING)
+    assert isinstance(talks.open(PLANNING, BARBELL_45), negotiations.Proposed)
+
+
+def test_the_ask_after_a_stop_opens_in_its_negotiation_following_it(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    talks = negotiation_of(
+        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press")]),
+        tmp_path,
+    )
+    def correcting(chunk: dict[str, object]) -> None:
+        talks.stop(PLANNING)
+
+    stopped = talks.open(PLANNING, BARBELL_45, progress=correcting)
+    assert isinstance(stopped, negotiations.Stopped)
+
+    after = talks.open(PLANNING, BARBELL_45, carrying=talks.continuing(PLANNING))
+
+    assert isinstance(after, negotiations.Proposed)
+    assert after.plan == plan_of("Barbell_Squat")
+    accepted = talks.answer(PLANNING, after.id, planner.accepted())
+    assert isinstance(accepted, negotiations.Accepted)
+    assert accepted.record["negotiation"] == stopped.record["negotiation"]
+    assert accepted.record["follows"] == stopped.record["run"]
+    assert len(workout_rows(catalogued)) == 1
+
+
+def test_a_stop_that_comes_as_the_run_ends_does_not_relabel_its_ending(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    talks = negotiation_of(Scripted(documents=[plan_of("Barbell_Squat")]), tmp_path)
+    offered = talks.open(PLANNING, BARBELL_45)
+    assert isinstance(offered, negotiations.Proposed)
+
+    def late(chunk: dict[str, object]) -> None:
+        if "prescribe" in chunk:
+            talks.stop(PLANNING)
+
+    accepted = talks.answer(PLANNING, offered.id, planner.accepted(), progress=late)
+
+    assert isinstance(accepted, negotiations.Accepted)
+    assert accepted.record["ending"] == "accepted"
+    assert len(workout_rows(catalogued)) == 1

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -56,7 +57,14 @@ class Superseded:
     """The answer was to a proposal no longer in hand, and nothing was written."""
 
 
-Outcome = Proposed | Accepted | Refused | Superseded
+@dataclass(frozen=True)
+class Stopped:
+    """The run was stopped between graph steps for a newer ask, and nothing was offered."""
+
+    record: dict[str, Any]
+
+
+Outcome = Proposed | Accepted | Refused | Superseded | Stopped
 
 
 def outcome(final: Mapping[str, Any], budget: int = tools.CALL_BUDGET) -> Outcome:
@@ -95,12 +103,14 @@ class Negotiation:
         budget: int = tools.CALL_BUDGET,
         supervisor: supervisor_graph.Supervisor | None = None,
         preparing: set[str] | None = None,
+        stopping: dict[str, threading.Event] | None = None,
     ) -> None:
         self._planner = planning
         self._archive = archive
         self._budget = budget
         self._supervisor = supervisor
         self._preparing = preparing if preparing is not None else set()
+        self._stopping = stopping if stopping is not None else {}
         self._claiming = threading.Lock()
 
     def open(
@@ -140,6 +150,23 @@ class Negotiation:
             bool(held.values.get("unasked")),
         )
 
+    def running(self, on: RunnableConfig) -> bool:
+        """Whether a run is in flight on this thread right now."""
+        return _thread(on) in self._stopping
+
+    def stop(self, on: RunnableConfig) -> bool:
+        """The run in flight on this thread stopped before its next graph step; whether there was one."""
+        flag = self._stopping.get(_thread(on))
+        if flag is None:
+            return False
+        flag.set()
+        return True
+
+    def continuing(self, on: RunnableConfig) -> dict[str, Any]:
+        """What opens the next run in the negotiation of this thread's last run, following it."""
+        last = self._planner.get_state(on).values
+        return {"negotiation": str(last.get("negotiation", "")), "follows": last.get("run")}
+
     def preparing(self, on: RunnableConfig) -> bool:
         """Whether the next mesocycle is being prepared on this thread right now."""
         return _thread(on) in self._preparing
@@ -175,18 +202,38 @@ class Negotiation:
 
     def _ran(self, given: Any, on: RunnableConfig, progress: Progress | None) -> Outcome:
         final: dict[str, Any] = {}
+        thread = _thread(on)
+        flag = self._stopping[thread] = threading.Event()
+        stopped = False
         try:
-            for mode, chunk in cast(
-                Iterator[tuple[str, dict[str, Any]]],
-                self._planner.stream(given, on, stream_mode=["updates", "values"]),
-            ):
-                if mode == "values":
+            with contextlib.closing(
+                cast(
+                    Generator[tuple[str, dict[str, Any]]],
+                    self._planner.stream(given, on, stream_mode=["updates", "values"]),
+                )
+            ) as streaming:
+                for mode, chunk in streaming:
+                    if mode != "values":
+                        if progress is not None:
+                            progress(chunk)
+                        continue
                     final = chunk
-                elif progress is not None:
-                    progress(chunk)
+                    # Checked on whole steps only, and never on one that ended
+                    # the run or reached a proposal: that run is over, and
+                    # stopping it would relabel what it wrote or leave a plan
+                    # pending that nobody was shown.
+                    over = "__interrupt__" in chunk or bool(chunk.get("ending"))
+                    if flag.is_set() and not over:
+                        stopped = True
+                        break
         except Exception:
             records.failed(self._planner, on, self._budget, self._archive)
             raise
+        finally:
+            if self._stopping.get(thread) is flag:
+                del self._stopping[thread]
+        if stopped:
+            return Stopped(records.stopped(self._planner, on, self._budget, self._archive))
         return outcome(final, self._budget)
 
 
