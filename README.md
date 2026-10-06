@@ -1,12 +1,41 @@
-# REPS
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="REPS" width="352">
+  </picture>
+</p>
 
-> *Reasoning Engine for Personal Strength.* A strength coach built as an agent: a deterministic engine defines what is possible, and a LangGraph agent decides what is good, over weeks, through a Telegram chat, on models reached through OpenRouter.
+<p align="center">
+  <a href="https://github.com/dquadro/REPS/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/dquadro/REPS/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://github.com/dquadro/REPS/actions/workflows/tests.yml"><img alt="coverage" src="https://github.com/dquadro/REPS/raw/badges/coverage.svg"></a>
+  <a href="https://github.com/dquadro/REPS/tags"><img alt="release" src="https://github.com/dquadro/REPS/raw/badges/release.svg"></a>
+  <a href="LICENSE"><img alt="licence: MIT" src="https://img.shields.io/badge/licence-MIT-blue"></a>
+  <br>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white">
+  <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-agent%20graph-1C3C3C?logo=langchain&logoColor=white">
+  <img alt="mypy strict" src="https://img.shields.io/badge/mypy-strict-2A6DB2">
+  <img alt="uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?logo=uv&logoColor=white">
+  <img alt="Telegram bot" src="https://img.shields.io/badge/Telegram-bot-26A5E4?logo=telegram&logoColor=white">
+</p>
+
+**A strength coach you talk to in Telegram**: a LangGraph agent decides what is good, over a deterministic engine that defines what is possible, on models reached through OpenRouter.
 
 REPS is not a plan generator: **it is a loop**. You report a workout in your own words; when that ends a mesocycle, a supervisor reads the ones before it and decides where the next goes, and the planner plans it from there.
 
 - [TRAINER.md](TRAINER.md): the design
 - [ROADMAP.md](ROADMAP.md): what is built and what comes next
 - [docs/adr/](docs/adr/): decisions ([ADR-0004](docs/adr/0004-an-agent-graph-over-the-engine-reached-through-telegram.md) is the architecture)
+
+## The demo
+
+The recorded demo, and its GIF, land here with `1.0.0`. Until then it runs from a script, once [set up](#getting-started):
+
+```sh
+uv run trainer demo ~/reps-demo
+TRAINER_HOME=~/reps-demo uv run trainer bot
+```
+
+`trainer demo` builds a home from nothing: the catalog, then three mesocycles performed ([docs/demo/history.toml](docs/demo/history.toml)): hypertrophy, new angles, then strength after the goal changed, the last one workout from its end. In the chat, ask for today's workout and report it: the third mesocycle ends, and the fourth arrives with its direction.
 
 ## Status
 
@@ -20,6 +49,7 @@ REPS is not a plan generator: **it is a loop**. You report a workout in your own
 | *«cosa faccio oggi?»* | today's workout, read off the mesocycle as the first of the cycle not yet performed, the last load beside each exercise |
 | *«panca bene, solo 3 serie di military»* | the logger writes what you did, asking when the words leave a number open |
 | that report ends the mesocycle's last cycle | the supervisor writes the next one's direction, the planner plans from it, and it arrives with that direction in a line |
+| *«anzi, ho solo 30 minuti»* while a plan is being written | the plan in flight is stopped and the new ask planned instead; a question is answered at once and the plan goes on; a report waits for it |
 | *«oggi ho 30 minuti»*, *«niente squat»* | this workout adapted, or the mesocycle rewritten; when the words do not say which, it asks *«solo oggi o d'ora in poi?»* |
 | *«ho comprato un bilanciere»* | the interview reruns on that alone, a new dated version of your declarations is kept beside the old, and the running mesocycle is kept, rewritten or replaced |
 | *«la cyclette mi annoia»* | a conclusion kept with your sentence beside it, refused unless you wrote that sentence; every plan after it reads it as a preference |
@@ -67,7 +97,7 @@ Every node has an eval suite with a bar declared before its first run (ADR-0010)
 
 ## Getting started
 
-Requires [uv](https://docs.astral.sh/uv/). Copy `.env.example` to `.env` and fill in a provider's key and the Telegram lines.
+Requires [uv](https://docs.astral.sh/uv/). Copy `.env.example` to `.env` and fill in `OPENROUTER_API_KEY` and the Telegram lines.
 
 ```sh
 uv sync
@@ -77,15 +107,6 @@ uv run trainer bot        # the first message starts the interview
 ```
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, from @BotFather, and `TELEGRAM_OWNER_ID`, the only user it answers, from @userinfobot. It long-polls: no public IP, no tunnel. One chat is one thread, and the conversation survives a restart. Every model is checked before it starts.
-
-## The demo
-
-```sh
-uv run trainer demo ~/reps-demo
-TRAINER_HOME=~/reps-demo uv run trainer bot
-```
-
-`trainer demo` builds a home from nothing: the catalog, then three mesocycles performed ([docs/demo/history.toml](docs/demo/history.toml)): hypertrophy, new angles, then strength after the goal changed, the last one workout from its end. In the chat, ask for today's workout and report it: the third mesocycle ends, and the fourth arrives with its direction.
 
 ## The command line
 
@@ -135,7 +156,7 @@ Everything the machine writes is in `~/.reps`; `TRAINER_HOME` moves it, so repla
 | `eval-runs/` | `TRAINER_EVAL_RUNS` | each eval run's record |
 | `trainer.log` | — | every state and exception, never the token or the owner id; rotated at a megabyte, four files deep |
 
-**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens, seconds per node and dollars charged. It reads documents only, so it works when the provider is what is wrong.
+**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, stopped by a message mid-plan, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens, seconds per node and dollars charged. It reads documents only, so it works when the provider is what is wrong.
 
 ## Development
 
@@ -165,3 +186,7 @@ docs/
   logging/ onboarding/ adapting/ supervising/  eval sets and their bars
   research/   notes behind decisions
 ```
+
+## Licence
+
+[MIT](LICENSE).

@@ -1,0 +1,41 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+# One run at a time, so two runs never race to rewrite the badges branch.
+concurrency:
+  group: tests
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run mypy
+      - run: uv run pytest --cov=trainer --cov-report=term --cov-report=json
+      - name: Badges
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          uv run python .github/scripts/badges.py coverage.json "$(git describe --tags --abbrev=0)" badges
+          cd badges
+          git init -q -b badges
+          git add .
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -qm "Badges for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
