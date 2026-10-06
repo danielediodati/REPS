@@ -20,5 +20,5 @@
 | 01 | One suite runner (done) | — |
 | 02 | One Negotiation, two doors (done) | — |
 | 03 | The entrance reads a message mid-plan (done) | 02 |
-| 04 | One roster of node models | — |
+| 04 | One roster of node models (done) | — |
 | 05 | The front page | 01-04 |
