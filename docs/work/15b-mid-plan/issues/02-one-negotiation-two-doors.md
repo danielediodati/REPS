@@ -17,7 +17,7 @@ The negotiation has no module; it is a string in the planner's state, and its li
 | a tap answers the plan in hand or is told it is superseded; a new run supersedes the pending one; is the next mesocycle already offered or being prepared | `coach/bot.py` (`answering` :1069, `_planning` :688, `_preparing` :1231, `_asked_for` :1252, `prepared` :1210, `Graphs.preparing`) |
 | reading what happened | `coach/runs.py` |
 
-The CLI drives the same life with its own code: `cli._ran` (:1710) invokes and resumes as accepted. The only test of "at most one plan" is `tests/test_bot.py:1488`, through a fake Telegram chat.
+The CLI drives the same life with its own code: `cli._ran` (:1507) invokes and resumes as accepted. The only test of "at most one plan" is `tests/test_bot.py:1488`, through a fake Telegram chat.
 
 ## Decided
 

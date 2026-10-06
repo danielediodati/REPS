@@ -14,9 +14,10 @@ Which model each of the five nodes runs on is spread over:
 |---|---|
 | four parallel constants per node: `X_MODEL_ENV`, `X_REASONING_ENV`, `X_HOST_ENV`, `X_CHOICE`, then `_CHOICES` mapping them again | `coach/models.py:49-130, 316` |
 | one factory per node; the entrance branches on its own backend | `models.py:292-392` |
-| five models built and checked one by one at start-up | `cli.bot_command` (:1004-1017) |
+| five models built and checked one by one at start-up | `cli.bot_command` (:801-814) |
+| each eval suite builds the nodes it runs in its own `chats()`, by role name; `eval_runner.run` checks them one by one | `*_evaluation.py`, `eval_runner.py` (since 15b.1) |
 | five Chats passed positionally, two of them with fallbacks of their own: onboarding to the entrance's, supervisor to the planner's. `models.onboarding()` falls back to the coach's model instead; only tests reach `bot.graphs`' fallbacks today | `bot.graphs` (:1682) |
-| a test helper that stands in a model for four node names and misses `supervisor` | `tests/test_cli.py` `stand_in` (:1682) |
+| a test helper that stands in a model for four node names and misses `supervisor`, and a second that lists all five | `tests/test_cli.py` `stand_in` (:1682), `tests/test_eval_suites.py` `scripted` |
 
 A sixth node means touching all five places.
 

@@ -17,7 +17,7 @@
 
 | # | Ticket | Blocked by |
 |---|---|---|
-| 01 | One suite runner | — |
+| 01 | One suite runner (done) | — |
 | 02 | One Negotiation, two doors | — |
 | 03 | The entrance reads a message mid-plan | 02 |
 | 04 | One roster of node models | — |
