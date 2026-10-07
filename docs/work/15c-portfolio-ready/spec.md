@@ -2,7 +2,7 @@
 
 **Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *«anzi, ho solo 30 minuti»* mid-plan brings the 30-minute plan. Recorded, with a GIF in the README.
 
-Its tickets are cut when it opens: the recorded demo, the repository made public, and the fixes found using `1.0.0rc1`.
+Tickets 01 and 02 are the fixes found using `1.0.0rc1` on the demo's home, 2026-10-07. A substitute exercise inheriting its block's numbers was raised and dropped by the user: likely not a real problem.
 
 ## Carried from 15.5
 
