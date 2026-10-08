@@ -227,22 +227,12 @@ def under(thread: str, graph: str) -> str:
 
 KEPT = "ok"
 TURNED_DOWN = "no"
-SHORTER = "30"
 
 CONFIRMED = "y"
 DECLINED = "n"
 
-SHORTER_MINUTES = 30
-
-BUTTONS = (
-    (KEPT, "Va bene"),
-    (TURNED_DOWN, "Non mi va"),
-    (SHORTER, f"Solo {SHORTER_MINUTES} minuti"),
-)
-"""The three answers a proposed plan takes, as (action, label)."""
-
-MESOCYCLE_BUTTONS = BUTTONS[:2]
-"""A mesocycle is kept or turned down; a shorter one is an adaptation of a day, not of it."""
+BUTTONS = ((KEPT, "Va bene"), (TURNED_DOWN, "Non mi va"))
+"""The two answers a proposed plan takes, as (action, label); anything else is asked in words."""
 
 CONFIRM = ((CONFIRMED, "Sì"), (DECLINED, "No"))
 """The two answers the exclusion the logger proposes takes.
@@ -255,10 +245,7 @@ buttons that shape.
 ACTIONS = dict(BUTTONS) | dict(CONFIRM)
 """Every action a callback may carry, so one tap is recognised and no other is."""
 
-SAID = {
-    TURNED_DOWN: "Non mi va questo allenamento.",
-    SHORTER: f"Ho solo {SHORTER_MINUTES} minuti.",
-}
+SAID = {TURNED_DOWN: "Non mi va questo allenamento."}
 """What a tap means in words, because the planner is told why and not which button."""
 
 EXCLUSION_ASKED = (
@@ -669,6 +656,11 @@ async def _handed_on(
         await _reoffered(graphs, thread, chat)
     elif handoff in entrance.PLANS:
         await _planning(graphs, thread, final, chat, following)
+    elif handoff == entrance.ACCEPT_PLAN:
+        await _answered(graphs, thread, None, planner.accepted(), chat)
+    elif handoff == entrance.TURN_DOWN_PLAN:
+        said = str(dict(final.get("asked", {})).get("said", "")) or text
+        await _answered(graphs, thread, None, planner.refused(said), chat)
     elif handoff == entrance.LOG_WORKOUT:
         await _logging(graphs, thread, text, final, chat)
     elif handoff == entrance.SET_UP:
@@ -719,6 +711,24 @@ def planning(preparing: set[str], stopping: Mapping[str, threading.Event]) -> Ca
         return on in stopping and on not in preparing
 
     return asked
+
+
+def proposing(plans_on: planner.Planner, stopping: Mapping[str, threading.Event]) -> Callable[[str], str | None]:
+    """The kind of plan waiting on the user's answer on a chat thread, or nothing."""
+    talks = negotiations.Negotiation(plans_on)
+
+    def waiting(thread: str) -> str | None:
+        on = _reading(under(thread, PLANNING))
+        if under(thread, PLANNING) in stopping:
+            return None
+        held = talks.pending(on)
+        if held is None or negotiations.passed(held.request):
+            return None
+        if isinstance(held.request, plans.Request):
+            return entrance.ADAPTATION
+        return entrance.CHANGE if held.request.changing is not None else entrance.MESOCYCLE
+
+    return waiting
 
 
 def relaying(graphs: Graphs) -> Relay:
@@ -814,9 +824,10 @@ async def _planning(
 ) -> None:
     """The planner, asked for a mesocycle, a change or an adaptation, behind the turn the entrance has already answered.
 
-    A request opened here supersedes any plan the thread was still waiting on,
-    and a tap on that one is answered as superseded. `following` opens it in
-    the negotiation of the run it replaced, as the run after it.
+    A request opened here ends any plan the thread was still waiting on, and
+    a tap on that one is answered as superseded. `following` opens it in the
+    negotiation of the run it replaced, as the run after it: a run stopped
+    mid-plan, or the plan the entrance was told is waiting.
 
     Assembling the request is a synchronous read of SQLite and of the
     declaration, and it is the half that can be refused -- so it happens
@@ -836,10 +847,9 @@ async def _planning(
         await chat.say(BLOCKED)
         return
     carrying = entrance.carried(final)
-    if following:
-        carrying |= await asyncio.to_thread(
-            graphs.negotiation.continuing, _reading(under(thread, PLANNING))
-        )
+    on = _reading(under(thread, PLANNING))
+    if following or await asyncio.to_thread(graphs.negotiation.pending, on) is not None:
+        carrying |= await asyncio.to_thread(graphs.negotiation.continuing, on)
     await _proposing(graphs, thread, request, chat, carrying)
 
 
@@ -1222,23 +1232,34 @@ def answering(graphs: Graphs) -> Resume:
         if tap.action in dict(CONFIRM):
             await _confirming(graphs, thread, tap, chat)
             return
-        on = _reading(under(thread, PLANNING))
-        held = await asyncio.to_thread(graphs.negotiation.pending, on)
-        if held is None or held.id != tap.proposal:
-            # Checked before the draft opens, so a stale tap draws no
-            # *Ci penso* for a plan nobody is working on.
-            await told(graphs, negotiations.Superseded(), thread, chat)
-            return
-        # Streamed like any other run: a refusal plans the whole workout
-        # again, which is the same minutes of silence a question costs.
-        settled = await _streaming(
-            lambda posted: graphs.negotiation.answer(on, tap.proposal, _answer(tap), posted),
-            chat,
-            progress.Progress(progress.PLAN),
-        )
-        await told(graphs, settled, thread, chat)
+        await _answered(graphs, thread, tap.proposal, _answer(tap), chat)
 
     return resume
+
+
+async def _answered(
+    graphs: Graphs, thread: str, proposal: str | None, answer: planner.Answer, chat: Chat
+) -> None:
+    """The plan waiting answered, by a tap on `proposal` or in words (`None`: whichever is waiting)."""
+    on = _reading(under(thread, PLANNING))
+    held = await asyncio.to_thread(graphs.negotiation.pending, on)
+    if (
+        held is None
+        or (proposal is not None and held.id != proposal)
+        or await asyncio.to_thread(graphs.negotiation.lapse, on)
+    ):
+        # Checked before the draft opens, so a stale answer draws no
+        # *Ci penso* for a plan nobody is working on.
+        await told(graphs, negotiations.Superseded(), thread, chat)
+        return
+    # Streamed like any other run: a refusal plans the whole workout
+    # again, which is the same minutes of silence a question costs.
+    settled = await _streaming(
+        lambda posted: graphs.negotiation.answer(on, held.id, answer, posted),
+        chat,
+        progress.Progress(progress.PLAN),
+    )
+    await told(graphs, settled, thread, chat)
 
 
 async def _confirming(graphs: Graphs, thread: str, tap: Tap, chat: Chat) -> None:
@@ -1284,13 +1305,11 @@ def _answer(tap: Tap) -> planner.Answer:
     """The button, as the planner reads it: kept, or turned down in words.
 
     A button is not a sentence, and the planner is told *why* rather than
-    which of three things was pressed -- the same field the user's own words
-    reach it through when they turn a plan down by writing instead of tapping.
+    which button was pressed -- the same field the user's own words reach it
+    through when they turn a plan down by writing instead of tapping.
     """
     if tap.action == KEPT:
         return planner.accepted()
-    if tap.action == SHORTER:
-        return planner.refused(SAID[SHORTER], minutes=SHORTER_MINUTES)
     return planner.refused(SAID[TURNED_DOWN])
 
 
@@ -1311,14 +1330,12 @@ async def told(
             if isinstance(proposed, plans.Mesocycle):
                 assert isinstance(request, plans.MesocycleRequest)
                 text = mesocycle_proposal(proposed, request)
-                buttons: Sequence[tuple[str, str]] = MESOCYCLE_BUTTONS
             else:
                 assert isinstance(request, plans.Request)
                 text = proposal(proposed, request.budget_min)
-                buttons = BUTTONS
             await chat.offer(
                 text,
-                [(carried(Tap(action, thread, answerable)), label) for action, label in buttons],
+                [(carried(Tap(action, thread, answerable)), label) for action, label in BUTTONS],
             )
         case negotiations.Accepted(workout=written) if written is not None:
             await _relay(graphs, thread, entrance.PRESCRIBED, chat)
@@ -1354,6 +1371,8 @@ async def reported(
         await _relay(graphs, thread, entrance.NOT_LOGGED, chat)
         return
     await asyncio.to_thread(_written, final)
+    # The adaptation of the workout just reported has nothing left to adapt.
+    await asyncio.to_thread(graphs.negotiation.lapse, _reading(under(thread, PLANNING)))
     await _relay(graphs, thread, entrance.LOGGED, chat)
     await _preparing(graphs, thread, chat)
 
@@ -1802,6 +1821,7 @@ def graphs(
             prepared=prepared(plans_on, preparing),
             store=store,
             planning=planning(preparing, stopping),
+            proposing=proposing(plans_on, stopping),
         ),
         planner=plans_on,
         logger=logger_graph.build(

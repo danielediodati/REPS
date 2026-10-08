@@ -433,11 +433,11 @@ def turned_down(refusals: Sequence[plans.Refusal]) -> str:
 
 
 class Answer(TypedDict, total=False):
-    """What resumes a thread waiting on a plan: kept, or turned down and why."""
+    """What resumes a thread waiting on a plan: kept, turned down and why, or ended unanswered."""
 
     accepted: bool
     because: str
-    minutes: int
+    ending: str
 
 
 def accepted() -> Answer:
@@ -445,12 +445,14 @@ def accepted() -> Answer:
     return {"accepted": True}
 
 
-def refused(because: str = "", minutes: int | None = None) -> Answer:
-    """The plan is turned down, with what the user said and any shorter time they asked for."""
-    answer: Answer = {"accepted": False, "because": because}
-    if minutes is not None:
-        answer["minutes"] = minutes
-    return answer
+def refused(because: str = "") -> Answer:
+    """The plan is turned down, with what the user said."""
+    return {"accepted": False, "because": because}
+
+
+def ended(ending: str) -> Answer:
+    """The plan is left unanswered, and its run closed with `ending`: stopped or lapsed."""
+    return {"accepted": False, "ending": ending}
 
 
 def _emit_schema(connection: sqlite3.Connection, request: plans.Request) -> dict[str, Any]:
@@ -874,9 +876,10 @@ def build(
         answer: Answer = interrupt(offered.model_dump())
         if answer.get("accepted"):
             return {"accepted": True}
+        if answer.get("ending"):
+            return closed(state, answer["ending"])
         request = state["request"]
         because = answer.get("because", "")
-        shorter = answer.get("minutes")
         # Turning a plan down ends the run that offered it (ADR-0007, item 2).
         # What it cost is written here and nowhere else: the state below is
         # the next run's, and everything this one spent is about to be cleared.
@@ -901,12 +904,7 @@ def build(
         # one before it, so the messages go and the brief is written again --
         # this time carrying every plan the negotiation has turned down.
         again = dataclasses.replace(
-            request,
-            refusals=plans.turned_down(request.refusals, offered, because),
-            budget_min=shorter if shorter is not None else request.budget_min,
-            # An allocation divides the minutes that were asked for, so a
-            # shorter workout carries none: `turn` divides the new budget.
-            allocation=() if shorter is not None else request.allocation,
+            request, refusals=plans.turned_down(request.refusals, offered, because)
         )
         # `dict(...)` because a node contributes a plain mapping, while
         # `following` is typed as the state so it can also be a run's input.
@@ -1011,8 +1009,10 @@ def build(
             return "done"
         return "planner"
 
-    def after_propose(state: PlannerState) -> Literal["planner", "prescribe"]:
-        return "prescribe" if state.get("accepted") else "planner"
+    def after_propose(state: PlannerState) -> Literal["planner", "prescribe", "done"]:
+        if state.get("accepted"):
+            return "prescribe"
+        return "done" if state.get("ending") else "planner"
 
     graph = StateGraph(PlannerState)
     graph.add_node("planner", timed("planner", turn))
@@ -1031,7 +1031,9 @@ def build(
         {"planner": "planner", "propose": "propose", "done": END},
     )
     graph.add_conditional_edges(
-        "propose", after_propose, {"planner": "planner", "prescribe": "prescribe"}
+        "propose",
+        after_propose,
+        {"planner": "planner", "prescribe": "prescribe", "done": END},
     )
     graph.add_edge("prescribe", END)
     return graph.compile(checkpointer=checkpointer)

@@ -84,6 +84,23 @@ def outcome(final: Mapping[str, Any], budget: int = tools.CALL_BUDGET) -> Outcom
     return Refused(tuple(final.get("violations", ())), records.of(final, budget))
 
 
+def passed(request: plans.Request | plans.MesocycleRequest) -> bool:
+    """Whether an adaptation's day is over: a workout reported since, or its mesocycle gone."""
+    adapting = request.adapting if isinstance(request, plans.Request) else None
+    if adapting is None:
+        return False
+    try:
+        with tools.reported(), tools.opened() as connection:
+            try:
+                found = mesocycles.today(connection)
+            except mesocycles.MesocycleError:
+                return True
+    except tools.ToolFailure:
+        # Nothing can be read, so nothing is known to have passed.
+        return False
+    return (found.mesocycle, found.performed) != (adapting.mesocycle, adapting.served_after)
+
+
 def next_request() -> plans.MesocycleRequest | None:
     """The next mesocycle's request, when the last cycle has just ended."""
     with tools.reported(), tools.opened() as connection:
@@ -121,8 +138,16 @@ class Negotiation:
         progress: Progress | None = None,
         unasked: bool = False,
     ) -> Outcome:
-        """A new ask on this thread, superseding any proposal pending on it."""
+        """A new ask on this thread, ending any proposal pending on it: stopped when the ask follows it, lapsed when not."""
         given = dict(planner.starting(request, unasked=unasked)) | dict(carrying or {})
+        if self.pending(on) is not None:
+            follows = self.continuing(on)["follows"]
+            replaced = follows is not None and given.get("follows") == follows
+            self._ran(
+                Command(resume=planner.ended(records.STOPPED if replaced else records.LAPSED)),
+                on,
+                None,
+            )
         return self._ran(given, on, progress)
 
     def answer(
@@ -132,11 +157,19 @@ class Negotiation:
         answer: planner.Answer,
         progress: Progress | None = None,
     ) -> Outcome:
-        """The proposal `proposal` kept or turned down; superseded when it is not the one pending."""
+        """The proposal `proposal` kept or turned down; superseded when it is not the one pending, or has lapsed."""
         held = self.pending(on)
-        if held is None or held.id != proposal:
+        if held is None or held.id != proposal or self.lapse(on):
             return Superseded()
         return self._ran(Command(resume=answer), on, progress)
+
+    def lapse(self, on: RunnableConfig) -> bool:
+        """The pending adaptation ended as lapsed when the day it adapts has passed; whether it was."""
+        held = self.pending(on)
+        if held is None or not passed(held.request):
+            return False
+        self._ran(Command(resume=planner.ended(records.LAPSED)), on, None)
+        return True
 
     def pending(self, on: RunnableConfig) -> Proposed | None:
         """The proposal this thread is waiting on, or nothing."""

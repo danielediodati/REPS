@@ -92,3 +92,15 @@ def test_a_mesocycle_that_is_not_one_is_refused() -> None:
 def test_a_missing_set_names_the_file(tmp_path: Path) -> None:
     with pytest.raises(adapt_set.AdaptSetError, match="not at"):
         adapt_set.load(tmp_path / "absent.toml")
+
+
+def test_a_case_with_a_plan_waiting_is_routed_and_never_planned() -> None:
+    held = adapt_set.parse(SET.replace('goes = "adapt_this_workout"\nminutes = 30\nholds = ["Barbell_Squat", ["Plank", "Pushups"]]', 'goes = "adapt_this_workout"\nproposed = true'))
+
+    (short,) = [case for case in held.cases if case.name == "short"]
+    assert short.proposed and not short.planned
+
+
+def test_a_plan_held_on_a_case_with_a_plan_waiting_is_refused() -> None:
+    with pytest.raises(adapt_set.AdaptSetError, match="short: only an adaptation is planned"):
+        adapt_set.parse(SET.replace("minutes = 30", "minutes = 30\nproposed = true"))

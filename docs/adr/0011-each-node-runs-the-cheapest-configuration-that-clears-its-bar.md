@@ -82,6 +82,7 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 - All four sent «oggi vorrei fare trazioni» to `todays_workout`, gpt-oss-120b also «oggi stacchi rumeni».
 - Plans held differ because the entrance decides which messages get planned; the planner is the same in every row.
 - The closing pass on deepseek, 3 reps (2026-10-03): routed 48 / 57 (84%), plans 30 / 31 (96%), $1.22, 14 s a run.
+- With a plan waiting on an answer (ticket 15c.1, 2026-10-08), 29 messages at 3 reps: routed 77 / 87 (88%), the ten new rows 30 / 30, plans 29 / 30, $1.26. The note that a plan waits had to sit just before the user's message: in the system prompt, a bare «no» read as a greeting.
 
 ## The supervisor's matrix
 

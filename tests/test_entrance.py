@@ -644,3 +644,42 @@ def test_todays_workout_while_a_plan_is_written_drops_nothing(
     ).invoke(entrance.heard("cosa faccio oggi?"), ON_A_THREAD)
 
     assert told_by(final) == [entrance.SERVING]
+
+
+# -- a plan waiting on an answer -----------------------------------------------
+
+
+def test_an_answer_called_with_no_plan_waiting_starts_nothing(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calling(entrance.ACCEPT_PLAN), says("Non c'è niente da accettare.")])
+
+    final = graph_of(model, proposing=lambda thread: None, checkpointer=InMemorySaver()).invoke(
+        entrance.heard("ok"), ON_A_THREAD
+    )
+
+    assert final["handoff"] == ""
+    assert told_by(final) == [entrance.NOTHING_WAITING]
+
+
+def test_turning_a_plan_down_in_words_carries_the_words(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calling(entrance.TURN_DOWN_PLAN, said="non mi piace"), says("Ne preparo un altro.")])
+
+    final = graph_of(
+        model, proposing=lambda thread: entrance.MESOCYCLE, checkpointer=InMemorySaver()
+    ).invoke(entrance.heard("non mi piace"), ON_A_THREAD)
+
+    assert final["handoff"] == entrance.TURN_DOWN_PLAN
+    assert final["asked"] == {"said": "non mi piace"}
+    note = model.seen[0][-2]
+    assert "a plan you offered, a mesocycle" in note.text
+    assert "call `turn_down_plan` with their words. It is about this plan" in " ".join(note.text.split())
+    assert not any("a plan you offered" in m.text for m in final["messages"]), "never kept in the conversation"
+
+
+def test_a_new_ask_over_a_plan_waiting_drops_it(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[calling(entrance.PLAN_MESOCYCLE), says("Ricomincio.")])
+
+    final = graph_of(
+        model, proposing=lambda thread: entrance.MESOCYCLE, checkpointer=InMemorySaver()
+    ).invoke(entrance.heard("rifammelo da capo"), ON_A_THREAD)
+
+    assert told_by(final) == [entrance.DROPPING + entrance.STARTED[entrance.PLAN_MESOCYCLE]]

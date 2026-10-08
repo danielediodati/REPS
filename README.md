@@ -51,11 +51,12 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 | that report ends the mesocycle's last cycle | the supervisor writes the next one's direction, the planner plans from it, and it arrives with that direction in a line |
 | *«anzi, ho solo 30 minuti»* while a plan is being written | the plan in flight is stopped and the new ask planned instead; a question is answered at once and the plan goes on; a report waits for it |
 | *«oggi ho 30 minuti»*, *«niente squat»* | this workout adapted, or the mesocycle rewritten; when the words do not say which, it asks *«solo oggi o d'ora in poi?»* |
+| *«ok»*, *«no»*, *«ho 20 minuti»* while a plan waits on your answer | kept or turned down as its buttons would; a new ask replaces it; reporting the workout an adaptation was for drops the adaptation |
 | *«ho comprato un bilanciere»* | the interview reruns on that alone, a new dated version of your declarations is kept beside the old, and the running mesocycle is kept, rewritten or replaced |
 | *«la cyclette mi annoia»* | a conclusion kept with your sentence beside it, refused unless you wrote that sentence; every plan after it reads it as a preference |
 | *«quanto petto ho fatto?»* | answered from the engine's read tools |
 
-A plan arrives with buttons: keep or turn down a mesocycle, three for an adapted workout. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
+A plan arrives with two buttons, *Va bene* and *Non mi va*, and can be answered in words instead. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
 
 ## How it works
 

@@ -6,7 +6,10 @@
 # - `goes` is where the message must go: a handoff the entrance offers, or
 #   - `ask`: nothing started, and the answer asks which they mean;
 #   - `triage`: nothing started, and the answer asks about the ache;
-#   - `remember`: a conclusion kept, and nothing started.
+#   - `remember`: a conclusion kept, and nothing started;
+#   - `answer`: nothing started.
+# - `proposed`: an adaptation of this workout is waiting on the user's answer
+#   when the message arrives. Such a case is routed and never planned.
 # - `excluded` is written into the fixture for that case only, re-tested six
 #   weeks after the run.
 # - A case that goes to `adapt_this_workout` is planned, and code holds its plan:
@@ -187,3 +190,65 @@ told = true
 name = "hate-bench"
 says = "odio la panca"
 goes = "remember"
+
+# -- an adaptation waiting on an answer ---------------------------------------
+
+[[cases]]
+name = "ok"
+says = "ok"
+goes = "accept_plan"
+proposed = true
+
+[[cases]]
+name = "perfetto"
+says = "perfetto, lo faccio"
+goes = "accept_plan"
+proposed = true
+
+[[cases]]
+name = "daje"
+says = "daje"
+goes = "accept_plan"
+proposed = true
+
+[[cases]]
+name = "no"
+says = "no"
+goes = "turn_down_plan"
+proposed = true
+
+[[cases]]
+name = "dislike"
+says = "non mi piace"
+goes = "turn_down_plan"
+proposed = true
+
+[[cases]]
+name = "without-squat"
+says = "senza squat"
+goes = "adapt_this_workout"
+proposed = true
+
+[[cases]]
+name = "twenty"
+says = "ho 20 minuti"
+goes = "adapt_this_workout"
+proposed = true
+
+[[cases]]
+name = "done-it"
+says = "fatto: squat 5x8, affondi, polpacci e plank come scritto"
+goes = "log_workout"
+proposed = true
+
+[[cases]]
+name = "how-long"
+says = "quanto dura?"
+goes = "answer"
+proposed = true
+
+[[cases]]
+name = "unrelated"
+says = "che differenza c'è tra stacco rumeno e stacco classico?"
+goes = "answer"
+proposed = true

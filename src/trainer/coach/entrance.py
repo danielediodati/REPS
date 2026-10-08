@@ -145,6 +145,28 @@ def set_up() -> str:
     raise AssertionError("the graph answers set_up; nothing calls it")
 
 
+def accept_plan() -> str:
+    """Take the plan waiting on their answer, as its *Va bene* button does.
+
+    Call this when what they write says yes to it: «ok», «perfetto», «daje».
+
+    The body is never run. The graph answers this call by accepting the plan.
+    """
+    raise AssertionError("the graph answers accept_plan; nothing calls it")
+
+
+def turn_down_plan(said: str) -> str:
+    """Turn down the plan waiting on their answer, as its *Non mi va* button does; another follows.
+
+    Call this when they say no to it and ask for nothing else: «no», «non mi
+    piace». `said` is what they wrote, in their own words: the planner reads
+    it when it plans the next one.
+
+    The body is never run. The graph answers this call by turning the plan down.
+    """
+    raise AssertionError("the graph answers turn_down_plan; nothing calls it")
+
+
 TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
 ADAPT_THIS_WORKOUT = adapt_this_workout.__name__
@@ -152,6 +174,8 @@ CHANGE_MESOCYCLE = change_mesocycle.__name__
 CHANGE_DECLARATION = change_declaration.__name__
 LOG_WORKOUT = log_workout.__name__
 SET_UP = set_up.__name__
+ACCEPT_PLAN = accept_plan.__name__
+TURN_DOWN_PLAN = turn_down_plan.__name__
 
 HANDOFFS = (
     todays_workout,
@@ -161,8 +185,13 @@ HANDOFFS = (
     change_declaration,
     log_workout,
     set_up,
+    accept_plan,
+    turn_down_plan,
 )
 """What the entrance hands on, on the same surface as the reads (ADR-0006, item 2)."""
+
+ANSWERS = (ACCEPT_PLAN, TURN_DOWN_PLAN)
+"""The handoffs that answer the plan waiting, offered only while one is."""
 
 CARRIED = (PLAN_MESOCYCLE, ADAPT_THIS_WORKOUT, CHANGE_MESOCYCLE, CHANGE_DECLARATION, LOG_WORKOUT, SET_UP)
 """The handoffs a subgraph carries on; the run of any other ends with the entrance's turn."""
@@ -238,6 +267,15 @@ STARTED = {
         "says follows your message. Tell them you are updating it. Ask nothing "
         "yourself."
     ),
+    ACCEPT_PLAN: (
+        "Their yes is being written down, and what it became is said right "
+        "after your message. Say only that you have it, in a few words."
+    ),
+    TURN_DOWN_PLAN: (
+        "The plan is turned down and the planner has started on another, with "
+        "their words. Tell them you are on it. You have not seen it, so say "
+        "nothing about what is in it."
+    ),
 }
 """What a handoff call is answered with: not words for the user, but what the
 model is told so it can find its own."""
@@ -255,9 +293,51 @@ done once the plan arrives."""
 REPLACING = "The plan that was being written is dropped for this one. "
 """What a planning handoff's answer opens with while a plan is being written."""
 
+ADAPTATION, CHANGE, MESOCYCLE = "adaptation", "change", "mesocycle"
+
+PROPOSAL = {
+    ADAPTATION: ("this workout, adapted", "`adapt_this_workout`"),
+    CHANGE: ("their mesocycle, rewritten for the cycles left", "`change_mesocycle`"),
+    MESOCYCLE: ("a mesocycle", "`turn_down_plan`"),
+}
+"""What the plan waiting is, and the handoff that carries a different ask of it, by the kind `proposing` names.
+
+A mesocycle's is `turn_down_plan`: `plan_mesocycle` takes no words, and a
+refusal's words reach the next run of the same negotiation.
+"""
+
+PROPOSED = """In the chat right now, above their message: a plan you offered, {what}, with
+two buttons, «Va bene» and «Non mi va». It is waiting on their answer, and
+their message is most likely that answer:
+- A yes, as in «ok», «perfetto», «daje», «va bene»: call `accept_plan`.
+- A no with nothing else asked, as in «no», «non mi piace»: call
+  `turn_down_plan` with their words. Another plan follows.
+- Something different asked of it, as in «senza panca» or «ho 20 minuti»:
+  call {again} with their words. It is about this plan, so do not ask
+  whether they mean today or from now on.
+- A report of the workout it was for: call `log_workout`.
+- Anything else, a question or a remark: answer it, and the plan stays
+  waiting.
+Only the call takes or turns down the plan: never say it is done without
+making it."""
+"""What the model is told, just before the user's message, while a plan waits on their answer.
+
+There and not in the system prompt: the plan went into the chat as a message
+with buttons, never into this conversation, so a bare «no» read without it is
+a greeting.
+"""
+
+DROPPING = "The plan that was waiting on their answer is dropped for this one. "
+"""What a planning handoff's answer opens with while a plan waits on an answer."""
+
 AFTER_THE_PLAN = (
     "That waits for the plan being written, and is done as soon as it arrives. "
     "Tell them so."
+)
+
+NOTHING_WAITING = (
+    "No plan is waiting on their answer, so there is nothing to take or turn "
+    "down. Answer them as you would without it."
 )
 
 ONE_AT_A_TIME = (
@@ -400,9 +480,10 @@ PRESCRIBED = (
 )
 
 SUPERSEDED = (
-    "They tapped a button on a plan the conversation has already moved past, "
-    "so there was nothing to answer. Tell them that plan is no longer the one "
-    "in hand and that writing to you again gets them another."
+    "They answered a plan that is no longer waiting: already answered, "
+    "replaced by a newer ask, or overtaken by a workout reported since. "
+    "Nothing changed. Tell them that plan is no longer the one in hand and "
+    "that writing to you again gets them another."
 )
 
 NO_PLAN = (
@@ -566,12 +647,14 @@ def build(
     prepared: Callable[[str], bool] | None = None,
     store: BaseStore | None = None,
     planning: Callable[[str], bool] | None = None,
+    proposing: Callable[[str], str | None] | None = None,
 ) -> Entrance:
     """The compiled entrance graph, talking on `on`; `today` answers `todays_workout`.
 
     `checking` says why a `CHECKED` handoff cannot start, or `None` when it can.
     `prepared` says whether the next mesocycle is waiting, or being prepared, on a thread.
     `planning` says whether a plan the user asked for is being written on a thread.
+    `proposing` names the plan waiting on the user's answer on a thread, a key of `PROPOSAL`.
     `store` is where `remember` keeps a conclusion; without one it is not offered.
 
     **Nothing here writes, and nothing here plans.** The reads answer questions
@@ -589,7 +672,12 @@ def build(
     free = [
         {"type": "function", "function": tools.schema(tool)}
         for tool in HANDOFFS
-        if tool.__name__ not in CHECKED
+        if tool.__name__ not in CHECKED and tool.__name__ not in ANSWERS
+    ]
+    answers = [
+        {"type": "function", "function": tools.schema(tool)}
+        for tool in HANDOFFS
+        if tool.__name__ in ANSWERS
     ]
     bounded = [
         {"type": "function", "function": tools.schema(tool)}
@@ -600,6 +688,12 @@ def build(
     def on_thread(asks: Callable[[str], bool] | None) -> bool:
         thread = get_config().get("configurable", {}).get("thread_id")
         return asks is not None and thread is not None and asks(str(thread))
+
+    def open_plan() -> str | None:
+        thread = get_config().get("configurable", {}).get("thread_id")
+        if proposing is None or thread is None:
+            return None
+        return proposing(str(thread))
 
     def talk(state: EntranceState) -> dict[str, Any]:
         """One turn of the conversation, with the tools bound only while they are still useful.
@@ -616,6 +710,7 @@ def build(
             else []
         )
         definitions: list[dict[str, Any]] = []
+        waiting = None if situation else open_plan()
         if not situation and not state.get("handoff"):
             # A turn that has already reached for a subgraph, and a turn opened
             # to say one thing, both have nothing left to do but speak. Bound
@@ -624,10 +719,21 @@ def build(
             # A checked handoff can be refused and called again, so it is
             # bounded like a read; the others always start.
             within = state.get("spent", 0) < budget
-            definitions = [*(reads + bounded if within else []), *free]
+            definitions = [
+                *(reads + bounded if within else []),
+                *free,
+                *(answers if waiting else []),
+            ]
         bound = model.bind_tools(definitions) if definitions else model
         prompt = TALKING + (MID_PLAN if not situation and on_thread(planning) else "")
-        reply = bound.invoke([SystemMessage(prompt), *state.get("messages", []), *asked])
+        history = list(state.get("messages", []))
+        if waiting in PROPOSAL:
+            what, again = PROPOSAL[waiting]
+            history.insert(
+                _last_said(history),
+                HumanMessage(PROPOSED.format(what=what, again=again), name="machine"),
+            )
+        reply = bound.invoke([SystemMessage(prompt), *history, *asked])
         return born | {"budget": budget, "messages": [*asked, reply]}
 
     def read(state: EntranceState) -> dict[str, Any]:
@@ -689,10 +795,11 @@ def build(
             return on_thread(prepared)
 
         mid_plan = on_thread(planning)
+        proposed = open_plan()
 
         def started(name: str) -> str:
             if not mid_plan:
-                return STARTED[name]
+                return (DROPPING if proposed and name in PLANS else "") + STARTED[name]
             if name in WRITES:
                 return AFTER_THE_PLAN
             return REPLACING + STARTED[name]
@@ -711,6 +818,10 @@ def build(
                     said, taken = WAITING_MESOCYCLE, PREPARED
             elif name == PLAN_MESOCYCLE and waiting():
                 said, taken = WAITING_MESOCYCLE, PREPARED
+            elif name in ANSWERS and not proposed:
+                said = NOTHING_WAITING
+            elif name == TURN_DOWN_PLAN:
+                said, taken, asked = started(name), name, dict(call["args"])
             elif name not in CHECKED:
                 said, taken = started(name), name
             elif state.get("spent", 0) + spent >= budget:
@@ -765,6 +876,15 @@ def build(
 
 
 HANDED = {handoff.__name__ for handoff in HANDOFFS}
+
+
+def _last_said(history: Sequence[AnyMessage]) -> int:
+    """Where the user's latest message is in the conversation, or its end."""
+    for at in range(len(history) - 1, -1, -1):
+        one = history[at]
+        if isinstance(one, HumanMessage) and one.name != "machine":
+            return at
+    return len(history)
 
 
 def reading_today() -> str:

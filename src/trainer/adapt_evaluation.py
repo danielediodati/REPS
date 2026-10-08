@@ -208,7 +208,13 @@ def _routed(
 ) -> tuple[eval_runner.Talked, Mapping[str, Any]]:
     """One message through the entrance, reading today's workout and checking requests off the fixture."""
     store = InMemoryStore()
-    graph = entrance.build(on, budget=budget, checkpointer=eval_runner.checkpointer(), store=store)
+    graph = entrance.build(
+        on,
+        budget=budget,
+        checkpointer=eval_runner.checkpointer(),
+        store=store,
+        proposing=lambda thread: entrance.ADAPTATION if case.proposed else None,
+    )
 
     def heard() -> dict[str, Any]:
         final = dict(graph.invoke(entrance.heard(case.says), eval_runner.thread("adapt", remembers=True)))
@@ -233,6 +239,8 @@ def routing(case: adapt_set.Case, final: Mapping[str, Any]) -> tuple[tuple[str, 
         wrong = handoff != case.goes
     elif case.goes in adapt_set.ASKING:
         wrong = bool(handoff) or "?" not in answer
+    elif case.goes == adapt_set.ANSWER:
+        wrong = bool(handoff)
     else:
         wrong = bool(handoff) or not final.get("kept")
         went = f"{went}, {len(final.get('kept', ()))} kept"

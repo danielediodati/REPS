@@ -16,9 +16,15 @@ from trainer.coach import entrance
 ADAPT_SET_ENV_VAR = "TRAINER_ADAPT_SET"
 DEFAULT_PARTS = ("docs", "adapting", "eval-set.toml")
 
-ASK, TRIAGE, REMEMBER = "ask", "triage", "remember"
-HANDED = (entrance.ADAPT_THIS_WORKOUT, entrance.CHANGE_MESOCYCLE, entrance.CHANGE_DECLARATION)
-DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER)
+ASK, TRIAGE, REMEMBER, ANSWER = "ask", "triage", "remember", "answer"
+HANDED = (
+    entrance.ADAPT_THIS_WORKOUT,
+    entrance.CHANGE_MESOCYCLE,
+    entrance.CHANGE_DECLARATION,
+    entrance.LOG_WORKOUT,
+    *entrance.ANSWERS,
+)
+DESTINATIONS = (*HANDED, ASK, TRIAGE, REMEMBER, ANSWER)
 ASKING = (ASK, TRIAGE)
 """Where nothing may start and the answer is a question."""
 
@@ -44,10 +50,12 @@ class Case:
     untrained: tuple[str, ...] = ()
     longer: bool = False
     told: bool = False
+    proposed: bool = False
+    """An adaptation of this workout is waiting on the user's answer when the message arrives."""
 
     @property
     def planned(self) -> bool:
-        return self.goes == entrance.ADAPT_THIS_WORKOUT
+        return self.goes == entrance.ADAPT_THIS_WORKOUT and not self.proposed
 
 
 @dataclass(frozen=True)
@@ -111,7 +119,8 @@ def _case(entry: Mapping[str, Any]) -> Case:
     goes = str(entry.get("goes", ""))
     if goes not in DESTINATIONS:
         raise AdaptSetError(f"{name}: goes {goes!r} is not one of {', '.join(DESTINATIONS)}")
-    if goes != entrance.ADAPT_THIS_WORKOUT and any(key in entry for key in PLAN_KEYS):
+    proposed = bool(entry.get("proposed", False))
+    if (goes != entrance.ADAPT_THIS_WORKOUT or proposed) and any(key in entry for key in PLAN_KEYS):
         raise AdaptSetError(f"{name}: only an adaptation is planned, so only one says what its plan holds")
 
     def listed(key: str) -> tuple[str, ...]:
@@ -134,4 +143,5 @@ def _case(entry: Mapping[str, Any]) -> Case:
         untrained=listed("untrained"),
         longer=bool(entry.get("longer", False)),
         told=bool(entry.get("told", False)),
+        proposed=proposed,
     )

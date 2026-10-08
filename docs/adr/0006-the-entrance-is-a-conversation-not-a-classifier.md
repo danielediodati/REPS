@@ -30,6 +30,7 @@ This ADR replaces the router. It does not touch the engine, the planner graph or
 - **`STARTED`, `QUEUED`, `WRITTEN`, `SUPERSEDED` and `NO_PLAN` stop being constants** and become things the entrance says. `BLOCKED` and `FAILED` do not.
 - **`bot.Coach` is renamed.** It is the turn-taking — one run at a time per thread, and the queue behind it — and the domain word is needed for the node that does the coaching.
 - **Amended in session 15b: a message mid-plan is read, not queued.** While a plan is written, `Turns` hands a new message to the entrance: a question is answered at once, a correction or a new ask stops the run between graph steps and its replacement goes ahead of the queue, and a report or a declaration waits for the plan. Anything else still queues.
+- **Amended in session 15c: a plan waiting is answered in words too.** While a proposal waits, the entrance is told so and offered `accept_plan` and `turn_down_plan`, which go through the same `Negotiation.answer` a tap does; a new ask replaces the plan, a report of the workout it adapts ends it, and anything else leaves it waiting.
 - **A second provider setting**, because two nodes now name two models. The run record carries the model per node from ADR-0007, which is where that becomes true.
 - **Both eval suites are unaffected.** They enter at the subgraphs, which do not change.
 - **`said` stops being write-only.** It is the conversation the entrance reads, and `planner.starting` must keep leaving it alone.

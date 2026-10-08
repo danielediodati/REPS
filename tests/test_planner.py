@@ -1075,23 +1075,6 @@ def test_what_the_user_said_reaches_the_planner(connection: sqlite3.Connection) 
     assert "Barbell_Squat" in planned, "the plan they turned down goes with it"
 
 
-def test_only_30_minutes_plans_again_against_the_shorter_budget(
-    connection: sqlite3.Connection,
-) -> None:
-    model = Scripted(
-        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
-    )
-    graph, thread = waiting(model)
-    graph.invoke({"request": BARBELL_45}, thread)
-
-    final = graph.invoke(Command(resume=planner.refused("", minutes=30)), thread)
-
-    assert final["request"].budget_min == 30
-    assert final["request"].allocation == (), "divided for a budget nobody asked for"
-    assert "30 minutes" in "\n".join(message.text for message in model.seen[-1])
-
-
 def test_a_refused_plan_is_never_the_one_that_is_written(
     connection: sqlite3.Connection,
 ) -> None:

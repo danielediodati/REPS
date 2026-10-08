@@ -121,7 +121,12 @@ _Avoid_: calling one invocation of the graph a run, or one message in the queue.
 **Negotiation**: one ask and everything it takes to answer it. It holds the runs, accepts at most one plan, and is what the user experiences as *asking for a mesocycle*, a change to it, or an adaptation. The machine opens one when a mesocycle's last cycle ends. What a refusal leaves behind belongs to it, never to the run that was refused.
 _Avoid_: request, which is what a single run is given.
 
-**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, fallen over, or stopped. *Done* is a run with nothing to accept or turn down, which is what reading a report is. *Stopped* is a run the user replaced mid-plan with a correction or a new ask; the run that replaces it follows it in the same negotiation. A run that is waiting on an answer has no ending, and neither has one that was cut.
+**Ending**: how a run finished, written when it happens — accepted, turned down, refused to the end, done, fallen over, stopped, or lapsed.
+- *Done*: nothing to accept or turn down, which is what reading a report is.
+- *Stopped*: the user replaced it with a correction or a new ask, mid-plan or while its plan waited; the run that replaces it follows it in the same negotiation.
+- *Lapsed*: its plan waited unanswered until what it was for had gone — the workout it adapted was reported, or another negotiation was opened over it.
+
+A run that is waiting on an answer has no ending, and neither has one that was cut.
 
 **Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
 

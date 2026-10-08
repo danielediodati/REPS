@@ -64,9 +64,12 @@ FAILED = "failed"
 """The run raised, and whoever caught it wrote the ending the node could not."""
 
 STOPPED = "stopped"
-"""The run was stopped between graph steps because the user asked again.
+"""The user asked again, mid-plan or while its plan waited, and the new ask follows it."""
 
-These six are every way a run can finish. A run still waiting on an
+LAPSED = "lapsed"
+"""Its plan waited unanswered until what it was for had gone: its workout reported, or another ask opened over it.
+
+These seven are every way a run can finish. A run still waiting on an
 answer has no ending, and neither has one that was cut: where the reader found
 it is the reader's to derive (ADR-0007, item 7).
 """

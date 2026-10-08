@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -24,6 +25,7 @@ from trainer import plan as plans
 from trainer import tools
 from trainer.coach import models, planner, supervisor
 from trainer.coach import negotiation as negotiations
+from trainer.coach import record as run_record
 from trainer.engine import mesocycles
 
 __all__ = ["catalogued", "declared"]
@@ -97,6 +99,37 @@ def test_opening_a_request_supersedes_the_pending_one(
     assert talks.answer(PLANNING, old.id, planner.accepted()) == negotiations.Superseded()
     assert workout_rows(catalogued) == []
     assert talks.pending(PLANNING).id == new.id  # type: ignore[union-attr]
+
+
+def test_a_fresh_ask_over_a_pending_proposal_ends_it_as_lapsed(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Never cut: the run it ended is written down, and the new ask is a negotiation of its own."""
+    talks = negotiation_of(
+        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]), tmp_path
+    )
+    talks.open(PLANNING, BARBELL_45)
+    talks.open(PLANNING, BARBELL_45)
+
+    (ended,) = [json.loads(one.read_text(encoding="utf-8")) for one in (tmp_path / "runs").glob("*/*.json")]
+    assert ended["ending"] == run_record.LAPSED
+
+
+def test_an_ask_following_a_pending_proposal_ends_it_as_stopped(
+    catalogued: sqlite3.Connection, tmp_path: Path
+) -> None:
+    talks = negotiation_of(
+        Scripted(documents=[plan_of("Barbell_Squat"), plan_of("Barbell_Squat")]), tmp_path
+    )
+    talks.open(PLANNING, BARBELL_45)
+
+    talks.open(PLANNING, BARBELL_45, talks.continuing(PLANNING))
+
+    (ended,) = [json.loads(one.read_text(encoding="utf-8")) for one in (tmp_path / "runs").glob("*/*.json")]
+    assert ended["ending"] == run_record.STOPPED
+    assert talks.pending(PLANNING) is not None
+    assert talks.continuing(PLANNING)["follows"] != ended["run"], "a run of its own"
+    assert talks.continuing(PLANNING)["negotiation"] == ended["negotiation"]
 
 
 def test_a_stale_id_writes_nothing(catalogued: sqlite3.Connection, tmp_path: Path) -> None:

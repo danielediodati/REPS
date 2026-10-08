@@ -51,7 +51,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, supervisor
+from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, runs, supervisor
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
 from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
@@ -277,6 +277,7 @@ def graphs_of(
             archive=kept,
             prepared=bot.prepared(plans_on, preparing),
             planning=bot.planning(preparing, stopping),
+            proposing=bot.proposing(plans_on, stopping),
         ),
         planner=plans_on,
         logger=log if log is not None else logger_graph_of(Scripted(), checkpointer=held),
@@ -781,7 +782,7 @@ def test_asking_for_a_mesocycle_reaches_it_whole_with_two_buttons(
     (text, buttons) = watched.offers[0]
     assert "Barbell Squat" in text and "Standing Military Press" in text
     assert "4 cicli" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
 
 
 def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
@@ -1451,29 +1452,6 @@ def test_tapping_no_proposes_another_plan_and_writes_nothing(
     assert still_waiting(graph, thread) == ("propose",)
 
 
-def test_tapping_thirty_minutes_plans_against_thirty(
-    catalogued: sqlite3.Connection,
-) -> None:
-    model = Scripted(
-        turns=[AIMessage(content="Planned."), AIMessage(content="Shorter.")],
-        documents=[plan_of("Barbell_Squat"), plan_of("Standing_Military_Press", minutes=30)],
-    )
-    graph, thread, final = waiting_on_a_plan(model)
-    sent, offer = offered()
-    graphs = graphs_of(graph)
-    coach = turns_of(graphs)
-
-    asyncio.run(
-        coach.tapped(
-            OWNER, CHAT, tap_on(final, thread, bot.SHORTER), channel(spoken()[1], offer)
-        )
-    )
-
-    asked = graph.get_state(planning_on()).values["request"]
-    assert asked.budget_min == bot.SHORTER_MINUTES
-    assert "min su 30" in sent[0][0], "rendered against the time it was asked for"
-
-
 def test_a_tap_on_a_plan_that_has_been_superseded_says_what_happens_next(
     catalogued: sqlite3.Connection,
 ) -> None:
@@ -1632,16 +1610,6 @@ def test_the_buttons_reach_telegram_as_a_keyboard() -> None:
     assert (chat_id, text) == (CHAT, "il piano")
     ((button,),) = markup.inline_keyboard
     assert (button.text, button.callback_data) == ("Va bene", "ok|chat:1|abc")
-
-
-def test_the_button_says_the_time_it_actually_asks_for() -> None:
-    """The label and the sentence the planner is given are one number.
-
-    Copied into the label, they drift the day the number changes: the plan is
-    built for twenty minutes and the button the user tapped still said thirty.
-    """
-    assert str(bot.SHORTER_MINUTES) in dict(bot.BUTTONS)[bot.SHORTER]
-    assert str(bot.SHORTER_MINUTES) in bot.SAID[bot.SHORTER]
 
 
 def test_a_run_does_not_block_the_bot_while_the_model_thinks(
@@ -2404,7 +2372,7 @@ def test_tapping_no_on_a_mesocycle_offers_another(
 
     ((text, buttons),) = watched.offers
     assert "2 cicli" in text
-    assert len(buttons) == len(bot.MESOCYCLE_BUTTONS)
+    assert len(buttons) == len(bot.BUTTONS)
     assert mesocycles.active(catalogued) is None
 
 
@@ -2458,7 +2426,7 @@ def test_a_change_is_offered_accepted_and_kept_counting_on(
     assert before is not None
 
     ((_, buttons),) = asking(graphs, "d'ora in poi meno giri di squat").offers
-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
     said, say = spoken()
     asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
 
@@ -2582,7 +2550,7 @@ def test_the_report_that_completes_the_last_cycle_prepares_the_next_mesocycle(
     assert watched.said[2].startswith(entrance.NEXT_MESOCYCLE.split("{")[0])
     ((text, buttons),) = watched.offers
     assert "3 cicli" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
     assert len(watched.drafts) == drafted, "the preparation opens no draft"
     state = graphs.planner.get_state(planning_on()).values
     assert state["unasked"] is True
@@ -2866,7 +2834,7 @@ def test_the_interview_ends_in_the_file_and_a_mesocycle_offered(
     assert answered.said == [entrance.ONBOARDED]
     (text, buttons) = answered.offers[0]
     assert "Barbell Squat" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
 
 
 def test_the_interview_survives_a_restart(
@@ -2996,7 +2964,7 @@ def test_a_rewrite_chosen_is_offered_through_the_mesocycles_loop(
 
     assert watched.said == [SAYS, "Con un'ora lo allungo."]
     ((_, buttons),) = watched.offers
-    assert [label for _, label in buttons] == [label for _, label in bot.MESOCYCLE_BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
     assert config.load(catalogued).duration_cap_min == 60
 
 
@@ -3131,3 +3099,185 @@ def test_a_report_mid_plan_waits_for_the_plan(
     assert len(watched.offers) == 1, "the plan was not stopped"
     assert watched.said == [SAYS, SAYS, entrance.LOGGED]
     assert workout_states(catalogued) == ["performed"]
+
+
+# -- a plan answered in words --------------------------------------------------
+
+
+ADAPTED = adapted_of("Barbell_Squat", rounds=2, minutes=30)
+
+
+def proposed_then(
+    catalogued: sqlite3.Connection,
+    tmp_path: Path,
+    *turns: AIMessage,
+    planned: Scripted | None = None,
+    log: Any = None,
+    saver: BaseCheckpointSaver[Any] | None = None,
+) -> tuple[bot.Graphs, Talking, Channels]:
+    """An adaptation offered and waiting, and an entrance that takes `turns` on the next message."""
+    if mesocycles.active(catalogued) is None:
+        served_from(catalogued)
+    held = saver if saver is not None else InMemorySaver()
+    archive = tmp_path / "runs"
+    front = Talking(
+        turns=[calling(entrance.ADAPT_THIS_WORKOUT, said="solo 30 minuti oggi"), AIMessage(content=SAYS), *turns]
+    )
+    graphs = graphs_of(
+        graph_of(
+            planned
+            if planned is not None
+            else Scripted(
+                turns=[AIMessage(content="Planned."), AIMessage(content="Again.")],
+                documents=[ADAPTED, adapted_of("Standing_Military_Press", rounds=2, minutes=30)],
+            ),
+            checkpointer=held,
+            archive=archive,
+        ),
+        front=front,
+        log=log,
+        saver=held,
+        archive=archive,
+    )
+    first = asking(graphs, "solo 30 minuti oggi")
+    assert len(first.offers) == 1, "the adaptation is offered"
+    return graphs, front, first
+
+
+def planned_runs(tmp_path: Path) -> list[dict[str, Any]]:
+    """The planner's runs, oldest first, as the archive holds them: the entrance's turns left out."""
+    kept = [one for one in documents(tmp_path / "runs") if one["plan"] is not None]
+    return sorted(kept, key=lambda one: one["began"])
+
+
+def endings(tmp_path: Path) -> list[str]:
+    return [one["ending"] for one in planned_runs(tmp_path)]
+
+
+def test_ok_written_accepts_the_plan_as_its_button_does(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    graphs, front, _ = proposed_then(
+        catalogued, tmp_path, calling(entrance.ACCEPT_PLAN), AIMessage(content=SAYS)
+    )
+
+    watched = asking(graphs, "ok")
+
+    assert entrance.ACCEPT_PLAN in front.bound[-1], "offered while the plan waits"
+    assert watched.said == [SAYS, entrance.PRESCRIBED]
+    assert workout_states(catalogued) == ["prescribed"]
+    assert endings(tmp_path) == [run_record.ACCEPTED]
+    assert still_waiting(graphs.planner, "") == ()
+
+
+def test_no_written_turns_it_down_and_the_next_plan_follows(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    graphs, _, _ = proposed_then(
+        catalogued,
+        tmp_path,
+        calling(entrance.TURN_DOWN_PLAN, said="non mi piace"),
+        AIMessage(content=SAYS),
+    )
+
+    watched = asking(graphs, "non mi piace")
+
+    assert watched.said == [SAYS]
+    assert len(watched.offers) == 1, "the next plan"
+    (turned,) = planned_runs(tmp_path)
+    assert (turned["ending"], turned["because"]) == (run_record.TURNED_DOWN, "non mi piace")
+    assert workout_states(catalogued) == []
+
+
+def test_a_new_ask_over_the_plan_waiting_stops_it_in_the_same_negotiation(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    saver = InMemorySaver()
+    graphs, _, first = proposed_then(
+        catalogued,
+        tmp_path,
+        calling(entrance.ADAPT_THIS_WORKOUT, said="ho 20 minuti"),
+        AIMessage(content=SAYS),
+        saver=saver,
+    )
+
+    second = asking(graphs, "anzi, ho 20 minuti")
+
+    assert len(second.offers) == 1
+    assert endings(tmp_path) == [run_record.STOPPED]
+    stale = Channels()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, first.offers[0][1][0][0], stale.chat))
+    assert stale.said == [entrance.SUPERSEDED]
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, second.offers[0][1][0][0], Channels().chat))
+    stopped, kept = planned_runs(tmp_path)
+    assert (stopped["ending"], kept["ending"]) == (run_record.STOPPED, run_record.ACCEPTED)
+    assert kept["negotiation"] == stopped["negotiation"]
+    assert kept["follows"] == stopped["run"]
+    held = runs.negotiations(runs.kept(tmp_path / "runs"), runs.live(saver))
+    assert runs.CUT not in [one.outcome for one in held]
+
+
+def test_reporting_the_workout_ends_its_adaptation_and_a_tap_changes_nothing(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    saver = InMemorySaver()
+    served_from(catalogued)
+    _, served = mesocycles.record_served(catalogued, date.today().isoformat())
+    log = logger_graph_of(
+        scripted(AIMessage(content="chiaro"), emits=report(workout_id=served, report="squat, 4 giri")),
+        checkpointer=saver,
+    )
+    graphs, _, first = proposed_then(
+        catalogued, tmp_path, calling(entrance.LOG_WORKOUT), AIMessage(content=SAYS), log=log, saver=saver
+    )
+
+    watched = asking(graphs, "fatto: squat, 4 giri")
+
+    assert watched.said == [SAYS, entrance.LOGGED]
+    assert endings(tmp_path) == [run_record.LAPSED]
+    tapped = Channels()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, first.offers[0][1][0][0], tapped.chat))
+    assert tapped.said == [entrance.SUPERSEDED]
+    assert workout_states(catalogued) == ["performed"]
+    assert endings(tmp_path) == [run_record.LAPSED]
+
+
+def test_a_tap_after_a_report_made_elsewhere_changes_nothing(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    """Reported from the terminal, the bot never saw it: the tap is what finds the day has passed."""
+    graphs, _, first = proposed_then(catalogued, tmp_path)
+    performed_once(catalogued, "Barbell_Squat")
+
+    tapped = Channels()
+    asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, first.offers[0][1][0][0], tapped.chat))
+
+    assert tapped.said == [entrance.SUPERSEDED]
+    assert workout_states(catalogued) == ["performed"]
+    assert endings(tmp_path) == [run_record.LAPSED]
+
+
+def test_anything_else_is_answered_and_the_plan_stays_waiting(
+    catalogued: sqlite3.Connection, declared: Path, tmp_path: Path
+) -> None:
+    graphs, front, _ = proposed_then(catalogued, tmp_path, AIMessage(content="dura mezz'ora"))
+
+    watched = asking(graphs, "quanto dura?")
+
+    assert watched.said == ["dura mezz'ora"]
+    assert watched.offers == []
+    assert still_waiting(graphs.planner, "") == ("propose",)
+    assert {entrance.ACCEPT_PLAN, entrance.TURN_DOWN_PLAN} <= set(front.bound[-1])
+    seen = front.seen[-1]
+    assert "a plan you offered, this workout, adapted" in seen[-2].text, "just before their message"
+    assert seen[-1].text == "quanto dura?"
+    assert endings(tmp_path) == []
+
+
+def test_with_no_plan_waiting_the_answers_are_not_offered(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    front = Talking()
+    asking(graphs_of(front=front), "ciao")
+
+    assert not {entrance.ACCEPT_PLAN, entrance.TURN_DOWN_PLAN} & set(front.bound[-1])

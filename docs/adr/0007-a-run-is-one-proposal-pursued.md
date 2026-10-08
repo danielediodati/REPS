@@ -37,6 +37,18 @@ it pursues nothing and there is nothing to accept or turn down. It ends
 written the moment it happens, it leaves a document in the archive, and where
 the reader found it stays the reader's to derive.
 
+## Amended in session 15c
+
+**A plan left unanswered gets an ending when the thread moves past it, never *cut*.**
+
+| What moved past it | Ending | The next run |
+|---|---|---|
+| a new ask while it waited | `stopped`, as mid-plan | follows it, same negotiation |
+| the workout it adapted, reported | `lapsed` | none |
+| another negotiation opened over it (the next mesocycle, an interview's) | `lapsed` | the first of its own negotiation |
+
+`lapsed` is the seventh ending. It is written by the planner's `propose` node, resumed with no answer, so the ending is still the graph's to write (item 7).
+
 ## Consequences
 
 - **`record.Run` goes.** The model, provider and budget carried in the run's config were the identity of a run answered by one model; the model belongs to the node that did the work and goes in the record's node entries.

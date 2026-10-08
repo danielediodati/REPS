@@ -414,3 +414,29 @@ def test_a_planner_run_that_fails_on_an_empty_message_still_says_what_failed(
 
     (plan,) = [o for o in report.outcomes if o.case == "hinge plan"]
     assert plan.error == "AssertionError: "
+
+
+def test_with_an_adaptation_waiting_a_written_yes_takes_it(
+    where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet, tmp_path: Path
+) -> None:
+    ok = dataclasses.replace(case_of(holds, "which"), says="ok", goes=entrance.ACCEPT_PLAN, proposed=True)
+
+    taken = ran(where, ok, tmp_path, calls((entrance.ACCEPT_PLAN, {})), says("Segnato."))
+    unwaited = ran(
+        where, dataclasses.replace(ok, proposed=False), tmp_path, calls((entrance.ACCEPT_PLAN, {})), says("Segnato.")
+    )
+
+    assert failed(taken, "which") == []
+    assert failed(unwaited, "which") == [adapt_evaluation.ROUTED], "nothing waits, so nothing is taken"
+
+
+def test_a_message_answered_while_it_waits_holds_only_when_nothing_starts(
+    where: adapt_evaluation.Fixture, holds: adapt_set.AdaptSet, tmp_path: Path
+) -> None:
+    asked = dataclasses.replace(case_of(holds, "which"), says="quanto dura?", goes=adapt_set.ANSWER, proposed=True)
+
+    answered = ran(where, asked, tmp_path, says("Dura mezz'ora."))
+    taken = ran(where, asked, tmp_path, calls((entrance.ACCEPT_PLAN, {})), says("Segnato."))
+
+    assert failed(answered, "which") == []
+    assert failed(taken, "which") == [adapt_evaluation.ROUTED]
