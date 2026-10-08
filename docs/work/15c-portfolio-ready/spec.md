@@ -13,6 +13,6 @@ Tickets 01 and 02 are the fixes found using `1.0.0rc1` on the demo's home, 2026-
 
 ## Carried from 15b.5
 
-- The tests badge is GitHub's own; coverage and release are SVGs the Action writes to the `badges` branch, read from `github.com/dquadro/REPS/raw/badges/`. While the repository is private they show only to its owner: once public, check them logged out.
+- The tests badge is GitHub's own; coverage and release are SVGs the Action writes to the `badges` branch, read from `github.com/danielediodati/REPS/raw/badges/`. While the repository is private they show only to its owner: once public, check them logged out.
 - The Action runs on Python 3.12, the floor `requires-python` claims; local development is on 3.14. Before 3.14 `asyncio.run` takes only a coroutine, so mypy on 3.14 alone misses it.
 - The release badge is orange for a pre-release tag (`rc`, `a`, `b`) and blue for `v1.0.0`.

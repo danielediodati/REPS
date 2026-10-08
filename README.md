@@ -6,9 +6,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dquadro/REPS/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/dquadro/REPS/actions/workflows/tests.yml/badge.svg"></a>
-  <a href="https://github.com/dquadro/REPS/actions/workflows/tests.yml"><img alt="coverage" src="https://github.com/dquadro/REPS/raw/badges/coverage.svg"></a>
-  <a href="https://github.com/dquadro/REPS/tags"><img alt="release" src="https://github.com/dquadro/REPS/raw/badges/release.svg"></a>
+  <a href="https://github.com/danielediodati/REPS/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/danielediodati/REPS/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://github.com/danielediodati/REPS/actions/workflows/tests.yml"><img alt="coverage" src="https://github.com/danielediodati/REPS/raw/badges/coverage.svg"></a>
+  <a href="https://github.com/danielediodati/REPS/tags"><img alt="release" src="https://github.com/danielediodati/REPS/raw/badges/release.svg"></a>
   <a href="LICENSE"><img alt="licence: MIT" src="https://img.shields.io/badge/licence-MIT-blue"></a>
   <br>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white">
