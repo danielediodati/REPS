@@ -4,6 +4,12 @@
 
 Tickets 01 and 02 are the fixes found using `1.0.0rc1` on the demo's home, 2026-10-07. A substitute exercise inheriting its block's numbers was raised and dropped by the user: likely not a real problem.
 
+## Carried from 15c.2
+
+- Exercise names in the chat are the catalog's, in English (*Barbell Squat*); everything else the recording shows is Italian.
+- A workout adapted only in time keeps the reasons of the slot it adapts; new reasons appear when the exercises change, e.g. *«oggi ho solo i manubri»*.
+- Measured on `anthropic/claude-haiku-4.5`: an adaptation $0.014–0.029, a mesocycle ~$0.06.
+
 ## Carried from 15.5
 
 - `trainer demo HOME` builds the demo's home from `docs/demo/history.toml`; the bot is pointed at it with `TRAINER_HOME`, and a `TRAINER_DB` already set wins over it.

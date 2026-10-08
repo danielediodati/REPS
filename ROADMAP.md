@@ -149,7 +149,7 @@ In this order. Measuring first is what stops the methodology being written again
 **Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *«anzi, ho solo 30 minuti»* mid-plan brings the 30-minute plan. Recorded, with a GIF in the README.
 
 1. **A plan is answered in words too.** While a proposal is open the entrance reads *«ok»*, *«no»* or a new ask against it; a proposal that ends unanswered gets an ending, and *Solo 30 minuti* goes. — **done** `c56300b`
-2. **What the chat shows is Italian.** A block's reason, a plan's note and a direction, from the planner and from the demo's history.
+2. **What the chat shows is Italian.** A block's reason, a plan's note and a direction, from the planner and from the demo's history. — **done** `ca4805a`
 3. **The recorded demo.** Both scenes in Telegram, and the GIF in the README.
 4. **The repository made public.** The history checked for secrets, the switch on the user's go, the badges checked logged out.
 
