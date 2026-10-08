@@ -109,6 +109,17 @@ def test_it_starts_from_the_mesocycle_that_ended_with_the_goal_and_its_methodolo
     assert asked.continuing is not None and asked.continuing.ended.why not in briefed
 
 
+def test_the_direction_is_asked_for_in_the_language_the_chat_shows(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """The entrance announces the next mesocycle from it."""
+    model = Scripted(documents=[DIRECTION])
+
+    supervisor.directed(graph_of(model), ended(connection, two_slots), {})
+
+    assert planner.SHOWN in model.seen[0][0].text
+
+
 def test_its_run_is_kept_like_every_other_with_the_direction_it_wrote(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest, tmp_path: Path
 ) -> None:

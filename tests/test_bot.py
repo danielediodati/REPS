@@ -11,6 +11,7 @@ import json
 import logging
 import sqlite3
 import threading
+import typing
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
@@ -1827,6 +1828,21 @@ def test_the_chat_and_the_terminal_render_one_plan(
     for block in reading.blocks:
         for item in block.items:
             assert item.name in text
+
+
+def test_a_prescription_is_worded_in_italian_in_every_unit_a_plan_can_take(
+    catalogued: sqlite3.Connection,
+) -> None:
+    units = typing.get_args(plans.Prescription.model_fields["unit"].annotation)
+    plan = plan_of("Barbell_Squat", "Standing_Military_Press")
+    plan.blocks[0].items[0].prescription = plans.Prescription(unit="seconds", amount=45)
+
+    text = bot.proposal(plan, 45)
+
+    assert set(bot.UNITS) == set(units)
+    assert "Barbell Squat · 45s" in text
+    assert "Standing Military Press · 8 ripetizioni" in text
+    assert not any(f" {unit}" in text for unit in units)
 
 
 def test_what_the_user_said_no_to_is_the_line_they_notice(

@@ -115,7 +115,7 @@ def test_a_history_that_is_not_there_is_named_as_a_state(tmp_path: Path, monkeyp
 
 
 def test_a_direction_missing_its_theme_is_refused_naming_what_it_needs() -> None:
-    text = demo.history_path().read_text(encoding="utf-8").replace('theme = "new angles"', 'thema = "new angles"')
+    text = demo.history_path().read_text(encoding="utf-8").replace('theme = "angoli nuovi"', 'thema = "angoli nuovi"')
 
     with pytest.raises(demo.DemoError, match="a direction has a theme, changes and why"):
         demo.parse(text)
@@ -139,3 +139,21 @@ def test_the_first_mesocycle_follows_nothing_so_it_has_no_direction() -> None:
 
     with pytest.raises(demo.DemoError, match="follows nothing"):
         demo.parse(text)
+
+
+def test_every_line_the_history_puts_in_the_chat_is_italian() -> None:
+    """A block's reason shows under it, and the next mesocycle is announced from its direction."""
+    told = demo.parse(demo.history_path().read_text(encoding="utf-8"))
+    said = [
+        *(one.mesocycle.why for one in told.accepted),
+        *(block.reason for one in told.accepted for workout in one.mesocycle.workouts for block in workout.blocks),
+        *(
+            line
+            for one in told.accepted
+            if one.direction is not None
+            for line in (one.direction.theme, one.direction.changes, one.direction.why)
+        ),
+    ]
+
+    english = {"the", "and", "of", "to", "up", "down", "one", "new", "back"}
+    assert [line for line in said if english & set(line.lower().replace(",", " ").replace(";", " ").split())] == []

@@ -1517,6 +1517,32 @@ def test_a_change_is_briefed_with_the_mesocycle_and_what_to_change(
     assert '"Barbell_Squat"' in briefed, "the mesocycle being changed, whole"
 
 
+def test_every_kind_of_plan_is_asked_for_in_the_language_the_chat_shows(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """A reason, a note, a `despite` and a cycles sentence reach the chat as the model wrote them."""
+    keeping(connection, two_slots)
+    days = mesocycle_of(plan_of("Barbell_Squat"), plan_of("Standing_Military_Press"))
+    asked: dict[str, tuple[plans.Request | plans.MesocycleRequest, BaseModel]] = {
+        "a workout": (BARBELL_45, plan_of("Barbell_Squat")),
+        "a mesocycle": (plans.mesocycle_requested(connection, "2026-09-22"), days),
+        "an adaptation": (
+            plans.adaptation_requested(
+                connection, "2026-09-22", plans.Asked(minutes=30), said="solo 30 minuti"
+            ),
+            adapted_of("Barbell_Squat", rounds=2, minutes=30),
+        ),
+        "a change": (plans.change_requested(connection, "2026-09-22", said="basta squat"), days),
+    }
+    for kind, (request, offered) in asked.items():
+        model = Scripted(documents=[offered])
+        graph, thread = pausing(model)
+
+        graph.invoke(planner.starting(request), thread)
+
+        assert planner.SHOWN in model.seen[0][0].text, kind
+
+
 def test_an_accepted_change_replaces_the_mesocycle_and_keeps_its_count(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:

@@ -95,6 +95,15 @@ KEEPS = ("id", "equipment", "primary_muscles", "mechanic")
 
 METHODOLOGY = methodology.committed().for_planner
 
+SHOWN = """\
+What you write in words -- a block's reason, a note, why an exercise is there
+despite them, why this many cycles, a direction -- reaches them in the chat.
+Write it in plain Italian, short, the way a coach texting would, with no
+English gym jargon. A reason says why this block is in this workout, in its
+own words each time, not what the exercise is or which muscle it trains. Ids,
+field names and dates stay as you were given them."""
+"""The language of every line the chat shows as a model wrote it, read by every prompt that writes one."""
+
 PLANNING = f"""\
 You plan one strength workout, for one person, today.
 
@@ -117,6 +126,8 @@ The rules you are working inside, none of which you can talk your way around:
 - Rest is yours to prescribe and travels with the block.
 - Every block carries the reason it is there, in one short sentence. That is
   the part of the plan only you can supply.
+
+{SHOWN}
 
 A plan that breaks one of these is refused, and the refusal comes back to you
 naming every rule it broke. You have {ATTEMPTS} attempts in all: read what it
@@ -154,6 +165,8 @@ workout would be:
 
 Then say how many cycles the mesocycle is repeated for, and why, in one
 sentence. That number is yours to choose.
+
+{SHOWN}
 
 A mesocycle that breaks a rule is refused, naming the workout and the rule.
 You have {ATTEMPTS} attempts in all. You also have a budget of tool calls;

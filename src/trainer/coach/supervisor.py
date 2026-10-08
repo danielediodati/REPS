@@ -29,7 +29,7 @@ from trainer import tools
 from trainer.coach import conclusions, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
-from trainer.coach.planner import REFUSED_TURN, REJECTIONS, changes, remembered
+from trainer.coach.planner import REFUSED_TURN, REJECTIONS, SHOWN, changes, remembered
 from trainer.engine import mesocycles, methodology, variation, workouts
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,8 @@ changes from the last (exercises, reps, rest, or more than one), and why.
 You do not plan the workouts. A planner does, from your direction, inside an
 engine that checks every choice; so name what changes and how far, not the
 workouts themselves.
+
+{SHOWN}
 
 The history is behind your tools, and you start from the mesocycle that ended:
 - `mesocycle_history` lists every mesocycle, with its count and the direction

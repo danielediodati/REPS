@@ -14,10 +14,10 @@ from trainer.engine import methodology, variation
 VARIATION_PATH = variation.VARIATION_PATH
 
 PLANNER_PROMPTS = {
-    "PLANNING": "15d8f2b831b6aecc68e7e911e8c38579842c702f2be340f694ebcaf3e6fb2df4",
-    "MESOCYCLE_PLANNING": "835b3fd08e7115b0ea94bac16cde0e4b7eaff552f8133b13f56c46a8b184bac4",
+    "PLANNING": "d796a57f09af82085595aba95e6f9646ced49c44dd7118ab4567f07c8924da08",
+    "MESOCYCLE_PLANNING": "6568728fa18d34b02c767def77a6da10a98be417f0e9bd11f20b9ca0cd15a8bd",
 }
-"""The planner's prompts as they were before `variation.md` existed; session 15 does not change them."""
+"""The planner's prompts as ticket 15c.2 left them: a change to them is made on purpose, never by `variation.md`."""
 
 
 def _sections(path: Path) -> tuple[str, str]:

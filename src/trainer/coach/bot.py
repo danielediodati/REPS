@@ -1513,6 +1513,8 @@ SAID_NO = "  ⚠️ avevi detto di no: {why}"
 WHY = "_{reason}_"
 TOTAL = "*Totale* {total} min su {budget}"
 NOTE = "⚠️ {note}"
+UNITS = {"reps": "{amount} ripetizioni", "seconds": "{amount}s"}
+"""How each unit a prescription is counted in is worded in the chat."""
 
 PARSE_MODE = "MarkdownV2"
 """The dialect `proposal` writes and `_offering` sends a plan as."""
@@ -1588,7 +1590,10 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> s
         for item in block.items:
             lines.append(
                 ITEM.format(
-                    name=marked(item.name), prescription=marked(item.prescription)
+                    name=marked(item.name),
+                    prescription=UNITS[item.prescription.unit].format(
+                        amount=item.prescription.amount
+                    ),
                 )
                 + _last(item.last, marked)
             )

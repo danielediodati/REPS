@@ -1143,7 +1143,7 @@ class ShownItem:
     """One prescribed exercise, under the catalog's own name, with whatever the user had said about it."""
 
     name: str
-    prescription: str
+    prescription: Prescription
     said: str | None = None
     last: state.Answer[float] | None = None
     """The load it was last performed with, beside a served workout; `None` beside a proposal."""
@@ -1214,7 +1214,7 @@ def shown(
                 items=tuple(
                     ShownItem(
                         name=names[item.exercise_id],
-                        prescription=_prescription(item),
+                        prescription=item.prescription,
                         said=acknowledged.get(item.exercise_id),
                         last=(
                             state.last_performed_load(connection, item.exercise_id)
@@ -1263,7 +1263,8 @@ def render(
             f"-- {block.seconds // 60}:{block.seconds % 60:02d}"
         )
         for item in block.items:
-            lines.append(f"  {item.name:<{column}}{item.prescription}{_last(item.last)}")
+            said = f"{item.prescription.amount} {item.prescription.unit}"
+            lines.append(f"  {item.name:<{column}}{said}{_last(item.last)}")
             if item.said is not None:
                 # On its own line and marked, not folded into the block's
                 # reason: this is the agent proposing something the user said
@@ -1325,10 +1326,6 @@ def _name(connection: sqlite3.Connection, exercise_id: str) -> str:
     if found is None:
         raise PlanError(f"no such exercise: {exercise_id!r}")
     return found.name
-
-
-def _prescription(item: PlanItem) -> str:
-    return f"{item.prescription.amount} {item.prescription.unit}"
 
 
 def _amount(item: PlanItem, unit: str) -> int | None:
