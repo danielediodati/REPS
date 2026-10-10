@@ -6,10 +6,11 @@ import asyncio
 import logging
 import os
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import httpx2
 import openai
 from langchain_core.language_models import BaseChatModel
 from langchain_core.outputs import ChatResult
@@ -214,6 +215,80 @@ BUSY_WAITS_S = (5, 15, 45)
 _logged = logging.getLogger(__name__)
 _sleep = time.sleep
 _asleep = asyncio.sleep
+_clock = time.monotonic
+
+
+def _overdue(request: httpx2.Request, began: float) -> None:
+    """Raise the client's own read timeout once the whole call has outlived `TIMEOUT_S`."""
+    if _clock() - began > TIMEOUT_S:
+        raise httpx2.ReadTimeout(f"no answer within {TIMEOUT_S} s", request=request)
+
+
+class _Bounded(httpx2.SyncByteStream):
+    """A response body that stops being read when its call is overdue."""
+
+    def __init__(self, body: httpx2.SyncByteStream, request: httpx2.Request, began: float) -> None:
+        self._body, self._request, self._began = body, request, began
+
+    def __iter__(self) -> Iterator[bytes]:
+        for part in self._body:
+            _overdue(self._request, self._began)
+            yield part
+
+    def close(self) -> None:
+        self._body.close()
+
+
+class _AsyncBounded(httpx2.AsyncByteStream):
+    """`_Bounded`, for the async client."""
+
+    def __init__(self, body: httpx2.AsyncByteStream, request: httpx2.Request, began: float) -> None:
+        self._body, self._request, self._began = body, request, began
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        async for part in self._body:
+            _overdue(self._request, self._began)
+            yield part
+
+    async def aclose(self) -> None:
+        await self._body.aclose()
+
+
+class Deadline(httpx2.BaseTransport):
+    """A transport whose every call ends within `TIMEOUT_S`, however the body arrives."""
+
+    # The client's timeout is per read, and OpenRouter keeps a waiting
+    # connection alive with whitespace: each byte restarts the clock, and a
+    # host that never answers is waited on for ever.
+    def __init__(self, over: httpx2.BaseTransport) -> None:
+        self._over = over
+
+    def handle_request(self, request: httpx2.Request) -> httpx2.Response:
+        began = _clock()
+        answered = self._over.handle_request(request)
+        assert isinstance(answered.stream, httpx2.SyncByteStream)
+        answered.stream = _Bounded(answered.stream, request, began)
+        return answered
+
+    def close(self) -> None:
+        self._over.close()
+
+
+class AsyncDeadline(httpx2.AsyncBaseTransport):
+    """`Deadline`, for the async client."""
+
+    def __init__(self, over: httpx2.AsyncBaseTransport) -> None:
+        self._over = over
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        began = _clock()
+        answered = await self._over.handle_async_request(request)
+        assert isinstance(answered.stream, httpx2.AsyncByteStream)
+        answered.stream = _AsyncBounded(answered.stream, request, began)
+        return answered
+
+    async def aclose(self) -> None:
+        await self._over.aclose()
 
 
 class ProviderFailed(ModelError):
@@ -384,6 +459,8 @@ def openrouter_model(named: str, reasoning: str = "", host: str | None = None) -
         extra_body=body,
         timeout=TIMEOUT_S,
         max_retries=RETRIES,
+        http_client=httpx2.Client(transport=Deadline(httpx2.HTTPTransport())),
+        http_async_client=httpx2.AsyncClient(transport=AsyncDeadline(httpx2.AsyncHTTPTransport())),
     )
 
 

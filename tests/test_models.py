@@ -511,6 +511,83 @@ def test_a_host_that_does_not_answer_is_named_with_the_wait(
     assert f"{models.RETRIES + 1} tries of {models.TIMEOUT_S} s" in str(raised.value)
 
 
+def trickling(clock: list[float], every: float, asynchronous: bool = False) -> Callable[[Any], Any]:
+    """An OpenRouter that keeps the connection alive with whitespace and never answers."""
+    import httpx2
+
+    def body() -> Any:
+        while True:
+            clock[0] += every
+            yield b" "
+
+    async def abody() -> Any:
+        for part in body():
+            yield part
+
+    def answer(request: Any) -> Any:
+        return httpx2.Response(200, content=abody() if asynchronous else body())
+
+    return answer
+
+
+def test_a_host_kept_alive_with_whitespace_is_still_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parasail held a report for eleven minutes under a 180 s timeout that every byte restarted."""
+    import httpx2
+
+    clock = [0.0]
+    monkeypatch.setattr(models, "_clock", lambda: clock[0])
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    model = models.OpenRouterChat(
+        model=built.model_name,
+        api_key=built.openai_api_key,
+        base_url=built.openai_api_base,
+        extra_body=built.extra_body,
+        http_client=httpx2.Client(
+            transport=models.Deadline(httpx2.MockTransport(trickling(clock, every=10)))
+        ),
+        max_retries=models.RETRIES,
+    )
+
+    with pytest.raises(models.ProviderFailed, match="did not answer"):
+        model.invoke("hello")
+
+    assert clock[0] <= (models.RETRIES + 1) * (models.TIMEOUT_S + 10)
+
+
+def test_the_async_client_is_bounded_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    import httpx2
+
+    clock = [0.0]
+    monkeypatch.setattr(models, "_clock", lambda: clock[0])
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+    model = models.OpenRouterChat(
+        model=built.model_name,
+        api_key=built.openai_api_key,
+        base_url=built.openai_api_base,
+        extra_body=built.extra_body,
+        http_async_client=httpx2.AsyncClient(
+            transport=models.AsyncDeadline(
+                httpx2.MockTransport(trickling(clock, every=10, asynchronous=True))
+            )
+        ),
+        max_retries=0,
+    )
+
+    with pytest.raises(models.ProviderFailed, match="did not answer"):
+        asyncio.run(model.ainvoke("hello"))
+
+
+def test_openrouter_models_are_built_on_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    built = cast(Any, openrouter_logger(monkeypatch).model)
+
+    assert isinstance(built.http_client._transport, models.Deadline)
+    assert isinstance(built.http_async_client._transport, models.AsyncDeadline)
+
+
 def rate_limited_until(answered_on: int, calls: list[Any]) -> Callable[[Any], Any]:
     """An OpenRouter whose pool at AkashML is full for the first `answered_on - 1` calls."""
     import httpx2

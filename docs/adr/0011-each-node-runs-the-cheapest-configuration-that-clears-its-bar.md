@@ -47,10 +47,13 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 | `openai/gpt-oss-120b` low, DeepInfra / AkashML | 6 / 9 run | must ask 8 / 15 | 83% / **56%** | 0.0005 | 6–54 |
 | `openai/gpt-oss-120b` medium, DeepInfra | — | must ask 3 / 15 | — | 0.0006 | 25–55 |
 | **`deepseek/deepseek-v4-flash` high, Parasail** | 9 / 11 | must ask 12 / 15 | **83% / 92%** | **0.003** | **8–200** |
+| `deepseek/deepseek-v4-flash` high, StreamLake | 9 / 11 | — | **78%** (42 / 54, 3 reps) / 92% (1 rep) | 0.001 | 9–105 |
+| `deepseek/deepseek-v4-flash` high, DeepInfra | 8 / 11, must ask 57% | — | — | 0.001 | 10–189 |
 | `qwen/qwen3.8-27b` low, DeepInfra | 6 / 8 run | — | — | 0.002–0.008 | 13–230 |
 | `anthropic/claude-haiku-4.5` none, Anthropic | 4 / 7 run, wrong unambiguous documents | — | — | 0.01–0.08 | 7–24 |
 
 - `gpt-oss-20b` was never measured properly: the hosts lost 16 of its 20 rows. It is excluded on its 2 / 4 and its larger sibling's must-ask score.
+- Another host buys neither time nor quality (15c.3, 2026-10-10): a report is about six calls of 2–50 s at `high` on all three, and the unambiguous failures are a provenance written `reported` for `assumed`.
 - More reasoning did not buy better questions: 120b at medium asked less than at low, and the reference, which reasons longest, asked least.
 
 ## Onboarding's matrix
