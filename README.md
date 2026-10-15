@@ -56,7 +56,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 | *«la cyclette mi annoia»* | a conclusion kept with your sentence beside it, refused unless you wrote that sentence; every plan after it reads it as a preference |
 | *«quanto petto ho fatto?»* | answered from the engine's read tools |
 
-A plan arrives with two buttons, *Va bene* and *Non mi va*, and can be answered in words instead. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
+It speaks the language your Telegram app is set to: Italian for Italian, English for any other ([ADR-0016](docs/adr/0016-the-chat-speaks-the-language-its-telegram-app-is-set-to.md)). A plan arrives with two buttons, *Sounds good* and *Not for me* (*Va bene*, *Non mi va*), and can be answered in words instead. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
 
 ## How it works
 

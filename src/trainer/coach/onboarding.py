@@ -27,7 +27,7 @@ from langgraph.types import interrupt
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import conclusions, models
+from trainer.coach import conclusions, language, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.coach.logger import CLARIFY, EXCLUSION
@@ -66,7 +66,7 @@ def propose_exclusion(value: str, retest_date: str, why: str) -> str:
     - `value`: a movement pattern or a loaded joint, as the catalog names it;
       never an exercise.
     - `retest_date`: when to try it again, as YYYY-MM-DD, after today.
-    - `why`: one sentence to them, in Italian, saying what you heard.
+    - `why`: one sentence to them, in their language, saying what you heard.
 
     They are asked to confirm it; what comes back says whether they did.
 
@@ -89,7 +89,7 @@ def choose(path: str, why: str) -> str:
     """Pick what happens to the mesocycle they are following, now that a declaration changed.
 
     - `path`: one of the paths `finish` said are open.
-    - `why`: one sentence to them, in Italian, saying why this one.
+    - `why`: one sentence to them, in their language, saying why this one.
 
     Refused while a declaration is missing or wrong, or when the path is not open.
     What comes back ends the change.
@@ -106,7 +106,7 @@ FINISH = finish.__name__
 
 INTERVIEWING = """\
 You are setting up a training system for the person you are talking to, in a
-conversation you lead. You write in Italian, the way a coach texting would:
+conversation you lead. You write in their language, the way a coach texting would:
 short, warm, one question per message, never a form or a list of questions.
 
 By the end you must know, and have written down with `declare`:
@@ -166,7 +166,7 @@ PATHS = {
 CHANGING = """\
 You are the trainer of the person you are talking to, and their training is
 already set up. They have just told you something that changes what they
-declared. You write in Italian, the way a coach texting would: short, warm, one
+declared. You write in their language, the way a coach texting would: short, warm, one
 question per message.
 
 What is declared now:
@@ -400,7 +400,7 @@ def build(
         started: list[AnyMessage] = []
         if not state.get("messages"):
             started = [
-                SystemMessage(_prompt(state)),
+                SystemMessage(_prompt(state) + language.told()),
                 HumanMessage(state.get("said", [""])[0]),
             ]
         working, ending = (change, changes_end) if state.get("changing") else (first, endings)

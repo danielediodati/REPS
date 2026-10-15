@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import conclusions, models
+from trainer.coach import conclusions, language, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.coach.planner import REFUSED_TURN, REJECTIONS, SHOWN, changes, remembered
@@ -227,7 +227,7 @@ def build(
                     )
             known = [] if store is None else conclusions.live(store, conclusions.whose())
             opening = [
-                SystemMessage(SUPERVISING),
+                SystemMessage(SUPERVISING + language.told()),
                 HumanMessage(brief(ended, state.get("goal"), known, state.get("split", ()))),
             ]
         bound = model.bind_tools(definitions) if state.get("spent", 0) < budget else model

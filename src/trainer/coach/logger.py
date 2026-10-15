@@ -27,7 +27,7 @@ from langgraph.types import interrupt
 from trainer import log as logs
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import conclusions, models
+from trainer.coach import conclusions, language, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import exclusions, workouts
@@ -354,7 +354,7 @@ def build(
         opening: list[AnyMessage] = []
         if not state.get("messages"):
             opening = [
-                SystemMessage(LOGGING),
+                SystemMessage(LOGGING + language.told()),
                 HumanMessage(
                     brief(
                         state["report"],

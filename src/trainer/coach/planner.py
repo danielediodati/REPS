@@ -30,7 +30,7 @@ from pydantic import TypeAdapter
 
 from trainer import tools
 from trainer import plan as plans
-from trainer.coach import conclusions, models
+from trainer.coach import conclusions, language, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import admissible, constraints, mesocycles, methodology, workouts
@@ -98,11 +98,11 @@ METHODOLOGY = methodology.committed().for_planner
 SHOWN = """\
 What you write in words -- a block's reason, a note, why an exercise is there
 despite them, why this many cycles, a direction -- reaches them in the chat.
-Write it in plain Italian, short, the way a coach texting would, with no
-English gym jargon. A reason says why this block is in this workout, in its
-own words each time, not what the exercise is or which muscle it trains. Ids,
-field names and dates stay as you were given them."""
-"""The language of every line the chat shows as a model wrote it, read by every prompt that writes one."""
+Write it in plain words, short, the way a coach texting would, with no gym
+jargon borrowed from another language. A reason says why this block is in
+this workout, in its own words each time, not what the exercise is or which
+muscle it trains. Ids, field names and dates stay as you were given them."""
+"""How every line the chat shows as a model wrote it is written, read by every prompt that writes one."""
 
 PLANNING = f"""\
 You plan one strength workout, for one person, today.
@@ -705,7 +705,7 @@ def build(
             opening: list[AnyMessage] = []
             if not state.get("messages"):
                 opening = [
-                    SystemMessage(MESOCYCLE_PLANNING),
+                    SystemMessage(MESOCYCLE_PLANNING + language.told()),
                     HumanMessage(mesocycle_brief(request, known())),
                 ]
             return _turn(state, request, opening)
@@ -731,7 +731,7 @@ def build(
                 budget_min=today.budget_min,
                 groups=today.groups,
             )
-            opening = [SystemMessage(PLANNING), HumanMessage(brief(request, known()))]
+            opening = [SystemMessage(PLANNING + language.told()), HumanMessage(brief(request, known()))]
         return _turn(state, request, opening)
 
     def _turn(

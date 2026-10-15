@@ -1,0 +1,57 @@
+# What the chat says in words of its own, in Italian. Every key is in en.toml too.
+# `{log}` is the log file's name, filled in on load; any other `{...}` is filled where the line is said.
+
+[chat]
+working = "Ci penso."
+failed = "Qualcosa è andato storto mentre ci lavoravo. Riprova. Il motivo è scritto in {log}."
+blocked = "Non posso lavorarci: c'è qualcosa da sistemare sul PC. Il motivo è scritto in {log}."
+turned_down = "Non mi va questo allenamento."
+exclusion = "{why}\n\nSmetto di proporti «{value}» fino al {retest_date}. Va bene?"
+
+[buttons]
+kept = "Va bene"
+turned_down = "Non mi va"
+confirmed = "Sì"
+declined = "No"
+
+[plan]
+heading = "*Blocco {position}* · {rounds} giri · {rest}s di recupero · {minutes}:{seconds:02d}"
+last = " · ultimo carico {load} kg"
+last_unknown = " · ultimo carico: non lo so"
+served = "*Allenamento {slot} di {slots}* · ciclo {cycle} di {cycles}"
+mesocycle = "*Mesociclo* · {cycles} cicli"
+slot = "*Allenamento {slot} di {slots}* · {groups}"
+said_no = "  ⚠️ avevi detto di no: {why}"
+total = "*Totale* {total} min su {budget}"
+reps = "{amount} ripetizioni"
+seconds = "{amount}s"
+
+[progress]
+writing = "scrivo il piano"
+rewriting = "riscrivo il piano"
+refused = "il validatore ha rifiutato: {rules}"
+exhausted = "dopo {attempts} tentativi non ho un piano che stia nei vincoli"
+valid = "piano valido, {blocks}"
+one_block = "1 blocco"
+blocks = "{count} blocchi"
+workouts = "{count} allenamenti"
+again = "va bene, ne penso un altro"
+writing_report = "metto giù quello che hai fatto"
+read = "report letto"
+not_read = "il report non è passato: {why}"
+failed = "non ha funzionato"
+unknown = "uso {tool}"
+
+[progress.calls]
+admissible_set = "guardo cosa puoi fare oggi con {equipment} e {budget_min} minuti"
+remaining_budget = "controllo quanto tempo resta"
+allocate = "divido {minutes} minuti fra i gruppi"
+pattern_history = "guardo lo storico di {pattern}"
+last_performed_load = "cerco l'ultimo carico su {exercise_id}"
+search_exercises = "cerco «{text}» in catalogo"
+adherence_history = "guardo quanto hai seguito i piani"
+volume_deficit = "confronto il volume pianificato con quello fatto"
+unreported_workouts = "controllo se è rimasto un allenamento senza report"
+compare_variants = "confronto {id_a} e {id_b}"
+prescribed_workout = "rileggo l'allenamento {workout_id}"
+ask_user = "ti chiedo una cosa"

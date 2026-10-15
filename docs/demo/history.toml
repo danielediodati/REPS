@@ -37,72 +37,72 @@ mesocycle = "hypertrophy"
 
 [[history]]
 mesocycle = "angles"
-direction = { theme = "angoli nuovi", changes = "ogni esercizio sostituito da uno che prende lo stesso muscolo da un altro angolo; ripetizioni da 8 a 10-12, recupero un gradino più corto", why = "con un solo esercizio per muscolo, alcune sue zone restano scoperte", varies = ["exercises", "reps", "rest"] }
+direction = { theme = "new angles", changes = "every exercise swapped for one that hits the same muscle from another angle; reps from 8 to 10-12, rest one step shorter", why = "with a single exercise per muscle, parts of it go untrained", varies = ["exercises", "reps", "rest"] }
 
 [[history]]
 mesocycle = "strength"
 goal = "strength"
-direction = { theme = "i fondamentali, pesanti", changes = "tornano squat, panca e rematore col bilanciere del primo mesociclo, si aggiunge uno stacco rumeno e si tolgono i complementari; ripetizioni a 5-6, recupero fino a 3 minuti", why = "ora l'obiettivo è la forza, e la allenano i multiarticolari pesanti", varies = ["exercises", "reps", "rest"] }
+direction = { theme = "the big lifts, heavy", changes = "squat, bench press and barbell row from the first mesocycle return, a Romanian deadlift is added and the accessories go; reps at 5-6, rest up to 3 minutes", why = "the goal is now strength, and heavy compound lifts are what train it", varies = ["exercises", "reps", "rest"] }
 
 # -- the mesocycles the history is made of ------------------------------------
 
 [mesocycles.hypertrophy]
 cycles = 4
-why = "quattro cicli per trovare i carichi di partenza"
+why = "four cycles to find the starting loads"
 
 [[mesocycles.hypertrophy.slots]]
 blocks = [
-  { rounds = 4, rest = 120, reason = "il multiarticolare pesante, che lavora tutta la gamba", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 4, rest = 90, reason = "una gamba alla volta, per pareggiare destra e sinistra", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 4, rest = 60, reason = "i polpacci, che lo squat lascia quasi fuori", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 4, rest = 60, reason = "gli addominali bassi, che lo squat non allena", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 3, rest = 60, reason = "tenere il tronco fermo, come sotto il bilanciere", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+  { rounds = 4, rest = 120, reason = "the heavy compound lift, working the whole leg", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "one leg at a time, to even out left and right", items = [{ exercise_id = "Dumbbell_Lunges", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "the calves, which the squat barely reaches", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "the lower abs, which the squat does not train", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 3, rest = 60, reason = "holding the torso still, as under the bar", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
 ]
 
 [[mesocycles.hypertrophy.slots]]
 blocks = [
-  { rounds = 4, rest = 120, reason = "la spinta pesante per il petto, dove si misura il progresso", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 4, rest = 120, reason = "la tirata pesante, per bilanciare la panca", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 4, rest = 90, reason = "la parte alta del petto, che la panca piana prende poco", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 4, rest = 90, reason = "la tirata dall'alto, per dorsali e bicipiti", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 120, reason = "the heavy chest press, where progress is measured", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 120, reason = "the heavy pull, to balance the bench", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 90, reason = "the upper chest, which the flat bench barely reaches", items = [{ exercise_id = "Incline_Dumbbell_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "pulling from above, for lats and biceps", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 8 } }] },
 ]
 
 [mesocycles.angles]
 cycles = 4
-why = "quattro cicli, quanto basta perché i carichi salgano anche sugli angoli nuovi"
+why = "four cycles, enough for the loads to climb on the new angles too"
 
 [[mesocycles.angles.slots]]
 blocks = [
-  { rounds = 4, rest = 90, reason = "busto più dritto: più quadricipiti, meno schiena", items = [{ exercise_id = "Front_Barbell_Squat", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 4, rest = 90, reason = "una gamba alla volta, con più allungamento in basso", items = [{ exercise_id = "Split_Squat_with_Dumbbells", prescription = { unit = "reps", amount = 12 } }] },
-  { rounds = 4, rest = 60, reason = "i polpacci, che lo squat lascia quasi fuori", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 4, rest = 60, reason = "tenere il tronco fermo sotto carico", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
-  { rounds = 3, rest = 60, reason = "gli addominali bassi, che lo squat non allena", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 90, reason = "a more upright torso: more quads, less lower back", items = [{ exercise_id = "Front_Barbell_Squat", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "one leg at a time, with a deeper stretch at the bottom", items = [{ exercise_id = "Split_Squat_with_Dumbbells", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 60, reason = "the calves, which the squat barely reaches", items = [{ exercise_id = "Standing_Dumbbell_Calf_Raise", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 60, reason = "holding the torso still under load", items = [{ exercise_id = "Plank", prescription = { unit = "seconds", amount = 45 } }] },
+  { rounds = 3, rest = 60, reason = "the lower abs, which the squat does not train", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 12 } }] },
 ]
 
 [[mesocycles.angles.slots]]
 blocks = [
-  { rounds = 4, rest = 90, reason = "i manubri scendono più del bilanciere: più escursione per il petto", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 4, rest = 90, reason = "un braccio alla volta, con più allungamento del dorso", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 10 } }] },
-  { rounds = 4, rest = 60, reason = "più serie per il petto, a corpo libero", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
-  { rounds = 4, rest = 90, reason = "presa prona: più dorsali, meno bicipiti", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 8 } }] },
-  { rounds = 4, rest = 60, reason = "il petto in allungamento, dove le spinte non arrivano", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 12 } }] },
+  { rounds = 4, rest = 90, reason = "dumbbells go lower than the bar: a longer range for the chest", items = [{ exercise_id = "Dumbbell_Bench_Press", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 90, reason = "one arm at a time, with a longer stretch for the lats", items = [{ exercise_id = "One-Arm_Dumbbell_Row", prescription = { unit = "reps", amount = 10 } }] },
+  { rounds = 4, rest = 60, reason = "more sets for the chest, with bodyweight", items = [{ exercise_id = "Pushups", prescription = { unit = "reps", amount = 15 } }] },
+  { rounds = 4, rest = 90, reason = "overhand grip: more lats, less biceps", items = [{ exercise_id = "Pullups", prescription = { unit = "reps", amount = 8 } }] },
+  { rounds = 4, rest = 60, reason = "the chest at full stretch, where presses do not reach", items = [{ exercise_id = "Dumbbell_Flyes", prescription = { unit = "reps", amount = 12 } }] },
 ]
 
 [mesocycles.strength]
 cycles = 4
-why = "quattro cicli pesanti, poi si guarda come sono saliti i carichi"
+why = "four heavy cycles, then a look at how the loads went up"
 
 [[mesocycles.strength.slots]]
 blocks = [
-  { rounds = 5, rest = 180, reason = "la forza delle gambe, sul movimento che si misura", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 5 } }] },
-  { rounds = 4, rest = 180, reason = "la catena posteriore, che lo squat lascia indietro", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 6 } }] },
-  { rounds = 3, rest = 180, reason = "un tronco che regge i carichi pesanti", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 5, rest = 180, reason = "leg strength, on the lift it is measured by", items = [{ exercise_id = "Barbell_Squat", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 4, rest = 180, reason = "the back of the legs, which the squat leaves behind", items = [{ exercise_id = "Romanian_Deadlift", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 3, rest = 180, reason = "a torso that holds heavy loads", items = [{ exercise_id = "Hanging_Leg_Raise", prescription = { unit = "reps", amount = 6 } }] },
 ]
 
 [[mesocycles.strength.slots]]
 blocks = [
-  { rounds = 5, rest = 180, reason = "la forza di spinta, sul movimento che si misura", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 5 } }] },
-  { rounds = 4, rest = 180, reason = "la forza di tirata, per bilanciare la panca", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 6 } }] },
-  { rounds = 3, rest = 180, reason = "la tirata dall'alto, pesante", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 5, rest = 180, reason = "pressing strength, on the lift it is measured by", items = [{ exercise_id = "Barbell_Bench_Press_-_Medium_Grip", prescription = { unit = "reps", amount = 5 } }] },
+  { rounds = 4, rest = 180, reason = "pulling strength, to balance the bench", items = [{ exercise_id = "Bent_Over_Barbell_Row", prescription = { unit = "reps", amount = 6 } }] },
+  { rounds = 3, rest = 180, reason = "pulling from above, heavy", items = [{ exercise_id = "Chin-Up", prescription = { unit = "reps", amount = 6 } }] },
 ]

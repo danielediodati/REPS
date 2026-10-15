@@ -7,10 +7,12 @@ is driven here is the part that decides, with the updates constructed by hand.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import sqlite3
 import threading
+import types
 import typing
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import closing
@@ -52,10 +54,12 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from trainer.coach import bot, checkpoints, entrance, logfile, models, onboarding, planner, progress, runs, supervisor
+from trainer.coach import bot, checkpoints, entrance, language, logfile, models, onboarding, planner, progress, runs, supervisor
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
 from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
+
+SAID = language.texts(language.ITALIAN)
 
 OWNER = 6421
 STRANGER = 99
@@ -103,11 +107,11 @@ def spoken() -> tuple[list[str], bot.Say]:
 class Channels:
     """One chat, remembering everything that went down each of its three channels."""
 
-    def __init__(self) -> None:
+    def __init__(self, spoken: language.Language = language.ITALIAN) -> None:
         self.said: list[str] = []
         self.offers: list[tuple[str, list[tuple[str, str]]]] = []
         self.drafts: list[str] = []
-        self.chat = bot.Chat(say=self._say, offer=self._offer, draft=self._draft)
+        self.chat = bot.Chat(say=self._say, offer=self._offer, draft=self._draft, language=spoken)
 
     async def _say(self, line: str) -> None:
         self.said.append(line)
@@ -570,7 +574,7 @@ def test_a_run_that_fails_does_not_wedge_the_thread() -> None:
         await coach.arriving(OWNER, CHAT, "due", channel(say, nowhere))
         return said
 
-    assert asyncio.run(scenario()) == [bot.FAILED, "fatto: due"]
+    assert asyncio.run(scenario()) == [SAID.chat.failed, "fatto: due"]
 
 
 def test_a_message_queued_behind_a_run_that_fails_is_still_answered() -> None:
@@ -604,7 +608,7 @@ def test_a_message_queued_behind_a_run_that_fails_is_still_answered() -> None:
         await first
         return said
 
-    assert asyncio.run(scenario()) == [entrance.QUEUED, bot.FAILED, "fatto: due"]
+    assert asyncio.run(scenario()) == [entrance.QUEUED, SAID.chat.failed, "fatto: due"]
 
 
 def test_a_chat_that_cannot_be_written_to_does_not_take_the_queue_with_it() -> None:
@@ -783,7 +787,7 @@ def test_asking_for_a_mesocycle_reaches_it_whole_with_two_buttons(
     (text, buttons) = watched.offers[0]
     assert "Barbell Squat" in text and "Standing Military Press" in text
     assert "4 cicli" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
 
 
 def test_the_request_the_chat_planned_against_was_derived_and_not_asked_for(
@@ -1105,7 +1109,7 @@ def test_a_catalog_nobody_enriched_stops_the_run_before_it_starts(
         watched = asking(graphs_of(graph))
 
     assert watched.offers == []
-    assert watched.said == [SAYS, bot.BLOCKED]
+    assert watched.said == [SAYS, SAID.chat.blocked]
     assert watched.drafts == []
     assert "trainer enrich derive" in caplog.text
 
@@ -1122,7 +1126,7 @@ def test_a_database_nobody_imported_stops_the_run_too(
         watched = asking(graphs_of(graph))
 
     assert watched.offers == []
-    assert watched.said == [SAYS, bot.BLOCKED]
+    assert watched.said == [SAYS, SAID.chat.blocked]
     assert "trainer db init" in caplog.text
 
 
@@ -1143,7 +1147,7 @@ def test_every_precondition_is_one_line_and_the_same_line(
     monkeypatch.setenv("TRAINER_DB", str(tmp_path / "absent.sqlite"))
     without_database = asking(graphs_of(graph)).said
 
-    assert without_catalog == without_database == [SAYS, bot.BLOCKED]
+    assert without_catalog == without_database == [SAYS, SAID.chat.blocked]
 
 
 def test_the_blocked_line_has_nothing_to_substitute_into() -> None:
@@ -1155,14 +1159,14 @@ def test_the_blocked_line_has_nothing_to_substitute_into() -> None:
     The three tests above are the other half: whatever the state, the chat
     gets this and only this.
     """
-    assert "{" not in bot.BLOCKED
+    assert "{" not in SAID.chat.blocked
 
 
 def test_both_lines_name_the_log_and_neither_carries_a_path() -> None:
     """*«dove gira il bot»* named no file. These name one, the same way, and
     still without saying where it is: an absolute path is what ticket 07/02
     kept out of the chat in the first place."""
-    for line in (bot.BLOCKED, bot.FAILED):
+    for line in (SAID.chat.blocked, SAID.chat.failed):
         assert logfile.LOG_NAME in line
         assert str(logfile.log_path()) not in line
         assert "\\" not in line and "/" not in line
@@ -1183,7 +1187,7 @@ def test_a_state_that_stops_a_run_is_written_to_the_log_file(
     watched = asking(graphs_of(graph))
 
     written = logfile.log_path().read_text(encoding="utf-8")
-    assert watched.said == [SAYS, bot.BLOCKED]
+    assert watched.said == [SAYS, SAID.chat.blocked]
     assert "trainer db init" in written
     assert str(tmp_path / "absent.sqlite") in written
     assert "Traceback" in written
@@ -1205,7 +1209,7 @@ def test_a_run_that_falls_over_is_written_to_the_log_file(
     watched = asking(graphs_of(graph))
 
     written = logfile.log_path().read_text(encoding="utf-8")
-    assert watched.said == [SAYS, bot.FAILED]
+    assert watched.said == [SAYS, SAID.chat.failed]
     assert "RuntimeError: the provider fell over" in written
     assert "Traceback" in written
 
@@ -1388,7 +1392,7 @@ def test_a_valid_plan_reaches_the_chat_with_three_buttons(
 
     (text, buttons) = sent[0]
     assert "Barbell Squat" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
     assert said == []
     assert still_waiting(graph, thread) == ("propose",)
     assert workout_rows(catalogued) == []
@@ -1407,7 +1411,7 @@ def test_every_button_fits_what_telegram_carries(catalogued: sqlite3.Connection)
         assert read is not None
         assert read.thread == thread
         taps.append(read.action)
-    assert taps == [action for action, _ in bot.BUTTONS]
+    assert taps == list(bot.BUTTONS)
 
 
 def test_tapping_accept_writes_exactly_one_prescribed_workout(
@@ -1731,12 +1735,12 @@ def test_the_draft_opens_on_a_line_of_our_own(
     graph = graph_of(refusing_then_planning(), checkpointer=InMemorySaver())
     watched = asking(graphs_of(graph))
 
-    assert watched.drafts[0] == bot.WORKING
+    assert watched.drafts[0] == SAID.chat.working
     assert "" not in watched.drafts, "an empty draft asks the client to invent one"
     assert watched.drafts[-1].splitlines() == [
-        progress.WRITING,
+        SAID.progress.writing,
         f"il validatore ha rifiutato: {plans.ADMISSIBLE}",
-        progress.REWRITING,
+        SAID.progress.rewriting,
         "piano valido, 2 allenamenti",
     ]
 
@@ -1758,7 +1762,7 @@ def test_a_refusal_is_streamed_too(catalogued: sqlite3.Connection) -> None:
         coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.TURNED_DOWN), watched.chat)
     )
 
-    assert progress.AGAIN in watched.drafts[-1]
+    assert SAID.progress.again in watched.drafts[-1]
     assert "Standing Military Press" in watched.offers[0][0]
 
 
@@ -1821,7 +1825,7 @@ def test_the_chat_and_the_terminal_render_one_plan(
     plan = plan_of("Barbell_Squat", "Standing_Military_Press")
     reading = plans.shown(catalogued, plan, plans.to_blocks(plan), 45)
 
-    text = bot.proposal(plan, 45)
+    text = bot.proposal(plan, 45, language.ITALIAN)
 
     assert f"min su {45}" in text
     assert str(reading.total_min) in text
@@ -1837,9 +1841,9 @@ def test_a_prescription_is_worded_in_italian_in_every_unit_a_plan_can_take(
     plan = plan_of("Barbell_Squat", "Standing_Military_Press")
     plan.blocks[0].items[0].prescription = plans.Prescription(unit="seconds", amount=45)
 
-    text = bot.proposal(plan, 45)
+    text = bot.proposal(plan, 45, language.ITALIAN)
 
-    assert set(bot.UNITS) == set(units)
+    assert set(units) <= {field.name for field in dataclasses.fields(language.PlanLines)}
     assert "Barbell Squat · 45s" in text
     assert "Standing Military Press · 8 ripetizioni" in text
     assert not any(f" {unit}" in text for unit in units)
@@ -1858,7 +1862,7 @@ def test_what_the_user_said_no_to_is_the_line_they_notice(
         }
     )
 
-    text = bot.proposal(plan, 45)
+    text = bot.proposal(plan, 45, language.ITALIAN)
 
     assert "avevi detto di no: non c'è altro per le gambe" in text
 
@@ -1872,7 +1876,7 @@ def test_the_plan_escapes_what_telegram_would_read_as_markup(
     """
     plan = plan_of("Barbell_Squat", reason="30-45 min. di lavoro")
 
-    text = bot.proposal(plan, 45)
+    text = bot.proposal(plan, 45, language.ITALIAN)
 
     assert "30\\-45 min\\. di lavoro" in text
 
@@ -1926,7 +1930,7 @@ def test_a_provider_that_falls_over_mid_stream_is_said_out_loud(
 
     asyncio.run(coach.arriving(OWNER, CHAT, "cosa faccio oggi?", watched.chat))
 
-    assert watched.said == [SAYS, bot.FAILED]
+    assert watched.said == [SAYS, SAID.chat.failed]
     assert watched.offers == []
     assert "someone" not in "".join(watched.said + watched.drafts)
 
@@ -1985,7 +1989,7 @@ def test_a_run_streams_against_the_checkpointer_the_bot_actually_uses(
 
         asyncio.run(coach.arriving(OWNER, CHAT, "cosa faccio oggi?", watched.chat))
 
-        assert watched.said != [bot.FAILED], "the run fell over"
+        assert watched.said != [SAID.chat.failed], "the run fell over"
         assert "Barbell Squat" in watched.offers[0][0]
         assert watched.drafts, "nothing was streamed"
 
@@ -2112,7 +2116,7 @@ def test_a_proposed_exclusion_is_two_buttons_and_nothing_is_written_until_one(
     asyncio.run(coach.arriving(OWNER, CHAT, "la spalla tirava", watched.chat))
 
     (text, buttons) = watched.offers[0]
-    assert [label for _, label in buttons] == [label for _, label in bot.CONFIRM]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.CONFIRM, language.ITALIAN)]
     assert "shoulder" in text
     assert workout_rows(catalogued) == [(identifier, "prescribed")]
     assert exclusions.active(catalogued, date.today().isoformat()) == ()
@@ -2179,8 +2183,8 @@ def test_a_button_on_an_exclusion_the_thread_moved_past_is_not_silence(
 def test_the_two_sets_of_buttons_are_told_apart_by_what_they_carry() -> None:
     """A tap has 64 bytes and has to find its graph in them. The actions are
     disjoint, so the action is enough and no byte goes on saying which."""
-    assert set(dict(bot.BUTTONS)) & set(dict(bot.CONFIRM)) == set()
-    assert set(bot.ACTIONS) == set(dict(bot.BUTTONS)) | set(dict(bot.CONFIRM))
+    assert set(bot.BUTTONS) & set(bot.CONFIRM) == set()
+    assert set(bot.ACTIONS) == set(bot.BUTTONS) | set(bot.CONFIRM)
 
 
 # -- two models, one run -------------------------------------------------------
@@ -2300,7 +2304,7 @@ def test_the_five_lines_are_gone_and_the_two_that_stay_are_constants() -> None:
     they are the two cases where the model is absent or not to be trusted."""
     for gone in ("STARTED", "QUEUED", "WRITTEN", "SUPERSEDED", "NO_PLAN"):
         assert not hasattr(bot, gone), gone
-    assert bot.BLOCKED and bot.FAILED
+    assert SAID.chat.blocked and SAID.chat.failed
 
 
 def test_every_situation_the_entrance_can_say_is_one_the_bot_names() -> None:
@@ -2328,7 +2332,7 @@ def test_the_entrance_saying_nothing_is_answered_like_a_model_that_is_absent(
 
     asyncio.run(turns_of(graphs).arriving(OWNER, CHAT, "ciao", watched.chat))
 
-    assert watched.said == [bot.FAILED]
+    assert watched.said == [SAID.chat.failed]
 
 
 def test_an_entrance_that_falls_over_does_not_wedge_the_greeting(
@@ -2346,7 +2350,7 @@ def test_an_entrance_that_falls_over_does_not_wedge_the_greeting(
 
     asyncio.run(turns_of(graphs).started(OWNER, CHAT, watched.chat))
 
-    assert watched.said == [bot.FAILED]
+    assert watched.said == [SAID.chat.failed]
 
 
 def test_the_closed_question_escapes_what_telegram_would_read_as_markup() -> None:
@@ -2360,7 +2364,8 @@ def test_the_closed_question_escapes_what_telegram_would_read_as_markup() -> Non
             "granularity": "joint",
             "value": "shoulder",
             "retest_date": "2026-10-15",
-        }
+        },
+        language.ITALIAN,
     )
 
     assert "2026\\-10\\-15" in asked
@@ -2417,7 +2422,7 @@ def test_an_adaptation_is_offered_accepted_and_served_and_the_mesocycle_stays(
     sent = asking(graphs, "solo 30 minuti oggi").offers
     ((text, buttons),) = sent
     assert "30" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
 
     said, say = spoken()
     asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
@@ -2442,7 +2447,7 @@ def test_a_change_is_offered_accepted_and_kept_counting_on(
     assert before is not None
 
     ((_, buttons),) = asking(graphs, "d'ora in poi meno giri di squat").offers
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
     said, say = spoken()
     asyncio.run(turns_of(graphs).tapped(OWNER, CHAT, buttons[0][0], channel(say)))
 
@@ -2566,12 +2571,31 @@ def test_the_report_that_completes_the_last_cycle_prepares_the_next_mesocycle(
     assert watched.said[2].startswith(entrance.NEXT_MESOCYCLE.split("{")[0])
     ((text, buttons),) = watched.offers
     assert "3 cicli" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
     assert len(watched.drafts) == drafted, "the preparation opens no draft"
     state = graphs.planner.get_state(planning_on()).values
     assert state["unasked"] is True
     assert state["request"].continuing is not None, "briefed with the mesocycle that ended"
     assert len(planned.seen) == 1, "one planning run, and only one"
+
+
+def test_a_chat_in_english_gets_the_next_mesocycle_in_english_from_every_model(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    planned = Scripted(documents=[NEXT])
+    directs = Scripted(documents=[DIRECTED])
+    front = Talking(handoff=entrance.LOG_WORKOUT)
+    graphs = finishing(catalogued, planned, front=front, directs=directs)
+    watched = Channels(language.ENGLISH)
+
+    asyncio.run(reported_and_prepared(graphs, watched))
+
+    english = language.texts(language.ENGLISH)
+    ((text, buttons),) = watched.offers
+    assert "3 cycles" in text and "*Block 1*" in text
+    assert [label for _, label in buttons] == [english.buttons.kept, english.buttons.turned_down]
+    for model in (front, planned, directs):
+        assert model.seen[0][0].text.endswith("everything you write that reaches them is in English.")
 
 
 def test_the_supervisor_directs_the_next_mesocycle_before_it_is_planned_and_it_is_kept(
@@ -2612,7 +2636,7 @@ def test_a_supervisor_that_falls_over_prepares_nothing_and_says_so(
 
     asyncio.run(reported_and_prepared(graphs, watched))
 
-    assert watched.said[-1] == bot.FAILED
+    assert watched.said[-1] == SAID.chat.failed
     assert planned.seen == [] and watched.offers == []
     assert graphs.preparing == set()
 
@@ -2850,7 +2874,7 @@ def test_the_interview_ends_in_the_file_and_a_mesocycle_offered(
     assert answered.said == [entrance.ONBOARDED]
     (text, buttons) = answered.offers[0]
     assert "Barbell Squat" in text
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
 
 
 def test_the_interview_survives_a_restart(
@@ -2980,7 +3004,7 @@ def test_a_rewrite_chosen_is_offered_through_the_mesocycles_loop(
 
     assert watched.said == [SAYS, "Con un'ora lo allungo."]
     ((_, buttons),) = watched.offers
-    assert [label for _, label in buttons] == [label for _, label in bot.BUTTONS]
+    assert [label for _, label in buttons] == [label for _, label in bot.labelled(bot.BUTTONS, language.ITALIAN)]
     assert config.load(catalogued).duration_cap_min == 60
 
 
@@ -3297,3 +3321,13 @@ def test_with_no_plan_waiting_the_answers_are_not_offered(
     asking(graphs_of(front=front), "ciao")
 
     assert not {entrance.ACCEPT_PLAN, entrance.TURN_DOWN_PLAN} & set(front.bound[-1])
+
+
+def test_the_language_is_the_one_the_senders_telegram_app_is_set_to() -> None:
+    def sent_by(code: str | None) -> Any:
+        return types.SimpleNamespace(effective_user=types.SimpleNamespace(language_code=code))
+
+    assert bot._spoken_in(sent_by("it")) == language.ITALIAN
+    assert bot._spoken_in(sent_by("en")) == language.ENGLISH
+    assert bot._spoken_in(sent_by(None)) == language.ENGLISH
+    assert bot._reading("chat:1", language.ENGLISH)["configurable"][language.KEY] == language.ENGLISH

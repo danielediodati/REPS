@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -115,7 +117,7 @@ def test_a_history_that_is_not_there_is_named_as_a_state(tmp_path: Path, monkeyp
 
 
 def test_a_direction_missing_its_theme_is_refused_naming_what_it_needs() -> None:
-    text = demo.history_path().read_text(encoding="utf-8").replace('theme = "angoli nuovi"', 'thema = "angoli nuovi"')
+    text = demo.history_path().read_text(encoding="utf-8").replace('theme = "new angles"', 'thema = "new angles"')
 
     with pytest.raises(demo.DemoError, match="a direction has a theme, changes and why"):
         demo.parse(text)
@@ -141,7 +143,7 @@ def test_the_first_mesocycle_follows_nothing_so_it_has_no_direction() -> None:
         demo.parse(text)
 
 
-def test_every_line_the_history_puts_in_the_chat_is_italian() -> None:
+def test_every_line_the_history_puts_in_the_chat_is_english() -> None:
     """A block's reason shows under it, and the next mesocycle is announced from its direction."""
     told = demo.parse(demo.history_path().read_text(encoding="utf-8"))
     said = [
@@ -155,5 +157,10 @@ def test_every_line_the_history_puts_in_the_chat_is_italian() -> None:
         ),
     ]
 
-    english = {"the", "and", "of", "to", "up", "down", "one", "new", "back"}
-    assert [line for line in said if english & set(line.lower().replace(",", " ").replace(";", " ").split())] == []
+    italian = {"il", "lo", "la", "le", "di", "del", "della", "che", "con", "una", "un", "si", "gli", "sotto", "ogni"}
+    assert [line for line in said if italian & set(re.findall(r"[a-z]+", line.lower()))] == []
+    assert [line for line in said if re.search(r"[àèéìòù]", line)] == [], "no Italian accents"
+    english = {"the", "a", "an", "and", "of", "to", "for", "on", "with", "from", "in", "at", "by", "as", "so", "than", "which", "is", "more", "less"}
+    assert [
+        line for line in said if len(words := re.findall(r"[a-z]+", line.lower())) >= 4 and not english & set(words)
+    ] == [], "every sentence has an English word in it"

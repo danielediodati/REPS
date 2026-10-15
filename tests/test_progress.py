@@ -20,7 +20,7 @@ from conftest import enrich
 from test_planner import BARBELL_45, CATALOG, PATTERNS, Scripted, graph_of, plan_of
 from trainer import plan as plans
 from trainer.coach import logger as coach_logger
-from trainer.coach import planner, progress
+from trainer.coach import language, planner, progress
 from trainer.engine import catalog, database, migrations
 
 
@@ -78,7 +78,7 @@ def test_a_run_is_narrated_from_the_stream_it_produced(
     assert lines == [
         "guardo cosa puoi fare oggi con barbell e 45 minuti",
         "controllo quanto tempo resta → 45 min",
-        progress.WRITING,
+        language.texts(language.ITALIAN).progress.writing,
         "piano valido, 1 blocco",
     ]
 
@@ -100,9 +100,9 @@ def test_a_refusal_names_the_rules_it_broke_before_the_retry(
     )
 
     assert lines == [
-        progress.WRITING,
+        language.texts(language.ITALIAN).progress.writing,
         f"il validatore ha rifiutato: {plans.ADMISSIBLE}",
-        progress.REWRITING,
+        language.texts(language.ITALIAN).progress.rewriting,
         "piano valido, 1 blocco",
     ]
 
@@ -114,7 +114,7 @@ def test_a_run_that_never_reaches_a_valid_plan_says_so(
         Scripted(documents=[plan_of("Dumbbell_Bench_Press")] * planner.ATTEMPTS)
     )
 
-    assert lines[-1] == progress.EXHAUSTED.format(attempts=planner.ATTEMPTS)
+    assert lines[-1] == language.texts(language.ITALIAN).progress.exhausted.format(attempts=planner.ATTEMPTS)
 
 
 def test_every_tool_a_streamed_run_can_call_has_a_line(
@@ -126,9 +126,9 @@ def test_every_tool_a_streamed_run_can_call_has_a_line(
     Both graphs, because from session 9 both are streamed into the draft; the
     logger's question is a call like any other and shows as one.
     """
-    assert set(progress.CALLS) == set(planner.TOOLS) | set(coach_logger.TOOLS) | {
-        coach_logger.ask_user.__name__
-    }
+    streamed_tools = set(planner.TOOLS) | set(coach_logger.TOOLS) | {coach_logger.ask_user.__name__}
+    for spoken in language.LANGUAGES:
+        assert set(language.texts(spoken).progress.calls) == streamed_tools, spoken
 
 
 def test_a_tool_the_model_called_wrong_is_still_a_line(
@@ -152,7 +152,7 @@ def test_a_tool_the_model_called_wrong_is_still_a_line(
         )
     )
 
-    assert lines[0] == f"guardo cosa puoi fare oggi con ? e 45 minuti → {progress.FAILED}"
+    assert lines[0] == f"guardo cosa puoi fare oggi con ? e 45 minuti → {language.texts(language.ITALIAN).progress.failed}"
 
 
 def test_the_draft_is_cut_to_what_telegram_carries() -> None:
@@ -201,7 +201,7 @@ def test_a_plan_turned_down_says_the_run_is_starting_again() -> None:
     lines = progress.Progress()
 
     assert lines.reading({"propose": dict(planner.starting(BARBELL_45))})
-    assert lines.lines == [progress.AGAIN]
+    assert lines.lines == [language.texts(language.ITALIAN).progress.again]
 
 
 def test_an_accepted_plan_is_not_a_new_run() -> None:

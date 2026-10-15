@@ -26,7 +26,7 @@ from langgraph.store.base import BaseStore
 
 from trainer import plan as plans
 from trainer import tools
-from trainer.coach import conclusions, models
+from trainer.coach import conclusions, language, models
 from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import catalog, mesocycles
@@ -73,7 +73,8 @@ def adapt_this_workout(said: str) -> str:
     Call this when what they want is this workout changed and the mesocycle
     left as it is: a different time, other equipment, an exercise out or in,
     another of the cycle's workouts, anything about today. `said` is what they
-    asked for, in their own words: the planner reads it, and decides the rest.
+    asked for, in their own words and language, never translated: the planner
+    reads it, and decides the rest.
 
     The adapted workout arrives in the chat by itself in a few minutes: tell
     them you are on it.
@@ -89,7 +90,8 @@ def change_mesocycle(said: str) -> str:
 
     Call this when they want the mesocycle itself changed from now on: an
     exercise gone for good, a different emphasis, a different number of
-    cycles. `said` is what they want changed, in their own words.
+    cycles. `said` is what they want changed, in their own words and language,
+    never translated.
 
     The new mesocycle arrives in the chat by itself in a few minutes: tell
     them you are on it. When it does not start, what comes back says why.
@@ -107,7 +109,8 @@ def change_declaration(said: str) -> str:
     Call this when what changes is not today's workout or this mesocycle's
     exercises but what they have, how long they train, or what for, as in «ho
     preso una panca piana», «da adesso mi alleno un'ora», «passo alla
-    forza». `said` is what they told you, in their own words.
+    forza». `said` is what they told you, in their own words and language, never
+    translated.
 
     The interview that writes it down asks its own questions, and its first
     follows your message: tell them you are updating it.
@@ -156,11 +159,11 @@ def accept_plan() -> str:
 
 
 def turn_down_plan(said: str) -> str:
-    """Turn down the plan waiting on their answer, as its *Non mi va* button does; another follows.
+    """Turn down the plan waiting on their answer, as its turn-down button does; another follows.
 
     Call this when they say no to it and ask for nothing else: «no», «non mi
-    piace». `said` is what they wrote, in their own words: the planner reads
-    it when it plans the next one.
+    piace». `said` is what they wrote, in their own words and language, never
+    translated: the planner reads it when it plans the next one.
 
     The body is never run. The graph answers this call by turning the plan down.
     """
@@ -307,14 +310,15 @@ refusal's words reach the next run of the same negotiation.
 """
 
 PROPOSED = """In the chat right now, above their message: a plan you offered, {what}, with
-two buttons, «Va bene» and «Non mi va». It is waiting on their answer, and
+two buttons, «{kept}» and «{turned_down}». It is waiting on their answer, and
 their message is most likely that answer:
 - A yes, as in «ok», «perfetto», «daje», «va bene»: call `accept_plan`.
 - A no with nothing else asked, as in «no», «non mi piace»: call
   `turn_down_plan` with their words. Another plan follows.
 - Something different asked of it, as in «senza panca» or «ho 20 minuti»:
-  call {again} with their words. It is about this plan, so do not ask
-  whether they mean today or from now on.
+  call {again} with the ask as it now stands, whole: what they asked of
+  this plan before, and what they ask now, in their words, never translated. It is about this plan, so do not
+  ask whether they mean today or from now on.
 - A report of the workout it was for: call `log_workout`.
 - Anything else, a question or a remark: answer it, and the plan stays
   waiting.
@@ -326,6 +330,12 @@ There and not in the system prompt: the plan went into the chat as a message
 with buttons, never into this conversation, so a bare «no» read without it is
 a greeting.
 """
+
+def buttons() -> dict[str, str]:
+    """The labels of a plan's two buttons, as the chat of the run in flight shows them."""
+    said = language.texts(language.running()).buttons
+    return {"kept": said.kept, "turned_down": said.turned_down}
+
 
 DROPPING = "The plan that was waiting on their answer is dropped for this one. "
 """What a planning handoff's answer opens with while a plan waits on an answer."""
@@ -377,7 +387,7 @@ in prose, and an id read out loud is not an answer."""
 
 TALKING = """\
 You are the entrance to a training system, and the only part of it the user
-talks to. You answer in Italian, in one or two sentences, the way a coach
+talks to. You answer in their language, in one or two sentences, the way a coach
 texting back would -- never a list, never a form, never a wall of text.
 
 Behind you is a deterministic engine over an exercise catalog and the training
@@ -451,7 +461,7 @@ One call per turn is enough. When you have what you need, answer.
 
 RELAYING = """\
 Something has just happened, and you are the one who tells the user about it.
-Say it to them in Italian, in one or two sentences, in your own words. Say
+Say it to them in their language, in one or two sentences, in your own words. Say
 nothing this does not say -- above all no numbers and no exercise names.
 
 {situation}"""
@@ -731,9 +741,12 @@ def build(
             what, again = PROPOSAL[waiting]
             history.insert(
                 _last_said(history),
-                HumanMessage(PROPOSED.format(what=what, again=again), name="machine"),
+                HumanMessage(
+                    PROPOSED.format(what=what, again=again, **buttons()),
+                    name="machine",
+                ),
             )
-        reply = bound.invoke([SystemMessage(prompt), *history, *asked])
+        reply = bound.invoke([SystemMessage(prompt + language.told()), *history, *asked])
         return born | {"budget": budget, "messages": [*asked, reply]}
 
     def read(state: EntranceState) -> dict[str, Any]:

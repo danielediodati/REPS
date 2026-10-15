@@ -1,0 +1,57 @@
+# What the chat says in words of its own, in English. Every key is in it.toml too.
+# `{log}` is the log file's name, filled in on load; any other `{...}` is filled where the line is said.
+
+[chat]
+working = "On it."
+failed = "Something went wrong while I was working on it. Try again. The reason is in {log}."
+blocked = "I can't work on it: something on the PC needs fixing. The reason is in {log}."
+turned_down = "I don't want this workout."
+exclusion = "{why}\n\nI'll stop suggesting \"{value}\" until {retest_date}. OK?"
+
+[buttons]
+kept = "Sounds good"
+turned_down = "Not for me"
+confirmed = "Yes"
+declined = "No"
+
+[plan]
+heading = "*Block {position}* · {rounds} rounds · {rest}s rest · {minutes}:{seconds:02d}"
+last = " · last load {load} kg"
+last_unknown = " · last load: unknown"
+served = "*Workout {slot} of {slots}* · cycle {cycle} of {cycles}"
+mesocycle = "*Mesocycle* · {cycles} cycles"
+slot = "*Workout {slot} of {slots}* · {groups}"
+said_no = "  ⚠️ you said no to it: {why}"
+total = "*Total* {total} min of {budget}"
+reps = "{amount} reps"
+seconds = "{amount}s"
+
+[progress]
+writing = "writing the plan"
+rewriting = "rewriting the plan"
+refused = "the validator refused it: {rules}"
+exhausted = "after {attempts} attempts I have no plan that fits the constraints"
+valid = "plan valid, {blocks}"
+one_block = "1 block"
+blocks = "{count} blocks"
+workouts = "{count} workouts"
+again = "fine, I'll think of another"
+writing_report = "writing down what you did"
+read = "report read"
+not_read = "the report did not go through: {why}"
+failed = "it did not work"
+unknown = "using {tool}"
+
+[progress.calls]
+admissible_set = "looking at what you can do today with {equipment} and {budget_min} minutes"
+remaining_budget = "checking how much time is left"
+allocate = "splitting {minutes} minutes between the groups"
+pattern_history = "looking at the history of {pattern}"
+last_performed_load = "finding the last load on {exercise_id}"
+search_exercises = "searching the catalog for \"{text}\""
+adherence_history = "looking at how closely you followed the plans"
+volume_deficit = "comparing the volume planned with the volume done"
+unreported_workouts = "checking for a workout left unreported"
+compare_variants = "comparing {id_a} and {id_b}"
+prescribed_workout = "rereading workout {workout_id}"
+ask_user = "asking you something"

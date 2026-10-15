@@ -33,6 +33,7 @@ from trainer import tools
 from trainer.coach import (
     conclusions,
     entrance,
+    language,
     logfile,
     models,
     onboarding,
@@ -56,62 +57,6 @@ EXAMPLE = ".env.example"
 """Where both settings are documented, named by every state that misses one."""
 
 logger = logging.getLogger(__name__)
-
-IN_THE_LOG = f"Il motivo è scritto in {logfile.LOG_NAME}."
-"""Where the detail is, said the same way by both lines that have one.
-
-The file name and not its path. The user reading this is on a phone and the
-person who can open it is at the machine -- the same person, at another moment
--- and an absolute path would put this installation's account name and disk
-layout on a third party's servers for no gain.
-"""
-
-BLOCKED = (
-    "Non posso lavorarci: c'è qualcosa da sistemare sul PC. " + IN_THE_LOG
-)
-"""A precondition the machine gets wrong, said without saying which.
-
-Nothing declared, so there is nothing to derive today's equipment, minutes
-or groups from; no database; a catalog nobody enriched. Each is a **state**
-rather than a run that fell over -- answered with `FAILED` it would read as
-the provider having dropped the plan -- and each already names itself and the
-command that fixes it.
-
-**It names itself to the machine and not to the chat.** The engine's states
-carry absolute paths: the file to copy, the directory to copy it into, the
-database that is not there. Quoted into Telegram they would leave this
-installation's account name and the shape of its disk on a third party's
-servers, permanently and for no gain -- nobody copies a file from a phone, so
-the path is not something a reader there can act on anyway. The state goes to
-the log, where the person who can act on it is already sitting, and this names
-the file it is in.
-
-This is the rule and not an exception to it: **nothing raised leaves this
-machine.** `FAILED` says the same thing about a run that fell over.
-"""
-
-WORKING = "Ci penso."
-"""The draft's first frame, before the graph has done anything worth saying.
-
-An empty draft is Telegram's *Thinking...* placeholder, which is Bot API 10.0
-and is drawn by the clients that know it. A line of our own is drawn wherever
-a draft is drawn at all, and the first minute of a local run is exactly when
-the user most needs to see something.
-"""
-
-FAILED = "Qualcosa è andato storto mentre ci lavoravo. Riprova. " + IN_THE_LOG
-"""Said when a run raises.
-
-A provider that falls over mid-run is the ordinary case on a laptop, and the
-user is looking at a phone. An exception that reaches only the log is a bot
-that has stopped answering, and the draft the run was writing into is gone
-thirty seconds later with nothing left behind to say what happened.
-
-It is also what a silent entrance gets. ADR-0006 keeps these two lines
-constants because they are the cases where the model is absent or not to be
-trusted, and a turn that came back with no words is one of them.
-"""
-
 
 class BotError(RuntimeError):
     """A Telegram setting the environment gets wrong, stated with its fix."""
@@ -231,10 +176,10 @@ TURNED_DOWN = "no"
 CONFIRMED = "y"
 DECLINED = "n"
 
-BUTTONS = ((KEPT, "Va bene"), (TURNED_DOWN, "Non mi va"))
-"""The two answers a proposed plan takes, as (action, label); anything else is asked in words."""
+BUTTONS = (KEPT, TURNED_DOWN)
+"""The two answers a proposed plan takes; anything else is asked in words."""
 
-CONFIRM = ((CONFIRMED, "Sì"), (DECLINED, "No"))
+CONFIRM = (CONFIRMED, DECLINED)
 """The two answers the exclusion the logger proposes takes.
 
 A closed question, which is what the payload says it is: the terminal reads
@@ -242,22 +187,20 @@ the same two answers as a prompt (`cli._confirmed`), and here they are the
 buttons that shape.
 """
 
-ACTIONS = dict(BUTTONS) | dict(CONFIRM)
+ACTIONS = {*BUTTONS, *CONFIRM}
 """Every action a callback may carry, so one tap is recognised and no other is."""
 
-SAID = {TURNED_DOWN: "Non mi va questo allenamento."}
-"""What a tap means in words, because the planner is told why and not which button."""
+def labelled(actions: Sequence[str], spoken: language.Language) -> list[tuple[str, str]]:
+    """Each action with the label its button shows in `spoken`."""
+    said = language.texts(spoken).buttons
+    labels = {
+        KEPT: said.kept,
+        TURNED_DOWN: said.turned_down,
+        CONFIRMED: said.confirmed,
+        DECLINED: said.declined,
+    }
+    return [(action, labels[action]) for action in actions]
 
-EXCLUSION_ASKED = (
-    "{why}\n\nSmetto di proporti «{value}» fino al {retest_date}. Va bene?"
-)
-"""The exclusion, as the chat puts it.
-
-The model's `why` first, because it is the part that says what was read in the
-report, and then what would actually stop and until when -- which is the half
-the user is being asked to agree to and the half the model does not decide:
-`logger.confirm` classifies the value against the catalog before asking.
-"""
 
 SEPARATOR = "|"
 
@@ -328,6 +271,7 @@ class Chat:
     say: Say
     offer: Offer
     draft: Draft
+    language: language.Language = language.ITALIAN
 
 
 Run = Callable[[str, str, Chat], Awaitable[None]]
@@ -503,7 +447,7 @@ class Turns:
                 await self._run(thread, turn, chat)
         except Exception:
             logger.exception("the run on %s failed", thread)
-            await self._tell(thread, chat, FAILED)
+            await self._tell(thread, chat, _said(chat).failed)
 
     async def _interjected(self, thread: str, text: str, chat: Chat) -> str | Later | None:
         """The message read while the thread is busy, with its failure said instead of raised."""
@@ -512,7 +456,7 @@ class Turns:
             return await self._interject(thread, text, chat)
         except Exception:
             logger.exception("the message mid-run on %s failed", thread)
-            await self._tell(thread, chat, FAILED)
+            await self._tell(thread, chat, _said(chat).failed)
             return None
 
     async def _tell(self, thread: str, chat: Chat, line: str) -> None:
@@ -544,7 +488,7 @@ class Turns:
             await self._relay(thread, situation, chat)
         except Exception:
             logger.exception("the entrance could not speak on %s", thread)
-            await self._tell(thread, chat, FAILED)
+            await self._tell(thread, chat, _said(chat).failed)
 
     def _answers(self, user_id: int) -> bool:
         """Whether this is the owner, checked before anything looks at the message."""
@@ -633,7 +577,7 @@ def talking(graphs: Graphs) -> Run:
             # interview is the answer, whatever the message was (ADR-0013).
             await _onboarding(graphs, thread, text, None, chat)
             return
-        final = await _entrance(graphs, thread, entrance.heard(text))
+        final = await _entrance(graphs, thread, entrance.heard(text), chat.language)
         await _spoken(final, thread, chat)
         await _handed_on(graphs, thread, text, final, chat)
 
@@ -686,7 +630,7 @@ def interjecting(graphs: Graphs) -> Interject:
             or await asyncio.to_thread(_asking, graphs, thread) is not None
         ):
             return text
-        final = await _entrance(graphs, thread, entrance.heard(text))
+        final = await _entrance(graphs, thread, entrance.heard(text), chat.language)
         await _spoken(final, thread, chat)
         handoff = str(final.get("handoff", ""))
         if handoff in entrance.PLANS:
@@ -741,20 +685,20 @@ def relaying(graphs: Graphs) -> Relay:
 
 
 async def _relay(graphs: Graphs, thread: str, situation: str, chat: Chat) -> None:
-    final = await _entrance(graphs, thread, entrance.relayed(situation))
+    final = await _entrance(graphs, thread, entrance.relayed(situation), chat.language)
     await _spoken(final, thread, chat)
 
 
 async def _entrance(
-    graphs: Graphs, thread: str, given: Any
+    graphs: Graphs, thread: str, given: Any, spoken: language.Language
 ) -> dict[str, Any]:
     """One turn of the entrance, serialised per thread and with its ending written.
 
     A node cannot write after it has raised (ADR-0007, item 1), and the turn
-    above this catches the exception to say `FAILED` -- so without this the
+    above this catches the exception to say the failed line -- so without this the
     entrance would be the one graph whose failures leave nothing behind.
     """
-    on = _reading(thread)
+    on = _reading(thread, spoken)
     async with graphs.talking.setdefault(thread, asyncio.Lock()):
         try:
             return cast(
@@ -783,7 +727,7 @@ async def _spoken(final: Mapping[str, Any], thread: str, chat: Chat) -> None:
     said = str(final.get("answer", "")).strip()
     if not said:
         logger.warning("the entrance answered %s with nothing", thread)
-    await chat.say(said or FAILED)
+    await chat.say(said or _said(chat).failed)
 
 
 async def _serving(thread: str, chat: Chat) -> None:
@@ -793,10 +737,10 @@ async def _serving(thread: str, chat: Chat) -> None:
     to serve, what it said is the whole answer.
     """
     try:
-        text = await asyncio.to_thread(_served)
+        text = await asyncio.to_thread(_served, chat.language)
     except tools.ToolFailure as state:
         logger.warning("%s cannot serve today's workout: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     if text is None:
         logger.info("%s has no mesocycle to serve from", thread)
@@ -804,7 +748,7 @@ async def _serving(thread: str, chat: Chat) -> None:
     await chat.offer(text, ())
 
 
-def _served() -> str | None:
+def _served(spoken: language.Language) -> str | None:
     """Today's workout prescribed and rendered, or `None` when no mesocycle serves one."""
     with tools.reported(), tools.opened() as connection:
         try:
@@ -812,7 +756,7 @@ def _served() -> str | None:
         except mesocycles.MesocycleError:
             return None
         cap = config.load(connection).duration_cap_min
-    return served(found, cap)
+    return served(found, cap, spoken)
 
 
 async def _planning(
@@ -844,7 +788,7 @@ async def _planning(
         # traceback, which is not noise on a state: it says which of the
         # preconditions the run stopped on.
         logger.warning("%s cannot plan: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     carrying = entrance.carried(final)
     on = _reading(under(thread, PLANNING))
@@ -861,11 +805,11 @@ async def _proposing(
     carrying: Mapping[str, Any] | None = None,
 ) -> None:
     """A request opened on the negotiation, streamed, and what it leaves the chat holding."""
-    on = _reading(under(thread, PLANNING))
+    on = _reading(under(thread, PLANNING), chat.language)
     settled = await _streaming(
         lambda posted: graphs.negotiation.open(on, request, carrying, posted),
         chat,
-        progress.Progress(progress.PLAN),
+        progress.Progress(progress.PLAN, chat.language),
     )
     await told(graphs, settled, thread, chat)
 
@@ -883,7 +827,7 @@ async def _logging(
         open_workout = await asyncio.to_thread(_awaiting)
     except tools.ToolFailure as state:
         logger.warning("%s cannot read a report: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     given = dict(
         logger_graph.starting(
@@ -904,7 +848,7 @@ async def _reporting(graphs: Graphs, thread: str, given: Any, chat: Chat) -> Non
         under(thread, LOGGING),
         chat,
         graphs.archive,
-        progress.Progress(progress.LOG),
+        progress.Progress(progress.LOG, chat.language),
     )
     await reported(graphs, settled, thread, chat)
 
@@ -917,7 +861,7 @@ async def _onboarding(
         words = await asyncio.to_thread(_vocabulary)
     except tools.ToolFailure as state:
         logger.warning("%s cannot set up: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     given = dict(onboarding.starting(text, date.today().isoformat(), words))
     if final is not None:
@@ -947,7 +891,7 @@ async def _changing(
         words = await asyncio.to_thread(_vocabulary)
     except tools.ToolFailure as state:
         logger.warning("%s cannot change a declaration: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     given = dict(
         onboarding.changing(text, date.today().isoformat(), words, before)
@@ -976,7 +920,7 @@ async def _interview(graphs: Graphs, thread: str, given: Any, chat: Chat) -> Non
         under(thread, ONBOARDING),
         chat,
         graphs.archive,
-        progress.Progress(progress.ONBOARD),
+        progress.Progress(progress.ONBOARD, chat.language),
     )
     await interviewed(graphs, settled, thread, chat)
 
@@ -997,7 +941,7 @@ async def interviewed(
         request = await asyncio.to_thread(_handed, entrance.PLAN_MESOCYCLE, {})
     except tools.ToolFailure as state:
         logger.warning("%s cannot finish setting up: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     await _relay(graphs, thread, entrance.ONBOARDED, chat)
     await _proposing(graphs, thread, request, chat)
@@ -1020,12 +964,12 @@ async def _changed(
             request = await asyncio.to_thread(_handed, entrance.PLAN_MESOCYCLE, {})
     except (tools.ToolFailure, mesocycles.MesocycleError) as state:
         logger.warning("%s cannot finish a change: %s", thread, state, exc_info=True)
-        await chat.say(BLOCKED)
+        await chat.say(_said(chat).blocked)
         return
     if not chosen:
         await _relay(graphs, thread, entrance.DECLARED, chat)
         return
-    await chat.say(str(final.get("why", "")) or FAILED)
+    await chat.say(str(final.get("why", "")) or _said(chat).failed)
     if request is not None:
         await _proposing(graphs, thread, request, chat)
 
@@ -1153,7 +1097,7 @@ async def drafting(
     progress as it stands when its turn comes, and the draft the user is
     looking at is therefore never an older one that finished last.
 
-    It opens on `WORKING` rather than on nothing, because the first line the
+    It opens on the working line rather than on nothing, because the first line the
     graph produces is a minute away and an empty draft asks the client to draw
     a placeholder it may not know. A send that fails is logged and nothing
     more: progress is not the answer, and a run must not be lost because the
@@ -1166,7 +1110,7 @@ async def drafting(
         fresh.set()
         async with sending:
             try:
-                await draft(lines.text() or WORKING)
+                await draft(lines.text() or language.texts(lines.language).chat.working)
             except Exception:
                 logger.exception("could not update the draft")
 
@@ -1229,10 +1173,10 @@ def answering(graphs: Graphs) -> Resume:
     """
 
     async def resume(thread: str, tap: Tap, chat: Chat) -> None:
-        if tap.action in dict(CONFIRM):
+        if tap.action in CONFIRM:
             await _confirming(graphs, thread, tap, chat)
             return
-        await _answered(graphs, thread, tap.proposal, _answer(tap), chat)
+        await _answered(graphs, thread, tap.proposal, _answer(tap, chat.language), chat)
 
     return resume
 
@@ -1241,7 +1185,7 @@ async def _answered(
     graphs: Graphs, thread: str, proposal: str | None, answer: planner.Answer, chat: Chat
 ) -> None:
     """The plan waiting answered, by a tap on `proposal` or in words (`None`: whichever is waiting)."""
-    on = _reading(under(thread, PLANNING))
+    on = _reading(under(thread, PLANNING), chat.language)
     held = await asyncio.to_thread(graphs.negotiation.pending, on)
     if (
         held is None
@@ -1257,7 +1201,7 @@ async def _answered(
     settled = await _streaming(
         lambda posted: graphs.negotiation.answer(on, held.id, answer, posted),
         chat,
-        progress.Progress(progress.PLAN),
+        progress.Progress(progress.PLAN, chat.language),
     )
     await told(graphs, settled, thread, chat)
 
@@ -1288,12 +1232,12 @@ async def _ending(
     """One run, streamed, and its ending written even when it is the graph falling over.
 
     A node cannot write after it has raised (ADR-0007, item 1), and the
-    turn-taking above this catches the exception to say `FAILED` -- so the run
+    turn-taking above this catches the exception to say the failed line -- so the run
     would otherwise be the one kind that leaves nothing behind, which is the
     kind you most want to read.
     """
     try:
-        return await streamed(graph, given, _reading(thread), chat, lines)
+        return await streamed(graph, given, _reading(thread, chat.language), chat, lines)
     except Exception:
         await asyncio.to_thread(
             run_record.failed, graph, _reading(thread), tools.CALL_BUDGET, archive
@@ -1301,7 +1245,7 @@ async def _ending(
         raise
 
 
-def _answer(tap: Tap) -> planner.Answer:
+def _answer(tap: Tap, spoken: language.Language) -> planner.Answer:
     """The button, as the planner reads it: kept, or turned down in words.
 
     A button is not a sentence, and the planner is told *why* rather than
@@ -1310,7 +1254,7 @@ def _answer(tap: Tap) -> planner.Answer:
     """
     if tap.action == KEPT:
         return planner.accepted()
-    return planner.refused(SAID[TURNED_DOWN])
+    return planner.refused(language.texts(spoken).chat.turned_down)
 
 
 async def told(
@@ -1329,13 +1273,16 @@ async def told(
         case negotiations.Proposed(plan=proposed, request=request, id=answerable):
             if isinstance(proposed, plans.Mesocycle):
                 assert isinstance(request, plans.MesocycleRequest)
-                text = mesocycle_proposal(proposed, request)
+                text = mesocycle_proposal(proposed, request, chat.language)
             else:
                 assert isinstance(request, plans.Request)
-                text = proposal(proposed, request.budget_min)
+                text = proposal(proposed, request.budget_min, chat.language)
             await chat.offer(
                 text,
-                [(carried(Tap(action, thread, answerable)), label) for action, label in BUTTONS],
+                [
+                    (carried(Tap(action, thread, answerable)), label)
+                    for action, label in labelled(BUTTONS, chat.language)
+                ],
             )
         case negotiations.Accepted(workout=written) if written is not None:
             await _relay(graphs, thread, entrance.PRESCRIBED, chat)
@@ -1410,8 +1357,8 @@ async def _prepare(graphs: Graphs, thread: str, chat: Chat) -> None:
     try:
         settled = await asyncio.to_thread(
             graphs.negotiation.prepare,
-            _reading(under(thread, PLANNING)),
-            _reading(under(thread, SUPERVISING)),
+            _reading(under(thread, PLANNING), chat.language),
+            _reading(under(thread, SUPERVISING), chat.language),
         )
     except tools.ToolFailure as state:
         logger.warning("%s cannot prepare the next mesocycle: %s", thread, state, exc_info=True)
@@ -1419,7 +1366,7 @@ async def _prepare(graphs: Graphs, thread: str, chat: Chat) -> None:
     except Exception:
         logger.exception("preparing the next mesocycle on %s failed", thread)
         with contextlib.suppress(Exception):
-            await chat.say(FAILED)
+            await chat.say(_said(chat).failed)
         return
     if settled is None:
         return
@@ -1461,17 +1408,17 @@ async def _asked(waiting: Any, thread: str, chat: Chat) -> None:
     question = waiting.value
     if question.get("kind") == logger_graph.EXCLUSION:
         await chat.offer(
-            exclusion(question),
+            exclusion(question, chat.language),
             [
                 (carried(Tap(action, thread, waiting.id)), label)
-                for action, label in CONFIRM
+                for action, label in labelled(CONFIRM, chat.language)
             ],
         )
         return
     await chat.say(str(question.get("ask", "")))
 
 
-def exclusion(question: Mapping[str, Any]) -> str:
+def exclusion(question: Mapping[str, Any], spoken: language.Language) -> str:
     """The proposed exclusion, as the chat asks about it.
 
     Escaped and with no markup of its own. Everything in it was written by a
@@ -1481,7 +1428,7 @@ def exclusion(question: Mapping[str, Any]) -> str:
     from telegram.helpers import escape_markdown
 
     return escape_markdown(
-        EXCLUSION_ASKED.format(
+        language.texts(spoken).chat.exclusion.format(
             why=question.get("ask", ""),
             value=question.get("value", ""),
             retest_date=question.get("retest_date", ""),
@@ -1502,41 +1449,31 @@ def _written(final: Mapping[str, Any]) -> int:
         return logger_graph.performed(connection, final, blocks)
 
 
-HEADING = "*Blocco {position}* · {rounds} giri · {rest}s di recupero · {minutes}:{seconds:02d}"
 ITEM = "• {name} · {prescription}"
-LAST = " · ultimo carico {load} kg"
-LAST_UNKNOWN = " · ultimo carico: non lo so"
-SERVED = "*Allenamento {slot} di {slots}* · ciclo {cycle} di {cycles}"
-MESOCYCLE = "*Mesociclo* · {cycles} cicli"
-SLOT = "*Allenamento {slot} di {slots}* · {groups}"
-SAID_NO = "  ⚠️ avevi detto di no: {why}"
 WHY = "_{reason}_"
-TOTAL = "*Totale* {total} min su {budget}"
 NOTE = "⚠️ {note}"
-UNITS = {"reps": "{amount} ripetizioni", "seconds": "{amount}s"}
-"""How each unit a prescription is counted in is worded in the chat."""
 
 PARSE_MODE = "MarkdownV2"
 """The dialect `proposal` writes and `_offering` sends a plan as."""
 
 
-def served(found: mesocycles.Today, budget_min: int) -> str:
+def served(found: mesocycles.Today, budget_min: int, spoken: language.Language) -> str:
     """Today's workout off the mesocycle, with the last load beside each exercise."""
-    heading = SERVED.format(
+    heading = language.texts(spoken).plan.served.format(
         slot=found.slot, slots=found.slots, cycle=found.cycle, cycles=found.cycles
     )
-    body = proposal(plans.from_prescribed(found.blocks), budget_min, loads=True)
+    body = proposal(plans.from_prescribed(found.blocks), budget_min, spoken, loads=True)
     return f"{heading}\n\n{body}"
 
 
 def mesocycle_proposal(
-    offered: plans.Mesocycle, request: plans.MesocycleRequest
+    offered: plans.Mesocycle, request: plans.MesocycleRequest, spoken: language.Language
 ) -> str:
     """The whole mesocycle as the chat shows it: the cycles and why, then one workout per slot."""
     from telegram.helpers import escape_markdown
 
     parts = [
-        MESOCYCLE.format(cycles=offered.cycles),
+        language.texts(spoken).plan.mesocycle.format(cycles=offered.cycles),
         WHY.format(reason=escape_markdown(offered.why, version=2)),
     ]
     for slot, (workout, asked) in enumerate(
@@ -1545,18 +1482,20 @@ def mesocycle_proposal(
         parts.extend(
             [
                 "",
-                SLOT.format(
+                language.texts(spoken).plan.slot.format(
                     slot=slot,
                     slots=len(request.slots),
                     groups=escape_markdown(", ".join(asked.groups), version=2),
                 ),
-                proposal(workout, asked.budget_min),
+                proposal(workout, asked.budget_min, spoken),
             ]
         )
     return "\n".join(parts)
 
 
-def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> str:
+def proposal(
+    plan: plans.WorkoutPlan, budget_min: int, spoken: language.Language, loads: bool = False
+) -> str:
     """The plan as the chat shows it, in the markup Telegram renders.
 
     Off `plans.shown`, which is also what the terminal's lines are folded
@@ -1573,13 +1512,16 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> s
     def marked(said: str) -> str:
         return escape_markdown(said, version=2)
 
+    words = language.texts(spoken).plan
+    units = {"reps": words.reps, "seconds": words.seconds}
+
     with tools.reported(), tools.opened() as connection:
         reading = plans.shown(connection, plan, plans.to_blocks(plan), budget_min, loads)
 
     lines: list[str] = []
     for block in reading.blocks:
         lines.append(
-            HEADING.format(
+            words.heading.format(
                 position=block.position,
                 rounds=block.rounds,
                 rest=block.rest,
@@ -1591,41 +1533,42 @@ def proposal(plan: plans.WorkoutPlan, budget_min: int, loads: bool = False) -> s
             lines.append(
                 ITEM.format(
                     name=marked(item.name),
-                    prescription=UNITS[item.prescription.unit].format(
+                    prescription=units[item.prescription.unit].format(
                         amount=item.prescription.amount
                     ),
                 )
-                + _last(item.last, marked)
+                + _last(item.last, marked, words)
             )
             if item.said is not None:
                 # Its own line and marked, not folded into the block's reason:
                 # this is the agent proposing something the user said no to,
                 # and it has to be the thing they notice.
-                lines.append(SAID_NO.format(why=marked(item.said)))
+                lines.append(words.said_no.format(why=marked(item.said)))
         lines.append(WHY.format(reason=marked(block.reason)))
         lines.append("")
-    lines.append(TOTAL.format(total=reading.total_min, budget=reading.budget_min))
+    lines.append(words.total.format(total=reading.total_min, budget=reading.budget_min))
     if reading.note:
         lines.append(NOTE.format(note=marked(reading.note)))
     return "\n".join(lines)
 
 
-def _last(last: Any, marked: Callable[[str], str]) -> str:
+def _last(last: Any, marked: Callable[[str], str], words: language.PlanLines) -> str:
     if last is None:
         return ""
     if last.value is None:
-        return LAST_UNKNOWN
-    return LAST.format(load=marked(f"{last.value:g}"))
+        return words.last_unknown
+    return words.last.format(load=marked(f"{last.value:g}"))
 
 
-def _reading(thread: str) -> RunnableConfig:
-    """A thread, and the user whose conclusions its runs read and keep: the chat it is under."""
-    return {
-        "configurable": {
-            "thread_id": thread,
-            conclusions.USER: thread.partition("/")[0],
-        }
+def _reading(thread: str, spoken: language.Language | None = None) -> RunnableConfig:
+    """A thread, the user whose conclusions its runs read and keep, and the language a run writes in."""
+    configurable: dict[str, Any] = {
+        "thread_id": thread,
+        conclusions.USER: thread.partition("/")[0],
     }
+    if spoken is not None:
+        configurable[language.KEY] = spoken
+    return {"configurable": configurable}
 
 
 def turns(graph: run_record.Graph, thread: str) -> list[str]:
@@ -1693,7 +1636,7 @@ def _on_start(coach: Turns) -> Handler:
         if who is None:
             return
         user_id, chat_id = who
-        await coach.started(user_id, chat_id, chatting(context, chat_id))
+        await coach.started(user_id, chat_id, chatting(context, chat_id, _spoken_in(update)))
 
     return handle
 
@@ -1708,7 +1651,9 @@ def _on_message(coach: Turns) -> Handler:
         if who is None or message is None or not message.text:
             return
         user_id, chat_id = who
-        await coach.arriving(user_id, chat_id, message.text, chatting(context, chat_id))
+        await coach.arriving(
+            user_id, chat_id, message.text, chatting(context, chat_id, _spoken_in(update))
+        )
 
     return handle
 
@@ -1726,7 +1671,7 @@ def _on_tap(coach: Turns) -> Handler:
         if not isinstance(tap.data, str):
             return
         user_id, chat_id = who
-        await coach.tapped(user_id, chat_id, tap.data, chatting(context, chat_id))
+        await coach.tapped(user_id, chat_id, tap.data, chatting(context, chat_id, _spoken_in(update)))
 
     return handle
 
@@ -1743,7 +1688,20 @@ def _who(update: Update) -> tuple[int, int] | None:
     return update.effective_user.id, update.effective_chat.id
 
 
-def chatting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Chat:
+def _said(chat: Chat) -> language.ChatLines:
+    """The chat's own lines, in its language."""
+    return language.texts(chat.language).chat
+
+
+def _spoken_in(update: Update) -> language.Language:
+    """The language the sender's Telegram app is set to, as the chat speaks it."""
+    user = update.effective_user
+    return language.of(None if user is None else user.language_code)
+
+
+def chatting(
+    context: ContextTypes.DEFAULT_TYPE, chat_id: int, spoken: language.Language
+) -> Chat:
     """One chat's three channels, built once per update.
 
     The draft id is minted here, so it is one per turn and therefore one per
@@ -1754,6 +1712,7 @@ def chatting(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Chat:
         say=_saying(context, chat_id),
         offer=_offering(context, chat_id),
         draft=_drafting(context, chat_id),
+        language=spoken,
     )
 
 

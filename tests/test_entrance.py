@@ -26,7 +26,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from conftest import enrich
 from test_planner import CATALOG, LEGS_AND_SHOULDERS, PATTERNS, Scripted, calling
 from trainer import tools
-from trainer.coach import entrance, models
+from trainer.coach import entrance, language, models
 from trainer.coach import record as records
 from trainer.engine import catalog, database, duration, mesocycles, migrations, workouts
 
@@ -291,7 +291,7 @@ def test_the_entrance_states_no_training_fact_it_did_not_get_from_a_tool(
     final = graph_of(model).invoke(entrance.heard("quanto squat ho fatto?"))
 
     shown = model.seen[-1]
-    assert isinstance(shown[0], SystemMessage) and shown[0].text == entrance.TALKING
+    assert isinstance(shown[0], SystemMessage) and shown[0].text == entrance.TALKING + language.told()
     for message in shown[1:]:
         assert isinstance(message, (HumanMessage, AIMessage, ToolMessage)), message
     assert [m.text for m in shown if isinstance(m, HumanMessage)] == [
@@ -671,7 +671,8 @@ def test_turning_a_plan_down_in_words_carries_the_words(connection: sqlite3.Conn
     assert final["asked"] == {"said": "non mi piace"}
     note = model.seen[0][-2]
     assert "a plan you offered, a mesocycle" in note.text
-    assert "call `turn_down_plan` with their words. It is about this plan" in " ".join(note.text.split())
+    assert "call `turn_down_plan` with the ask as it now stands, whole" in " ".join(note.text.split())
+    assert "«Va bene» and «Non mi va»" in note.text, "the buttons as an Italian chat shows them"
     assert not any("a plan you offered" in m.text for m in final["messages"]), "never kept in the conversation"
 
 
@@ -683,3 +684,27 @@ def test_a_new_ask_over_a_plan_waiting_drops_it(connection: sqlite3.Connection) 
     ).invoke(entrance.heard("rifammelo da capo"), ON_A_THREAD)
 
     assert told_by(final) == [entrance.DROPPING + entrance.STARTED[entrance.PLAN_MESOCYCLE]]
+
+
+def test_a_plan_waiting_is_described_with_the_buttons_an_english_chat_shows(
+    connection: sqlite3.Connection,
+) -> None:
+    model = Scripted(turns=[says("Fine.")])
+    english: RunnableConfig = {"configurable": {**ON_A_THREAD["configurable"], language.KEY: language.ENGLISH}}
+
+    graph_of(model, proposing=lambda thread: entrance.ADAPTATION, checkpointer=InMemorySaver()).invoke(
+        entrance.heard("hmm"), english
+    )
+
+    assert "«Sounds good» and «Not for me»" in model.seen[0][-2].text
+
+
+def test_every_handoff_that_carries_their_words_carries_them_untranslated() -> None:
+    for handoff in (
+        entrance.adapt_this_workout,
+        entrance.change_mesocycle,
+        entrance.change_declaration,
+        entrance.turn_down_plan,
+    ):
+        assert "never translated" in " ".join((handoff.__doc__ or "").split()), handoff.__name__
+    assert "never translated" in " ".join(entrance.PROPOSED.split())
