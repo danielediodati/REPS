@@ -16,6 +16,7 @@ The session's demo, recorded in English (Telegram's app set to English, ticket 0
 2. Once the fourth mesocycle is accepted, today's workout is adapted (*"today I only have dumbbells"*), and *"actually, I only have 30 minutes"* is sent while it is written: the 30-minute dumbbell plan arrives instead. Asked of a mesocycle still waiting on its answer, the same words rewrite the whole mesocycle.
 
 - A GIF of it in the README's "The demo", replacing the line that says it lands with `1.0.0`; the script stays below it for anyone who wants to run it.
+- The draft's last line stays above a message the bot has just sent, with its dots, until Telegram expires it about 30 seconds later (seen on the user's client in the 15c.4 rehearsal; the Bot API has no call to clear it). Wait it out or cut there.
 - Whatever the recording shows wrong is either fixed here or written down as a declined finding; a fix that is a session of its own goes under After 1.0.0, with the user.
 
 ## Acceptance criteria

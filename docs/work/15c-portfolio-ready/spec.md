@@ -4,6 +4,11 @@
 
 Tickets 01 and 02 are the fixes found using `1.0.0rc1` on the demo's home, 2026-10-07. A substitute exercise inheriting its block's numbers was raised and dropped by the user: likely not a real problem.
 
+## Carried from 15c.4
+
+- Measured in the rehearsal, 2026-10-15, on `anthropic/claude-haiku-4.5`: a mesocycle $0.042–0.058; the report, the supervisor and the entrance's turns together under $0.01.
+- A planner turn that looks at two workouts at once names the last of them in the draft.
+
 ## Carried from 15c.2
 
 - Exercise names in the chat are the catalog's, in English (*Barbell Squat*); everything else is in the chat's language, English for the recording (ADR-0016).
