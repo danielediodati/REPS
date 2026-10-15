@@ -28,9 +28,10 @@ REPS is not a plan generator: **it is a loop**. You report a workout in your own
 
 ## The demo
 
-<p align="center">
-  <img src="docs/demo.gif" alt="In Telegram: today's workout is reported and the fourth mesocycle arrives with its reason; then today's workout is adapted to dumbbells, and 'actually, I only have 30 minutes' sent while it is written brings a 26-minute plan instead" width="480">
-</p>
+<table>
+<tr>
+<td width="380"><img src="docs/demo.gif" alt="In Telegram: today's workout is reported and the fourth mesocycle arrives with its reason; then today's workout is adapted to dumbbells, and 'actually, I only have 30 minutes' sent while it is written brings a 26-minute plan instead" width="360"></td>
+<td>
 
 Today's workout is reported: the third mesocycle ends, and the fourth arrives with its reason. Once it is accepted, *"today I only have dumbbells"* starts an adapted plan, and *"actually, I only have 30 minutes"*, sent while that plan is written, stops it: a dumbbell plan that fits in 30 minutes arrives instead. Played at twice the speed.
 
@@ -41,7 +42,11 @@ uv run trainer demo ~/reps-demo
 TRAINER_HOME=~/reps-demo uv run trainer bot
 ```
 
-`trainer demo` builds a home from nothing: the catalog, then three mesocycles performed ([docs/demo/history.toml](docs/demo/history.toml)): hypertrophy, new angles, then strength after the goal changed, the last one workout from its end. In the chat, ask for today's workout and report it: the third mesocycle ends, and the fourth arrives with its direction.
+`trainer demo` builds a home from nothing: the catalog, then three mesocycles performed ([docs/demo/history.toml](docs/demo/history.toml)): hypertrophy, new angles, then strength after the goal changed, the last one workout from its end.
+
+</td>
+</tr>
+</table>
 
 ## Status
 
