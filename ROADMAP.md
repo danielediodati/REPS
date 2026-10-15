@@ -152,7 +152,7 @@ In this order. Measuring first is what stops the methodology being written again
 2. **What the chat shows is Italian.** A block's reason, a plan's note and a direction, from the planner and from the demo's history. — **done** `ca4805a`
 3. **The chat speaks Telegram's language.** Models and fixed lines follow the app's language: Italian for `it`, English otherwise; the demo's history in English. — **done** `ed5277f`
 4. **What the chat shows while it works.** Progress is one line that changes, not a log; a tool call written as text never reaches the chat. — **done** `b3295ab`
-5. **The recorded demo.** Both scenes in Telegram, in English, and the GIF in the README.
+5. **The recorded demo.** Both scenes in Telegram, in English, and the GIF in the README. — **done** `a5e812f`
 6. **The repository made public.** The history checked for secrets, the switch on the user's go, the badges checked logged out.
 
 ## Later sessions

@@ -4,6 +4,11 @@
 
 Tickets 01 and 02 are the fixes found using `1.0.0rc1` on the demo's home, 2026-10-07. A substitute exercise inheriting its block's numbers was raised and dropped by the user: likely not a real problem.
 
+## Carried from 15c.5
+
+- Recording the demo took three attempts, $0.82 in all: $0.19 and $0.20 when it ran clean, $0.41 when the fourth mesocycle was refused by the validator three times on `anthropic/claude-haiku-4.5` and planned again on *«yes»*.
+- To show a run stopped mid-plan, the correction is sent as soon as the bot answers «On it»: an adaptation is written in ~35 s.
+
 ## Carried from 15c.4
 
 - Measured in the rehearsal, 2026-10-15, on `anthropic/claude-haiku-4.5`: a mesocycle $0.042–0.058; the report, the supervisor and the entrance's turns together under $0.01.
