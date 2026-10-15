@@ -6,7 +6,7 @@
 | commit | `a859101d633a01c4a1a920d6a8ce41dabba0705f` |
 | commit date | 2026-08-30 |
 | vendored on | 2026-09-02 |
-| licence | The Unlicense (public domain) — see `LICENSE.md` |
+| license | The Unlicense (public domain) — see `LICENSE.md` |
 | records | 876 |
 | sha256 of `exercises.json` | `5bb747e3fc658f095a60dcbf6d53c96627acdcc6ffb6fffde86f7e26995d40bf` |
 | files | `dist/exercises.json` -> `exercises.json`, `LICENSE.md` |
@@ -39,5 +39,5 @@ longer carries, so the table follows the file rather than accumulating
 everything the file has ever said.
 
 Use `curl --fail`: without it a 404 is written into the file as if it were the
-download, and a fourteen-byte `404: Not Found` is a licence file that passes
+download, and a fourteen-byte `404: Not Found` is a license file that passes
 every check nobody wrote.

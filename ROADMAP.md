@@ -2,7 +2,7 @@
 
 The order things get built in. [TRAINER.md](TRAINER.md) is the design; [ADR-0004](docs/adr/0004-an-agent-graph-over-the-engine-reached-through-telegram.md) is the architecture.
 
-**Slicing rule.** A session has at most five issues and ends with a **demo someone can watch**: a chat, a Studio trace, a command. If there is nothing to record, the session was sliced wrong. Each issue must be closable on its own, in a clean context.
+**Slicing rule.** A session has at most seven issues and ends with a **demo someone can watch**: a chat, a Studio trace, a command. If there is nothing to record, the session was sliced wrong. Each issue must be closable on its own, in a clean context.
 
 ## Done
 
@@ -142,7 +142,7 @@ In this order. Measuring first is what stops the methodology being written again
 2. **One Negotiation, two doors.** "At most one plan" moves out of the bot into a module both the bot and the CLI call, tested without Telegram; nothing the user sees changes. — **done** `1ae3b23`
 3. **The entrance reads a message mid-plan.** A question is answered at once, a correction or a new ask stops the run in flight, a report still waits. — **done** `7d03b41`
 4. **One roster of node models.** Which model each node runs on, its effort and host, in one table that the bot, the CLI and the evals read whole; no node changes model. — **done** `efe65e0`
-5. **The front page.** MIT licence, a logo, a README worth opening, and badges: tests and coverage from a GitHub Action, release, licence, and the stack. — **done** `9df49a6`
+5. **The front page.** MIT license, a logo, a README worth opening, and badges: tests and coverage from a GitHub Action, release, license, and the stack. — **done** `9df49a6`
 
 ## Session 15c — `1.0.0` — Portfolio-ready
 

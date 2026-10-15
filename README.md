@@ -9,7 +9,7 @@
   <a href="https://github.com/danielediodati/REPS/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/danielediodati/REPS/actions/workflows/tests.yml/badge.svg"></a>
   <a href="https://github.com/danielediodati/REPS/actions/workflows/tests.yml"><img alt="coverage" src="https://github.com/danielediodati/REPS/raw/badges/coverage.svg"></a>
   <a href="https://github.com/danielediodati/REPS/tags"><img alt="release" src="https://github.com/danielediodati/REPS/raw/badges/release.svg"></a>
-  <a href="LICENSE"><img alt="licence: MIT" src="https://img.shields.io/badge/licence-MIT-blue"></a>
+  <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
   <br>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white">
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-agent%20graph-1C3C3C?logo=langchain&logoColor=white">
@@ -61,28 +61,26 @@ It speaks the language your Telegram app is set to: Italian for Italian, English
 ## How it works
 
 ```mermaid
-flowchart LR
-  tg([Telegram]) <--> bot[bot on the PC]
-  bot --> entrance[entrance: a chat model]
-  entrance --> planner
-  entrance --> logger
-  entrance --> onboarding
-  logger -- mesocycle ended --> supervisor
-  supervisor -- direction --> planner
-  onboarding --> interview[/interrupt: question or confirm/]
-  planner <--> tools[(engine tools)]
-  logger <--> tools
-  supervisor <--> tools
-  planner --> validate
-  validate -- refused --> planner
-  validate -- ok --> accept[/interrupt: accept or refuse/]
-  logger --> ask[/interrupt: question or confirm/]
-  accept --> db[(SQLite)]
-  ask --> db
-  entrance -.-> store[(memory store)]
-  logger -.-> store
-  store -.-> planner
-  store -.-> supervisor
+flowchart TD
+  subgraph agent ["agent: LangGraph, models decide"]
+    entrance["entrance: the chat model you talk to"]
+    entrance --> onboarding & logger & planner
+    logger -- mesocycle ended --> supervisor
+    supervisor -- direction --> planner
+    planner --> validate{validator}
+    validate -- refused --> planner
+  end
+
+  subgraph engine ["engine: code only, no model"]
+    tools["engine tools"] --> db[(SQLite)]
+  end
+
+  tg(["Telegram, through the bot on your PC"]) <--> entrance
+  onboarding & logger -- question or confirm --> you[/"interrupt: you answer"/]
+  validate -- accept or refuse --> you
+  you --> db
+  agent <--> tools
+  agent <-.-> store[(memory store)]
 ```
 
 | Part | What it is |
@@ -93,6 +91,7 @@ flowchart LR
 | logger | turns a report into a performed workout (ADR-0009) |
 | onboarding | the interview that writes your declarations (ADR-0012, ADR-0013) |
 | supervisor | between mesocycles: a theme, what changes in exercises, reps or rest, and why, from [variation.md](src/trainer/data/variation.md) and its own past directions (ADR-0014) |
+| memory store | what the entrance and the logger concluded about you; the planner and the supervisor read it |
 
 Every node has an eval suite with a bar declared before its first run (ADR-0010): `trainer eval --suite plan`, `log`, `onboard`, `adapt`, `supervise`. Legality is held at 100% by code; judgement is measured.
 
@@ -188,6 +187,6 @@ docs/
   research/   notes behind decisions
 ```
 
-## Licence
+## License
 
 [MIT](LICENSE).
