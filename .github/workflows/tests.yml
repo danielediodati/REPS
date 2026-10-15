@@ -34,7 +34,7 @@ jobs:
           TOKEN: ${{ github.token }}
         run: |
           # Its own line, so a run that finds no tag fails instead of drawing an empty badge.
-          release=$(git describe --tags --abbrev=0)
+          release=$(git describe --tags --abbrev=0) || { echo "::error::no release tag reachable from HEAD"; exit 1; }
           uv run python .github/scripts/badges.py coverage.json "$release" badges
           cd badges
           git init -q -b badges

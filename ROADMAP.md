@@ -31,7 +31,6 @@ The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their a
 
 **Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *"actually, I only have 30 minutes"* mid-plan brings the 30-minute plan. Recorded in English, with a GIF in the README.
 
-6. **The repository made public.** The history checked for secrets, the switch on the user's go, the badges checked logged out.
 
 ## Later sessions
 
