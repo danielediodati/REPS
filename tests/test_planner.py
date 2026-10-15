@@ -1423,6 +1423,26 @@ def test_an_adaptation_is_briefed_with_todays_slot_and_what_was_said(
     assert "named, and the plan keeps to it: 30 minutes" in briefed
 
 
+def test_an_adaptation_keeps_what_was_left_unsaid(
+    connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
+) -> None:
+    """Asked only for dumbbells, a planner told to decide the rest once cut a
+    45-minute workout to 32, and the time the user asked for next changed
+    nothing they could see."""
+    keeping(connection, two_slots)
+    asked = plans.adaptation_requested(
+        connection, "2026-09-22", plans.Asked(), said="today I only have dumbbells"
+    )
+    model = Scripted(documents=[adapted_of("Barbell_Squat")])
+    graph, thread = pausing(model)
+
+    graph.invoke(planner.starting(asked), thread)
+
+    briefed = "\n".join(message.text for message in model.seen[0])
+    assert "decide it" not in briefed
+    assert "What they leave unsaid stays as the workout due" in briefed
+
+
 def test_an_adaptations_emit_schema_lists_no_ids_and_the_validator_holds_the_exclusions(
     connection: sqlite3.Connection, two_slots: plans.MesocycleRequest
 ) -> None:

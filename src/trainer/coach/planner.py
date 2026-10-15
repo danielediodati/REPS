@@ -281,8 +281,10 @@ def adapted(request: plans.Request) -> str:
         "Nothing of the mesocycle binds it: not its groups, not the time "
         "they usually train, not the equipment they declared. Read what they "
         "said and plan the workout it asks for -- more time or less, other "
-        "groups, other equipment, an exercise in or out. Where they leave "
-        "something to you, decide it. Equipment they name as all they have "
+        "groups, other equipment, an exercise in or out. What they leave "
+        "unsaid stays as the workout due: with only «only dumbbells today», "
+        "it is the usual minutes and the same groups, with dumbbells. "
+        "Equipment they name as all they have "
         "today is all of it: with «solo kettlebell», every exercise is a "
         "kettlebell one.",
         f"Usually they train {adapting.usual_minutes} minutes with "
