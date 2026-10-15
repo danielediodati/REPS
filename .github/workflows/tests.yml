@@ -33,7 +33,9 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: |
-          uv run python .github/scripts/badges.py coverage.json "$(git describe --tags --abbrev=0)" badges
+          # Its own line, so a run that finds no tag fails instead of drawing an empty badge.
+          release=$(git describe --tags --abbrev=0)
+          uv run python .github/scripts/badges.py coverage.json "$release" badges
           cd badges
           git init -q -b badges
           git add .
