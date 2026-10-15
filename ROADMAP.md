@@ -146,12 +146,14 @@ In this order. Measuring first is what stops the methodology being written again
 
 ## Session 15c — `1.0.0` — Portfolio-ready
 
-**Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *«anzi, ho solo 30 minuti»* mid-plan brings the 30-minute plan. Recorded, with a GIF in the README.
+**Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *"actually, I only have 30 minutes"* mid-plan brings the 30-minute plan. Recorded in English, with a GIF in the README.
 
 1. **A plan is answered in words too.** While a proposal is open the entrance reads *«ok»*, *«no»* or a new ask against it; a proposal that ends unanswered gets an ending, and *Solo 30 minuti* goes. — **done** `c56300b`
 2. **What the chat shows is Italian.** A block's reason, a plan's note and a direction, from the planner and from the demo's history. — **done** `ca4805a`
-3. **The recorded demo.** Both scenes in Telegram, and the GIF in the README.
-4. **The repository made public.** The history checked for secrets, the switch on the user's go, the badges checked logged out.
+3. **The chat speaks Telegram's language.** Models and fixed lines follow the app's language: Italian for `it`, English otherwise; the demo's history in English. — **done** `ed5277f`
+4. **What the chat shows while it works.** Progress is one line that changes, not a log; a tool call written as text never reaches the chat.
+5. **The recorded demo.** Both scenes in Telegram, in English, and the GIF in the README.
+6. **The repository made public.** The history checked for secrets, the switch on the user's go, the badges checked logged out.
 
 ## Later sessions
 

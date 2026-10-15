@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Blocked by: 03.
+Blocked by: 05.
 
 Read first: `spec.md` (Carried from 15b.5).
 
