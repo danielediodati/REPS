@@ -67,26 +67,15 @@ It speaks the language your Telegram app is set to: Italian for Italian, English
 ## How it works
 
 ```mermaid
-flowchart TD
-  subgraph agent ["agent: LangGraph, models decide"]
-    entrance["entrance: the chat model you talk to"]
-    entrance --> onboarding & logger & planner
-    logger -- mesocycle ended --> supervisor
-    supervisor -- direction --> planner
-    planner --> validate{validator}
-    validate -- refused --> planner
+flowchart LR
+  telegram([Telegram]) <--> entrance
+  subgraph agent [agent]
+    entrance(entrance) --> onboarding(onboarding) & logger(logger) & planner(planner)
+    logger --> supervisor(supervisor) --> planner
+    planner <--> validator{validator}
   end
-
-  subgraph engine ["engine: code only, no model"]
-    tools["engine tools"] --> db[(SQLite)]
-  end
-
-  tg(["Telegram, through the bot on your PC"]) <--> entrance
-  onboarding & logger -- question or confirm --> you[/"interrupt: you answer"/]
-  validate -- accept or refuse --> you
-  you --> db
-  agent <--> tools
-  agent <-.-> store[(memory store)]
+  agent <--> engine[[engine]] --> db[(SQLite)]
+  agent <-.-> store[(memory)]
 ```
 
 | Part | What it is |
@@ -126,7 +115,7 @@ uv run trainer plan --time 30                          # today's adapted for tod
 uv run trainer plan --change "basta affondi"           # the mesocycle rewritten for the cycles left
 uv run trainer log --say "panca bene, solo 3 serie di military"
 uv run trainer state
-uv run trainer eval --suite plan                       # ends with dollars and seconds a run
+uv run trainer eval --suite plan
 uv run trainer runs list                               # every negotiation, and what it came to
 uv run trainer runs show 20260918-190412-3f9a          # what each run called, spent and reached
 uv run trainer mcp                                     # the engine's tools over MCP
@@ -140,13 +129,11 @@ Each node runs the cheapest configuration that cleared its suite's bar ([ADR-001
 
 | Node | Model, effort, host | Measured |
 |---|---|---|
-| planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles, ~$0.13 and ~47 s each |
-| logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60%, ~$0.003 and 8-200 s a report |
-| onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80%, ~$0.0015 and 3-150 s an onboarding |
-| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routed 84% against 80%, plans held 96% against 90%; $0.0003-0.001 and 1-6 s a turn |
-| supervisor | `openai/gpt-6-luna`, default, OpenAI | held 88% against 80%, followed 100% against 80%; ~$0.0015 a direction |
-
-**A month costs about $0.5-0.9**: ~300 turns in the chat, ~20 reports and one mesocycle.
+| planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles |
+| logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60% |
+| onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80% |
+| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routed 84% against 80%, plans held 96% against 90% |
+| supervisor | `openai/gpt-6-luna`, default, OpenAI | held 88% against 80%, followed 100% against 80% |
 
 `PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. A missing key, an unreachable OpenRouter or a model it does not route to is reported before the run starts, with the fix.
 
@@ -162,7 +149,7 @@ Everything the machine writes is in `~/.reps`; `TRAINER_HOME` moves it, so repla
 | `eval-runs/` | `TRAINER_EVAL_RUNS` | each eval run's record |
 | `trainer.log` | — | every state and exception, never the token or the owner id; rotated at a megabyte, four files deep |
 
-**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, stopped by a message mid-plan, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens, seconds per node and dollars charged. It reads documents only, so it works when the provider is what is wrong.
+**Every run can be read back.** A *run* is one proposal pursued, to your answer; one ask and all its runs are a *negotiation* (ADR-0007). `trainer runs list` says what each came to: accepted, turned down, refused by the validator, fallen over, cut, stopped by a message mid-plan, waiting, or *opened by the machine* for a next mesocycle. `trainer runs show` prints the tools called, the attempts refused, tokens and seconds per node. It reads documents only, so it works when the provider is what is wrong.
 
 ## Development
 
