@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 from langchain_core.language_models import BaseChatModel
 
+from test_entrance import WRITTEN_CALL
 from trainer.coach import models
 
 
@@ -862,3 +863,32 @@ def test_the_supervisor_takes_a_model_effort_and_host_of_its_own(
 
     assert (chat.name, chat.reasoning, chat.host) == ("qwen/qwen3.8-27b", "low", "deepinfra")
     assert models.chat_for("planner").name == models.NODES["planner"].choice.model
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        WRITTEN_CALL,
+        "<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>todays_workout",
+        '<tool_call>\n{"name": "todays_workout", "arguments": {}}\n</tool_call>',
+        '[TOOL_CALLS][{"name": "todays_workout", "arguments": {}}]',
+        "<|python_tag|>todays_workout()",
+        "<function=todays_workout>{}</function>",
+    ],
+)
+def test_a_tool_call_written_as_text_is_recognised(written: str) -> None:
+    """Each a host's own call markup, leaked into the text instead of parsed into a call."""
+    assert models.written_call(written)
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Oggi tocca alle gambe: 45 minuti, tre blocchi.",
+        "Today is legs, <45 minutes> as you asked | nothing else.",
+        "Pick one: < | > or the other.",
+        "Use the function of the hips, not the back.",
+    ],
+)
+def test_words_are_not_a_tool_call(said: str) -> None:
+    assert not models.written_call(said)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from collections.abc import AsyncIterator, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -119,6 +120,20 @@ def spent(error: BaseException) -> QuotaSpent | None:
             "https://openrouter.ai/settings/credits"
         )
     return None
+
+
+WRITTEN_CALL = re.compile(
+    r"</?[|｜][\w▁]+"  # special tokens: <|python_tag|>, <｜DSML｜tool_calls>
+    r"|</?tool_calls?>"
+    r"|\[TOOL_CALLS\]"
+    r"|<function=",
+)
+"""The call markup hosts are known to leak into a reply's text."""
+
+
+def written_call(text: str) -> bool:
+    """Whether a reply's text is a tool call the host failed to parse, rather than words."""
+    return WRITTEN_CALL.search(text) is not None
 
 
 @dataclass(frozen=True)

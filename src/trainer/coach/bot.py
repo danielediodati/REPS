@@ -247,9 +247,9 @@ testable as the rest."""
 Draft = Callable[[str], Awaitable[None]]
 """The run's progress, re-sent in place while it works.
 
-Ephemeral, about thirty seconds, so what goes down it is the whole progress so
-far and never the newest line alone: a draft is not a transcript and nothing
-that has to survive the run may go this way.
+Ephemeral, about thirty seconds, so what goes down it is the phase the run is
+in, one line: a draft is not a transcript and nothing that has to survive the
+run may go this way.
 """
 
 

@@ -708,3 +708,28 @@ def test_every_handoff_that_carries_their_words_carries_them_untranslated() -> N
     ):
         assert "never translated" in " ".join((handoff.__doc__ or "").split()), handoff.__name__
     assert "never translated" in " ".join(entrance.PROPOSED.split())
+
+
+# -- a tool call written as text -----------------------------------------------
+
+WRITTEN_CALL = '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="todays_workout">\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>'
+"""What DeepSeek once answered a speak-only turn with, on 2026-10-15."""
+
+
+def test_a_tool_call_written_as_text_is_asked_again(connection: sqlite3.Connection) -> None:
+    model = Scripted(turns=[says(WRITTEN_CALL), says("Oggi gambe.")])
+
+    final = graph_of(model).invoke(entrance.heard(CIAO))
+
+    assert final["answer"] == "Oggi gambe."
+    assert all(WRITTEN_CALL not in message.text for message in final["messages"])
+
+
+def test_a_tool_call_written_as_text_twice_is_no_answer(connection: sqlite3.Connection) -> None:
+    """The bot answers an empty answer with its failed line (ADR-0006)."""
+    model = Scripted(turns=[says(WRITTEN_CALL), says(WRITTEN_CALL), says("mai")])
+
+    final = graph_of(model).invoke(entrance.heard(CIAO))
+
+    assert final["answer"] == ""
+    assert all(WRITTEN_CALL not in message.text for message in final["messages"])

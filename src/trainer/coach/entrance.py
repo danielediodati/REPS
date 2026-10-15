@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import operator
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
@@ -31,6 +32,8 @@ from trainer.coach import record as records
 from trainer.coach.calls import answered
 from trainer.engine import catalog, mesocycles
 from trainer.engine.exclusions import ExclusionError
+
+logger = logging.getLogger(__name__)
 
 
 def todays_workout() -> str:
@@ -354,6 +357,12 @@ ONE_AT_A_TIME = (
     "That one was not started: one thing at a time, and the first call of this "
     "turn is what is running. Say only what that one is doing."
 )
+
+WRITTEN_CALL = (
+    "Your last reply was a tool call written out as text, and the user would "
+    "have read it as it is. Reply again, in words."
+)
+"""What a reply that is call markup is asked again with, once (`models.written_call`)."""
 
 SPENT = (
     "You have no tool calls left. Answer with what you know, and say you do "
@@ -746,7 +755,16 @@ def build(
                     name="machine",
                 ),
             )
-        reply = bound.invoke([SystemMessage(prompt + language.told()), *history, *asked])
+        sent = [SystemMessage(prompt + language.told()), *history, *asked]
+        reply = bound.invoke(sent)
+        if _leaked(reply):
+            logger.warning("the entrance wrote a tool call as text: %.200s", reply.text)
+            reply = bound.invoke([*sent, reply, HumanMessage(WRITTEN_CALL, name="provider")])
+            if _leaked(reply):
+                # Left out of the history, so the next turn does not imitate
+                # it; with no reply the turn's answer is empty.
+                logger.warning("and again: the turn goes unanswered")
+                return born | {"budget": budget, "messages": asked}
         return born | {"budget": budget, "messages": [*asked, reply]}
 
     def read(state: EntranceState) -> dict[str, Any]:
@@ -889,6 +907,11 @@ def build(
 
 
 HANDED = {handoff.__name__ for handoff in HANDOFFS}
+
+
+def _leaked(reply: AIMessage) -> bool:
+    """Whether a reply is words that are really a tool call the host did not parse."""
+    return not reply.tool_calls and models.written_call(reply.text)
 
 
 def _last_said(history: Sequence[AnyMessage]) -> int:

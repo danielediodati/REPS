@@ -64,21 +64,22 @@ class PlanLines:
 
 @dataclass(frozen=True)
 class ProgressLines:
+    looking: str
+    looking_workout: str
     writing: str
-    rewriting: str
+    checking: str
     refused: str
+    rewriting: str
     exhausted: str
     valid: str
     one_block: str
     blocks: str
     workouts: str
     again: str
+    reading_report: str
     writing_report: str
     read: str
     not_read: str
-    failed: str
-    unknown: str
-    calls: dict[str, str]
 
 
 @dataclass(frozen=True)

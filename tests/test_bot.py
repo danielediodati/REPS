@@ -32,6 +32,7 @@ from conftest import enrich
 from trainer import tools
 from trainer import plan as plans
 from trainer import tools
+from test_entrance import WRITTEN_CALL
 from test_logger import graph_of as logger_graph_of
 from test_logger import prescribe, proposing, report, scripted
 from test_planner import (
@@ -1737,10 +1738,40 @@ def test_the_draft_opens_on_a_line_of_our_own(
 
     assert watched.drafts[0] == SAID.chat.working
     assert "" not in watched.drafts, "an empty draft asks the client to invent one"
-    assert watched.drafts[-1].splitlines() == [
+
+
+def test_a_streamed_mesocycle_is_one_line_at_a_time(
+    catalogued: sqlite3.Connection, declared: Path
+) -> None:
+    """The draft is the phase the run is in, naming the workout looked at, and
+    the refusal is a phase of its own between the two writings."""
+    scripted = refusing_then_planning()
+    scripted.turns.insert(
+        0,
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "admissible_set",
+                    "args": {"equipment": ["barbell"], "budget_min": 45, "muscle_groups": ["shoulders"]},
+                    "id": "c",
+                }
+            ],
+        ),
+    )
+    graph = graph_of(scripted, checkpointer=InMemorySaver())
+    watched = asking(graphs_of(graph))
+
+    shown = [draft for at, draft in enumerate(watched.drafts) if at == 0 or draft != watched.drafts[at - 1]]
+    assert all("\n" not in draft for draft in shown)
+    assert shown == [
+        SAID.chat.working,
+        SAID.progress.looking_workout.format(workout=2, count=2),
         SAID.progress.writing,
-        f"il validatore ha rifiutato: {plans.ADMISSIBLE}",
+        SAID.progress.checking,
+        SAID.progress.refused.format(rules=plans.ADMISSIBLE),
         SAID.progress.rewriting,
+        SAID.progress.checking,
         "piano valido, 2 allenamenti",
     ]
 
@@ -1762,7 +1793,7 @@ def test_a_refusal_is_streamed_too(catalogued: sqlite3.Connection) -> None:
         coach.tapped(OWNER, CHAT, tap_on(final, thread, bot.TURNED_DOWN), watched.chat)
     )
 
-    assert SAID.progress.again in watched.drafts[-1]
+    assert SAID.progress.again in watched.drafts
     assert "Standing Military Press" in watched.offers[0][0]
 
 
@@ -3331,3 +3362,16 @@ def test_the_language_is_the_one_the_senders_telegram_app_is_set_to() -> None:
     assert bot._spoken_in(sent_by("en")) == language.ENGLISH
     assert bot._spoken_in(sent_by(None)) == language.ENGLISH
     assert bot._reading("chat:1", language.ENGLISH)["configurable"][language.KEY] == language.ENGLISH
+
+
+def test_a_tool_call_written_as_text_never_reaches_the_chat() -> None:
+    """Neither the markup nor silence: asked again once, then the failed line."""
+    once = asking(graphs_of(front=Talking(turns=[AIMessage(content=WRITTEN_CALL)])))
+    twice = asking(
+        graphs_of(
+            front=Talking(turns=[AIMessage(content=WRITTEN_CALL), AIMessage(content=WRITTEN_CALL)])
+        )
+    )
+
+    assert once.said == [SAYS]
+    assert twice.said == [SAID.chat.failed]
