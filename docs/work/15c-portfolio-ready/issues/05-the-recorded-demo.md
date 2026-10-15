@@ -6,7 +6,7 @@ Blocked by: 01, 02, 03, 04.
 
 Read first: `spec.md` (Carried from 15.5); README "The demo".
 
-Budget: $0.50 for the whole ticket, approved by the user on 2026-10-15.
+Budget: $1.00 for the whole ticket, approved by the user on 2026-10-15 (raised from $0.50 after two attempts, ~$0.62).
 
 ## What to build
 
