@@ -556,7 +556,7 @@ def test_asking_leaves_the_table_once_the_budget_is_spent(
 # -- the exclusion it may propose ----------------------------------------------
 
 
-def proposing(identifier: int, retest: str = "2026-10-15") -> Scripted:
+def proposing(identifier: int, retest: str = "2099-01-01") -> Scripted:
     return scripted(
         AIMessage(content="tutto chiaro"),
         emits=report(
@@ -586,7 +586,7 @@ def test_a_proposed_exclusion_stops_for_confirmation(
     assert waiting.value["kind"] == logger.EXCLUSION
     assert waiting.value["value"] == "shoulder"
     assert waiting.value["granularity"] == "joint", "the catalog decides which"
-    assert waiting.value["retest_date"] == "2026-10-15"
+    assert waiting.value["retest_date"] == "2099-01-01"
     assert exclusions.active(connection, TODAY) == ()
 
 
