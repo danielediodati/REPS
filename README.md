@@ -45,7 +45,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## Status
 
-**`1.0.0rc1` reads a message sent mid-plan.** A question is answered at once, a correction or a new ask stops the plan being written and the new one arrives instead, a report waits for it. Session 15c, for `1.0.0`, opens next: the recorded demo, the repository made public, and the fixes found using this release candidate.
+**`1.0.0`**: the loop above, recorded. A plan can be answered in words as well as with its buttons, and the chat speaks the language its Telegram app is set to. Session 16, for `1.1.0`, opens next: each exercise of a plan sent with its start and end photos.
 
 ## What it does
 

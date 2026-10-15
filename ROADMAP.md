@@ -24,13 +24,9 @@ The order things get built in. [TRAINER.md](TRAINER.md) is the design; [ADR-0004
 | 14 | `0.14.0` | anything about this workout: the adaptation set, the next workout off the log, one adaptation tool, this workout or from now on, prompt caching |
 | 15 | `0.15.0` | the supervisor (ADR-0014) and `variation.md`: the next mesocycle arrives with its reason; the demo's home |
 | 15b | `1.0.0rc1` | a message mid-plan is read: one suite runner, one negotiation for the bot and the CLI, one roster of node models, the front page |
+| 15c | `1.0.0` | portfolio-ready: a plan answered in words, the chat in Telegram's language and one progress line, the demo recorded with its GIF, the repository public |
 
 The details are in `git show v0.N.0`. Sessions 1-5 predate ADR-0004, and their agent layer is what sessions 6-9 replace.
-
-## Session 15c — `1.0.0` — Portfolio-ready
-
-**Demo**: after three mesocycles, the fourth arrives in Telegram with its reason; and *"actually, I only have 30 minutes"* mid-plan brings the 30-minute plan. Recorded in English, with a GIF in the README.
-
 
 ## Later sessions
 
@@ -39,8 +35,6 @@ Their issues are cut when each session opens.
 | # | version | demo | scope |
 |---|---|---|---|
 | 16 | `1.1.0` | a plan in Telegram shows each exercise done: its start and end photos | the two photos free-exercise-db has for 873 of 876 exercises, sent with the plan; an exercise without photos is sent without; nothing generated |
-
-**Portfolio-ready** is session 15c, `1.0.0`. Until then the README still has to describe what the system does *today* at every release — that is hygiene, not the flag.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
