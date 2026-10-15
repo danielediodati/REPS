@@ -49,20 +49,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## What it does
 
-| You say, in the chat | What happens |
-|---|---|
-| anything, with nothing declared yet | an interview, one question per message and resumed where you left it: goal, rotation, time, equipment; it ends in a first mesocycle |
-| *«cosa faccio oggi?»* | today's workout, read off the mesocycle as the first of the cycle not yet performed, the last load beside each exercise |
-| *«panca bene, solo 3 serie di military»* | the logger writes what you did, asking when the words leave a number open |
-| that report ends the mesocycle's last cycle | the supervisor writes the next one's direction, the planner plans from it, and it arrives with that direction in a line |
-| *«anzi, ho solo 30 minuti»* while a plan is being written | the plan in flight is stopped and the new ask planned instead; a question is answered at once and the plan goes on; a report waits for it |
-| *«oggi ho 30 minuti»*, *«niente squat»* | this workout adapted, or the mesocycle rewritten; when the words do not say which, it asks *«solo oggi o d'ora in poi?»* |
-| *«ok»*, *«no»*, *«ho 20 minuti»* while a plan waits on your answer | kept or turned down as its buttons would; a new ask replaces it; reporting the workout an adaptation was for drops the adaptation |
-| *«ho comprato un bilanciere»* | the interview reruns on that alone, a new dated version of your declarations is kept beside the old, and the running mesocycle is kept, rewritten or replaced |
-| *«la cyclette mi annoia»* | a conclusion kept with your sentence beside it, refused unless you wrote that sentence; every plan after it reads it as a preference |
-| *«quanto petto ho fatto?»* | answered from the engine's read tools |
-
-It speaks the language your Telegram app is set to: Italian for Italian, English for any other ([ADR-0016](docs/adr/0016-the-chat-speaks-the-language-its-telegram-app-is-set-to.md)). A plan arrives with two buttons, *Sounds good* and *Not for me* (*Va bene*, *Non mi va*), and can be answered in words instead. The validator refuses any plan outside what you declared, and the planner tries again. Nothing the chat says is a fixed line except the two about the machine being in trouble.
+In the chat you declare what you have, ask for today's workout, report it in your own words, and change a plan by saying so, even while it is being written; when a mesocycle ends, the next one arrives with its reason.
 
 ## How it works
 
@@ -72,9 +59,9 @@ flowchart LR
   subgraph agent [agent]
     entrance(entrance) --> onboarding(onboarding) & logger(logger) & planner(planner)
     logger --> supervisor(supervisor) --> planner
-    planner <--> validator{validator}
   end
-  agent <--> engine[[engine]] --> db[(SQLite)]
+  planner <--> validator[validator]
+  agent <--> engine[engine] --> db[(SQLite)]
   agent <-.-> store[(memory)]
 ```
 
