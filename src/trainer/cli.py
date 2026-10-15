@@ -1453,7 +1453,7 @@ def _asked(
     assert isinstance(emitted, plan.WorkoutPlan)
     blocks = plan.to_blocks(emitted)
     return emitted, [
-        *plan.render(connection, emitted, blocks, request.budget_min),
+        *plan.render(connection, emitted, blocks, request.shown_minutes),
         "",
         *run_record.summary(written),
     ]

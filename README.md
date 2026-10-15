@@ -29,10 +29,10 @@ REPS is not a plan generator: **it is a loop**. You report a workout in your own
 ## The demo
 
 <p align="center">
-  <img src="docs/demo.gif" alt="In Telegram: today's workout is reported and the fourth mesocycle arrives with its reason; then today's workout is adapted to dumbbells, and 'actually, I only have 30 minutes' sent while it is written brings the 26-minute plan" width="480">
+  <img src="docs/demo.gif" alt="In Telegram: today's workout is reported and the fourth mesocycle arrives with its reason; then today's workout is adapted to dumbbells, and 'actually, I only have 30 minutes' sent while it is written brings a 26-minute plan instead" width="480">
 </p>
 
-Today's workout is reported: the third mesocycle ends, and the fourth arrives with its reason. Once it is accepted, *"today I only have dumbbells"* starts an adapted plan, and *"actually, I only have 30 minutes"*, sent while that plan is written, stops it: the 30-minute dumbbell plan arrives instead. Played at twice the speed.
+Today's workout is reported: the third mesocycle ends, and the fourth arrives with its reason. Once it is accepted, *"today I only have dumbbells"* starts an adapted plan, and *"actually, I only have 30 minutes"*, sent while that plan is written, stops it: a dumbbell plan that fits in 30 minutes arrives instead. Played at twice the speed.
 
 To run it yourself, once [set up](#getting-started):
 

@@ -1276,8 +1276,7 @@ async def told(
                 text = mesocycle_proposal(proposed, request, chat.language)
             else:
                 assert isinstance(request, plans.Request)
-                asked = None if request.adapting is not None else request.budget_min
-                text = proposal(proposed, asked, chat.language)
+                text = proposal(proposed, request.shown_minutes, chat.language)
             await chat.offer(
                 text,
                 [
@@ -1500,7 +1499,7 @@ def proposal(
     spoken: language.Language,
     loads: bool = False,
 ) -> str:
-    """The plan as the chat shows it, in the markup Telegram renders; its total alone without `budget_min`.
+    """The plan as the chat shows it, in the markup Telegram renders.
 
     Off `plans.shown`, which is also what the terminal's lines are folded
     from. Only the markup differs: the terminal aligns a column of ASCII

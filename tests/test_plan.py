@@ -489,6 +489,32 @@ def test_the_rendering_carries_the_whole_prescription(
     assert "of 45" in out
 
 
+def test_an_adaptation_is_rendered_without_the_usual_minutes(
+    connection: sqlite3.Connection,
+) -> None:
+    """Its time is the planner's, read off what the user said: the slot's
+    usual minutes are context, and *31 min of 45* reads as a plan that ignored
+    them."""
+    text = document(block({"exercise_id": "Barbell_Squat", "prescription": {"unit": "reps", "amount": 8}}))
+    parsed = plans.parse(text)
+    adapting = plans.Adapting(
+        mesocycle=1,
+        served_after=0,
+        slot=1,
+        cycle=(parsed,),
+        split=("legs",),
+        still=(1,),
+        usual_minutes=45,
+        usual_equipment=("barbell",),
+    )
+    asked = dataclasses.replace(BARBELL_45, adapting=adapting)
+
+    out = plans.render(connection, parsed, plans.to_blocks(parsed), asked.shown_minutes)
+
+    assert BARBELL_45.shown_minutes == 45
+    assert out[-1] == f"total {plans.shown(connection, parsed, plans.to_blocks(parsed), None).total_min} min"
+
+
 def test_timed_work_is_printed_in_seconds(connection: sqlite3.Connection) -> None:
     out = rendered(connection, document(block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 45}})))
 

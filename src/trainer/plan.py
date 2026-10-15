@@ -337,6 +337,11 @@ class Request:
     goal: str | None = None
     """The methodology column the plan is made for; `None` when nothing is declared."""
 
+    @property
+    def shown_minutes(self) -> int | None:
+        """The minutes a reader is shown the plan against; none for an adaptation, whose time is the planner's."""
+        return None if self.adapting is not None else self.budget_min
+
 
 @dataclass(frozen=True)
 class MesocycleRefusal:
@@ -1246,7 +1251,7 @@ def render(
     connection: sqlite3.Connection,
     plan: WorkoutPlan,
     blocks: duration.Plan,
-    budget_min: int,
+    budget_min: int | None,
     loads: bool = False,
 ) -> list[str]:
     """The workout, as the terminal prints it."""
@@ -1274,7 +1279,10 @@ def render(
         lines.append(f"  why: {block.reason}")
         lines.append("")
 
-    lines.append(f"total {reading.total_min} min of {reading.budget_min}")
+    if reading.budget_min is None:
+        lines.append(f"total {reading.total_min} min")
+    else:
+        lines.append(f"total {reading.total_min} min of {reading.budget_min}")
     if reading.note:
         lines.append(f"note: {reading.note}")
     return lines

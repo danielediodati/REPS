@@ -57,8 +57,8 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from trainer.coach import bot, checkpoints, entrance, language, logfile, models, onboarding, planner, progress, runs, supervisor
 from trainer.coach import logger as coach_logger
-from trainer.coach import record as run_record
 from trainer.coach import negotiation as negotiations
+from trainer.coach import record as run_record
 from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
 
 SAID = language.texts(language.ITALIAN)
@@ -1430,8 +1430,8 @@ def test_an_adaptation_shows_its_total_without_the_usual_minutes(
     )
 
     (text, _) = sent[0]
-    assert "*Totale*" in text
-    assert "su 45" not in text
+    total = plans.shown(catalogued, plan_of("Barbell_Squat"), plans.to_blocks(plan_of("Barbell_Squat")), None).total_min
+    assert text.splitlines()[-1] == f"*Totale* {total} min"
 
 
 def test_every_button_fits_what_telegram_carries(catalogued: sqlite3.Connection) -> None:
