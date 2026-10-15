@@ -23,6 +23,7 @@ mesocycle = "*Mesociclo* · {cycles} cicli"
 slot = "*Allenamento {slot} di {slots}* · {groups}"
 said_no = "  ⚠️ avevi detto di no: {why}"
 total = "*Totale* {total} min su {budget}"
+total_alone = "*Totale* {total} min"
 reps = "{amount} ripetizioni"
 seconds = "{amount}s"
 

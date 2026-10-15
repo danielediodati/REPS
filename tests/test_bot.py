@@ -58,6 +58,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from trainer.coach import bot, checkpoints, entrance, language, logfile, models, onboarding, planner, progress, runs, supervisor
 from trainer.coach import logger as coach_logger
 from trainer.coach import record as run_record
+from trainer.coach import negotiation as negotiations
 from trainer.engine import catalog, config, database, exclusions, mesocycles, migrations, workouts
 
 SAID = language.texts(language.ITALIAN)
@@ -1397,6 +1398,40 @@ def test_a_valid_plan_reaches_the_chat_with_three_buttons(
     assert said == []
     assert still_waiting(graph, thread) == ("propose",)
     assert workout_rows(catalogued) == []
+
+
+def test_an_adaptation_shows_its_total_without_the_usual_minutes(
+    catalogued: sqlite3.Connection,
+) -> None:
+    """The time of an adaptation is the planner's, read off what the user
+    said: a 30-minute plan shown as *31 min of 45* reads as a plan that
+    ignored them."""
+    adapting = plans.Adapting(
+        mesocycle=1,
+        served_after=0,
+        slot=1,
+        cycle=(plan_of("Barbell_Squat"),),
+        split=("legs",),
+        still=(1,),
+        usual_minutes=45,
+        usual_equipment=("barbell",),
+        said="I only have 30 minutes",
+    )
+    request = dataclasses.replace(BARBELL_45, adapting=adapting)
+    sent, offer = offered()
+
+    asyncio.run(
+        bot.told(
+            graphs_of(),
+            negotiations.Proposed(plan_of("Barbell_Squat"), request, "id", False),
+            bot.thread_for(CHAT),
+            channel(spoken()[1], offer),
+        )
+    )
+
+    (text, _) = sent[0]
+    assert "*Totale*" in text
+    assert "su 45" not in text
 
 
 def test_every_button_fits_what_telegram_carries(catalogued: sqlite3.Connection) -> None:

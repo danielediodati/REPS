@@ -58,6 +58,7 @@ class PlanLines:
     slot: str
     said_no: str
     total: str
+    total_alone: str
     reps: str
     seconds: str
 

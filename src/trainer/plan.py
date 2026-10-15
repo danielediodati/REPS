@@ -1174,7 +1174,8 @@ class Shown:
 
     blocks: tuple[ShownBlock, ...]
     total_min: int
-    budget_min: int
+    budget_min: int | None
+    """The minutes the plan was built to; none for an adaptation, whose time is the planner's."""
     note: str = ""
     """What an adapted workout tells the user it could not do; empty otherwise."""
 
@@ -1183,7 +1184,7 @@ def shown(
     connection: sqlite3.Connection,
     plan: WorkoutPlan,
     blocks: duration.Plan,
-    budget_min: int,
+    budget_min: int | None,
     loads: bool = False,
 ) -> Shown:
     """The plan a reader is shown: names off the catalog, seconds off the engine.
