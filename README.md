@@ -55,10 +55,10 @@ In the chat you declare what you have, ask for today's workout, report it in you
 
 ```mermaid
 flowchart LR
-  telegram([Telegram]) <--> entrance
+  telegram((Telegram)) <--> entrance
   subgraph agent [agent]
-    entrance(entrance) --> onboarding(onboarding) & logger(logger) & planner(planner)
-    logger --> supervisor(supervisor) --> planner
+    entrance([entrance]) --> onboarding([onboarding]) & logger([logger]) & planner([planner])
+    logger --> supervisor([supervisor]) --> planner
   end
   planner <--> validator[validator]
   agent <--> engine[engine] --> db[(SQLite)]
