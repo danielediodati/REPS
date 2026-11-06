@@ -65,6 +65,10 @@ Spec: [spec](docs/work/2.2-sessions/spec.md)
 
 A feature's directory is `docs/work/<m>.<f>-<slug>/`: the feature slug of the conventions above, prefixed with the feature's number. Its spec and `issues/` follow those conventions unchanged.
 
+### Where a milestone is built
+
+Each milestone is built on its own branch, `milestone/<n>-<slug>`, opened from main by the first commit that adds the milestone to `ROADMAP.md`: its heading, its map or its first spec. Its features and tickets close on that branch. `/ae:close-milestone` merges it into main and tags the merge, so main holds closed milestones and fixes only.
+
 ### When a skill publishes a spec
 
 Ask which milestone the feature belongs to when the conversation does not make it clear, and give it the next feature number in that milestone. Write the spec to `docs/work/<m>.<f>-<slug>/spec.md`, then add its `### Feature` heading and `Spec:` line under the milestone in `ROADMAP.md`.
@@ -79,4 +83,4 @@ A ticket is closed by `/ae:close-ticket <m>.<f>.<t>`: that is the way this track
 
 ### Bugs
 
-A bug is fixed outside the triple: no spec, no ticket, no number. The fix is a commit whose subject starts `Fix:`, and ships with the next milestone or a patch. A bug that needs real work becomes a feature.
+A bug is fixed outside the triple: no spec, no ticket, no number. The fix is a commit on main whose subject starts `Fix:`, and ships with the next milestone or a patch. A bug that needs real work becomes a feature.
