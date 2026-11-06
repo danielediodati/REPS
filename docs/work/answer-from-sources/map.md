@@ -20,6 +20,8 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 ## Decisions so far
 
+- [Sources and licences](issues/01-sources-and-licences.md): English and Italian Wikipedia pinned by revision, free-exercise-db and MedlinePlus as support; OpenStax and WHO out (NonCommercial); chunks committed with a NOTICE, vectors not.
+
 - [Italian questions, English texts](issues/02-italian-questions-english-texts.md): `bge-m3` first, on Ollama or OpenRouter alike; `qwen3-embedding:0.6b` and `snowflake-arctic-embed2` as challengers; query translation as fallback, never the corpus.
 
 ## Not yet specified
