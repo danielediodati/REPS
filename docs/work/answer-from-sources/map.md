@@ -24,6 +24,8 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 - [Italian questions, English texts](issues/02-italian-questions-english-texts.md): `bge-m3` first, on Ollama or OpenRouter alike; `qwen3-embedding:0.6b` and `snowflake-arctic-embed2` as challengers; query translation as fallback, never the corpus.
 
+- [Where retrieval runs](issues/03-where-retrieval-runs.md): embeddings on the owner's Ollama, the index in a Qdrant server the owner starts, storage in `~/.reps/qdrant/`; ADR-0017 amends ADR-0015; what is missing or down is a state, never a crash.
+
 ## Not yet specified
 
 - **The retrieval ladder**: which techniques to climb, and in what order, once the first version is measured.
