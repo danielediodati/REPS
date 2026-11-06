@@ -30,4 +30,4 @@ Each of these was learned by getting it wrong once.
 
 ## Closing
 
-A ticket closes with `/dd:close-ticket S.N`, a session with `/dd:close-session N`.
+A ticket closes with `/ae:close-ticket S.N`, a session with `/ae:close-session N`.
