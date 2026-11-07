@@ -1,0 +1,130 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway. Question: how does an answer with its source look in Telegram?
+     Four variants x four cases, switch with the bottom bar or ?variant=A&case=1 -->
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Citation Prototype</title>
+<style>
+:root{--bg:#0e1621;--chat:#17212b;--in:#182533;--out:#2b5278;--txt:#f5f5f5;--mut:#7f91a4;--link:#6ab3f3;--bar:#6ab3f3;--btn:#22303f;--panel:#10161d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:110px}
+.wrap{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:16px}
+.phone{width:380px;max-width:100%;background:var(--chat);border-radius:14px;padding:14px 10px;min-height:520px}
+.head{color:var(--mut);font-size:13px;text-align:center;margin-bottom:10px}
+.msg{max-width:88%;padding:7px 10px 6px;border-radius:12px;margin:6px 0;white-space:pre-wrap;word-wrap:break-word}
+.me{background:var(--out);margin-left:auto;border-bottom-right-radius:4px}
+.bot{background:var(--in);border-bottom-left-radius:4px}
+a{color:var(--link);text-decoration:none}
+blockquote{margin:6px 0;border-left:3px solid var(--bar);padding:4px 8px;background:#1f3247;border-radius:4px;font-size:14px;white-space:pre-wrap}
+blockquote.exp{max-height:3.2em;overflow:hidden;position:relative;cursor:pointer}
+blockquote.exp.open{max-height:none}
+blockquote.exp:not(.open)::after{content:"▾";position:absolute;right:6px;bottom:2px;color:var(--mut)}
+.kb{display:flex;flex-direction:column;gap:4px;max-width:88%;margin-top:-2px}
+.kb button{background:var(--btn);color:var(--txt);border:0;border-radius:8px;padding:8px;font:inherit;cursor:pointer}
+.preview{border-left:3px solid var(--bar);padding:4px 8px;margin-top:6px;font-size:13px}
+.preview b{color:var(--link)}
+.sup{color:var(--link);font-size:11px;vertical-align:super}
+.small{color:var(--mut);font-size:13px}
+.panel{width:340px;max-width:100%;background:var(--panel);border-radius:14px;padding:14px;font-size:14px}
+.panel h3{margin:0 0 8px;font-size:15px}.panel dt{color:var(--mut);margin-top:8px}.panel dd{margin:2px 0 0}
+.barwrap{position:fixed;left:0;right:0;bottom:0;background:#0b1118;border-top:1px solid #243140;padding:8px;display:flex;flex-direction:column;gap:6px;align-items:center}
+.row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.row button{background:#1c2733;color:var(--txt);border:1px solid #2c3b4b;border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;font-size:13px}
+.row button.on{background:var(--out);border-color:var(--link)}
+</style></head><body>
+<div class="wrap"><div class="phone" id="phone"></div><div class="panel" id="panel"></div></div>
+<div class="barwrap"><div class="row" id="vbar"></div><div class="row" id="cbar"></div></div>
+<script>
+const W = {
+ itSquat: 'https://it.wikipedia.org/w/index.php?title=Squat&oldid=141234567',
+ enSquat: 'https://en.wikipedia.org/w/index.php?title=Squat_(exercise)&oldid=1251234567',
+ enValsalva: 'https://en.wikipedia.org/w/index.php?title=Valsalva_maneuver&oldid=1249876543',
+ medline: 'https://medlineplus.gov/sportsinjuries.html'
+};
+const CASES = [
+ {name:'1 Coperta', q:'Le ginocchia possono andare oltre le punte nello squat?'},
+ {name:'2 Due fonti, una inglese', q:'Devo trattenere il respiro quando faccio squat pesante?'},
+ {name:'3 Fuori corpus', q:'Meglio la creatina monoidrato o la HCL?'},
+ {name:'4 Confine col triage', q:'Come si evita il mal di schiena nello stacco? Comunque ieri mi ha fatto male in basso.'}
+];
+const A = { // footnotes at the end
+ name:'A Note a piè', render:c=>[
+ [`Sì, se il tallone resta a terra e il peso sul mezzo piede. Spingere le ginocchia avanti fa parte della discesa profonda: limitarlo sposta il carico sulle anche e sulla schiena [1].
+
+Fonti
+[1] Wikipedia, «Squat» § Esecuzione
+<a href="${W.itSquat}">${W.itSquat}</a>`],
+ [`Con carichi alti si usa spesso la manovra di Valsalva: inspiri, chiudi la glottide e spingi, per irrigidire il tronco [1]. Alza molto la pressione sanguigna, quindi chi ha problemi di pressione o cardiaci la evita [2].
+
+Fonti
+[1] Wikipedia (en), «Squat (exercise)» § Technique
+<a href="${W.enSquat}">${W.enSquat}</a>
+[2] Wikipedia (en), «Valsalva maneuver» § Uses
+<a href="${W.enValsalva}">${W.enValsalva}</a>`],
+ [`Non lo trovo nelle mie fonti, quindi non ti rispondo a memoria. Copro tecnica degli esercizi e prevenzione degli infortuni.`],
+ [`Per lo stacco: schiena neutra, bilanciere vicino alle tibie, spinta con le gambe prima di estendere le anche [1].
+
+Il dolore di ieri invece è un'altra cosa: dimmi in quali movimenti lo senti, così vediamo cosa togliere per ora.
+
+Fonti
+[1] Wikipedia, «Stacco da terra» § Tecnica
+<a href="${W.itSquat}">${W.itSquat}</a>`]][c],
+ panel:{dove:'In fondo al messaggio, sotto «Fonti», con marcatori [n] nel testo.',nomina:'Sito, lingua se non italiana, titolo, sezione, URL completo con oldid.',lunghezza:'~350-550 caratteri. Gli URL pinned sono lunghi e brutti.',parse:'Testo semplice: va bene col say() di oggi.',rifiuto:'Una riga + cosa copre il corpus.'}
+};
+const B = { // quote the passage, link hidden in the title
+ name:'B Citazione', render:c=>[
+ [`Sì, se il tallone resta a terra e il peso sul mezzo piede.
+<blockquote class="exp">Nello squat profondo le ginocchia avanzano oltre la punta dei piedi; limitarne il movimento aumenta il carico su anche e colonna lombare.</blockquote>— <a href="${W.itSquat}">Wikipedia, «Squat» § Esecuzione</a>`],
+ [`Con carichi alti si usa la manovra di Valsalva per irrigidire il tronco, ma alza molto la pressione: chi ha problemi di pressione o cardiaci la evita.
+<blockquote class="exp">Lifters commonly use the Valsalva maneuver: inhaling deeply and holding the breath against a closed glottis to brace the torso during the ascent.</blockquote>— <a href="${W.enSquat}">Wikipedia (en), «Squat (exercise)» § Technique</a>
+<blockquote class="exp">The maneuver causes a marked rise in intrathoracic and blood pressure, and is discouraged for people with cardiovascular conditions.</blockquote>— <a href="${W.enValsalva}">Wikipedia (en), «Valsalva maneuver»</a>`],
+ [`Non ho un testo che ne parli, e non rispondo senza una fonte.
+Posso aiutarti su come si esegue un esercizio o su come prevenire un infortunio.`],
+ [`Schiena neutra, bilanciere vicino alle tibie, spinta con le gambe prima delle anche.
+<blockquote class="exp">Mantenere la colonna in posizione neutra e il bilanciere a contatto con le gambe riduce il momento sulla zona lombare.</blockquote>— <a href="${W.itSquat}">Wikipedia, «Stacco da terra» § Tecnica</a>
+
+Il dolore di ieri lo guardiamo a parte: in quali movimenti lo senti?`]][c],
+ panel:{dove:'Il passaggio usato, citato verbatim in un blockquote espandibile (tocca per aprirlo), sotto la risposta.',nomina:'Titolo § sezione come link testuale; l\'URL non si vede. Il passaggio inglese resta in inglese.',lunghezza:'Risposta ~150-250 caratteri + citazioni chiuse.',parse:'MarkdownV2 (expandable blockquote, text link): say() va cambiato, con escape di tutto.',rifiuto:'Due righe, nessuna fonte.'}
+};
+const C = { // short answer, source behind a button
+ name:'C Bottone', render:c=>[
+ [`Sì, se il tallone resta a terra e il peso sul mezzo piede. Limitarle sposta il carico su anche e schiena.`,['📖 Fonte: Wikipedia, «Squat»']],
+ [`Con carichi alti si trattiene il fiato (Valsalva) per irrigidire il tronco. Alza molto la pressione: se hai problemi di pressione o di cuore, evitala.`,['📖 Fonte 1: «Squat (exercise)» (en)','📖 Fonte 2: «Valsalva maneuver» (en)']],
+ [`Questo non è nelle mie fonti. Chiedimi di tecnica o prevenzione.`],
+ [`Schiena neutra, bilanciere vicino alle tibie, spingi con le gambe prima delle anche.
+
+E il dolore di ieri: in quali movimenti lo senti?`,['📖 Fonte: Wikipedia, «Stacco da terra»']]][c],
+ panel:{dove:'Fuori dal testo: un bottone per fonte. Al tocco il bot manda il passaggio e il link.',nomina:'Titolo e lingua sul bottone; sezione, passaggio e URL nel messaggio che segue.',lunghezza:'Corta, ~100-200 caratteri.',parse:'Testo + inline keyboard (come offer()); serve un callback che ritrova il chunk.',rifiuto:'Una riga, nessun bottone.'}
+};
+const D = { // one-line footer + link preview card
+ name:'D Riga + anteprima', render:c=>[
+ [`Sì, se il tallone resta a terra e il peso sul mezzo piede: limitarle sposta il carico su anche e schiena.
+
+Fonte: <a href="${W.itSquat}">Wikipedia, «Squat»</a>`,null,{t:'Squat - Wikipedia',d:'Lo squat è un esercizio fisico multiarticolare…'}],
+ [`Con carichi alti si trattiene il fiato (Valsalva) per irrigidire il tronco, ma alza molto la pressione: se hai problemi di pressione o di cuore, evitala.
+
+Fonti: <a href="${W.enSquat}">Squat (en)</a> · <a href="${W.enValsalva}">Valsalva (en)</a>`,null,{t:'Squat (exercise) - Wikipedia',d:'A squat is a strength exercise in which the trainee lowers…'}],
+ [`Su questo non ho fonti, quindi passo.`],
+ [`Schiena neutra, bilanciere vicino alle tibie, spingi con le gambe prima delle anche.
+
+Fonte: <a href="${W.itSquat}">Wikipedia, «Stacco da terra»</a>
+
+Il dolore di ieri: in quali movimenti lo senti?`,null,{t:'Stacco da terra - Wikipedia',d:'Lo stacco da terra è un esercizio…'}]][c],
+ panel:{dove:'Una riga «Fonte:» in fondo; Telegram aggiunge l\'anteprima della pagina.',nomina:'Solo sito e titolo, niente sezione; link alla revisione fissata.',lunghezza:'~150-250 caratteri.',parse:'MarkdownV2 per i text link, oppure HTML.',rifiuto:'Una riga secca.'}
+};
+const V={A,B,C,D};
+const p=new URLSearchParams(location.search);let v=p.get('variant')||'A',c=+(p.get('case')||1)-1;
+function draw(){
+ const r=V[v].render(c);let h=`<div class="head">REPS · variante ${V[v].name}</div><div class="msg me">${CASES[c].q}</div><div class="msg bot">${r[0]}`;
+ if(r[2])h+=`<div class="preview"><b>${r[2].t}</b><br>${r[2].d}</div>`;
+ h+='</div>';
+ if(r[1])h+=`<div class="kb">${r[1].map(b=>`<button onclick="alert('Il bot manderebbe il passaggio citato e il link alla revisione.')">${b}</button>`).join('')}</div>`;
+ const txt=r[0].replace(/<[^>]+>/g,'');
+ document.getElementById('phone').innerHTML=h;
+ const P=V[v].panel;
+ document.getElementById('panel').innerHTML=`<h3>${V[v].name}</h3><dl><dt>Dove sta la fonte</dt><dd>${P.dove}</dd><dt>Cosa nomina</dt><dd>${P.nomina}</dd><dt>Lunghezza</dt><dd>${P.lunghezza} Questo messaggio: <b>${txt.length}</b> caratteri.</dd><dt>Formattazione</dt><dd>${P.parse}</dd><dt>Rifiuto</dt><dd>${P.rifiuto}</dd></dl>`;
+ document.querySelectorAll('blockquote.exp').forEach(b=>b.onclick=()=>b.classList.toggle('open'));
+ document.getElementById('vbar').innerHTML=Object.keys(V).map(k=>`<button class="${k==v?'on':''}" onclick="v='${k}';sync()">${V[k].name}</button>`).join('');
+ document.getElementById('cbar').innerHTML=CASES.map((x,i)=>`<button class="${i==c?'on':''}" onclick="c=${i};sync()">${x.name}</button>`).join('');
+}
+function sync(){history.replaceState(null,'',`?variant=${v}&case=${c+1}`);draw()}
+draw();
+</script></body></html>
