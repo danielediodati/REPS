@@ -26,6 +26,8 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 - [Where retrieval runs](issues/03-where-retrieval-runs.md): embeddings on the owner's Ollama, the index in a Qdrant server the owner starts, storage in `~/.reps/qdrant/`; ADR-0017 amends ADR-0015; what is missing or down is a state, never a crash.
 
+- [How a citation looks](issues/04-how-a-citation-looks.md): a short answer, then the passage quoted verbatim in an expandable blockquote under a `«Title» § Section` link to the pinned revision; a two-line refusal; replies move to MarkdownV2.
+
 ## Not yet specified
 
 - **The retrieval ladder**: which techniques to climb, and in what order, once the first version is measured.
