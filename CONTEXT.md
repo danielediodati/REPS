@@ -141,3 +141,8 @@ _Avoid_: chunk, which is the index's cut and changes with it.
 
 **Not covered**: the entrance's reply when the corpus does not hold the answer: it says so, and what the corpus does cover.
 _Avoid_: refusal, which is the validator's word for a plan it sends back.
+
+**Faithful**: an answer that says only what its passage says.
+
+**Judge**: the model that reads whether an answer is faithful and answers its question. It judges nothing code can check, and clears its own bar before it judges.
+_Avoid_: grader, evaluator.

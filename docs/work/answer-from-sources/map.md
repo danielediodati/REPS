@@ -30,6 +30,8 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 - [The eval set](issues/05-the-eval-set.md): about 90 rows (60 covered, 20 not covered, 10 on the triage boundary), 80% Italian; the agent drafts in other words than the passage, the owner reads the doubtful rows and a random fifth; passages labelled by verbatim quote, not chunk; frozen and versioned against a named corpus version.
 
+- [The judge](issues/07-the-judge.md): a model judges only faithfulness and relevance, code the rest (ADR-0018); gpt-oss-120b, a Qwen, Haiku in that order, never the answering model's family; calibrated on 30 real replies the owner reads plus 15 planted errors, bar 13/15 and 27/30.
+
 ## Not yet specified
 
 Nothing: what remains is ticketed.
