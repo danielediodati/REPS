@@ -32,10 +32,7 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 ## Not yet specified
 
-- **The retrieval ladder**: which techniques to climb, and in what order, once the first version is measured.
-- **The judge**: which model, and the sample it is calibrated on.
-- **The bars**: what Recall@5, MRR, faithfulness and the not-covered rows must each clear.
-- **The corpus over time**: how it is versioned and refreshed, and what that does to the frozen eval.
+Nothing: what remains is ticketed.
 
 ## Out of scope
 
