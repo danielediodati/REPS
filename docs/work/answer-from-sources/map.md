@@ -28,10 +28,13 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 - [How a citation looks](issues/04-how-a-citation-looks.md): a short answer, then the passage quoted verbatim in an expandable blockquote under a `«Title» § Section` link to the pinned revision; a two-line refusal; replies move to MarkdownV2.
 
+- [The eval set](issues/05-the-eval-set.md): about 90 rows (60 covered, 20 not covered, 10 on the triage boundary), 80% Italian; the agent drafts in other words than the passage, the owner reads the doubtful rows and a random fifth; passages labelled by verbatim quote, not chunk; frozen and versioned against a named corpus version.
+
 ## Not yet specified
 
 - **The retrieval ladder**: which techniques to climb, and in what order, once the first version is measured.
 - **The judge**: which model, and the sample it is calibrated on.
+- **The bars**: what Recall@5, MRR, faithfulness and the not-covered rows must each clear.
 - **The corpus over time**: how it is versioned and refreshed, and what that does to the frozen eval.
 
 ## Out of scope

@@ -131,3 +131,13 @@ A run that is waiting on an answer has no ending, and neither has one that was c
 **Run record**: a closed run as a document: what it called, what was refused, what it cost. It is the only thing a run leaves behind.
 
 **Home**: the one directory the machine writes in. Everything it owns is in it, so a new machine is one directory to copy.
+
+## What the entrance answers from
+
+**Corpus**: the openly licensed texts the entrance answers technique and injury prevention from, each pinned to one revision. It never diagnoses: a current pain is triage's.
+
+**Passage**: a stretch of a corpus text, quoted verbatim, that an answer stands on. It is named by its title, section and words, never by how the index cuts the text.
+_Avoid_: chunk, which is the index's cut and changes with it.
+
+**Not covered**: the entrance's reply when the corpus does not hold the answer: it says so, and what the corpus does cover.
+_Avoid_: refusal, which is the validator's word for a plan it sends back.
