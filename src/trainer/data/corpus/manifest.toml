@@ -1,0 +1,453 @@
+# The corpus the entrance answers from: its version and the pinned list it is cut from.
+# Changed only by a refresh, which bumps the version. `trainer corpus fetch` cuts it.
+
+version = 1
+
+[free-exercise-db]
+commit = "a859101d633a01c4a1a920d6a8ce41dabba0705f"
+
+[medlineplus]
+date = "2026-11-07"
+topics = [
+    "Exercise and Physical Fitness",
+    "Benefits of Exercise",
+    "How Much Exercise Do I Need?",
+    "Sports Safety",
+    "Sports Injuries",
+    "Sprains and Strains",
+    "Back Pain",
+    "Knee Injuries and Disorders",
+    "Shoulder Injuries and Disorders",
+    "Elbow Injuries and Disorders",
+    "Neck Injuries and Disorders",
+    "Tendinitis",
+    "Muscle Cramps",
+    "Hernia",
+]
+
+# English Wikipedia: technique
+
+[[wikipedia]]
+language = "en"
+title = "Squat (exercise)"
+revision = 1383893983
+
+[[wikipedia]]
+language = "en"
+title = "Deadlift"
+revision = 1384115374
+
+[[wikipedia]]
+language = "en"
+title = "Bench press"
+revision = 1383894009
+
+[[wikipedia]]
+language = "en"
+title = "Overhead press"
+revision = 1356984016
+
+[[wikipedia]]
+language = "en"
+title = "Lunge (exercise)"
+revision = 1354123807
+
+[[wikipedia]]
+language = "en"
+title = "Pull-up"
+revision = 1381924723
+
+[[wikipedia]]
+language = "en"
+title = "Push-up"
+revision = 1383581531
+
+[[wikipedia]]
+language = "en"
+title = "Bent-over row"
+revision = 1379612938
+
+[[wikipedia]]
+language = "en"
+title = "Pelvic thrust"
+revision = 1370304098
+
+[[wikipedia]]
+language = "en"
+title = "Leg press"
+revision = 1381049535
+
+[[wikipedia]]
+language = "en"
+title = "Biceps curl"
+revision = 1353107812
+
+[[wikipedia]]
+language = "en"
+title = "Pull-down (exercise)"
+revision = 1383894010
+
+[[wikipedia]]
+language = "en"
+title = "Plank (exercise)"
+revision = 1348549215
+
+[[wikipedia]]
+language = "en"
+title = "Good-morning (exercise)"
+revision = 1357026765
+
+[[wikipedia]]
+language = "en"
+title = "Dip (exercise)"
+revision = 1382015936
+
+[[wikipedia]]
+language = "en"
+title = "Calf raises"
+revision = 1336889656
+
+[[wikipedia]]
+language = "en"
+title = "Kettlebell swing"
+revision = 1374560331
+
+[[wikipedia]]
+language = "en"
+title = "Clean and jerk"
+revision = 1376888225
+
+[[wikipedia]]
+language = "en"
+title = "Snatch (weightlifting)"
+revision = 1375796768
+
+[[wikipedia]]
+language = "en"
+title = "Lying triceps extension"
+revision = 1380573220
+
+[[wikipedia]]
+language = "en"
+title = "Crunch (exercise)"
+revision = 1325102967
+
+[[wikipedia]]
+language = "en"
+title = "Sit-up"
+revision = 1357358537
+
+# English Wikipedia: training and recovery
+
+[[wikipedia]]
+language = "en"
+title = "Strength training"
+revision = 1383897566
+
+[[wikipedia]]
+language = "en"
+title = "Warming up"
+revision = 1379958109
+
+[[wikipedia]]
+language = "en"
+title = "Cooling down"
+revision = 1352530570
+
+[[wikipedia]]
+language = "en"
+title = "Stretching"
+revision = 1376433435
+
+[[wikipedia]]
+language = "en"
+title = "Delayed onset muscle soreness"
+revision = 1382939876
+
+[[wikipedia]]
+language = "en"
+title = "Valsalva maneuver"
+revision = 1372002675
+
+[[wikipedia]]
+language = "en"
+title = "Weightlifting belt"
+revision = 1369359307
+
+[[wikipedia]]
+language = "en"
+title = "Progressive overload"
+revision = 1377742591
+
+[[wikipedia]]
+language = "en"
+title = "Spotting (weight training)"
+revision = 1344121979
+
+[[wikipedia]]
+language = "en"
+title = "One-repetition maximum"
+revision = 1380865315
+
+[[wikipedia]]
+language = "en"
+title = "Overtraining"
+revision = 1354542406
+
+[[wikipedia]]
+language = "en"
+title = "Rating of perceived exertion"
+revision = 1382877515
+
+[[wikipedia]]
+language = "en"
+title = "Muscle hypertrophy"
+revision = 1382941479
+
+[[wikipedia]]
+language = "en"
+title = "Muscle fatigue"
+revision = 1368885306
+
+[[wikipedia]]
+language = "en"
+title = "Spinal posture"
+revision = 1373916107
+
+# English Wikipedia: injury and prevention
+
+[[wikipedia]]
+language = "en"
+title = "Sports injury"
+revision = 1370579323
+
+[[wikipedia]]
+language = "en"
+title = "Low back pain"
+revision = 1381263688
+
+[[wikipedia]]
+language = "en"
+title = "Sprain"
+revision = 1373349772
+
+[[wikipedia]]
+language = "en"
+title = "Strain (injury)"
+revision = 1384303597
+
+[[wikipedia]]
+language = "en"
+title = "Tendinopathy"
+revision = 1369034384
+
+[[wikipedia]]
+language = "en"
+title = "Rotator cuff tear"
+revision = 1378450353
+
+[[wikipedia]]
+language = "en"
+title = "Shoulder impingement syndrome"
+revision = 1379650167
+
+[[wikipedia]]
+language = "en"
+title = "Patellofemoral pain syndrome"
+revision = 1379534180
+
+[[wikipedia]]
+language = "en"
+title = "Disc herniation"
+revision = 1383367773
+
+[[wikipedia]]
+language = "en"
+title = "Tennis elbow"
+revision = 1375249945
+
+[[wikipedia]]
+language = "en"
+title = "Golfer's elbow"
+revision = 1383265848
+
+[[wikipedia]]
+language = "en"
+title = "Skeletal muscle cramp"
+revision = 1357387177
+
+# Italian Wikipedia: technique
+
+[[wikipedia]]
+language = "it"
+title = "Squat"
+revision = 150843803
+
+[[wikipedia]]
+language = "it"
+title = "Stacco da terra"
+revision = 152350358
+
+[[wikipedia]]
+language = "it"
+title = "Distensioni su panca"
+revision = 149773765
+
+[[wikipedia]]
+language = "it"
+title = "Shoulder press"
+revision = 146827673
+
+[[wikipedia]]
+language = "it"
+title = "Trazioni alla sbarra"
+revision = 153249163
+
+[[wikipedia]]
+language = "it"
+title = "Flessione (esercizio fisico)"
+revision = 138798044
+
+[[wikipedia]]
+language = "it"
+title = "Dip (esercizio)"
+revision = 152255416
+
+[[wikipedia]]
+language = "it"
+title = "Leg press"
+revision = 142476082
+
+[[wikipedia]]
+language = "it"
+title = "Calf raise"
+revision = 151955604
+
+[[wikipedia]]
+language = "it"
+title = "Curl"
+revision = 151937315
+
+[[wikipedia]]
+language = "it"
+title = "Plank"
+revision = 148156317
+
+# Italian Wikipedia: training and recovery
+
+[[wikipedia]]
+language = "it"
+title = "Allenamento contro resistenza"
+revision = 150807045
+
+[[wikipedia]]
+language = "it"
+title = "Allenamento sportivo"
+revision = 150992965
+
+[[wikipedia]]
+language = "it"
+title = "Allenamento a circuito"
+revision = 148916548
+
+[[wikipedia]]
+language = "it"
+title = "Sollevamento pesi"
+revision = 152771881
+
+[[wikipedia]]
+language = "it"
+title = "Powerlifting"
+revision = 152771379
+
+[[wikipedia]]
+language = "it"
+title = "Riscaldamento (sport)"
+revision = 149970064
+
+[[wikipedia]]
+language = "it"
+title = "Defaticamento"
+revision = 105910760
+
+[[wikipedia]]
+language = "it"
+title = "Stretching"
+revision = 152534481
+
+[[wikipedia]]
+language = "it"
+title = "Indolenzimento muscolare a insorgenza ritardata"
+revision = 147628323
+
+[[wikipedia]]
+language = "it"
+title = "Manovra di Valsalva"
+revision = 153141820
+
+[[wikipedia]]
+language = "it"
+title = "Supercompensazione"
+revision = 140401698
+
+[[wikipedia]]
+language = "it"
+title = "Sovrallenamento"
+revision = 152374918
+
+[[wikipedia]]
+language = "it"
+title = "Ipertrofia muscolare"
+revision = 152501362
+
+[[wikipedia]]
+language = "it"
+title = "Postura"
+revision = 147256202
+
+# Italian Wikipedia: injury and prevention
+
+[[wikipedia]]
+language = "it"
+title = "Lombalgia"
+revision = 152981580
+
+[[wikipedia]]
+language = "it"
+title = "Ernia del disco"
+revision = 152183217
+
+[[wikipedia]]
+language = "it"
+title = "Epicondilite"
+revision = 149144300
+
+[[wikipedia]]
+language = "it"
+title = "Distorsione (medicina)"
+revision = 135904008
+
+[[wikipedia]]
+language = "it"
+title = "Strappo muscolare"
+revision = 150267330
+
+[[wikipedia]]
+language = "it"
+title = "Tendinite"
+revision = 150218100
+
+[[wikipedia]]
+language = "it"
+title = "Crampo"
+revision = 148171191
+
+[[wikipedia]]
+language = "it"
+title = "Sindrome della cuffia dei rotatori"
+revision = 134681072
+
+[[wikipedia]]
+language = "it"
+title = "Sindrome femoro-rotulea"
+revision = 150458099

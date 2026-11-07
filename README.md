@@ -154,7 +154,8 @@ In Studio the planner takes a request: `{"request": {"equipment": ["dumbbell"], 
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
   coach/      the LangGraph agent: entrance, planner, logger, onboarding and supervisor graphs, the Telegram bot, the run archive
-  data/       vendored catalog, muscle-group mapping, methodology.md and variation.md
+  data/       vendored catalog, muscle-group mapping, methodology.md, variation.md and the answer corpus
+  corpus.py   the answer corpus: pinned texts fetched and cut into committed chunks
   demo.py     the demo's home
   tools.py    the tool surface, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer
@@ -169,4 +170,4 @@ docs/
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE), except the corpus texts in `src/trainer/data/corpus/`, which keep their own licences ([NOTICE](src/trainer/data/corpus/NOTICE.md)).

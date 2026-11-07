@@ -29,6 +29,7 @@ from trainer import (
     __version__,
     adapt_evaluation,
     adapt_set,
+    corpus,
     demo,
     eval_runner,
     eval_set,
@@ -162,6 +163,8 @@ def reported() -> Iterator[None]:
     except models.ModelError as error:
         # The provider the graph runs on: a server nobody started, a model
         # nobody pulled, a backend nobody built. Each already carries its fix.
+        raise click.ClickException(str(error)) from error
+    except corpus.CorpusError as error:
         raise click.ClickException(str(error)) from error
     except bot.BotError as error:
         # The Telegram settings: a token nobody set, an owner id given as the
@@ -341,6 +344,31 @@ def db_snapshot() -> None:
         # The normal outcome, and the one worth naming: an unchanged file is
         # the evidence that the snapshot does not churn.
         click.echo("unchanged, nothing to commit")
+
+
+@main.group("corpus")
+def corpus_group() -> None:
+    """Fetch and cut the texts the entrance answers from."""
+
+
+@corpus_group.command("fetch")
+def corpus_fetch() -> None:
+    """Fetch the manifest's pinned texts and cut them into the committed chunks."""
+    directory = corpus.CORPUS_DIRECTORY
+    click.echo(f"corpus: {directory}")
+
+    def get(url: str) -> bytes:
+        click.echo(f"  fetching {url}")
+        return corpus.http_get(url)
+
+    with reported():
+        manifest = corpus.read_manifest(directory)
+        chunks = corpus.fetch(manifest, get)
+        changed = corpus.write(chunks, directory)
+
+    texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
+    click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {manifest.version}")
+    click.echo("written" if changed else "unchanged, nothing to commit")
 
 
 @main.group()
