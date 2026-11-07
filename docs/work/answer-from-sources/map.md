@@ -32,6 +32,12 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 - [The judge](issues/07-the-judge.md): a model judges only faithfulness and relevance, code the rest (ADR-0018); gpt-oss-120b, a Qwen, Haiku in that order, never the answering model's family; calibrated on 30 real replies the owner reads plus 15 planted errors, bar 13/15 and 27/30.
 
+- [The bars](issues/08-the-bars.md): Recall@5 80%, verbatim quote 100%, faithful 90%, relevant 85%, *not covered* 90% outside the corpus and at most 10% on covered rows, triage boundary 90%; read on the observed score with the interval beside it; Italian-on-English rows reported apart; one rep.
+
+- [The retrieval ladder](issues/09-the-retrieval-ladder.md): the three embedders always compared at $0; then, only while a bar misses, query translation, hybrid, chunk size, reranker; a rung stays on +3 rows and no bar lost, within 2 s p95; answers and judge rerun once, on the final configuration.
+
+- [The corpus over time](issues/10-the-corpus-over-time.md): frozen for 16, refreshed by hand with a new version; a refresh rechecks every labelled quote, the owner relabels the lost ones and the set's version bumps.
+
 ## Not yet specified
 
 Nothing: what remains is ticketed.
