@@ -42,3 +42,4 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 - **Diagnosis**: a pain is triage's, and its outcome is an exclusion.
 - **The planner reading the corpus**: it keeps its calibrated eval.
 - **Exercise photos**: parked.
+- [What changes for 17](issues/06-what-changes-for-17.md): milestone 17's to decide when it runs, after 16; its map carries the note.
