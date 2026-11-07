@@ -32,6 +32,21 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 
 **Goal**: the entrance answers a question on technique or injury prevention from a corpus of openly licensed texts, cites the passage, and says so when the corpus does not cover it; retrieval, faithfulness and refusal are measured. Charted in [the map](docs/work/answer-from-sources/map.md).
 
+### Feature 16.1 - Answer from sources
+
+Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
+
+1. **Entrance replies in MarkdownV2** - [ticket](docs/work/16.1-answer-from-sources/issues/01-entrance-replies-in-markdownv2.md)
+2. **The corpus cut and pinned** - [ticket](docs/work/16.1-answer-from-sources/issues/02-the-corpus-cut-and-pinned.md)
+3. **Search the corpus, and its states** - [ticket](docs/work/16.1-answer-from-sources/issues/03-search-the-corpus.md)
+4. **The entrance answers from sources** - [ticket](docs/work/16.1-answer-from-sources/issues/04-the-entrance-answers-from-sources.md)
+5. **The eval set frozen** - [ticket](docs/work/16.1-answer-from-sources/issues/05-the-eval-set-frozen.md)
+6. **The answer suite, in code** - [ticket](docs/work/16.1-answer-from-sources/issues/06-the-answer-suite-in-code.md)
+7. **The embedders compared and the ladder** - [ticket](docs/work/16.1-answer-from-sources/issues/07-the-embedders-and-the-ladder.md)
+8. **The judge calibrated** - [ticket](docs/work/16.1-answer-from-sources/issues/08-the-judge-calibrated.md)
+9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)
+10. **The corpus refreshed** - [ticket](docs/work/16.1-answer-from-sources/issues/10-the-corpus-refreshed.md)
+
 ## Later
 
 **Parked**:
