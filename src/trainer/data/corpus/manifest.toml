@@ -9,7 +9,7 @@ commit = "a859101d633a01c4a1a920d6a8ce41dabba0705f"
 [wger]
 language = "it"
 date = "2026-11-08"
-sha256 = "b6b5b2849ab605c8b2e5d04ec8ec7d7b36e72b8c16b452fe6ebd853678caebb4"
+sha256 = "ab65be4c822477423c40ff82b67f449e5d6e4f26677d1b01423049a45ff93c09"
 
 # ATP 7-22.02, Oct 2020 incorporating Change 1 of 16 Sep 2025; details page:
 # https://armypubs.army.mil/ProductMaps/PubForm/Details.aspx?PUB_ID=1020967

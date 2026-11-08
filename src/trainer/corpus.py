@@ -51,6 +51,11 @@ class Source:
         [only] = self.licences
         return only
 
+    @property
+    def licence_url(self) -> str:
+        """The terms of a source whose texts all carry one licence."""
+        return self.licences[self.licence]
+
 
 _CC_BY_SA_3 = {"CC BY-SA 3.0": "https://creativecommons.org/licenses/by-sa/3.0/"}
 _CC_BY_SA_4 = {"CC BY-SA 4.0": "https://creativecommons.org/licenses/by-sa/4.0/"}
@@ -82,6 +87,9 @@ _WGER_LICENCES = {
     "CC0": "CC0 1.0",
 }
 """wger's own names for the licences the corpus accepts; any other wger licence is left out."""
+
+_COPYRIGHTED_SITES = ("bodybuilding.com",)
+"""Sites a wger author may name as where a text came from; such a text is not theirs to license."""
 
 
 @dataclass(frozen=True)
@@ -255,7 +263,7 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
         "",
         "## Wikipedia",
         "",
-        f"Licence: [{WIKIPEDIA.licence}]({WIKIPEDIA.licences[WIKIPEDIA.licence]}). Authors: the contributors "
+        f"Licence: [{WIKIPEDIA.licence}]({WIKIPEDIA.licence_url}). Authors: the contributors "
         "listed in each page's history. Each chunk links the revision it was taken from; "
         "the pinned revisions are:",
         "",
@@ -268,7 +276,7 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             "",
             "## MedlinePlus",
             "",
-            f"Licence: [{MEDLINEPLUS.licence}]({MEDLINEPLUS.licences[MEDLINEPLUS.licence]}). "
+            f"Licence: [{MEDLINEPLUS.licence}]({MEDLINEPLUS.licence_url}). "
             "Source: MedlinePlus, National Library of Medicine. Only NLM-written health-topic "
             "summaries are used; A.D.A.M. and other copyrighted MedlinePlus content is not. "
             "Taken from "
@@ -281,7 +289,7 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             "",
             "## free-exercise-db",
             "",
-            f"Licence: [{EXERCISES.licence}]({EXERCISES.licences[EXERCISES.licence]}), public domain. "
+            f"Licence: [{EXERCISES.licence}]({EXERCISES.licence_url}), public domain. "
             "The `instructions` of every exercise in https://github.com/yuhonas/free-exercise-db "
             f"at commit `{manifest.exercises_commit}`.",
         ]
@@ -311,7 +319,7 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             "",
             "## US Army",
             "",
-            f"Licence: [{ARMY.licence}]({ARMY.licences[ARMY.licence]}): works of the US "
+            f"Licence: [{ARMY.licence}]({ARMY.licence_url}): works of the US "
             "Government carry no copyright (17 U.S.C. 105). Approved for public release; "
             f"distribution is unlimited. Author: {ARMY.author}. Only the chapters named are "
             "used, and no figure:",
@@ -503,6 +511,7 @@ def _wger(pin: Wger, get: Getter) -> list[Chunk]:
                 for translation in exercise["translations"]
                 if translation["language"] == languages[pin.language]
                 and licences.get(translation["license"])
+                and _own_text(translation)
             )
         url = page["next"]
     taken.sort(key=lambda item: int(str(item[1]["id"])))
@@ -537,6 +546,17 @@ def _wger(pin: Wger, get: Getter) -> list[Chunk]:
             )
         )
     return chunks
+
+
+def _own_text(translation: dict[str, object]) -> bool:
+    """A description that says more than its title, by an author who is not a copyrighted site."""
+    author = str(translation["license_author"]).lower()
+    if any(site in author for site in _COPYRIGHTED_SITES):
+        return False
+    words = _clean(re.sub(r"<[^>]+>", " ", str(translation["description"])))
+    for word in str(translation["name"]).split():
+        words = words.replace(word, " ")
+    return len(words.split()) >= 3
 
 
 def pdf_pages(data: bytes) -> list[str]:
@@ -632,7 +652,7 @@ def _is_heading(line: str) -> bool:
 
 def _heading(line: str) -> str:
     """An all-capitals heading, written the way a title reads."""
-    return string.capwords(_clean(line.lstrip("+")))
+    return string.capwords(re.sub(r"^\d+\.\s*", "", _clean(line.lstrip("+"))))
 
 
 def _page_link(page: Page) -> str:

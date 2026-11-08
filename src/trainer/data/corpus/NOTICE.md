@@ -306,28 +306,14 @@ Licence: [The Unlicense](https://unlicense.org/), public domain. The `instructio
 
 ## wger
 
-Licences: each description keeps the licence its author gave it ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). The it exercise descriptions of https://wger.de as taken on 2026-11-08 (sha256 `b6b5b2849ab605c8b2e5d04ec8ec7d7b36e72b8c16b452fe6ebd853678caebb4`). Each, with its author and licence:
+Licences: each description keeps the licence its author gave it ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). The it exercise descriptions of https://wger.de as taken on 2026-11-08 (sha256 `ab65be4c822477423c40ff82b67f449e5d6e4f26677d1b01423049a45ff93c09`). Each, with its author and licence:
 
 - [Curl su Panca a 45°](https://wger.de/it/exercise/465/view/), by cgoob883, CC BY-SA 3.0
-- [Distensione Panca Piana con Bilanciere](https://wger.de/it/exercise/73/view/), by sistab2, CC BY-SA 3.0
 - [Rematore presa neutra con bilanciere](https://wger.de/it/exercise/83/view/), by wger.de, CC BY-SA 3.0
-- [Stacco](https://wger.de/it/exercise/184/view/), by wger.de, CC BY-SA 3.0
 - [Lat Machine (Piegati Indietro)](https://wger.de/it/exercise/354/view/), by drthurlow, CC BY-SA 3.0
-- [Scrollate con bilanciere](https://wger.de/it/exercise/571/view/), by wger.de, CC BY-SA 3.0
-- [Curl con bilanciere](https://wger.de/it/exercise/91/view/), by wger.de, CC BY-SA 3.0
-- [Curl inversi con bilanciere](https://wger.de/it/exercise/495/view/), by BFad07, CC0 1.0
-- [Hummer curl con manubri](https://wger.de/it/exercise/272/view/), by wger.de, CC BY-SA 3.0
-- [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/1111/view/), by kwrindy, CC BY-SA 3.0
 - [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/308/view/), by tuckerm, CC BY-SA 3.0
-- [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/538/view/), by wger.de, CC BY-SA 3.0
-- [Distensione su Panca Piana Imp Stretta](https://wger.de/it/exercise/539/view/), by wger.de, CC BY-SA 3.0
-- [Alzate Laterali](https://wger.de/it/exercise/348/view/), by wger.de, CC BY-SA 3.0
 - [French press](https://wger.de/it/exercise/549/view/), by richmr2174@gmail.com, CC BY-SA 4.0
-- [Trazioni al mento Bilanciere](https://wger.de/it/exercise/254/view/), by Marius, CC BY-SA 3.0
 - [Croci su panca piana](https://wger.de/it/exercise/161/view/), by powerade69, CC BY-SA 3.0
-- [Croci su panca Inclinata](https://wger.de/it/exercise/238/view/), by wger.de, CC BY-SA 3.0
-- [Distensione lento avanti Bilanciere](https://wger.de/it/exercise/256/view/), by Manu, wikipedia, CC BY-SA 3.0
-- [Sollevamento Gambe](https://wger.de/it/exercise/378/view/), by wger.de, CC BY-SA 3.0
 - [Crunch Bicicletta](https://wger.de/it/exercise/607/view/), by djblitzd, CC BY-SA 3.0
 - [Piegamenti a diamante](https://wger.de/it/exercise/386/view/), by notdefine, CC BY-SA 4.0
 - [Trazioni orizzontali con trx](https://wger.de/it/exercise/959/view/), by clafal, CC BY-SA 4.0
@@ -359,7 +345,6 @@ Licences: each description keeps the licence its author gave it ([CC BY-SA 3.0](
 - [Squat a pistola a sinistra](https://wger.de/it/exercise/456/view/), by minifigmaster125, CC BY-SA 3.0
 - [Pull ups](https://wger.de/it/exercise/475/view/), by wger.de, CC BY-SA 3.0
 - [Scrollate di spalle](https://wger.de/it/exercise/570/view/), by BFad07, CC0 1.0
-- [Plank su lato sinistro](https://wger.de/it/exercise/580/view/), by http://www.bodybuilding.com/, CC BY-SA 4.0
 - [Squat sumo](https://wger.de/it/exercise/632/view/), by sophialj, CC BY-SA 4.0
 - [Spinte squat](https://wger.de/it/exercise/616/view/), by BFad07, CC0 1.0
 - [Squat (Stacchi)](https://wger.de/it/exercise/615/view/), by wger.de, CC BY-SA 3.0

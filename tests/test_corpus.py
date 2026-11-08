@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -453,6 +454,16 @@ WGER_SECOND = {
     "results": [
         {"id": 80, "translations": [_translation(3, 13, 5, "Rematore", "<p>Tirate.</p>")]},
         {"id": 81, "translations": [_translation(4, 13, 3, "Crunch", "<p>Sollevate le spalle.</p>")]},
+        {"id": 82, "translations": [_translation(5, 13, 2, "Stacco", "<p>StaccoStacco Stacco</p>")]},
+        {
+            "id": 83,
+            "translations": [
+                {
+                    **_translation(6, 13, 2, "Plank laterale", "<p>Sdraiati su un fianco.</p>"),
+                    "license_author": "http://www.bodybuilding.com/",
+                }
+            ],
+        },
     ],
 }
 
@@ -499,6 +510,18 @@ def test_wger_gives_its_italian_descriptions_under_their_own_licence() -> None:
     assert bench.link == "https://wger.de/it/exercise/73/view/"
 
 
+def test_wger_leaves_out_a_description_that_only_repeats_its_title() -> None:
+    titles = [c.title for c in corpus.fetch(_wger_manifest(_wger_pin()), _wger_getter())]
+
+    assert "Stacco" not in titles
+
+
+def test_wger_leaves_out_a_text_credited_to_a_copyrighted_site() -> None:
+    titles = [c.title for c in corpus.fetch(_wger_manifest(_wger_pin()), _wger_getter())]
+
+    assert "Plank laterale" not in titles
+
+
 def test_wger_changed_since_its_pin_names_the_new_pin() -> None:
     with pytest.raises(corpus.CorpusError, match="changed since 2026-11-08"):
         corpus.fetch(_wger_manifest("0" * 64), _wger_getter())
@@ -524,7 +547,8 @@ ARMY_PAGES = [
     "⚫ Keep the knees aligned over the feet and the heels on the ground. \n"
     "⚫ Initially do not squat deeper than 90 degrees. \n \nFigure 14-2. FW2 Back Squat \n",
     "Free Weight Training \n01 October 2022 ATP 7-22.02 (INCL C1) 14-2 \n \n"
-    "BACK SQUAT CAUTION \n• Do not round out the upper back. \n",
+    "BACK SQUAT CAUTION \n• Do not round out the upper back. \n"
+    "2. REAR LUNGE \n• Step back with the left leg. \n",
     "15-1 ATP 7-22.02 (INCL C1) 01 October 2020 \nChapter 15 \n+Strength Training Machine Drill \n"
     "LEG PRESS \n15-2. Sit on the machine. \n",
 ]
@@ -549,8 +573,6 @@ def _army_manifest(sha256: str, chapters: tuple[int, ...] = (14,)) -> corpus.Man
 
 @pytest.fixture()
 def army_pages(monkeypatch: pytest.MonkeyPatch) -> str:
-    import hashlib
-
     monkeypatch.setattr(corpus, "pdf_pages", lambda data: list(ARMY_PAGES))
     return hashlib.sha256(ARMY_BYTES).hexdigest()
 
@@ -572,6 +594,7 @@ def test_an_army_manual_is_cut_by_heading_within_its_chosen_chapters(army_pages:
             "Initially do not squat deeper than 90 degrees.",
         ),
         ("Back Squat Caution", "Do not round out the upper back."),
+        ("Rear Lunge", "Step back with the left leg."),
     ]
     squat = chunks[1]
     assert squat.source == "us-army"
