@@ -155,6 +155,126 @@ Licence: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Author
 - it: [Legamento crociato anteriore](https://it.wikipedia.org/w/index.php?title=Legamento_crociato_anteriore&oldid=141034178)
 - it: [Ginocchio valgo](https://it.wikipedia.org/w/index.php?title=Ginocchio_valgo&oldid=143997148)
 - it: [Rabdomiolisi](https://it.wikipedia.org/w/index.php?title=Rabdomiolisi&oldid=147701273)
+- en: [Abdominal exercise](https://en.wikipedia.org/w/index.php?title=Abdominal_exercise&oldid=1370485905)
+- en: [Bridge (exercise)](https://en.wikipedia.org/w/index.php?title=Bridge_(exercise)&oldid=1379760385)
+- en: [Front lever](https://en.wikipedia.org/w/index.php?title=Front_lever&oldid=1371892016)
+- en: [Hindu push-up](https://en.wikipedia.org/w/index.php?title=Hindu_push-up&oldid=1380008762)
+- en: [Hindu squat](https://en.wikipedia.org/w/index.php?title=Hindu_squat&oldid=1345250907)
+- en: [Jackknife (exercise)](https://en.wikipedia.org/w/index.php?title=Jackknife_(exercise)&oldid=1292837694)
+- en: [Pelvic tilt](https://en.wikipedia.org/w/index.php?title=Pelvic_tilt&oldid=1380197862)
+- en: [Planche (exercise)](https://en.wikipedia.org/w/index.php?title=Planche_(exercise)&oldid=1356195680)
+- en: [Roman chair](https://en.wikipedia.org/w/index.php?title=Roman_chair&oldid=1260285474)
+- en: [Split jump (exercise)](https://en.wikipedia.org/w/index.php?title=Split_jump_(exercise)&oldid=1343360089)
+- en: [Squat thrust](https://en.wikipedia.org/w/index.php?title=Squat_thrust&oldid=1338356284)
+- en: [Serratus punch](https://en.wikipedia.org/w/index.php?title=Serratus_punch&oldid=1291880222)
+- en: [Vacuum exercise](https://en.wikipedia.org/w/index.php?title=Vacuum_exercise&oldid=1371323584)
+- en: [Bent press](https://en.wikipedia.org/w/index.php?title=Bent_press&oldid=1215542145)
+- en: [Clean and press](https://en.wikipedia.org/w/index.php?title=Clean_and_press&oldid=1361369268)
+- en: [Face pull (exercise)](https://en.wikipedia.org/w/index.php?title=Face_pull_(exercise)&oldid=1249899813)
+- en: [Hang clean (weightlifting)](https://en.wikipedia.org/w/index.php?title=Hang_clean_(weightlifting)&oldid=1283904468)
+- en: [Inverted row](https://en.wikipedia.org/w/index.php?title=Inverted_row&oldid=1339461644)
+- en: [Machine fly](https://en.wikipedia.org/w/index.php?title=Machine_fly&oldid=1366088839)
+- en: [Pullover (exercise)](https://en.wikipedia.org/w/index.php?title=Pullover_(exercise)&oldid=1365450965)
+- en: [Push-down (exercise)](https://en.wikipedia.org/w/index.php?title=Push-down_(exercise)&oldid=1303253297)
+- en: [Rear delt raise](https://en.wikipedia.org/w/index.php?title=Rear_delt_raise&oldid=1228847173)
+- en: [Shoulder shrug](https://en.wikipedia.org/w/index.php?title=Shoulder_shrug&oldid=1355354437)
+- en: [Wrist curl](https://en.wikipedia.org/w/index.php?title=Wrist_curl&oldid=1374974815)
+- en: [Hook grip](https://en.wikipedia.org/w/index.php?title=Hook_grip&oldid=1377609977)
+- en: [Kettlebell lifting](https://en.wikipedia.org/w/index.php?title=Kettlebell_lifting&oldid=1377600147)
+- en: [Barbell](https://en.wikipedia.org/w/index.php?title=Barbell&oldid=1380986687)
+- en: [Exercise ball](https://en.wikipedia.org/w/index.php?title=Exercise_ball&oldid=1348595979)
+- en: [Exercise machine](https://en.wikipedia.org/w/index.php?title=Exercise_machine&oldid=1340457380)
+- en: [Medicine ball](https://en.wikipedia.org/w/index.php?title=Medicine_ball&oldid=1381444182)
+- en: [Battling ropes](https://en.wikipedia.org/w/index.php?title=Battling_ropes&oldid=1383798616)
+- en: [Grippers](https://en.wikipedia.org/w/index.php?title=Grippers&oldid=1383972215)
+- en: [Indoor rower](https://en.wikipedia.org/w/index.php?title=Indoor_rower&oldid=1373135804)
+- en: [Plyo box](https://en.wikipedia.org/w/index.php?title=Plyo_box&oldid=1338706534)
+- en: [Training sled](https://en.wikipedia.org/w/index.php?title=Training_sled&oldid=1366089061)
+- en: [Wrist roller](https://en.wikipedia.org/w/index.php?title=Wrist_roller&oldid=1332015224)
+- en: [Suspension training](https://en.wikipedia.org/w/index.php?title=Suspension_training&oldid=1380715162)
+- en: [Bodybuilding](https://en.wikipedia.org/w/index.php?title=Bodybuilding&oldid=1383705437)
+- en: [Repetition (bodybuilding)](https://en.wikipedia.org/w/index.php?title=Repetition_(bodybuilding)&oldid=1381831801)
+- en: [PHA training](https://en.wikipedia.org/w/index.php?title=PHA_training&oldid=1301171752)
+- en: [Circuit training](https://en.wikipedia.org/w/index.php?title=Circuit_training&oldid=1352535058)
+- en: [Drop set](https://en.wikipedia.org/w/index.php?title=Drop_set&oldid=1360451899)
+- en: [Full-body workout](https://en.wikipedia.org/w/index.php?title=Full-body_workout&oldid=1323878456)
+- en: [Split weight training](https://en.wikipedia.org/w/index.php?title=Split_weight_training&oldid=1361236084)
+- en: [Unilateral training](https://en.wikipedia.org/w/index.php?title=Unilateral_training&oldid=1316577068)
+- en: [General fitness training](https://en.wikipedia.org/w/index.php?title=General_fitness_training&oldid=1335810276)
+- en: [Power training](https://en.wikipedia.org/w/index.php?title=Power_training&oldid=1374050178)
+- en: [Toning exercises](https://en.wikipedia.org/w/index.php?title=Toning_exercises&oldid=1330068289)
+- en: [Ballistic training](https://en.wikipedia.org/w/index.php?title=Ballistic_training&oldid=1360947236)
+- en: [Closed kinetic chain exercises](https://en.wikipedia.org/w/index.php?title=Closed_kinetic_chain_exercises&oldid=1332106749)
+- en: [Open kinetic chain exercises](https://en.wikipedia.org/w/index.php?title=Open_kinetic_chain_exercises&oldid=1305626057)
+- en: [Complex training](https://en.wikipedia.org/w/index.php?title=Complex_training&oldid=1356054488)
+- en: [Cross-training](https://en.wikipedia.org/w/index.php?title=Cross-training&oldid=1379528299)
+- en: [Endurance training](https://en.wikipedia.org/w/index.php?title=Endurance_training&oldid=1372977309)
+- en: [Exercise intensity](https://en.wikipedia.org/w/index.php?title=Exercise_intensity&oldid=1371323517)
+- en: [Functional training](https://en.wikipedia.org/w/index.php?title=Functional_training&oldid=1380858034)
+- en: [Physical strength](https://en.wikipedia.org/w/index.php?title=Physical_strength&oldid=1366838118)
+- en: [Prehabilitation](https://en.wikipedia.org/w/index.php?title=Prehabilitation&oldid=1384116513)
+- en: [Spot reduction](https://en.wikipedia.org/w/index.php?title=Spot_reduction&oldid=1341671079)
+- en: [Super Slow](https://en.wikipedia.org/w/index.php?title=Super_Slow&oldid=1308236513)
+- en: [Sports periodization](https://en.wikipedia.org/w/index.php?title=Sports_periodization&oldid=1361041410)
+- en: [Smolov Squat Routine](https://en.wikipedia.org/w/index.php?title=Smolov_Squat_Routine&oldid=1301410459)
+- en: [Blood flow restriction training](https://en.wikipedia.org/w/index.php?title=Blood_flow_restriction_training&oldid=1373670728)
+- en: [Exercise prescription](https://en.wikipedia.org/w/index.php?title=Exercise_prescription&oldid=1364472694)
+- en: [General physical preparedness](https://en.wikipedia.org/w/index.php?title=General_physical_preparedness&oldid=1340370974)
+- en: [High-intensity interval training](https://en.wikipedia.org/w/index.php?title=High-intensity_interval_training&oldid=1384369416)
+- en: [Acute muscle soreness](https://en.wikipedia.org/w/index.php?title=Acute_muscle_soreness&oldid=1273739236)
+- en: [Anaerobic exercise](https://en.wikipedia.org/w/index.php?title=Anaerobic_exercise&oldid=1375933180)
+- en: [Core (anatomy)](https://en.wikipedia.org/w/index.php?title=Core_(anatomy)&oldid=1379793759)
+- en: [Excess post-exercise oxygen consumption](https://en.wikipedia.org/w/index.php?title=Excess_post-exercise_oxygen_consumption&oldid=1381442302)
+- en: [Exercise-associated muscle cramps](https://en.wikipedia.org/w/index.php?title=Exercise-associated_muscle_cramps&oldid=1368852658)
+- en: [Grip strength](https://en.wikipedia.org/w/index.php?title=Grip_strength&oldid=1383274338)
+- en: [Isotonic contraction](https://en.wikipedia.org/w/index.php?title=Isotonic_contraction&oldid=1338463411)
+- en: [Muscle memory (strength training)](https://en.wikipedia.org/w/index.php?title=Muscle_memory_(strength_training)&oldid=1369835720)
+- en: [Stretch shortening cycle](https://en.wikipedia.org/w/index.php?title=Stretch_shortening_cycle&oldid=1373431000)
+- en: [Achilles tendon rupture](https://en.wikipedia.org/w/index.php?title=Achilles_tendon_rupture&oldid=1381439763)
+- en: [Musculoskeletal injury](https://en.wikipedia.org/w/index.php?title=Musculoskeletal_injury&oldid=1317036092)
+- it: [Panca (pesistica)](https://it.wikipedia.org/w/index.php?title=Panca_(pesistica)&oldid=136950312)
+- it: [Torretta per tricipiti](https://it.wikipedia.org/w/index.php?title=Torretta_per_tricipiti&oldid=114767387)
+- it: [Handstand push-up](https://it.wikipedia.org/w/index.php?title=Handstand_push-up&oldid=96603250)
+- it: [Burpee](https://it.wikipedia.org/w/index.php?title=Burpee&oldid=139858417)
+- it: [Twist (esercizio)](https://it.wikipedia.org/w/index.php?title=Twist_(esercizio)&oldid=110615068)
+- it: [Biceps curl](https://it.wikipedia.org/w/index.php?title=Biceps_curl&oldid=134024375)
+- it: [Bilanciere](https://it.wikipedia.org/w/index.php?title=Bilanciere&oldid=151501377)
+- it: [Distensione lenta](https://it.wikipedia.org/w/index.php?title=Distensione_lenta&oldid=152780524)
+- it: [Good-morning](https://it.wikipedia.org/w/index.php?title=Good-morning&oldid=131391491)
+- it: [Lock out](https://it.wikipedia.org/w/index.php?title=Lock_out&oldid=104559855)
+- it: [Manubrio (pesistica)](https://it.wikipedia.org/w/index.php?title=Manubrio_(pesistica)&oldid=127144922)
+- it: [Slancio](https://it.wikipedia.org/w/index.php?title=Slancio&oldid=139498946)
+- it: [Strappo (sollevamento pesi)](https://it.wikipedia.org/w/index.php?title=Strappo_(sollevamento_pesi)&oldid=136230824)
+- it: [Wrist curl](https://it.wikipedia.org/w/index.php?title=Wrist_curl&oldid=122682980)
+- it: [Allenamento della resistenza](https://it.wikipedia.org/w/index.php?title=Allenamento_della_resistenza&oldid=120882690)
+- it: [Esercizi monoarticolari](https://it.wikipedia.org/w/index.php?title=Esercizi_monoarticolari&oldid=151927192)
+- it: [Esercizi multiarticolari](https://it.wikipedia.org/w/index.php?title=Esercizi_multiarticolari&oldid=151237948)
+- it: [Esercizio anaerobico](https://it.wikipedia.org/w/index.php?title=Esercizio_anaerobico&oldid=143261906)
+- it: [Ginnastica isometrica](https://it.wikipedia.org/w/index.php?title=Ginnastica_isometrica&oldid=139412637)
+- it: [Periodizzazione dell'allenamento sportivo](https://it.wikipedia.org/w/index.php?title=Periodizzazione_dell%27allenamento_sportivo&oldid=127160133)
+- it: [Preparazione atletica](https://it.wikipedia.org/w/index.php?title=Preparazione_atletica&oldid=146825794)
+- it: [Allenamento a corpo libero](https://it.wikipedia.org/w/index.php?title=Allenamento_a_corpo_libero&oldid=152965553)
+- it: [Culturismo](https://it.wikipedia.org/w/index.php?title=Culturismo&oldid=152850222)
+- it: [Culturismo naturale](https://it.wikipedia.org/w/index.php?title=Culturismo_naturale&oldid=147948319)
+- it: [Deallenamento](https://it.wikipedia.org/w/index.php?title=Deallenamento&oldid=142357964)
+- it: [Frequenza (esercizio coi pesi)](https://it.wikipedia.org/w/index.php?title=Frequenza_(esercizio_coi_pesi)&oldid=141291902)
+- it: [Periodo pre-allenamento](https://it.wikipedia.org/w/index.php?title=Periodo_pre-allenamento&oldid=150699405)
+- it: [Specificità (sport)](https://it.wikipedia.org/w/index.php?title=Specificit%C3%A0_(sport)&oldid=125740206)
+- it: [Tempo di recupero](https://it.wikipedia.org/w/index.php?title=Tempo_di_recupero&oldid=146778352)
+- it: [Allenamento di strada](https://it.wikipedia.org/w/index.php?title=Allenamento_di_strada&oldid=136144926)
+- it: [Allenamento in sospensione](https://it.wikipedia.org/w/index.php?title=Allenamento_in_sospensione&oldid=142785040)
+- it: [Dimagrimento localizzato](https://it.wikipedia.org/w/index.php?title=Dimagrimento_localizzato&oldid=152077766)
+- it: [Ginnastica funzionale](https://it.wikipedia.org/w/index.php?title=Ginnastica_funzionale&oldid=149157626)
+- it: [Scala di percezione dello sforzo](https://it.wikipedia.org/w/index.php?title=Scala_di_percezione_dello_sforzo&oldid=147927806)
+- it: [Cedimento muscolare](https://it.wikipedia.org/w/index.php?title=Cedimento_muscolare&oldid=140147262)
+- it: [Rest pause](https://it.wikipedia.org/w/index.php?title=Rest_pause&oldid=128349831)
+- it: [Sistema piramidale (esercizio coi pesi)](https://it.wikipedia.org/w/index.php?title=Sistema_piramidale_(esercizio_coi_pesi)&oldid=148358143)
+- it: [Iperplasia muscolare](https://it.wikipedia.org/w/index.php?title=Iperplasia_muscolare&oldid=147725016)
+- it: [EPOC (metabolismo)](https://it.wikipedia.org/w/index.php?title=EPOC_(metabolismo)&oldid=152645548)
+- it: [Flessibilità articolare](https://it.wikipedia.org/w/index.php?title=Flessibilit%C3%A0_articolare&oldid=148880955)
+- it: [Insufficienza muscolare](https://it.wikipedia.org/w/index.php?title=Insufficienza_muscolare&oldid=149485608)
+- it: [Rabdomiolisi da sforzo](https://it.wikipedia.org/w/index.php?title=Rabdomiolisi_da_sforzo&oldid=145427088)
+- it: [Riatletizzazione](https://it.wikipedia.org/w/index.php?title=Riatletizzazione&oldid=143999051)
 
 ## MedlinePlus
 
@@ -178,3 +298,154 @@ Licence: [Public domain (US federal work)](https://medlineplus.gov/about/using/u
 ## free-exercise-db
 
 Licence: [The Unlicense](https://unlicense.org/), public domain. The `instructions` of every exercise in https://github.com/yuhonas/free-exercise-db at commit `a859101d633a01c4a1a920d6a8ce41dabba0705f`.
+
+## wger
+
+Licences: each description keeps the licence its author gave it ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). The it exercise descriptions of https://wger.de as taken on 2026-11-08 (sha256 `b6b5b2849ab605c8b2e5d04ec8ec7d7b36e72b8c16b452fe6ebd853678caebb4`). Each, with its author and licence:
+
+- [Curl su Panca a 45°](https://wger.de/it/exercise/465/view/), by cgoob883, CC BY-SA 3.0
+- [Distensione Panca Piana con Bilanciere](https://wger.de/it/exercise/73/view/), by sistab2, CC BY-SA 3.0
+- [Rematore presa neutra con bilanciere](https://wger.de/it/exercise/83/view/), by wger.de, CC BY-SA 3.0
+- [Stacco](https://wger.de/it/exercise/184/view/), by wger.de, CC BY-SA 3.0
+- [Lat Machine (Piegati Indietro)](https://wger.de/it/exercise/354/view/), by drthurlow, CC BY-SA 3.0
+- [Scrollate con bilanciere](https://wger.de/it/exercise/571/view/), by wger.de, CC BY-SA 3.0
+- [Curl con bilanciere](https://wger.de/it/exercise/91/view/), by wger.de, CC BY-SA 3.0
+- [Curl inversi con bilanciere](https://wger.de/it/exercise/495/view/), by BFad07, CC0 1.0
+- [Hummer curl con manubri](https://wger.de/it/exercise/272/view/), by wger.de, CC BY-SA 3.0
+- [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/1111/view/), by kwrindy, CC BY-SA 3.0
+- [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/308/view/), by tuckerm, CC BY-SA 3.0
+- [Distensione Panca Inclinata Bilanciere](https://wger.de/it/exercise/538/view/), by wger.de, CC BY-SA 3.0
+- [Distensione su Panca Piana Imp Stretta](https://wger.de/it/exercise/539/view/), by wger.de, CC BY-SA 3.0
+- [Alzate Laterali](https://wger.de/it/exercise/348/view/), by wger.de, CC BY-SA 3.0
+- [French press](https://wger.de/it/exercise/549/view/), by richmr2174@gmail.com, CC BY-SA 4.0
+- [Trazioni al mento Bilanciere](https://wger.de/it/exercise/254/view/), by Marius, CC BY-SA 3.0
+- [Croci su panca piana](https://wger.de/it/exercise/161/view/), by powerade69, CC BY-SA 3.0
+- [Croci su panca Inclinata](https://wger.de/it/exercise/238/view/), by wger.de, CC BY-SA 3.0
+- [Distensione lento avanti Bilanciere](https://wger.de/it/exercise/256/view/), by Manu, wikipedia, CC BY-SA 3.0
+- [Sollevamento Gambe](https://wger.de/it/exercise/378/view/), by wger.de, CC BY-SA 3.0
+- [Crunch Bicicletta](https://wger.de/it/exercise/607/view/), by djblitzd, CC BY-SA 3.0
+- [Piegamenti a diamante](https://wger.de/it/exercise/386/view/), by notdefine, CC BY-SA 4.0
+- [Trazioni orizzontali con trx](https://wger.de/it/exercise/959/view/), by clafal, CC BY-SA 4.0
+- [Bicipiti al trx](https://wger.de/it/exercise/958/view/), by clafal, CC BY-SA 4.0
+- [Crunch con alzata di Gambe](https://wger.de/it/exercise/174/view/), by krisbbb, CC BY-SA 4.0
+- [Plank](https://wger.de/it/exercise/458/view/), by YYCfit / BFad07, CC BY-SA 3.0
+- [Trazioni alla sbarra](https://wger.de/it/exercise/152/view/), by BFad07, CC0 1.0
+- [Bicicletta](https://wger.de/it/exercise/177/view/), by BFad07, CC0 1.0
+- [Tapis roulant](https://wger.de/it/exercise/530/view/), by foguinho.peruca, CC BY-SA 3.0
+- [Piegamenti con manubri](https://wger.de/it/exercise/801/view/), by wger contributors, CC BY-SA 4.0
+- [Kettlebell swing](https://wger.de/it/exercise/960/view/), by clafal, CC BY-SA 4.0
+- [Dips](https://wger.de/it/exercise/194/view/), by BFad07, CC0 1.0
+- [Ellittica](https://wger.de/it/exercise/962/view/), by clafal, CC BY-SA 4.0
+- [Curl con kettlebell a due mani](https://wger.de/it/exercise/974/view/), by wger contributors, CC BY-SA 4.0
+- [Curl con kettlebell una sola mano](https://wger.de/it/exercise/975/view/), by clafal, CC BY-SA 4.0
+- [Push Up da un lato all'altro](https://wger.de/it/exercise/583/view/), by nate303303, CC BY-SA 4.0
+- [Crunch a libretto con palla medica](https://wger.de/it/exercise/976/view/), by clafal, CC BY-SA 4.0
+- [Squat box](https://wger.de/it/exercise/977/view/), by clafal, CC BY-SA 4.0
+- [Barchetta](https://wger.de/it/exercise/297/view/), by Behrooz, CC0 1.0
+- [Addominali alla sbarra](https://wger.de/it/exercise/978/view/), by clafal, CC BY-SA 4.0
+- [Addominali alla sbarra a gambe distese](https://wger.de/it/exercise/979/view/), by clafal, CC BY-SA 4.0
+- [Scivoli a muro](https://wger.de/it/exercise/716/view/), by Whythebigpaws, CC BY-SA 4.0
+- [Trazioni alla sbarra commando](https://wger.de/it/exercise/980/view/), by clafal, CC BY-SA 4.0
+- [Spingere su burpees](https://wger.de/it/exercise/132/view/), by er0355, CC BY-SA 4.0
+- [Addominali](https://wger.de/it/exercise/167/view/), by wger.de, CC BY-SA 3.0
+- [Jumping jack](https://wger.de/it/exercise/320/view/), by student1234, CC BY-SA 4.0
+- [Alzate le gambe](https://wger.de/it/exercise/376/view/), by BFad07, CC0 1.0
+- [Flessioni del luccio](https://wger.de/it/exercise/454/view/), by Nash, CC BY-SA 4.0
+- [Squat a pistola a sinistra](https://wger.de/it/exercise/456/view/), by minifigmaster125, CC BY-SA 3.0
+- [Pull ups](https://wger.de/it/exercise/475/view/), by wger.de, CC BY-SA 3.0
+- [Scrollate di spalle](https://wger.de/it/exercise/570/view/), by BFad07, CC0 1.0
+- [Plank su lato sinistro](https://wger.de/it/exercise/580/view/), by http://www.bodybuilding.com/, CC BY-SA 4.0
+- [Squat sumo](https://wger.de/it/exercise/632/view/), by sophialj, CC BY-SA 4.0
+- [Spinte squat](https://wger.de/it/exercise/616/view/), by BFad07, CC0 1.0
+- [Squat (Stacchi)](https://wger.de/it/exercise/615/view/), by wger.de, CC BY-SA 3.0
+- [Seduta a muro](https://wger.de/it/exercise/718/view/), by Blablabla, CC0 1.0
+- [Sollevamento del polpaccio gamba sinistra](https://wger.de/it/exercise/702/view/), by McMarcel13, CC BY-SA 4.0
+- [Step](https://wger.de/it/exercise/981/view/), by wger contributors, CC BY-SA 4.0
+- [Corsa sul posto con ginocchia alte](https://wger.de/it/exercise/983/view/), by wger contributors, CC BY-SA 4.0
+- [Affondi](https://wger.de/it/exercise/984/view/), by wger contributors, CC BY-SA 4.0
+- [Flessioni con rotazione](https://wger.de/it/exercise/985/view/), by wger contributors, CC BY-SA 4.0
+- [Squat laterale sinistro](https://wger.de/it/exercise/986/view/), by wger contributors, CC BY-SA 4.0
+- [Squat laterali a destra](https://wger.de/it/exercise/987/view/), by wger contributors, CC BY-SA 4.0
+- [Affondo bulgaro con manubri](https://wger.de/it/exercise/988/view/), by wger contributors, CC BY-SA 4.0
+- [Split squats right bulgari](https://wger.de/it/exercise/989/view/), by wger contributors, CC BY-SA 4.0
+- [Contraccolpi in ginocchio](https://wger.de/it/exercise/990/view/), by wger contributors, CC BY-SA 4.0
+- [Split squat a sinistra](https://wger.de/it/exercise/991/view/), by wger contributors, CC BY-SA 4.0
+- [Squat laterali a sinistra](https://wger.de/it/exercise/992/view/), by wger contributors, CC BY-SA 4.0
+- [Corda per saltare: salti di base](https://wger.de/it/exercise/993/view/), by wger contributors, CC BY-SA 4.0
+- [Cerchi del braccio](https://wger.de/it/exercise/994/view/), by wger contributors, CC BY-SA 4.0
+- [Cerchi di braccia all'indietro](https://wger.de/it/exercise/995/view/), by wger contributors, CC BY-SA 4.0
+- [Alpinista](https://wger.de/it/exercise/996/view/), by wger contributors, CC BY-SA 4.0
+- [Burpees da 4 punti](https://wger.de/it/exercise/997/view/), by wger contributors, CC BY-SA 4.0
+- [Nessun burpees con flessioni](https://wger.de/it/exercise/998/view/), by wger contributors, CC BY-SA 4.0
+- [Affondi inversi](https://wger.de/it/exercise/999/view/), by wger contributors, CC BY-SA 4.0
+- [Cadimenti a terra](https://wger.de/it/exercise/1000/view/), by wger contributors, CC BY-SA 4.0
+- [Asse alto](https://wger.de/it/exercise/1001/view/), by wger contributors, CC BY-SA 4.0
+- [Posa del bambino](https://wger.de/it/exercise/1002/view/), by wger contributors, CC BY-SA 4.0
+- [Kettlebell Deadlifts](https://wger.de/it/exercise/1003/view/), by wger contributors, CC BY-SA 4.0
+- [Rotazione della spalla in avanti](https://wger.de/it/exercise/1004/view/), by wger contributors, CC BY-SA 4.0
+- [Rotazione della spalla all'indietro](https://wger.de/it/exercise/1005/view/), by wger contributors, CC BY-SA 4.0
+- [Rialzo del mento](https://wger.de/it/exercise/1006/view/), by wger contributors, CC BY-SA 4.0
+- [La testa gira](https://wger.de/it/exercise/1007/view/), by wger contributors, CC BY-SA 4.0
+- [Stiramento del collo sinistro](https://wger.de/it/exercise/1008/view/), by wger contributors, CC BY-SA 4.0
+- [Stiramento del collo destro](https://wger.de/it/exercise/1009/view/), by wger contributors, CC BY-SA 4.0
+- [Stiramento della nuca](https://wger.de/it/exercise/1010/view/), by wger contributors, CC BY-SA 4.0
+- [Collo anteriore allungato](https://wger.de/it/exercise/1011/view/), by wger contributors, CC BY-SA 4.0
+- [Plank sul lato destro](https://wger.de/it/exercise/1019/view/), by wger contributors, CC BY-SA 4.0
+- [Squat a pistola a destra](https://wger.de/it/exercise/1020/view/), by wger contributors, CC BY-SA 4.0
+- [Sollevamento del polpaccio gamba destra](https://wger.de/it/exercise/1021/view/), by wger contributors, CC BY-SA 4.0
+- [Addominali alla sbarra](https://wger.de/it/exercise/283/view/), by robhoyt, CC BY-SA 3.0
+- [Croci in sospensione](https://wger.de/it/exercise/927/view/), by wger contributors, CC BY-SA 4.0
+- [Kettlebell swing a una mano](https://wger.de/it/exercise/1022/view/), by wger contributors, CC BY-SA 4.0
+- [Kettlebell Swings](https://wger.de/it/exercise/331/view/), by J120290,cerin, CC BY-SA 3.0
+- [Russian twist con palla medica](https://wger.de/it/exercise/1089/view/), by clafal, CC BY-SA 4.0
+- [Corsa in zona 2](https://wger.de/it/exercise/908/view/), by karly, CC BY-SA 4.0
+- [Vpushup](https://wger.de/it/exercise/1090/view/), by clafal, CC BY-SA 4.0
+- [Plank shoulder taps](https://wger.de/it/exercise/1091/view/), by clafal, CC BY-SA 4.0
+- [Allenamento al sacco](https://wger.de/it/exercise/1092/view/), by clafal, CC BY-SA 4.0
+- [Sits-ups](https://wger.de/it/exercise/591/view/), by wger.de, CC BY-SA 3.0
+- [Isometria trazioni orizzontali](https://wger.de/it/exercise/1101/view/), by clafal, CC BY-SA 4.0
+- [Affondi indietro alternati](https://wger.de/it/exercise/1102/view/), by clafal, CC BY-SA 4.0
+- [Ponte in camminata](https://wger.de/it/exercise/1103/view/), by clafal, CC BY-SA 4.0
+- [Croci con Manubri su Panca Declinata](https://wger.de/it/exercise/239/view/), by wger.de, CC BY-SA 3.0
+- [Pectoral Machine](https://wger.de/it/exercise/926/view/), by novadani, CC BY-SA 4.0
+- [Panca inclinata con manubri](https://wger.de/it/exercise/537/view/), by wger.de, CC BY-SA 3.0
+- [Pulley basso](https://wger.de/it/exercise/394/view/), by wger.de, CC BY-SA 3.0
+- [Lat pull down](https://wger.de/it/exercise/355/view/), by drthurlow, CC BY-SA 3.0
+- [Muscle up](https://wger.de/it/exercise/423/view/), by arson, CC BY-SA 4.0
+- [Front lever](https://wger.de/it/exercise/1245/view/), by clafal, CC BY-SA 4.0
+- [Flessioni dei Tricipiti al Cavo](https://wger.de/it/exercise/805/view/), by FEFFO, CC BY-SA 4.0
+- [Panca piana con presa srtetta](https://wger.de/it/exercise/76/view/), by FEFFO, CC BY-SA 4.0
+- [Panca declinata con bilanciere](https://wger.de/it/exercise/185/view/), by FEFFO, CC BY-SA 4.0
+- [Sollevamento dei polpacci in piedi](https://wger.de/it/exercise/622/view/), by FEFFO, CC BY-SA 4.0
+- [Pressa per polpacci alla Leg Press](https://wger.de/it/exercise/146/view/), by FEFFO, CC BY-SA 4.0
+- [Esercizio di yoga: Mucca-gatto](https://wger.de/it/exercise/1244/view/), by FEFFO, CC BY-SA 4.0
+- [Addominali su panca inclinata](https://wger.de/it/exercise/171/view/), by FEFFO, CC BY-SA 4.0
+- [Estensione dei Tricipiti con Bilanciere](https://wger.de/it/exercise/50/view/), by FEFFO, CC BY-SA 4.0
+- [Rematore seduto al cavo](https://wger.de/it/exercise/1117/view/), by FEFFO, CC BY-SA 4.0
+- [Curl per Bicipiti con Manubrio](https://wger.de/it/exercise/92/view/), by FEFFO, CC BY-SA 4.0
+- [Curl Bicipiti Alternato con Manubrio](https://wger.de/it/exercise/1192/view/), by FEFFO, CC BY-SA 4.0
+- [Panca Piana con Manubri](https://wger.de/it/exercise/75/view/), by FEFFO, CC BY-SA 4.0
+- [Piegamenti laterali con manubri](https://wger.de/it/exercise/577/view/), by clafal, CC BY-SA 4.0
+- [Estensione Plank-Gomito](https://wger.de/it/exercise/1406/view/), by clafal, CC BY-SA 4.0
+- [Leg curl con elastico](https://wger.de/it/exercise/1603/view/), by clafal, CC BY-SA 4.0
+- [Affondo laterale con pattina](https://wger.de/it/exercise/1604/view/), by RiccaBaro, CC BY-SA 4.0
+- [Copenhagen Plank](https://wger.de/it/exercise/1605/view/), by RiccaBaro, CC BY-SA 4.0
+- [Iperestensioni](https://wger.de/it/exercise/301/view/), by admin, CC BY-SA 4.0
+- [Ice Scream maker](https://wger.de/it/exercise/1248/view/), by admin, CC BY-SA 4.0
+- [Trazioni orizzontali](https://wger.de/it/exercise/1198/view/), by admin, CC BY-SA 4.0
+- [Front lever tuck](https://wger.de/it/exercise/1214/view/), by admin, CC BY-SA 4.0
+- [Piegamenti a una mano](https://wger.de/it/exercise/1293/view/), by admin, CC BY-SA 4.0
+- [Alzate posteriori](https://wger.de/it/exercise/828/view/), by almenociprovo, CC BY-SA 4.0
+- [Clamshell](https://wger.de/it/exercise/1823/view/), by teus_ergaster, CC BY-SA 4.0
+- [Shinbox IR stretch](https://wger.de/it/exercise/1884/view/), by teus_ergaster, CC BY-SA 4.0
+- [Esercizio YTWL](https://wger.de/it/exercise/1885/view/), by teus_ergaster, CC BY-SA 4.0
+- [Abduzione dell'anca in posizione supina](https://wger.de/it/exercise/1886/view/), by teus_ergaster, CC BY-SA 4.0
+- [Lat machine monolaterale con maniglia](https://wger.de/it/exercise/1972/view/), by evtimovgeorg, CC BY-SA 4.0
+- [Flessione del collo con carico](https://wger.de/it/exercise/2676/view/), by qoxivi, CC BY-SA 4.0
+- [Leg press a singola gamba](https://wger.de/it/exercise/2677/view/), by qoxivi, CC BY-SA 4.0
+
+## US Army
+
+Licence: [Public domain (US government work)](https://www.copyright.gov/title17/92chap1.html#105): works of the US Government carry no copyright (17 U.S.C. 105). Approved for public release; distribution is unlimited. Author: Headquarters, Department of the Army. Only the chapters named are used, and no figure:
+
+- ATP 7-22.02, *Holistic Health and Fitness Drills and Exercises*, https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN45013-ATP_7-22.02-001-WEB-4.pdf (sha256 `58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a`), chapters 2, 3, 4, 5, 9, 10, 11, 13, 14, 15, 16

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -191,6 +192,18 @@ topics = ["Sprains and Strains"]
 [free-exercise-db]
 commit = "a859101d633a01c4a1a920d6a8ce41dabba0705f"
 
+[wger]
+language = "it"
+date = "2026-11-08"
+sha256 = "abc"
+
+[[army]]
+publication = "ATP 7-22.02"
+title = "Holistic Health and Fitness Drills and Exercises"
+url = "https://armypubs.army.mil/x.pdf"
+sha256 = "def"
+chapters = [3, 14]
+
 [[wikipedia]]
 language = "en"
 title = "Squat (exercise)"
@@ -217,6 +230,16 @@ def test_the_manifest_names_the_version_and_the_pinned_list(tmp_path: Path) -> N
         medlineplus_date="2026-11-07",
         medlineplus_topics=("Sprains and Strains",),
         exercises_commit="a859101d633a01c4a1a920d6a8ce41dabba0705f",
+        wger=corpus.Wger("it", "2026-11-08", "abc"),
+        army=(
+            corpus.ArmyPublication(
+                "ATP 7-22.02",
+                "Holistic Health and Fitness Drills and Exercises",
+                "https://armypubs.army.mil/x.pdf",
+                "def",
+                (3, 14),
+            ),
+        ),
     )
 
 
@@ -235,6 +258,7 @@ def _chunk(number: int, text: str = "Keep the heels down.") -> corpus.Chunk:
         revision="1383893983",
         link="https://en.wikipedia.org/w/index.php?title=Squat_(exercise)&oldid=1383893983#Form",
         licence="CC BY-SA 4.0",
+        author="Wikipedia contributors",
         text=text,
     )
 
@@ -269,7 +293,12 @@ def test_the_notice_names_each_licence_and_every_pinned_page(tmp_path: Path) -> 
 
     notice = (tmp_path / "NOTICE.md").read_text(encoding="utf-8")
 
-    for licence in ("CC BY-SA 4.0", "The Unlicense", "Public domain (US federal work)"):
+    for licence in (
+        "CC BY-SA 4.0",
+        "The Unlicense",
+        "Public domain (US federal work)",
+        "Public domain (US government work)",
+    ):
         assert licence in notice
     assert "https://en.wikipedia.org/w/index.php?title=Squat_(exercise)&oldid=1383893983" in notice
     assert "https://it.wikipedia.org/w/index.php?title=Squat&oldid=150843803" in notice
@@ -338,8 +367,10 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
-        assert chunk.source in {"wikipedia", "medlineplus", "free-exercise-db"}, chunk.id
-        assert chunk.licence == corpus.SOURCES[chunk.source].licence, chunk.id
+        assert chunk.source in {
+            "wikipedia", "medlineplus", "free-exercise-db", "wger", "us-army"
+        }, chunk.id
+        assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
 
 def test_the_committed_corpus_directory_holds_no_vectors() -> None:
@@ -370,11 +401,192 @@ def test_the_committed_chunks_have_unique_ids() -> None:
 def test_the_committed_notice_matches_the_manifest() -> None:
     notice = (corpus.CORPUS_DIRECTORY / "NOTICE.md").read_text(encoding="utf-8")
 
-    assert notice == corpus.notice(corpus.read_manifest())
+    assert notice == corpus.notice(corpus.read_manifest(), corpus.read_chunks())
 
 
 def test_the_committed_manifest_pins_the_vendored_exercises() -> None:
     assert corpus.read_manifest().exercises_commit == corpus.vendored_exercises_commit()
+
+
+WGER_LICENCES = {
+    "results": [
+        {"id": 1, "short_name": "CC-BY-SA 3"},
+        {"id": 2, "short_name": "CC-BY-SA 4"},
+        {"id": 3, "short_name": "CC0"},
+        {"id": 5, "short_name": "ODbL"},
+    ]
+}
+WGER_LANGUAGES = {"results": [{"id": 2, "short_name": "en"}, {"id": 13, "short_name": "it"}]}
+
+
+def _translation(id: int, language: int, licence: int, name: str, description: str) -> dict[str, object]:
+    return {
+        "id": id,
+        "language": language,
+        "license": licence,
+        "license_author": "FEFFO",
+        "name": name,
+        "description": description,
+    }
+
+
+WGER_FIRST = {
+    "next": "https://wger.de/api/v2/exerciseinfo/?offset=200",
+    "results": [
+        {
+            "id": 73,
+            "translations": [
+                _translation(1, 2, 2, "Bench Press", "<p>Lie on the bench.</p>"),
+                _translation(
+                    2,
+                    13,
+                    2,
+                    "Panca piana con manubri",
+                    "<p>Impugnate due manubri.</p><ol><li>Scendete lentamente.</li></ol>",
+                ),
+            ],
+        }
+    ],
+}
+WGER_SECOND = {
+    "next": None,
+    "results": [
+        {"id": 80, "translations": [_translation(3, 13, 5, "Rematore", "<p>Tirate.</p>")]},
+        {"id": 81, "translations": [_translation(4, 13, 3, "Crunch", "<p>Sollevate le spalle.</p>")]},
+    ],
+}
+
+
+def _wger_getter() -> Callable[[str], bytes]:
+    pages = {
+        "/license/": WGER_LICENCES,
+        "/language/": WGER_LANGUAGES,
+        "offset=200": WGER_SECOND,
+        "/exerciseinfo/": WGER_FIRST,
+    }
+    return _getter({k: json.dumps(v).encode("utf-8") for k, v in pages.items()})
+
+
+def _wger_manifest(sha256: str) -> corpus.Manifest:
+    return _manifest(wikipedia=(), wger=corpus.Wger("it", "2026-11-08", sha256))
+
+
+def _wger_pin() -> str:
+    try:
+        corpus.fetch(_wger_manifest("0" * 64), _wger_getter())
+    except corpus.CorpusError as error:
+        found = re.search(r"sha256 = \"([0-9a-f]{64})\"", str(error))
+        assert found is not None, str(error)
+        return found.group(1)
+    raise AssertionError("a wrong pin was accepted")
+
+
+def test_wger_gives_its_italian_descriptions_under_their_own_licence() -> None:
+    chunks = corpus.fetch(_wger_manifest(_wger_pin()), _wger_getter())
+
+    assert [(c.title, c.licence, c.text) for c in chunks] == [
+        (
+            "Panca piana con manubri",
+            "CC BY-SA 4.0",
+            "Impugnate due manubri.\nScendete lentamente.",
+        ),
+        ("Crunch", "CC0 1.0", "Sollevate le spalle."),
+    ]
+    bench = chunks[0]
+    assert bench.source == "wger"
+    assert bench.language == "it"
+    assert bench.revision == "2026-11-08"
+    assert bench.link == "https://wger.de/it/exercise/73/view/"
+
+
+def test_wger_changed_since_its_pin_names_the_new_pin() -> None:
+    with pytest.raises(corpus.CorpusError, match="changed since 2026-11-08"):
+        corpus.fetch(_wger_manifest("0" * 64), _wger_getter())
+
+
+def test_the_notice_credits_each_wger_author(tmp_path: Path) -> None:
+    (tmp_path / "manifest.toml").write_text(MANIFEST_TOML, encoding="utf-8")
+    chunks = corpus.fetch(_wger_manifest(_wger_pin()), _wger_getter())
+
+    corpus.write(chunks, tmp_path)
+
+    notice = (tmp_path / "NOTICE.md").read_text(encoding="utf-8")
+    assert "Panca piana con manubri" in notice
+    assert "FEFFO" in notice
+    assert "https://wger.de/it/exercise/73/view/" in notice
+
+
+ARMY_PAGES = [
+    "Contents\nChapter 14 +FREE WEIGHT TRAINING ........ 14-1\n",
+    "01 October 2020 ATP 7-22.02 (INCL C1) 14-1 \n \nChapter 14 \n+Free Weight Training \n \n"
+    "FREE WEIGHTS \n14-1. Free Weight Training exercises are divided into two groups, core \n"
+    "and assistive. \n \nBACK SQUAT \n14-6. The Back Squat is a common variation of the Front Squat. \n"
+    "⚫ Keep the knees aligned over the feet and the heels on the ground. \n"
+    "⚫ Initially do not squat deeper than 90 degrees. \n \nFigure 14-2. FW2 Back Squat \n",
+    "Free Weight Training \n01 October 2022 ATP 7-22.02 (INCL C1) 14-2 \n \n"
+    "BACK SQUAT CAUTION \n• Do not round out the upper back. \n",
+    "15-1 ATP 7-22.02 (INCL C1) 01 October 2020 \nChapter 15 \n+Strength Training Machine Drill \n"
+    "LEG PRESS \n15-2. Sit on the machine. \n",
+]
+ARMY_URL = "https://armypubs.army.mil/epubs/DR_pubs/DR_a/ATP_7-22.02.pdf"
+ARMY_BYTES = b"%PDF-fake"
+
+
+def _army_manifest(sha256: str, chapters: tuple[int, ...] = (14,)) -> corpus.Manifest:
+    return _manifest(
+        wikipedia=(),
+        army=(
+            corpus.ArmyPublication(
+                "ATP 7-22.02",
+                "Holistic Health and Fitness Drills and Exercises",
+                ARMY_URL,
+                sha256,
+                chapters,
+            ),
+        ),
+    )
+
+
+@pytest.fixture()
+def army_pages(monkeypatch: pytest.MonkeyPatch) -> str:
+    import hashlib
+
+    monkeypatch.setattr(corpus, "pdf_pages", lambda data: list(ARMY_PAGES))
+    return hashlib.sha256(ARMY_BYTES).hexdigest()
+
+
+def test_an_army_manual_is_cut_by_heading_within_its_chosen_chapters(army_pages: str) -> None:
+    get = _getter({ARMY_URL: ARMY_BYTES})
+
+    chunks = corpus.fetch(_army_manifest(army_pages), get)
+
+    assert [(c.section, c.text) for c in chunks] == [
+        (
+            "Free Weights",
+            "Free Weight Training exercises are divided into two groups, core and assistive.",
+        ),
+        (
+            "Back Squat",
+            "The Back Squat is a common variation of the Front Squat.\n"
+            "Keep the knees aligned over the feet and the heels on the ground.\n"
+            "Initially do not squat deeper than 90 degrees.",
+        ),
+        ("Back Squat Caution", "Do not round out the upper back."),
+    ]
+    squat = chunks[1]
+    assert squat.source == "us-army"
+    assert squat.title == "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises"
+    assert squat.language == "en"
+    assert squat.licence == "Public domain (US government work)"
+    assert squat.link == f"{ARMY_URL}#page=2"
+    assert chunks[2].link == f"{ARMY_URL}#page=3"
+
+
+def test_an_army_manual_other_than_the_pinned_file_is_refused(army_pages: str) -> None:
+    get = _getter({ARMY_URL: b"%PDF-another"})
+
+    with pytest.raises(corpus.CorpusError, match="not the pinned file"):
+        corpus.fetch(_army_manifest(army_pages), get)
 
 
 def test_a_commit_other_than_the_vendored_one_is_refused() -> None:

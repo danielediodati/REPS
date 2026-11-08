@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import re
+import string
 import time
 import tomllib
 import urllib.error
@@ -16,6 +18,8 @@ from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree
+
+from pypdf import PdfReader
 
 from trainer.engine import catalog
 
@@ -34,22 +38,50 @@ MAX_CHARS = 1200
 
 @dataclass(frozen=True)
 class Source:
-    """A source the corpus may draw from, with the licence its text carries."""
+    """A source the corpus may draw from, with the licences its texts may carry."""
 
     name: str
-    licence: str
-    licence_url: str
+    author: str
+    licences: dict[str, str]
+    """Each licence allowed for this source, with the address of its terms."""
+
+    @property
+    def licence(self) -> str:
+        """The licence of a source whose texts all carry one."""
+        [only] = self.licences
+        return only
 
 
-WIKIPEDIA = Source("wikipedia", "CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/")
+_CC_BY_SA_3 = {"CC BY-SA 3.0": "https://creativecommons.org/licenses/by-sa/3.0/"}
+_CC_BY_SA_4 = {"CC BY-SA 4.0": "https://creativecommons.org/licenses/by-sa/4.0/"}
+_CC_BY_4 = {"CC BY 4.0": "https://creativecommons.org/licenses/by/4.0/"}
+_CC0 = {"CC0 1.0": "https://creativecommons.org/publicdomain/zero/1.0/"}
+
+WIKIPEDIA = Source("wikipedia", "Wikipedia contributors", _CC_BY_SA_4)
 MEDLINEPLUS = Source(
     "medlineplus",
-    "Public domain (US federal work)",
-    "https://medlineplus.gov/about/using/usingcontent/",
+    "MedlinePlus, National Library of Medicine",
+    {"Public domain (US federal work)": "https://medlineplus.gov/about/using/usingcontent/"},
 )
-EXERCISES = Source("free-exercise-db", "The Unlicense", "https://unlicense.org/")
-SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, EXERCISES)}
+EXERCISES = Source(
+    "free-exercise-db", "free-exercise-db contributors", {"The Unlicense": "https://unlicense.org/"}
+)
+WGER = Source("wger", "wger contributors", _CC_BY_SA_3 | _CC_BY_SA_4 | _CC_BY_4 | _CC0)
+ARMY = Source(
+    "us-army",
+    "Headquarters, Department of the Army",
+    {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
+)
+SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, EXERCISES, WGER, ARMY)}
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
+
+_WGER_LICENCES = {
+    "CC-BY-SA 3": "CC BY-SA 3.0",
+    "CC-BY-SA 4": "CC BY-SA 4.0",
+    "CC-BY 4": "CC BY 4.0",
+    "CC0": "CC0 1.0",
+}
+"""wger's own names for the licences the corpus accepts; any other wger licence is left out."""
 
 
 @dataclass(frozen=True)
@@ -62,6 +94,26 @@ class Page:
 
 
 @dataclass(frozen=True)
+class Wger:
+    """wger's exercise descriptions in one language, pinned by a hash of what was taken."""
+
+    language: str
+    date: str
+    sha256: str
+
+
+@dataclass(frozen=True)
+class ArmyPublication:
+    """A US Army manual pinned by the hash of its PDF, with the chapters taken from it."""
+
+    publication: str
+    title: str
+    url: str
+    sha256: str
+    chapters: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class Manifest:
     """The corpus version and the pinned list it is cut from."""
 
@@ -70,6 +122,8 @@ class Manifest:
     medlineplus_date: str | None
     medlineplus_topics: tuple[str, ...]
     exercises_commit: str | None
+    wger: Wger | None = None
+    army: tuple[ArmyPublication, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,6 +138,7 @@ class Chunk:
     revision: str
     link: str
     licence: str
+    author: str
     text: str
 
 
@@ -104,6 +159,10 @@ def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
         chunks.extend(_medlineplus(manifest.medlineplus_date, manifest.medlineplus_topics, get))
     if manifest.exercises_commit is not None:
         chunks.extend(_exercises(manifest.exercises_commit))
+    if manifest.wger is not None:
+        chunks.extend(_wger(manifest.wger, get))
+    for publication in manifest.army:
+        chunks.extend(_army(publication, get))
     return chunks
 
 
@@ -115,7 +174,23 @@ def read_manifest(directory: Path | None = None) -> Manifest:
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
         medlineplus = data.get("medlineplus", {})
+        wger = data.get("wger")
         return Manifest(
+            wger=(
+                Wger(str(wger["language"]), str(wger["date"]), str(wger["sha256"]))
+                if wger is not None
+                else None
+            ),
+            army=tuple(
+                ArmyPublication(
+                    str(entry["publication"]),
+                    str(entry["title"]),
+                    str(entry["url"]),
+                    str(entry["sha256"]),
+                    tuple(int(chapter) for chapter in entry["chapters"]),
+                )
+                for entry in data.get("army", [])
+            ),
             version=int(data["version"]),
             wikipedia=tuple(
                 Page(str(page["language"]), str(page["title"]), int(page["revision"]))
@@ -149,7 +224,7 @@ def write(chunks: list[Chunk], directory: Path | None = None) -> bool:
         _CHUNKS: "".join(
             json.dumps(asdict(chunk), ensure_ascii=False) + "\n" for chunk in chunks
         ),
-        _NOTICE: notice(manifest),
+        _NOTICE: notice(manifest, chunks),
     }
     changed = False
     for name, text in files.items():
@@ -163,7 +238,7 @@ def write(chunks: list[Chunk], directory: Path | None = None) -> bool:
     return changed
 
 
-def notice(manifest: Manifest) -> str:
+def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
     """The NOTICE: each source's licence, how to attribute it, and every pinned text."""
     lines = [
         "# Corpus notice",
@@ -180,7 +255,7 @@ def notice(manifest: Manifest) -> str:
         "",
         "## Wikipedia",
         "",
-        f"Licence: [{WIKIPEDIA.licence}]({WIKIPEDIA.licence_url}). Authors: the contributors "
+        f"Licence: [{WIKIPEDIA.licence}]({WIKIPEDIA.licences[WIKIPEDIA.licence]}). Authors: the contributors "
         "listed in each page's history. Each chunk links the revision it was taken from; "
         "the pinned revisions are:",
         "",
@@ -193,7 +268,7 @@ def notice(manifest: Manifest) -> str:
             "",
             "## MedlinePlus",
             "",
-            f"Licence: [{MEDLINEPLUS.licence}]({MEDLINEPLUS.licence_url}). "
+            f"Licence: [{MEDLINEPLUS.licence}]({MEDLINEPLUS.licences[MEDLINEPLUS.licence]}). "
             "Source: MedlinePlus, National Library of Medicine. Only NLM-written health-topic "
             "summaries are used; A.D.A.M. and other copyrighted MedlinePlus content is not. "
             "Taken from "
@@ -206,10 +281,48 @@ def notice(manifest: Manifest) -> str:
             "",
             "## free-exercise-db",
             "",
-            f"Licence: [{EXERCISES.licence}]({EXERCISES.licence_url}), public domain. "
+            f"Licence: [{EXERCISES.licence}]({EXERCISES.licences[EXERCISES.licence]}), public domain. "
             "The `instructions` of every exercise in https://github.com/yuhonas/free-exercise-db "
             f"at commit `{manifest.exercises_commit}`.",
         ]
+    if manifest.wger is not None:
+        licences = ", ".join(f"[{name}]({url})" for name, url in WGER.licences.items())
+        lines += [
+            "",
+            "## wger",
+            "",
+            f"Licences: each description keeps the licence its author gave it ({licences}). "
+            f"The {manifest.wger.language} exercise descriptions of https://wger.de as taken on "
+            f"{manifest.wger.date} (sha256 `{manifest.wger.sha256}`). Each, with its author and "
+            "licence:",
+            "",
+        ]
+        credited = dict.fromkeys(
+            (chunk.title, chunk.author, chunk.licence, chunk.link)
+            for chunk in chunks
+            if chunk.source == WGER.name
+        )
+        lines.extend(
+            f"- [{title}]({link}), by {author}, {licence}"
+            for title, author, licence, link in credited
+        )
+    if manifest.army:
+        lines += [
+            "",
+            "## US Army",
+            "",
+            f"Licence: [{ARMY.licence}]({ARMY.licences[ARMY.licence]}): works of the US "
+            "Government carry no copyright (17 U.S.C. 105). Approved for public release; "
+            f"distribution is unlimited. Author: {ARMY.author}. Only the chapters named are "
+            "used, and no figure:",
+            "",
+        ]
+        lines.extend(
+            f"- {publication.publication}, *{publication.title}*, {publication.url} "
+            f"(sha256 `{publication.sha256}`), chapters "
+            f"{', '.join(str(chapter) for chapter in publication.chapters)}"
+            for publication in manifest.army
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -346,6 +459,9 @@ def _cut(
     revision: str,
     sections: list[tuple[str, str, list[str]]],
     link: Callable[[str], str],
+    *,
+    licence: str | None = None,
+    author: str | None = None,
 ) -> list[Chunk]:
     """One text's sections packed into chunks, each linked through its section's anchor."""
     return [
@@ -357,11 +473,166 @@ def _cut(
             section=section,
             revision=revision,
             link=link(anchor),
-            licence=source.licence,
+            licence=licence or source.licence,
+            author=author or source.author,
             text=text,
         )
         for number, (section, anchor, text) in enumerate(_packed(sections))
     ]
+
+
+def _wger(pin: Wger, get: Getter) -> list[Chunk]:
+    api = "https://wger.de/api/v2"
+    licences = {
+        entry["id"]: _WGER_LICENCES.get(entry["short_name"].strip())
+        for entry in json.loads(get(f"{api}/license/?format=json&limit=100"))["results"]
+    }
+    languages = {
+        entry["short_name"]: entry["id"]
+        for entry in json.loads(get(f"{api}/language/?format=json&limit=100"))["results"]
+    }
+    if pin.language not in languages:
+        raise CorpusError(f"wger has no language {pin.language!r}; pin one of {sorted(languages)}")
+    taken: list[tuple[int, dict[str, object]]] = []
+    url: str | None = f"{api}/exerciseinfo/?format=json&limit=200&offset=0"
+    while url:
+        page = json.loads(get(url))
+        for exercise in page["results"]:
+            taken.extend(
+                (exercise["id"], translation)
+                for translation in exercise["translations"]
+                if translation["language"] == languages[pin.language]
+                and licences.get(translation["license"])
+            )
+        url = page["next"]
+    taken.sort(key=lambda item: int(str(item[1]["id"])))
+    digest = hashlib.sha256(
+        json.dumps(
+            [
+                [t["id"], t["name"], t["description"], licences[t["license"]], t["license_author"]]
+                for _, t in taken
+            ],
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if digest != pin.sha256:
+        raise CorpusError(
+            f"wger's {pin.language} descriptions have changed since {pin.date}; to take them as "
+            f'they are now, refresh the manifest with date = today and sha256 = "{digest}"'
+        )
+    chunks = []
+    for exercise_id, translation in taken:
+        link = f"https://wger.de/{pin.language}/exercise/{exercise_id}/view/"
+        chunks.extend(
+            _cut(
+                WGER,
+                pin.language,
+                str(translation["name"]),
+                str(translation["id"]),
+                pin.date,
+                _sections(str(translation["description"]), set()),
+                lambda _: link,
+                licence=licences[translation["license"]],
+                author=str(translation["license_author"]),
+            )
+        )
+    return chunks
+
+
+def pdf_pages(data: bytes) -> list[str]:
+    """The text of each page of a PDF."""
+    return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
+
+
+def _army(publication: ArmyPublication, get: Getter) -> list[Chunk]:
+    data = get(publication.url)
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != publication.sha256:
+        raise CorpusError(
+            f"{publication.url} is not the pinned file of {publication.publication} (sha256 "
+            f"{digest}); the Army may have issued a change, so refresh the manifest from the "
+            "publication's details page"
+        )
+    return _cut(
+        ARMY,
+        "en",
+        f"{publication.publication}, {publication.title}",
+        publication.publication,
+        digest,
+        _army_sections(pdf_pages(data), publication),
+        lambda anchor: f"{publication.url}#{anchor}",
+    )
+
+
+_BULLETS = "⚫•●▪"
+_PARAGRAPH_NUMBER = re.compile(r"^\+?\d+-\d+\.\s*")
+_PAGE_ID = re.compile(r"(?:^|\s)(\d+)-\d+(?=\s|$)")
+
+
+def _army_sections(
+    pages: list[str], publication: ArmyPublication
+) -> list[tuple[str, str, list[str]]]:
+    """A manual's chosen chapters as (heading, page anchor, paragraphs), running heads dropped."""
+    sections: list[tuple[str, str, list[str]]] = []
+    titles: dict[int, str] = {}
+    for number, page in enumerate(pages, start=1):
+        lines = [line.strip() for line in page.splitlines()]
+        header = next((line for line in lines if publication.publication in line), None)
+        found = _PAGE_ID.search(header) if header else None
+        chapter = int(found.group(1)) if found else None
+        if chapter not in publication.chapters:
+            continue
+        running = {f"Chapter {chapter}"}
+        for index, line in enumerate(lines[:-1]):
+            if line == f"Chapter {chapter}" and chapter not in titles:
+                titles[chapter] = lines[index + 1].lstrip("+").strip()
+        running.add(titles.get(chapter, ""))
+        heading_open = False
+        for line in lines:
+            if (
+                not line
+                or publication.publication in line
+                or line.lstrip("+").strip() in running
+                or re.match(r"^Figure \d+-\d+\.", line)
+            ):
+                continue
+            if _is_heading(line):
+                if heading_open:
+                    sections[-1] = (f"{sections[-1][0]} {_heading(line)}", sections[-1][1], [])
+                else:
+                    sections.append((_heading(line), f"page={number}", []))
+                heading_open = True
+                continue
+            heading_open = False
+            if not sections:
+                sections.append((titles.get(chapter, ""), f"page={number}", []))
+            paragraphs = sections[-1][2]
+            starts = _PARAGRAPH_NUMBER.match(line) or line[0] in _BULLETS
+            text = _PARAGRAPH_NUMBER.sub("", line).lstrip(_BULLETS).strip()
+            if starts or not paragraphs:
+                paragraphs.append(text)
+            else:
+                paragraphs[-1] = f"{paragraphs[-1]} {text}"
+    return [
+        (heading, anchor, [_clean(p) for p in paragraphs if _clean(p)])
+        for heading, anchor, paragraphs in sections
+        if any(_clean(p) for p in paragraphs)
+    ]
+
+
+def _is_heading(line: str) -> bool:
+    """An all-capitals line; one with quotes or a full stop is a spoken command, not a title."""
+    return (
+        line == line.upper()
+        and re.search(r"[A-Z]{2}", line) is not None
+        and line[0] not in _BULLETS
+        and not re.search(r"[\"“”]|\.$", line)
+    )
+
+
+def _heading(line: str) -> str:
+    """An all-capitals heading, written the way a title reads."""
+    return string.capwords(_clean(line.lstrip("+")))
 
 
 def _page_link(page: Page) -> str:
