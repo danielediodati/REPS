@@ -40,7 +40,7 @@ Decisions enough to run `/to-spec` on this outcome: the entrance answers questio
 
 ## Not yet specified
 
-Nothing: what remains is ticketed.
+- [More open sources](issues/11-more-open-sources.md): what else can carry technique, before the eval set is frozen.
 
 ## Out of scope
 
