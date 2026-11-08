@@ -29,7 +29,6 @@ def exercise(**overrides: object) -> catalog.Exercise:
         "category": "strength",
         "primary_muscles": ("chest",),
         "secondary_muscles": ("triceps", "shoulders"),
-        "instructions": ("Lie on the bench.", "Press."),
         "images": ("Bench_Press/0.jpg", "Bench_Press/1.jpg"),
     }
     base.update(overrides)
@@ -166,7 +165,7 @@ def test_a_row_is_the_exercise_reduced_to_what_can_be_read(
 
     assert last_row(snapshot.render(connection)) == (
         "| Bench_Press | Bench Press | strength | barbell | push | compound "
-        "| beginner | chest | triceps, shoulders | 2 | 2"
+        "| beginner | chest | triceps, shoulders | 2"
         " | - | - | - | - | - | - | - | - |"
     )
 
@@ -179,7 +178,7 @@ def test_absent_values_read_as_absent(connection: sqlite3.Connection) -> None:
 
     assert last_row(snapshot.render(connection)) == (
         "| Bench_Press | Bench Press | strength | - | - | - "
-        "| beginner | chest | - | 2 | 2"
+        "| beginner | chest | - | 2"
         " | - | - | - | - | - | - | - | - |"
     )
 
@@ -211,22 +210,21 @@ def test_enriched_values_are_read_from_their_own_columns(
 
     assert row == (
         "| Bench_Press | Bench Press | strength | barbell | push | compound "
-        "| beginner | chest | triceps, shoulders | 2 | 2"
+        "| beginner | chest | triceps, shoulders | 2"
         " | horizontal push | shoulder, elbow | no | low | 2"
         " | - | Incline_Bench_Press | https://example.invalid/bench-press |"
     )
 
 
-def test_instructions_and_images_are_counted_not_copied(
+def test_images_are_counted_not_copied(
     connection: sqlite3.Connection,
 ) -> None:
     stock(connection, exercise())
 
     text = snapshot.render(connection)
 
-    assert "Lie on the bench." not in text
     assert "Bench_Press/0.jpg" not in text
-    assert text.rstrip().endswith("| 2 | 2 | - | - | - | - | - | - | - | - |")
+    assert text.rstrip().endswith("| 2 | - | - | - | - | - | - | - | - |")
 
 
 def test_a_pipe_in_a_value_cannot_break_the_table(
@@ -237,7 +235,7 @@ def test_a_pipe_in_a_value_cannot_break_the_table(
     row = last_row(snapshot.render(connection))
 
     assert r"Press \| Pull" in row
-    assert row.count("|") == 20 + row.count(r"\|")  # 19 columns, 20 delimiters
+    assert row.count("|") == 19 + row.count(r"\|")  # 18 columns, 19 delimiters
 
 
 def test_a_newline_in_a_value_cannot_split_a_row(
@@ -258,7 +256,7 @@ def test_a_newline_in_a_value_cannot_split_a_row(
 
     assert rows == [
         "| Bench_Press | Press and Pull | strength | barbell | push "
-        "| compound | beginner | chest | triceps, shoulders | 2 | 2"
+        "| compound | beginner | chest | triceps, shoulders | 2"
         " | - | - | - | - | - | - | - | - |"
     ]
 

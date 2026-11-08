@@ -42,7 +42,6 @@ def exercise(exercise_id: str, name: str) -> Exercise:
         category="strength",
         primary_muscles=("shoulders",),
         secondary_muscles=(),
-        instructions=(),
         images=(),
     )
 

@@ -20,7 +20,7 @@ DATASET_PATH = DATASET_DIRECTORY / "exercises.json"
 
 _REQUIRED = ("id", "name", "level", "category")
 _OPTIONAL = ("force", "mechanic", "equipment")
-_LISTS = ("primaryMuscles", "secondaryMuscles", "instructions", "images")
+_LISTS = ("primaryMuscles", "secondaryMuscles", "images")
 
 
 class CatalogError(RuntimeError):
@@ -44,7 +44,6 @@ class Exercise:
     category: str
     primary_muscles: tuple[str, ...]
     secondary_muscles: tuple[str, ...]
-    instructions: tuple[str, ...]
     images: tuple[str, ...]
 
 
@@ -119,7 +118,6 @@ def _parse(record: object, position: int) -> Exercise:
         category=str(values["category"]),
         primary_muscles=_strings(values["primaryMuscles"]),
         secondary_muscles=_strings(values["secondaryMuscles"]),
-        instructions=_strings(values["instructions"]),
         images=_strings(values["images"]),
     )
 
@@ -184,8 +182,8 @@ def import_exercises(
             """
             INSERT INTO exercises (
                 id, name, force, level, mechanic, equipment, category,
-                primary_muscles, secondary_muscles, instructions, images
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                primary_muscles, secondary_muscles, images
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 force = excluded.force,
@@ -195,7 +193,6 @@ def import_exercises(
                 category = excluded.category,
                 primary_muscles = excluded.primary_muscles,
                 secondary_muscles = excluded.secondary_muscles,
-                instructions = excluded.instructions,
                 images = excluded.images
             """,
             [_to_row(exercise) for exercise in exercises],
@@ -233,7 +230,6 @@ def _to_row(exercise: Exercise) -> tuple[object, ...]:
         exercise.category,
         json.dumps(list(exercise.primary_muscles)),
         json.dumps(list(exercise.secondary_muscles)),
-        json.dumps(list(exercise.instructions)),
         json.dumps(list(exercise.images)),
     )
 
@@ -250,10 +246,10 @@ def known_ids(connection: sqlite3.Connection) -> set[str]:
 
 
 def exercise(connection: sqlite3.Connection, exercise_id: str) -> Exercise | None:
-    """One exercise, whole — instructions and images included.
+    """One exercise, whole — images included.
 
-    This is the retrieval the appendix describes: those two fields are never
-    queried, they are fetched by id when something needs to show the exercise.
+    This is the retrieval the appendix describes: images are never queried,
+    they are fetched by id when something needs to show the exercise.
     """
     row = connection.execute(
         "SELECT * FROM exercises WHERE id = ?", (exercise_id,)
@@ -276,7 +272,6 @@ def from_row(row: sqlite3.Row) -> Exercise:
         category=row["category"],
         primary_muscles=tuple(json.loads(row["primary_muscles"])),
         secondary_muscles=tuple(json.loads(row["secondary_muscles"])),
-        instructions=tuple(json.loads(row["instructions"])),
         images=tuple(json.loads(row["images"])),
     )
 
@@ -289,9 +284,8 @@ LIST_FILTERS = ("primary_muscles", "secondary_muscles")
 
 FILTERABLE = SCALAR_FILTERS + LIST_FILTERS
 
-# `instructions` and `images` are deliberately not filterable. The appendix is
-# explicit that they are never queried: they are fetched by id when something
-# needs to show the exercise.
+# `images` is deliberately not filterable. The appendix is explicit that it is
+# never queried: it is fetched by id when something needs to show the exercise.
 
 ENRICHMENT_FIELDS = (
     "movement_pattern",

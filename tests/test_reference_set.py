@@ -31,7 +31,6 @@ def exercise(**overrides: object) -> Exercise:
         "category": "strength",
         "primary_muscles": ("chest",),
         "secondary_muscles": (),
-        "instructions": (),
         "images": (),
     }
     base.update(overrides)

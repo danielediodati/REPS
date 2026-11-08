@@ -30,7 +30,6 @@ def record(**overrides: object) -> dict[str, object]:
         "category": "strength",
         "primaryMuscles": ["chest"],
         "secondaryMuscles": ["triceps"],
-        "instructions": ["Press."],
         "images": ["Bench_Press/0.jpg"],
     }
     base.update(overrides)
