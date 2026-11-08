@@ -15,5 +15,6 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - [ ] A current pain alone goes to triage, with no answer and no source
 - [ ] Technique plus a current pain: the technique answered and cited, the pain sent to triage in its own sentence
 - [ ] Sources unavailable mid-session: the tool says so, the entrance says it cannot answer from sources, and the conversation goes on
+- [ ] A chunk with no section (a page's lead, a wger description) is cited by its title alone, with no `§`; the source name in the link is read from the chunk, not only Wikipedia's
 - [ ] The planner is unchanged
 - [ ] Tested on the entrance graph with a scripted model and the in-memory corpus, and on the bot's rendering
