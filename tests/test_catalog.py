@@ -31,7 +31,6 @@ def record(**overrides: object) -> dict[str, object]:
         "category": "strength",
         "primaryMuscles": ["chest"],
         "secondaryMuscles": ["triceps", "shoulders"],
-        "instructions": ["Lie on the bench.", "Press."],
         "images": ["Bench_Press/0.jpg", "Bench_Press/1.jpg"],
     }
     base.update(overrides)
@@ -77,13 +76,18 @@ def test_the_vendored_dataset_carries_only_image_references() -> None:
             assert not image.startswith("data:")
 
 
+def test_the_vendored_dataset_carries_no_borrowed_text() -> None:
+    """Upstream's instructions are a copyrighted site's text, so none is kept."""
+    records = json.loads(catalog.DATASET_PATH.read_text(encoding="utf-8"))
+    assert not any("instructions" in record for record in records)
+
+
 def test_a_record_becomes_an_exercise(tmp_path: Path) -> None:
     (loaded,) = catalog.load(dataset(tmp_path, record()))
 
     assert loaded.id == "Bench_Press"
     assert loaded.primary_muscles == ("chest",)
     assert loaded.secondary_muscles == ("triceps", "shoulders")
-    assert loaded.instructions == ("Lie on the bench.", "Press.")
     assert loaded.images == ("Bench_Press/0.jpg", "Bench_Press/1.jpg")
 
 
@@ -118,7 +122,7 @@ def test_malformed_json_is_refused(tmp_path: Path) -> None:
         {"force": 3},
         {"primaryMuscles": "chest"},
         {"images": [1, 2]},
-        {"instructions": None},
+        {"secondaryMuscles": None},
     ],
     ids=lambda case: str(sorted(case)),
 )
@@ -304,9 +308,9 @@ def test_a_json_object_cannot_be_stored_in_a_list_column(migrated: Path) -> None
                 """
                 INSERT INTO exercises (
                     id, name, force, level, mechanic, equipment, category,
-                    primary_muscles, secondary_muscles, instructions, images
+                    primary_muscles, secondary_muscles, images
                 ) VALUES ('x', 'X', NULL, 'beginner', NULL, NULL, 'strength',
-                          '{"a": 1}', '[]', '[]', '[]')
+                          '{"a": 1}', '[]', '[]')
                 """
             )
 
@@ -576,9 +580,9 @@ def test_a_filter_that_legitimately_matches_nothing_is_not_an_error(
         ).total == 0
 
 
-@pytest.mark.parametrize("field", ["instructions", "images", "id", "nonsense"])
+@pytest.mark.parametrize("field", ["images", "id", "nonsense"])
 def test_fields_that_are_not_filters_are_refused(field: str, stocked: Path) -> None:
-    """instructions and images are fetched by id, never queried."""
+    """images are fetched by id, never queried."""
     with closing(database.connect(stocked)) as connection:
         with pytest.raises(catalog.CatalogError):
             catalog.search(connection, filters={field: "anything"})

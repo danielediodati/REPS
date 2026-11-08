@@ -147,7 +147,6 @@ def _exercise(found: catalog.Exercise) -> dict[str, Any]:
     return asdict(found) | {
         "primary_muscles": list(found.primary_muscles),
         "secondary_muscles": list(found.secondary_muscles),
-        "instructions": list(found.instructions),
         "images": list(found.images),
     }
 

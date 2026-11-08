@@ -123,7 +123,6 @@ def test_the_tool_itself_answers_with_the_whole_record(
         "force",
         "id",
         "images",
-        "instructions",
         "level",
         "mechanic",
         "name",
@@ -565,7 +564,7 @@ def test_trimming_reaches_a_record_nested_under_a_key() -> None:
     """`compare_variants` already answers `{"a": {...}, "b": {...}}`. A tool
     that nests a list of exercises brings back the payload this exists to
     bound, with nothing failing to say so."""
-    answer = {"variants": [{"id": "X", "instructions": ["long"], "level": "expert"}]}
+    answer = {"variants": [{"id": "X", "images": ["X/0.jpg"], "level": "expert"}]}
 
     trimmed = tools._trimmed(answer, logger.KEEPS)
 
