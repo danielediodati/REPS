@@ -39,6 +39,9 @@ topics = [
     "Tendinitis",
     "Muscle Cramps",
     "Hernia",
+    "Wrist Injuries and Disorders",
+    "Hip Injuries and Disorders",
+    "Foot Injuries and Disorders",
 ]
 
 # English Wikipedia: technique
@@ -1405,3 +1408,15 @@ revision = 145427088
 language = "it"
 title = "Riatletizzazione"
 revision = 143999051
+
+# English Wikipedia: coverage gaps
+
+[[wikipedia]]
+language = "en"
+title = "Strength athletics"
+revision = 1382911247
+
+[[wikipedia]]
+language = "en"
+title = "Inguinal hernia"
+revision = 1382441004

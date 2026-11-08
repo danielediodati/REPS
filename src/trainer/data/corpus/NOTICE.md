@@ -275,6 +275,8 @@ Licence: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Author
 - it: [Insufficienza muscolare](https://it.wikipedia.org/w/index.php?title=Insufficienza_muscolare&oldid=149485608)
 - it: [Rabdomiolisi da sforzo](https://it.wikipedia.org/w/index.php?title=Rabdomiolisi_da_sforzo&oldid=145427088)
 - it: [Riatletizzazione](https://it.wikipedia.org/w/index.php?title=Riatletizzazione&oldid=143999051)
+- en: [Strength athletics](https://en.wikipedia.org/w/index.php?title=Strength_athletics&oldid=1382911247)
+- en: [Inguinal hernia](https://en.wikipedia.org/w/index.php?title=Inguinal_hernia&oldid=1382441004)
 
 ## MedlinePlus
 
@@ -294,6 +296,9 @@ Licence: [Public domain (US federal work)](https://medlineplus.gov/about/using/u
 - Tendinitis
 - Muscle Cramps
 - Hernia
+- Wrist Injuries and Disorders
+- Hip Injuries and Disorders
+- Foot Injuries and Disorders
 
 ## free-exercise-db
 
