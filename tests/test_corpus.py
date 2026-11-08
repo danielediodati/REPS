@@ -173,10 +173,15 @@ version = 3
 date = "2026-11-07"
 topics = ["Sprains and Strains"]
 
-[wger]
+[[wger]]
 language = "it"
 date = "2026-11-08"
 sha256 = "abc"
+
+[[wger]]
+language = "en"
+date = "2026-11-08"
+sha256 = "ghi"
 
 [[army]]
 publication = "ATP 7-22.02"
@@ -210,7 +215,7 @@ def test_the_manifest_names_the_version_and_the_pinned_list(tmp_path: Path) -> N
         ),
         medlineplus_date="2026-11-07",
         medlineplus_topics=("Sprains and Strains",),
-        wger=corpus.Wger("it", "2026-11-08", "abc"),
+        wger=(corpus.Wger("it", "2026-11-08", "abc"), corpus.Wger("en", "2026-11-08", "ghi")),
         army=(
             corpus.ArmyPublication(
                 "ATP 7-22.02",
@@ -447,8 +452,29 @@ WGER_SECOND = {
                 }
             ],
         },
+        {
+            "id": 84,
+            "translations": [
+                _translation(
+                    7,
+                    2,
+                    2,
+                    "Barbell Squat",
+                    "<p>Set the bar on a rack to just below shoulder level and step under it.</p>"
+                    "<p>Squat down.</p>",
+                ),
+                {**_translation(8, 2, 2, "Concentration Curl", "<p>Sit and curl the dumbbell.</p>"), "license_author": "ExRx"},
+                _translation(
+                    9, 2, 2, "Fire Hydrant Circles", "<p>Source: Joe DeFranco\nPrescription: 10 reps</p>"
+                ),
+                {**_translation(10, 2, 2, "Toe Taps", "<p>Lie down and tap your toes.</p>"), "license_author": "someone@gmail.com"},
+            ],
+        },
     ],
 }
+BORROWED = [
+    {"instructions": ["Set the bar on a rack to just below shoulder level and step under it."]},
+]
 
 
 def _wger_getter() -> Callable[[str], bytes]:
@@ -457,17 +483,18 @@ def _wger_getter() -> Callable[[str], bytes]:
         "/language/": WGER_LANGUAGES,
         "offset=200": WGER_SECOND,
         "/exerciseinfo/": WGER_FIRST,
+        "free-exercise-db": BORROWED,
     }
     return _getter({k: json.dumps(v).encode("utf-8") for k, v in pages.items()})
 
 
-def _wger_manifest(sha256: str) -> corpus.Manifest:
-    return _manifest(wikipedia=(), wger=corpus.Wger("it", "2026-11-08", sha256))
+def _wger_manifest(sha256: str, language: str = "it") -> corpus.Manifest:
+    return _manifest(wikipedia=(), wger=(corpus.Wger(language, "2026-11-08", sha256),))
 
 
-def _wger_pin() -> str:
+def _wger_pin(language: str = "it") -> str:
     try:
-        corpus.fetch(_wger_manifest("0" * 64), _wger_getter())
+        corpus.fetch(_wger_manifest("0" * 64, language), _wger_getter())
     except corpus.CorpusError as error:
         found = re.search(r"sha256 = \"([0-9a-f]{64})\"", str(error))
         assert found is not None, str(error)
@@ -503,6 +530,38 @@ def test_wger_leaves_out_a_text_credited_to_a_copyrighted_site() -> None:
     titles = [c.title for c in corpus.fetch(_wger_manifest(_wger_pin()), _wger_getter())]
 
     assert "Plank laterale" not in titles
+
+
+def _english_titles() -> list[str]:
+    return [c.title for c in corpus.fetch(_wger_manifest(_wger_pin("en"), "en"), _wger_getter())]
+
+
+def test_wger_gives_each_pinned_language_apart() -> None:
+    manifest = _manifest(
+        wikipedia=(),
+        wger=(corpus.Wger("it", "2026-11-08", _wger_pin()), corpus.Wger("en", "2026-11-08", _wger_pin("en"))),
+    )
+
+    chunks = corpus.fetch(manifest, _wger_getter())
+
+    assert ("en", "Bench Press") in [(c.language, c.title) for c in chunks]
+    assert ("it", "Crunch") in [(c.language, c.title) for c in chunks]
+    assert "https://wger.de/en/exercise/73/view/" in [c.link for c in chunks]
+
+
+def test_wger_leaves_out_a_text_copied_from_bodybuilding_com() -> None:
+    assert "Barbell Squat" not in _english_titles()
+
+
+def test_wger_leaves_out_a_text_whose_author_is_a_site() -> None:
+    titles = _english_titles()
+
+    assert "Concentration Curl" not in titles
+    assert "Toe Taps" in titles
+
+
+def test_wger_leaves_out_a_text_that_names_another_source() -> None:
+    assert "Fire Hydrant Circles" not in _english_titles()
 
 
 def test_wger_changed_since_its_pin_names_the_new_pin() -> None:

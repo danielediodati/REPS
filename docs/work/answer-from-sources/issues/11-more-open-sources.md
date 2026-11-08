@@ -22,6 +22,7 @@ Researched 2026-11-08 on branches `research/more-open-sources` and `research/ope
 |---|---|---|
 | US Army ATP 7-22.02, *H2F Drills and Exercises* | US government work, public domain | In: chapters 2-5, 9-11, 13-16, pinned by the PDF's SHA-256 |
 | wger, Italian exercise descriptions | CC BY-SA 3.0/4.0, CC BY 4.0 or CC0, per entry | In: the only open Italian technique text; pinned by a hash of what was taken |
+| wger, English exercise descriptions | as above | Out: of six sampled sentences, two are fitnessvolt.com's and one Wikipedia's, none declared; a sample of the Italian found none |
 | More Wikipedia, taken from its categories | CC BY-SA 4.0 | In: 265 pages in all |
 | ATP 7-22.01, FM 7-22 | public domain | Out: test administration and programming, not technique |
 | NHS | OGL plus a no-charge clause | Out: a condition on the repo's users |

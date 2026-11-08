@@ -87,8 +87,21 @@ _WGER_LICENCES = {
 }
 """wger's own names for the licences the corpus accepts; any other wger licence is left out."""
 
-_COPYRIGHTED_SITES = ("bodybuilding.com",)
-"""Sites a wger author may name as where a text came from; such a text is not theirs to license."""
+_SITE = re.compile(r"https?://|www[.]|[.](com|net|org)\b|\bexrx\b", re.IGNORECASE)
+"""An author that is a web site rather than a person: the text is the site's, not theirs to license."""
+
+_OTHER_SOURCE = re.compile(r"\bsource\s*:", re.IGNORECASE)
+"""A description that names where it was taken from, so it is not its author's own."""
+
+_BORROWED_TEXT = (
+    "https://raw.githubusercontent.com/yuhonas/free-exercise-db/"
+    "a859101d633a01c4a1a920d6a8ce41dabba0705f/dist/exercises.json"
+)
+"""bodybuilding.com's exercise steps, as free-exercise-db copied them; read, never kept."""
+
+_PHRASE_WORDS = 8
+_BORROWED_SHARE = 0.2
+"""A wger text whose eight-word phrases are this much bodybuilding.com's was copied from it."""
 
 
 @dataclass(frozen=True)
@@ -128,7 +141,7 @@ class Manifest:
     wikipedia: tuple[Page, ...]
     medlineplus_date: str | None
     medlineplus_topics: tuple[str, ...]
-    wger: Wger | None = None
+    wger: tuple[Wger, ...] = ()
     army: tuple[ArmyPublication, ...] = ()
 
 
@@ -163,8 +176,10 @@ def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
         chunks.extend(_wikipedia(page, get))
     if manifest.medlineplus_date is not None:
         chunks.extend(_medlineplus(manifest.medlineplus_date, manifest.medlineplus_topics, get))
-    if manifest.wger is not None:
-        chunks.extend(_wger(manifest.wger, get))
+    if manifest.wger:
+        borrowed = _borrowed_phrases(get)
+        for pin in manifest.wger:
+            chunks.extend(_wger(pin, get, borrowed))
     for publication in manifest.army:
         chunks.extend(_army(publication, get))
     return chunks
@@ -184,12 +199,10 @@ def read_manifest(directory: Path | None = None) -> Manifest:
                 f"the corpus may hold ({', '.join(sorted(_MANIFEST_KEYS - {'version'}))})"
             )
         medlineplus = data.get("medlineplus", {})
-        wger = data.get("wger")
         return Manifest(
-            wger=(
-                Wger(str(wger["language"]), str(wger["date"]), str(wger["sha256"]))
-                if wger is not None
-                else None
+            wger=tuple(
+                Wger(str(pin["language"]), str(pin["date"]), str(pin["sha256"]))
+                for pin in data.get("wger", [])
             ),
             army=tuple(
                 ArmyPublication(
@@ -285,22 +298,25 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             "",
         ]
         lines.extend(f"- {topic}" for topic in manifest.medlineplus_topics)
-    if manifest.wger is not None:
+    if manifest.wger:
         licences = ", ".join(f"[{name}]({url})" for name, url in WGER.licences.items())
         lines += [
             "",
             "## wger",
             "",
-            f"Licences: each description keeps the licence its author gave it ({licences}). "
-            f"The {manifest.wger.language} exercise descriptions of https://wger.de as taken on "
-            f"{manifest.wger.date} (sha256 `{manifest.wger.sha256}`). Each, with its author and "
-            "licence:",
+            f"Licences: each description keeps the licence its author gave it ({licences}).",
+        ]
+    for pin in manifest.wger:
+        lines += [
+            "",
+            f"The {pin.language} exercise descriptions of https://wger.de as taken on "
+            f"{pin.date} (sha256 `{pin.sha256}`). Each, with its author and licence:",
             "",
         ]
         credited = dict.fromkeys(
             (chunk.title, chunk.author, chunk.licence, chunk.link)
             for chunk in chunks
-            if chunk.source == WGER.name
+            if chunk.source == WGER.name and chunk.language == pin.language
         )
         lines.extend(
             f"- [{title}]({link}), by {author}, {licence}"
@@ -445,7 +461,7 @@ def _cut(
     ]
 
 
-def _wger(pin: Wger, get: Getter) -> list[Chunk]:
+def _wger(pin: Wger, get: Getter, borrowed: set[tuple[str, ...]]) -> list[Chunk]:
     api = "https://wger.de/api/v2"
     licences = {
         entry["id"]: _WGER_LICENCES.get(entry["short_name"].strip())
@@ -467,7 +483,7 @@ def _wger(pin: Wger, get: Getter) -> list[Chunk]:
                 for translation in exercise["translations"]
                 if translation["language"] == languages[pin.language]
                 and licences.get(translation["license"])
-                and _own_text(translation)
+                and _own_text(translation, borrowed)
             )
         url = page["next"]
     taken.sort(key=lambda item: int(str(item[1]["id"])))
@@ -504,15 +520,33 @@ def _wger(pin: Wger, get: Getter) -> list[Chunk]:
     return chunks
 
 
-def _own_text(translation: dict[str, object]) -> bool:
-    """A description that says more than its title, by an author who is not a copyrighted site."""
-    author = str(translation["license_author"]).lower()
-    if any(site in author for site in _COPYRIGHTED_SITES):
+def _own_text(translation: dict[str, object], borrowed: set[tuple[str, ...]]) -> bool:
+    """A description its author wrote, and that says more than its title."""
+    author = str(translation["license_author"])
+    description = str(translation["description"])
+    if ("@" not in author and _SITE.search(author)) or _OTHER_SOURCE.search(description):
         return False
-    words = _clean(re.sub(r"<[^>]+>", " ", str(translation["description"])))
+    phrases = _phrases(description)
+    if phrases and sum(phrase in borrowed for phrase in phrases) >= _BORROWED_SHARE * len(phrases):
+        return False
+    words = _clean(re.sub(r"<[^>]+>", " ", description))
     for word in str(translation["name"]).split():
         words = words.replace(word, " ")
     return len(words.split()) >= 3
+
+
+def _borrowed_phrases(get: Getter) -> set[tuple[str, ...]]:
+    """Every eight-word phrase of bodybuilding.com's exercise steps."""
+    return {
+        phrase
+        for record in json.loads(get(_BORROWED_TEXT))
+        for phrase in _phrases(" ".join(record["instructions"]))
+    }
+
+
+def _phrases(text: str) -> list[tuple[str, ...]]:
+    words = re.findall(r"[a-z0-9']+", re.sub(r"<[^>]+>", " ", text).lower())
+    return [tuple(words[i : i + _PHRASE_WORDS]) for i in range(len(words) - _PHRASE_WORDS + 1)]
 
 
 def pdf_pages(data: bytes) -> list[str]:
