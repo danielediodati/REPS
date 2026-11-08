@@ -3,9 +3,6 @@
 
 version = 1
 
-[free-exercise-db]
-commit = "a859101d633a01c4a1a920d6a8ce41dabba0705f"
-
 [wger]
 language = "it"
 date = "2026-11-08"

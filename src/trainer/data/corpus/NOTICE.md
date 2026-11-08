@@ -300,10 +300,6 @@ Licence: [Public domain (US federal work)](https://medlineplus.gov/about/using/u
 - Hip Injuries and Disorders
 - Foot Injuries and Disorders
 
-## free-exercise-db
-
-Licence: [The Unlicense](https://unlicense.org/), public domain. The `instructions` of every exercise in https://github.com/yuhonas/free-exercise-db at commit `a859101d633a01c4a1a920d6a8ce41dabba0705f`.
-
 ## wger
 
 Licences: each description keeps the licence its author gave it ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)). The it exercise descriptions of https://wger.de as taken on 2026-11-08 (sha256 `ab65be4c822477423c40ff82b67f449e5d6e4f26677d1b01423049a45ff93c09`). Each, with its author and licence:

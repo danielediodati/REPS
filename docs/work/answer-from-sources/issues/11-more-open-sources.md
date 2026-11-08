@@ -29,5 +29,6 @@ Researched 2026-11-08 on branches `research/more-open-sources` and `research/ope
 | Markell and Peterson; Shelton | labelled CC BY 4.0 | Out: Markell is a modified version of Flynn's *Concepts of Fitness and Wellness*, which is CC BY-NC-SA, so the CC BY label does not hold; Shelton derives from Markell |
 | Flynn; Lumen; Titus; mobilesport.ch; Kallipos | NonCommercial | Out |
 | *Introduction to Biomechanics*; Wikibooks; ISS | open | Out: off topic, tiny or wrong |
+| free-exercise-db `instructions` (chosen in [Sources and licences](01-sources-and-licences.md)) | labelled Unlicense | Out: the text is bodybuilding.com's, word for word (its Barbell Squat page as archived on 2013-01-06); upstream admits scraping its images |
 
 No open Italian source on technique exists beyond Wikipedia and wger.

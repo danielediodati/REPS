@@ -21,7 +21,6 @@ from xml.etree import ElementTree
 
 from pypdf import PdfReader
 
-from trainer.engine import catalog
 
 Getter = Callable[[str], bytes]
 
@@ -68,17 +67,17 @@ MEDLINEPLUS = Source(
     "MedlinePlus, National Library of Medicine",
     {"Public domain (US federal work)": "https://medlineplus.gov/about/using/usingcontent/"},
 )
-EXERCISES = Source(
-    "free-exercise-db", "free-exercise-db contributors", {"The Unlicense": "https://unlicense.org/"}
-)
 WGER = Source("wger", "wger contributors", _CC_BY_SA_3 | _CC_BY_SA_4 | _CC_BY_4 | _CC0)
 ARMY = Source(
     "us-army",
     "Headquarters, Department of the Army",
     {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
 )
-SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, EXERCISES, WGER, ARMY)}
+SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY)}
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
+
+_MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "army"}
+"""What a manifest may name: the sources the corpus may hold, and its version."""
 
 _WGER_LICENCES = {
     "CC-BY-SA 3": "CC BY-SA 3.0",
@@ -129,7 +128,6 @@ class Manifest:
     wikipedia: tuple[Page, ...]
     medlineplus_date: str | None
     medlineplus_topics: tuple[str, ...]
-    exercises_commit: str | None
     wger: Wger | None = None
     army: tuple[ArmyPublication, ...] = ()
 
@@ -165,8 +163,6 @@ def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
         chunks.extend(_wikipedia(page, get))
     if manifest.medlineplus_date is not None:
         chunks.extend(_medlineplus(manifest.medlineplus_date, manifest.medlineplus_topics, get))
-    if manifest.exercises_commit is not None:
-        chunks.extend(_exercises(manifest.exercises_commit))
     if manifest.wger is not None:
         chunks.extend(_wger(manifest.wger, get))
     for publication in manifest.army:
@@ -181,6 +177,12 @@ def read_manifest(directory: Path | None = None) -> Manifest:
         raise CorpusError(f"no corpus manifest at {path}; the corpus ships with one in the repo")
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
+        unknown = sorted(set(data) - _MANIFEST_KEYS)
+        if unknown:
+            raise CorpusError(
+                f"the corpus manifest {path} names {', '.join(unknown)}, which is not a source "
+                f"the corpus may hold ({', '.join(sorted(_MANIFEST_KEYS - {'version'}))})"
+            )
         medlineplus = data.get("medlineplus", {})
         wger = data.get("wger")
         return Manifest(
@@ -206,7 +208,6 @@ def read_manifest(directory: Path | None = None) -> Manifest:
             ),
             medlineplus_date=medlineplus.get("date"),
             medlineplus_topics=tuple(medlineplus.get("topics", ())),
-            exercises_commit=data.get("free-exercise-db", {}).get("commit"),
         )
     except (tomllib.TOMLDecodeError, KeyError, TypeError, ValueError) as error:
         raise CorpusError(f"the corpus manifest {path} is unusable: {error}") from error
@@ -284,15 +285,6 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             "",
         ]
         lines.extend(f"- {topic}" for topic in manifest.medlineplus_topics)
-    if manifest.exercises_commit is not None:
-        lines += [
-            "",
-            "## free-exercise-db",
-            "",
-            f"Licence: [{EXERCISES.licence}]({EXERCISES.licence_url}), public domain. "
-            "The `instructions` of every exercise in https://github.com/yuhonas/free-exercise-db "
-            f"at commit `{manifest.exercises_commit}`.",
-        ]
     if manifest.wger is not None:
         licences = ", ".join(f"[{name}]({url})" for name, url in WGER.licences.items())
         lines += [
@@ -359,42 +351,6 @@ def http_get(url: str) -> bytes:
                 f"{url} could not be reached ({error.reason}); check the connection"
             ) from error
     raise AssertionError("unreachable")
-
-
-def vendored_exercises_commit() -> str:
-    """The upstream commit the vendored free-exercise-db was copied from."""
-    provenance = (catalog.DATASET_DIRECTORY / "PROVENANCE.md").read_text(encoding="utf-8")
-    found = re.search(r"\| commit \| `([0-9a-f]{40})` \|", provenance)
-    if found is None:
-        raise CorpusError("free-exercise-db's PROVENANCE.md names no commit")
-    return found.group(1)
-
-
-def _exercises(commit: str) -> list[Chunk]:
-    vendored = vendored_exercises_commit()
-    if commit != vendored:
-        raise CorpusError(
-            f"the manifest pins free-exercise-db at {commit}, but the vendored copy is "
-            f"{vendored}; pin the vendored commit"
-        )
-    chunks = []
-    for exercise in sorted(catalog.load(), key=lambda e: e.id):
-        link = (
-            f"https://github.com/yuhonas/free-exercise-db/blob/{commit}/exercises/{exercise.id}.json"
-        )
-        paragraphs = [_clean(step) for step in exercise.instructions if _clean(step)]
-        chunks.extend(
-            _cut(
-                EXERCISES,
-                "en",
-                exercise.name,
-                exercise.id,
-                commit,
-                [("", "", paragraphs)],
-                lambda _: link,
-            )
-        )
-    return chunks
 
 
 def _medlineplus(date: str, topics: tuple[str, ...], get: Getter) -> list[Chunk]:

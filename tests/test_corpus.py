@@ -54,7 +54,6 @@ def _manifest(**overrides: object) -> corpus.Manifest:
         "wikipedia": (corpus.Page("en", "Squat (exercise)", 1383893983),),
         "medlineplus_date": None,
         "medlineplus_topics": (),
-        "exercises_commit": None,
     }
     fields.update(overrides)
     return corpus.Manifest(**fields)  # type: ignore[arg-type]
@@ -167,31 +166,12 @@ def test_a_medlineplus_file_no_longer_published_names_the_fix() -> None:
         corpus.fetch(manifest, gone)
 
 
-def test_free_exercise_db_instructions_come_from_the_vendored_commit() -> None:
-    manifest = _manifest(wikipedia=(), exercises_commit=corpus.vendored_exercises_commit())
-
-    squat = next(
-        c for c in corpus.fetch(manifest, _getter({})) if c.title == "Barbell Squat"
-    )
-    assert squat.source == "free-exercise-db"
-    assert squat.language == "en"
-    assert squat.licence == "The Unlicense"
-    assert squat.link == (
-        "https://github.com/yuhonas/free-exercise-db/blob/"
-        f"{manifest.exercises_commit}/exercises/Barbell_Squat.json"
-    )
-    assert squat.text.startswith("This exercise is best performed inside a squat rack")
-
-
 MANIFEST_TOML = """\
 version = 3
 
 [medlineplus]
 date = "2026-11-07"
 topics = ["Sprains and Strains"]
-
-[free-exercise-db]
-commit = "a859101d633a01c4a1a920d6a8ce41dabba0705f"
 
 [wger]
 language = "it"
@@ -230,7 +210,6 @@ def test_the_manifest_names_the_version_and_the_pinned_list(tmp_path: Path) -> N
         ),
         medlineplus_date="2026-11-07",
         medlineplus_topics=("Sprains and Strains",),
-        exercises_commit="a859101d633a01c4a1a920d6a8ce41dabba0705f",
         wger=corpus.Wger("it", "2026-11-08", "abc"),
         army=(
             corpus.ArmyPublication(
@@ -296,7 +275,6 @@ def test_the_notice_names_each_licence_and_every_pinned_page(tmp_path: Path) -> 
 
     for licence in (
         "CC BY-SA 4.0",
-        "The Unlicense",
         "Public domain (US federal work)",
         "Public domain (US government work)",
     ):
@@ -369,7 +347,7 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
         assert chunk.source in {
-            "wikipedia", "medlineplus", "free-exercise-db", "wger", "us-army"
+            "wikipedia", "medlineplus", "wger", "us-army"
         }, chunk.id
         assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
@@ -405,8 +383,13 @@ def test_the_committed_notice_matches_the_manifest() -> None:
     assert notice == corpus.notice(corpus.read_manifest(), corpus.read_chunks())
 
 
-def test_the_committed_manifest_pins_the_vendored_exercises() -> None:
-    assert corpus.read_manifest().exercises_commit == corpus.vendored_exercises_commit()
+def test_a_manifest_naming_a_source_the_corpus_may_not_hold_is_refused(tmp_path: Path) -> None:
+    (tmp_path / "manifest.toml").write_text(
+        'version = 1\n\n[free-exercise-db]\ncommit = "a859101"\n', encoding="utf-8"
+    )
+
+    with pytest.raises(corpus.CorpusError, match="free-exercise-db"):
+        corpus.read_manifest(tmp_path)
 
 
 WGER_LICENCES = {
@@ -610,10 +593,3 @@ def test_an_army_manual_other_than_the_pinned_file_is_refused(army_pages: str) -
 
     with pytest.raises(corpus.CorpusError, match="not the pinned file"):
         corpus.fetch(_army_manifest(army_pages), get)
-
-
-def test_a_commit_other_than_the_vendored_one_is_refused() -> None:
-    manifest = _manifest(wikipedia=(), exercises_commit="0" * 40)
-
-    with pytest.raises(corpus.CorpusError, match="vendored"):
-        corpus.fetch(manifest, _getter({}))

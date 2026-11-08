@@ -8,7 +8,7 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Blocked by:** None (can start immediately).
 
-- [ ] Sources: English and Italian Wikipedia pages on technique and prevention, free-exercise-db `instructions`, NLM-written MedlinePlus summaries
+- [ ] Sources: English and Italian Wikipedia pages on technique and prevention, US Army ATP 7-22.02, wger's Italian descriptions ([more open sources](../../answer-from-sources/issues/11-more-open-sources.md)), NLM-written MedlinePlus summaries
 - [ ] No OpenStax, WHO, ExRx, NSCA, Mayo Clinic or A.D.A.M. text
 - [ ] Every Wikipedia page is fetched at its pinned revision; a second fetch of the same list yields the same chunks
 - [ ] The manifest names the corpus version and the pinned list

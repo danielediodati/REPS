@@ -10,7 +10,7 @@ The owner asks the bot how to perform an exercise or how to avoid getting hurt, 
 
 ## Solution
 
-The entrance gets a tool that searches a corpus of openly licensed texts (English and Italian Wikipedia pinned by revision, free-exercise-db's instructions, MedlinePlus). It answers briefly, quotes the passage it stands on verbatim under a link to the pinned revision, and replies *not covered* when the corpus does not hold the answer. A current pain still goes to triage. Embeddings run on the owner's Ollama and the index in a Qdrant server the owner starts (ADR-0017); either missing is a state, never a crash.
+The entrance gets a tool that searches a corpus of openly licensed texts (English and Italian Wikipedia pinned by revision, the US Army's ATP 7-22.02, wger's Italian exercise descriptions, MedlinePlus). It answers briefly, quotes the passage it stands on verbatim under a link to the pinned revision, and replies *not covered* when the corpus does not hold the answer. A current pain still goes to triage. Embeddings run on the owner's Ollama and the index in a Qdrant server the owner starts (ADR-0017); either missing is a state, never a crash.
 
 A frozen eval set of about 90 rows measures three layers: retrieval in code, faithfulness and relevance by a calibrated judge (ADR-0018), and *not covered* and triage in code.
 
