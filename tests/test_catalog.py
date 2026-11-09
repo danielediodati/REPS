@@ -31,7 +31,6 @@ def record(**overrides: object) -> dict[str, object]:
         "category": "strength",
         "primaryMuscles": ["chest"],
         "secondaryMuscles": ["triceps", "shoulders"],
-        "images": ["Bench_Press/0.jpg", "Bench_Press/1.jpg"],
     }
     base.update(overrides)
     return base
@@ -69,17 +68,10 @@ def test_the_vendored_dataset_keeps_absent_fields_absent() -> None:
     assert not any(exercise.force == "" for exercise in exercises)
 
 
-def test_the_vendored_dataset_carries_only_image_references() -> None:
-    for exercise in catalog.load():
-        for image in exercise.images:
-            assert isinstance(image, str)
-            assert not image.startswith("data:")
-
-
 def test_the_vendored_dataset_carries_no_borrowed_text() -> None:
-    """Upstream's instructions are a copyrighted site's text, so none is kept."""
+    """Upstream's instructions and images were taken from other sites, so neither is kept."""
     records = json.loads(catalog.DATASET_PATH.read_text(encoding="utf-8"))
-    assert not any("instructions" in record for record in records)
+    assert not any("instructions" in record or "images" in record for record in records)
 
 
 def test_a_record_becomes_an_exercise(tmp_path: Path) -> None:
@@ -88,7 +80,6 @@ def test_a_record_becomes_an_exercise(tmp_path: Path) -> None:
     assert loaded.id == "Bench_Press"
     assert loaded.primary_muscles == ("chest",)
     assert loaded.secondary_muscles == ("triceps", "shoulders")
-    assert loaded.images == ("Bench_Press/0.jpg", "Bench_Press/1.jpg")
 
 
 def test_nulls_are_preserved_not_blanked(tmp_path: Path) -> None:
@@ -121,7 +112,7 @@ def test_malformed_json_is_refused(tmp_path: Path) -> None:
         {"level": None},
         {"force": 3},
         {"primaryMuscles": "chest"},
-        {"images": [1, 2]},
+        {"primaryMuscles": [1, 2]},
         {"secondaryMuscles": None},
     ],
     ids=lambda case: str(sorted(case)),
@@ -308,9 +299,9 @@ def test_a_json_object_cannot_be_stored_in_a_list_column(migrated: Path) -> None
                 """
                 INSERT INTO exercises (
                     id, name, force, level, mechanic, equipment, category,
-                    primary_muscles, secondary_muscles, images
+                    primary_muscles, secondary_muscles
                 ) VALUES ('x', 'X', NULL, 'beginner', NULL, NULL, 'strength',
-                          '{"a": 1}', '[]', '[]')
+                          '{"a": 1}', '[]')
                 """
             )
 
@@ -580,9 +571,9 @@ def test_a_filter_that_legitimately_matches_nothing_is_not_an_error(
         ).total == 0
 
 
-@pytest.mark.parametrize("field", ["images", "id", "nonsense"])
+@pytest.mark.parametrize("field", ["id", "nonsense"])
 def test_fields_that_are_not_filters_are_refused(field: str, stocked: Path) -> None:
-    """images are fetched by id, never queried."""
+    """Only the native scalar and list fields are filters."""
     with closing(database.connect(stocked)) as connection:
         with pytest.raises(catalog.CatalogError):
             catalog.search(connection, filters={field: "anything"})

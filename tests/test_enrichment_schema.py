@@ -33,7 +33,6 @@ def exercise(**overrides: object) -> catalog.Exercise:
         "category": "strength",
         "primary_muscles": ("chest",),
         "secondary_muscles": ("triceps",),
-        "images": ("Bench_Press/0.jpg",),
     }
     base.update(overrides)
     return catalog.Exercise(**base)  # type: ignore[arg-type]

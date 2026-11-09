@@ -250,7 +250,6 @@ def _as_record(exercise: catalog.Exercise) -> dict[str, object]:
         "category": exercise.category,
         "primaryMuscles": list(exercise.primary_muscles),
         "secondaryMuscles": list(exercise.secondary_muscles),
-        "images": list(exercise.images),
     }
 
 

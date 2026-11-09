@@ -58,7 +58,6 @@ def exercise(**overrides: object) -> Exercise:
         "category": "strength",
         "primary_muscles": ("abdominals",),
         "secondary_muscles": (),
-        "images": (),
     }
     base.update(overrides)
     return Exercise(**base)  # type: ignore[arg-type]
