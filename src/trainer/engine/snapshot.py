@@ -44,7 +44,6 @@ _COLUMNS = (
     "level",
     "primary muscles",
     "secondary muscles",
-    "images",
     "movement pattern",
     "loaded joints",
     "spinal axial load",
@@ -72,8 +71,6 @@ _PREAMBLE = """\
      lost the next time the command runs. -->
 
 The exercise catalog as it stands in the database, one exercise per row.
-`images` is a count rather than paths: this file is for reading, not a second
-copy of the database. The paths are fetched by id.
 
 {total} exercises, at {schema}.
 """
@@ -102,7 +99,7 @@ def render(connection: sqlite3.Connection) -> str:
     rows = connection.execute(
         """
         SELECT id, name, category, equipment, force, mechanic, level,
-               primary_muscles, secondary_muscles, images,
+               primary_muscles, secondary_muscles,
                movement_pattern, loaded_joints, spinal_axial_load,
                required_stability, setup_cost_min, regression_of, variant_of,
                demo_url
@@ -168,7 +165,6 @@ def _cells(row: sqlite3.Row) -> tuple[str, ...]:
         row["level"],
         _joined(row["primary_muscles"]),
         _joined(row["secondary_muscles"]),
-        str(len(json.loads(row["images"]))),
         row["movement_pattern"] or _ABSENT,
         _joined(row["loaded_joints"]),
         row["spinal_axial_load"] or _ABSENT,

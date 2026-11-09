@@ -45,7 +45,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## Status
 
-**`1.0.0`**: the loop above, recorded. A plan can be answered in words as well as with its buttons, and the chat speaks the language its Telegram app is set to. Session 16, for `1.1.0`, opens next: each exercise of a plan sent with its start and end photos.
+**`1.0.0`**: the loop above, recorded. A plan can be answered in words as well as with its buttons, and the chat speaks the language its Telegram app is set to.
 
 ## What it does
 

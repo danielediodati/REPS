@@ -148,7 +148,6 @@ def make_exercise(**overrides: Any) -> Exercise:
         "category": "strength",
         "primary_muscles": ("shoulders",),
         "secondary_muscles": (),
-        "images": (),
     }
     base.update(overrides)
     return Exercise(**base)
