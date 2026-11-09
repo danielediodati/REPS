@@ -16,7 +16,7 @@ from click.testing import CliRunner
 
 from langchain_core.messages import AIMessage
 
-from trainer import __version__, cli
+from trainer import __version__, cli, retrieval
 from trainer.cli import main
 from trainer.coach import models
 from trainer.engine import (
@@ -3601,6 +3601,10 @@ def healthy_bot(
         polled.append(declared)
 
     monkeypatch.setattr(bot, "serve", served)
+    from test_retrieval import CHUNKS
+
+    search = retrieval.in_memory(CHUNKS, version=1)
+    monkeypatch.setattr(retrieval, "served", lambda: search)
     return polled
 
 
@@ -3618,6 +3622,28 @@ def test_bot_says_what_it_runs_on_before_it_polls(
     assert "store.sqlite" in result.output, "the memory is kept next to the checkpoints"
     assert result.output.isascii()
     assert [getattr(declared, "owner_id") for declared in healthy_bot] == [6421]
+
+
+def test_bot_starts_with_retrieval_not_ready_and_names_what_is_missing(
+    runner: CliRunner, healthy_bot: list[object]
+) -> None:
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert "sources:     not ready: the corpus is not built" in result.output
+    assert "trainer corpus build" in result.output
+    assert len(healthy_bot) == 1, "the bot still polls"
+
+
+def test_bot_says_the_sources_are_ready_with_their_version(
+    runner: CliRunner, healthy_bot: list[object]
+) -> None:
+    retrieval.served().build()
+
+    result = runner.invoke(main, ["bot"])
+
+    assert result.exit_code == 0, result.output
+    assert "sources:     corpus version 1 on words" in result.output
 
 
 def test_bot_opens_its_log_in_the_home_and_says_where(
@@ -3859,6 +3885,7 @@ def test_bot_starts_on_the_key_and_telegram_alone(
 
     monkeypatch.setattr(Bot, "get_me", known)
     monkeypatch.setattr(bot, "serve", lambda *args: None)
+    monkeypatch.setattr(retrieval, "served", lambda: retrieval.in_memory([], 1))
 
     result = runner.invoke(main, ["bot"])
 

@@ -40,6 +40,7 @@ from trainer import (
     onboarding_evaluation,
     onboarding_set,
     plan,
+    retrieval,
     supervise_evaluation,
     supervise_set,
     tools,
@@ -165,6 +166,9 @@ def reported() -> Iterator[None]:
         # nobody pulled, a backend nobody built. Each already carries its fix.
         raise click.ClickException(str(error)) from error
     except corpus.CorpusError as error:
+        raise click.ClickException(str(error)) from error
+    except retrieval.Unavailable as error:
+        # Ollama, the embedding model, Qdrant or the build: each names its fix.
         raise click.ClickException(str(error)) from error
     except bot.BotError as error:
         # The Telegram settings: a token nobody set, an owner id given as the
@@ -348,7 +352,7 @@ def db_snapshot() -> None:
 
 @main.group("corpus")
 def corpus_group() -> None:
-    """Fetch and cut the texts the entrance answers from."""
+    """Fetch, cut and index the texts the entrance answers from."""
 
 
 @corpus_group.command("fetch")
@@ -369,6 +373,25 @@ def corpus_fetch() -> None:
     texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
     click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {manifest.version}")
     click.echo("written" if changed else "unchanged, nothing to commit")
+
+
+@corpus_group.command("build")
+def corpus_build() -> None:
+    """Embed the committed chunks on Ollama into Qdrant, at the corpus's version."""
+    with reported():
+        search = retrieval.served()
+        click.echo(f"building: {search.described}")
+        tenths: set[int] = set()
+
+        def progress(done: int, total: int) -> None:
+            tenth = done * 10 // total
+            if tenth not in tenths:
+                tenths.add(tenth)
+                click.echo(f"  embedded {done}/{total}")
+
+        search.build(progress)
+        search.check()
+    click.echo(f"built: {len(search.chunks)} passages, corpus version {search.version}")
 
 
 @main.group()
@@ -811,7 +834,9 @@ def bot_command() -> None:
     Each node answers on its own model, all of them on OpenRouter.
 
     Everything the bot needs is checked before it starts: the OpenRouter key
-    and each model's listing, and the token, with Telegram.
+    and each model's listing, and the token, with Telegram. The sources the
+    entrance answers from are checked too, and named when not ready, but the
+    bot starts without them.
 
     What happens then goes to a rotating log in the home, never to the token or
     the owner id, and it is the file the chat names when a run cannot start or
@@ -829,6 +854,12 @@ def bot_command() -> None:
         models.ready_all(cast)
         on = cast["planner"]
         name = bot.identified(declared)
+        # Read, never required: without the sources everything else still works.
+        try:
+            sources = retrieval.served()
+            missing: Exception | None = sources.state()
+        except corpus.CorpusError as unreadable:
+            missing = unreadable
 
         # Opened before the block is printed, not after: a block that says
         # where the checkpoints go, immediately before saying they cannot go
@@ -840,6 +871,10 @@ def bot_command() -> None:
             click.echo(f"entrance:    {cast['entrance'].described}")
             click.echo(f"onboarding:  {cast['onboarding'].described}")
             click.echo(f"supervisor:  {cast['supervisor'].described}")
+            click.echo(
+                f"sources:     not ready: {missing}" if missing
+                else f"sources:     corpus version {sources.version} on {sources.embedder.model}"
+            )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
             click.echo(f"memory:      {conclusions.store_path()}")
             click.echo(f"log:         {log_file}")
