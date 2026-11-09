@@ -6,7 +6,9 @@ Status: ready-for-agent
 
 Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/map.md).
 
-**Blocked by:** 01, 03.
+**Blocked by:** 03.
+
+**Constraint from 01:** `say` escapes the whole line, so a cited reply carries its own markup only through `offer` (text already marked, as `proposal` writes it), never through `say`.
 
 - [ ] A technique question calls the tool, and the reply quotes a returned passage verbatim with its link; the raw URL never shows
 - [ ] The answer is about 150-250 characters
