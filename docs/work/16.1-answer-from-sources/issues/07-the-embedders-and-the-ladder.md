@@ -8,6 +8,8 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Blocked by:** 06.
 
+`CORPUS_EMBEDDER` picks the Ollama model; each embedder's build is its own Qdrant collection, kept beside the others, so the three can be built once and compared. `Search` sends the question as is: an embedder that wants a query instruction (`qwen3-embedding`) needs it added here.
+
 - [ ] The three embedders compared; highest Recall@5 wins, MRR breaks a tie; the corpus is built with the winner
 - [ ] Rungs in order, only while a bar misses: query translation (only if the Italian-on-English rows lag far behind; paid, asked for first), hybrid search, chunk size, local reranker
 - [ ] A rung stays when it raises the missing metric by at least 3 of 60 rows, drops no other bar and keeps retrieval within 2 s at p95 on the laptop; the paired difference is reported with its interval

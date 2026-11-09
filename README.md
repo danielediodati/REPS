@@ -88,6 +88,8 @@ uv run trainer enrich derive && uv run trainer enrich curated
 uv run trainer bot        # the first message starts the interview
 ```
 
+**Sources.** Answers on technique come from a corpus searched on the laptop ([ADR-0017](docs/adr/0017-retrieval-runs-on-the-laptop.md)): [Ollama](https://ollama.com) with `ollama pull bge-m3`, and the [Qdrant](https://github.com/qdrant/qdrant/releases) binary started with `QDRANT__STORAGE__STORAGE_PATH=~/.reps/qdrant`. Then `uv run trainer corpus build` embeds the committed chunks, at $0. The bot starts without them and says what is missing.
+
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, from @BotFather, and `TELEGRAM_OWNER_ID`, the only user it answers, from @userinfobot. It long-polls: no public IP, no tunnel. One chat is one thread, and the conversation survives a restart. Every model is checked before it starts.
 
 ## The command line
@@ -156,6 +158,7 @@ src/trainer/
   coach/      the LangGraph agent: entrance, planner, logger, onboarding and supervisor graphs, the Telegram bot, the run archive
   data/       vendored catalog, muscle-group mapping, methodology.md, variation.md and the answer corpus
   corpus.py   the answer corpus: pinned texts fetched and cut into committed chunks
+  retrieval.py the corpus searched: embedded on Ollama into Qdrant, and the states that stop it
   demo.py     the demo's home
   tools.py    the tool surface, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer
