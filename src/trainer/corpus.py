@@ -43,6 +43,8 @@ class Source:
     author: str
     licences: dict[str, str]
     """Each licence allowed for this source, with the address of its terms."""
+    label: str
+    """The source as a citation names it."""
 
     @property
     def licence(self) -> str:
@@ -61,17 +63,19 @@ _CC_BY_SA_4 = {"CC BY-SA 4.0": "https://creativecommons.org/licenses/by-sa/4.0/"
 _CC_BY_4 = {"CC BY 4.0": "https://creativecommons.org/licenses/by/4.0/"}
 _CC0 = {"CC0 1.0": "https://creativecommons.org/publicdomain/zero/1.0/"}
 
-WIKIPEDIA = Source("wikipedia", "Wikipedia contributors", _CC_BY_SA_4)
+WIKIPEDIA = Source("wikipedia", "Wikipedia contributors", _CC_BY_SA_4, "Wikipedia")
 MEDLINEPLUS = Source(
     "medlineplus",
     "MedlinePlus, National Library of Medicine",
     {"Public domain (US federal work)": "https://medlineplus.gov/about/using/usingcontent/"},
+    "MedlinePlus",
 )
-WGER = Source("wger", "wger contributors", _CC_BY_SA_3 | _CC_BY_SA_4 | _CC_BY_4 | _CC0)
+WGER = Source("wger", "wger contributors", _CC_BY_SA_3 | _CC_BY_SA_4 | _CC_BY_4 | _CC0, "wger")
 ARMY = Source(
     "us-army",
     "Headquarters, Department of the Army",
     {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
+    "US Army",
 )
 SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY)}
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""

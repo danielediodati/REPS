@@ -29,7 +29,7 @@ from langgraph.types import Command
 
 from trainer import log as logs
 from trainer import plan as plans
-from trainer import tools
+from trainer import corpus, tools
 from trainer.coach import (
     conclusions,
     entrance,
@@ -727,6 +727,10 @@ async def _spoken(final: Mapping[str, Any], thread: str, chat: Chat) -> None:
     said = str(final.get("answer", "")).strip()
     if not said:
         logger.warning("the entrance answered %s with nothing", thread)
+    cited = final.get("cited") or []
+    if said and cited:
+        await chat.offer(sourced(said, cited, chat.language), ())
+        return
     await chat.say(said or _said(chat).failed)
 
 
@@ -1556,6 +1560,47 @@ def proposal(
     if reading.note:
         lines.append(NOTE.format(note=marked(reading.note)))
     return "\n".join(lines)
+
+
+QUOTE_OPENS, QUOTE_LINE, QUOTE_CLOSES = "**>", ">", "||"
+"""An expandable blockquote's first-line mark, every other line's, and its end."""
+
+CITATION = "— [{name}]({link})"
+NAMED = "{source}, «{title}»"
+IN_LANGUAGE = "{source} ({language})"
+SECTION = "{named} § {section}"
+
+
+def sourced(answer: str, cited: Sequence[Mapping[str, str]], spoken: language.Language) -> str:
+    """An answer from sources as the chat shows it: the answer, then each quote under a link to its source."""
+    from telegram.helpers import escape_markdown
+
+    def marked(said: str) -> str:
+        return escape_markdown(said, version=2)
+
+    lines = [marked(answer)]
+    for one in cited:
+        quoted = [marked(line) for line in one["quote"].splitlines() or [""]]
+        quoted[-1] += QUOTE_CLOSES
+        lines.append(QUOTE_OPENS + quoted[0])
+        lines.extend(QUOTE_LINE + line for line in quoted[1:])
+        lines.append(
+            CITATION.format(
+                name=marked(_citation_name(one, spoken)),
+                link=escape_markdown(one["link"], version=2, entity_type="text_link"),
+            )
+        )
+    return "\n".join(lines)
+
+
+def _citation_name(one: Mapping[str, str], spoken: language.Language) -> str:
+    """`Wikipedia (en), «Title» § Section`: the language only when it is not the chat's, the section only when there is one."""
+    known = corpus.SOURCES.get(one["source"])
+    source = known.label if known is not None else one["source"]
+    if one["language"] != spoken:
+        source = IN_LANGUAGE.format(source=source, language=one["language"])
+    named = NAMED.format(source=source, title=one["title"])
+    return SECTION.format(named=named, section=one["section"]) if one["section"] else named
 
 
 def _last(last: Any, marked: Callable[[str], str], words: language.PlanLines) -> str:

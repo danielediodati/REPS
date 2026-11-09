@@ -6,7 +6,8 @@ import hashlib
 import math
 import os
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
@@ -403,6 +404,25 @@ def _ollama_host() -> str:
     if not re.search(r":\d+$", host):
         host = f"{host}:{OLLAMA_PORT}"
     return host
+
+
+_installed: Search | None = None
+
+
+@contextmanager
+def installed(search: Search) -> Iterator[Search]:
+    """`search` as the corpus `current` returns, while the block runs."""
+    global _installed
+    before, _installed = _installed, search
+    try:
+        yield search
+    finally:
+        _installed = before
+
+
+def current() -> Search:
+    """The corpus the tools search: the one installed, else the committed corpus served."""
+    return _installed if _installed is not None else served()
 
 
 def served() -> Search:

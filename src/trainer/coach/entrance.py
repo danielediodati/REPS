@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import operator
 import sqlite3
@@ -172,6 +173,41 @@ def turn_down_plan(said: str) -> str:
     """
     raise AssertionError("the graph answers turn_down_plan; nothing calls it")
 
+
+def cite(passage: str, quote: str) -> str:
+    """Quote a passage `search_sources` returned this turn, as your answer's source.
+
+    Call it once for each passage your answer stands on, before you answer.
+    `passage` is the passage's id; `quote` is the sentence or two your answer
+    uses, copied from its text word for word, in its own language, never
+    translated. The quote goes under your answer with a link to its source,
+    so do not repeat it, name the source or write a link yourself.
+
+    The body is never run. The graph answers this call by checking the quote
+    against the passage.
+    """
+    raise AssertionError("the graph answers cite; nothing calls it")
+
+
+SEARCH_SOURCES = tools.search_sources.__name__
+CITE = cite.__name__
+
+CITED, NOT_COVERED, UNAVAILABLE = "cited", "not_covered", "unavailable"
+"""What a turn that searched the sources ended as: `EntranceState.sources`."""
+
+QUOTED = (
+    "Quoted: it goes under your answer with a link to its source. Do not "
+    "repeat it, name the source or write a link."
+)
+
+NOT_RETRIEVED = (
+    "No passage {passage!r} was returned this turn; cite one of: {ids}."
+)
+
+NOT_VERBATIM = (
+    "That quote is not in passage {passage!r} word for word. Copy it exactly "
+    "as it is written there, in its own language, or cite nothing from it."
+)
 
 TODAYS_WORKOUT = todays_workout.__name__
 PLAN_MESOCYCLE = plan_mesocycle.__name__
@@ -381,8 +417,9 @@ TOOLS = (
     "due_workout",
     "search_exercises",
     "compare_variants",
+    "search_sources",
 )
-"""The engine's reads, so a question about training is answered here.
+"""The engine's reads and the sources, so a question about training is answered here.
 
 Named rather than derived by subtraction, for the reason `planner.TOOLS` is.
 `admissible_set`, `remaining_budget` and `allocate` are left out: they are the
@@ -442,6 +479,24 @@ When they want something changed, the question is how long for:
 - **An ache or a pain**, as in «il ginocchio mi tira sugli squat», starts nothing: ask
   them about it, in one question -- where, and doing what.
 
+Answering from your sources:
+
+- They ask how an exercise is done, or how to avoid getting hurt in general,
+  as in «come scendo nello squat?» or «come evito il mal di schiena nello
+  stacco?»: call `search_sources` with their question, in their words. Answer
+  only from the passages it returns, in about 150-250 characters, and `cite`
+  each passage your answer uses before you answer. Never name the source or
+  write a link: both go under your answer.
+- When no passage answers it, say so in two lines and cite nothing: the first
+  that it is not in your texts, the second that they cover how exercises are
+  done and how injuries are prevented.
+- When `search_sources` says the sources are unavailable, say you cannot
+  answer from your sources right now, and go on with the rest.
+- General prevention is a question to answer, never an ache. A pain they have
+  now is not a question for the sources: ask about it as above, with no search
+  and no source. When one message has both, answer and cite the technique,
+  then ask about the pain in a sentence of its own.
+
 Remembering, when `remember` is offered:
 
 - Something lasting they tell you about themselves -- what they like, what
@@ -457,7 +512,8 @@ What you may never do:
 
 - **State a training fact no tool gave you.** Not a load, not a number of
   sets, not how much of a muscle group they have done, not what they trained
-  last. If no tool answered it, say you do not know and offer to look.
+  last, not how an exercise is done. If no tool answered it, say you do not
+  know and offer to look.
 - **Decide which workout is due.** That is the rotation, read off what has been
   performed, and `todays_workout` reads it for you. When they ask for another
   of the cycle's, `adapt_this_workout` takes it.
@@ -465,7 +521,8 @@ What you may never do:
   refused plans you would have accepted.
 - Invent an exercise, an id or a date.
 
-One call per turn is enough. When you have what you need, answer.
+One call per turn is enough, a search and its quotes aside. When you have
+what you need, answer.
 """
 
 RELAYING = """\
@@ -604,6 +661,15 @@ class EntranceState(TypedDict, total=False):
     answer: str
     """What goes into the chat. The model's sentence, never a constant."""
 
+    found: dict[str, dict[str, str]]
+    """The passages `search_sources` returned this run, by id."""
+
+    cited: list[dict[str, str]]
+    """The quotes the answer stands on, each with what it takes to link its source."""
+
+    sources: str
+    """`CITED`, `NOT_COVERED` or `UNAVAILABLE` once a run searched the sources; empty when it did not."""
+
 
 def heard(text: str) -> EntranceState:
     """The input that starts a turn: what the user wrote, onto the thread's own history."""
@@ -630,6 +696,9 @@ def _beginning() -> EntranceState:
         "handoff": "",
         "asked": {},
         "answer": "",
+        "found": {},
+        "cited": [],
+        "sources": "",
     }
 
 
@@ -683,6 +752,7 @@ def build(
     model = on.model
     offered = tools.registered("entrance", TOOLS)
     reads = [{"type": "function", "function": tools.schema(tool)} for tool in offered]
+    reads.append({"type": "function", "function": tools.schema(cite)})
     if store is not None:
         reads.append({"type": "function", "function": tools.schema(conclusions.remember)})
     timed = records.timing(on)
@@ -787,11 +857,16 @@ def build(
                     for call in reply.tool_calls
                 ]
             }
-        answers = [answering(call, state) for call in reply.tool_calls]
-        return {"messages": answers, "spent": spent + len(answers)}
+        kept = _sourcing(state)
+        answers = [answering(call, state, kept) for call in reply.tool_calls]
+        return {"messages": answers, "spent": spent + len(answers), **kept}
 
-    def answering(call: ToolCall, state: EntranceState) -> ToolMessage:
-        """A call that is not a handoff: a conclusion to keep, or an engine read."""
+    def answering(call: ToolCall, state: EntranceState, kept: dict[str, Any]) -> ToolMessage:
+        """A call that is not a handoff: a search, a quote, a conclusion to keep, or an engine read."""
+        if call["name"] == CITE:
+            return _cited(call, kept)
+        if call["name"] == SEARCH_SOURCES:
+            return _searched(call, offered, kept)
         if call["name"] != conclusions.REMEMBER or store is None:
             return _answer(call, offered)
         said, refused = conclusions.kept(
@@ -821,6 +896,7 @@ def build(
         asked: dict[str, Any] = {}
         answers: list[AnyMessage] = []
         spent = 0
+        kept = _sourcing(state)
 
         def waiting() -> bool:
             return on_thread(prepared)
@@ -839,7 +915,7 @@ def build(
             name = call["name"]
             if name not in HANDED:
                 spent += 1
-                answers.append(answering(call, state))
+                answers.append(answering(call, state, kept))
                 continue
             if taken:
                 said = ONE_AT_A_TIME
@@ -871,6 +947,7 @@ def build(
             "handoff": taken,
             "asked": asked,
             "spent": state.get("spent", 0) + spent,
+            **kept,
         }
 
     def answer(state: EntranceState) -> dict[str, Any]:
@@ -991,6 +1068,58 @@ def _answer(
         name=call["name"],
         status="error" if result.failed else "success",
     )
+
+
+CITING = ("source", "language", "title", "section", "link")
+"""What a quote carries of its passage: enough to name and link the source."""
+
+
+def _sourcing(state: EntranceState) -> dict[str, Any]:
+    """This run's passages, quotes and outcome so far, as a node updates them."""
+    return {
+        "found": dict(state.get("found", {})),
+        "cited": list(state.get("cited", [])),
+        "sources": state.get("sources", ""),
+    }
+
+
+def _searched(
+    call: ToolCall, offered: Sequence[Callable[..., Any]], kept: dict[str, Any]
+) -> ToolMessage:
+    """A search run, its passages kept for `cite` to check a quote against."""
+    message = _answer(call, offered)
+    if message.status == "error":
+        if not kept["sources"]:
+            kept["sources"] = UNAVAILABLE
+        return message
+    for passage in json.loads(message.text)["passages"]:
+        kept["found"][passage["id"]] = passage
+    if kept["sources"] != CITED:
+        kept["sources"] = NOT_COVERED
+    return message
+
+
+def _cited(call: ToolCall, kept: dict[str, Any]) -> ToolMessage:
+    """A quote kept when it is word for word in a passage returned this run, refused otherwise."""
+    passage = str(call["args"].get("passage", ""))
+    quote = str(call["args"].get("quote", "")).strip().strip("\"'“”«»")
+    found = kept["found"].get(passage)
+    if found is None:
+        said = NOT_RETRIEVED.format(passage=passage, ids=", ".join(kept["found"]) or "none")
+    elif not quote or _spaced(quote) not in _spaced(found["text"]):
+        said = NOT_VERBATIM.format(passage=passage)
+    else:
+        quoted = {"quote": quote, **{key: found[key] for key in CITING}}
+        if quoted not in kept["cited"]:
+            kept["cited"].append(quoted)
+        kept["sources"] = CITED
+        return ToolMessage(QUOTED, tool_call_id=answered(call), name=CITE)
+    return ToolMessage(said, tool_call_id=answered(call), name=CITE, status="error")
+
+
+def _spaced(text: str) -> str:
+    """Text with every run of whitespace one space, so a quote across a line break still matches."""
+    return " ".join(text.split())
 
 
 def studio() -> Entrance:

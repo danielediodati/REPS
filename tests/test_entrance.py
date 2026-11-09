@@ -25,7 +25,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from conftest import enrich
 from test_planner import CATALOG, LEGS_AND_SHOULDERS, PATTERNS, Scripted, calling
-from trainer import tools
+from trainer import corpus, retrieval, tools
 from trainer.coach import entrance, language, models
 from trainer.coach import record as records
 from trainer.engine import catalog, database, duration, mesocycles, migrations, workouts
@@ -733,3 +733,178 @@ def test_a_tool_call_written_as_text_twice_is_no_answer(connection: sqlite3.Conn
 
     assert final["answer"] == ""
     assert all(WRITTEN_CALL not in message.text for message in final["messages"])
+
+
+# -- answering from sources ----------------------------------------------------
+
+SQUAT_FORM = "Squat with the heels down and the trunk braced as the hips descend."
+
+
+def _passage(source: str, language: str, title: str, section: str, text: str) -> corpus.Chunk:
+    return corpus.Chunk(
+        id=f"{source}/{language}/{title}/{section}",
+        source=source,
+        language=language,
+        title=title,
+        section=section,
+        revision="7",
+        link=f"https://{language}.example.org/{title}?oldid=7",
+        licence="CC BY-SA 4.0",
+        author="contributors",
+        text=text,
+    )
+
+
+PASSAGES = [
+    _passage("wikipedia", "en", "Squat (exercise)", "Form", SQUAT_FORM),
+    _passage("wikipedia", "it", "Stacco da terra", "", "Lo stacco solleva il bilanciere da terra con la schiena neutra."),
+    _passage("wger", "it", "Plank", "", "Tieni il tronco rigido su avambracci e punte dei piedi."),
+]
+SQUAT = PASSAGES[0].id
+
+
+@pytest.fixture()
+def sources() -> Iterator[retrieval.Search]:
+    """The in-memory corpus, built, as the tools search it."""
+    search = retrieval.in_memory(PASSAGES, version=1)
+    search.build()
+    with retrieval.installed(search):
+        yield search
+
+
+def test_a_technique_question_is_answered_with_the_passage_it_quotes(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="come scendo nello squat?"),
+            calling(entrance.CITE, passage=SQUAT, quote="the trunk braced as the hips descend"),
+            says("Talloni a terra e tronco rigido mentre scendi."),
+        ]
+    )
+
+    final = graph_of(model).invoke(entrance.heard("come scendo nello squat?"))
+
+    assert final["answer"] == "Talloni a terra e tronco rigido mentre scendi."
+    assert final["cited"] == [
+        {
+            "quote": "the trunk braced as the hips descend",
+            "source": "wikipedia",
+            "language": "en",
+            "title": "Squat (exercise)",
+            "section": "Form",
+            "link": "https://en.example.org/Squat (exercise)?oldid=7",
+        }
+    ]
+    assert final["sources"] == entrance.CITED
+    found = told_by(final)[0]
+    assert SQUAT_FORM in found and "oldid=7" in found
+
+
+def test_a_quote_not_word_for_word_in_the_passage_is_refused(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    """An invented citation is a bug: it goes back to the model, never under the answer."""
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="squat"),
+            calling(entrance.CITE, passage=SQUAT, quote="keep the trunk braced while descending"),
+            says("Tronco rigido."),
+        ]
+    )
+
+    final = graph_of(model).invoke(entrance.heard("come faccio lo squat?"))
+
+    assert told_by(final)[1] == entrance.NOT_VERBATIM.format(passage=SQUAT)
+    assert final["cited"] == []
+    assert final["sources"] == entrance.NOT_COVERED
+
+
+def test_a_quote_across_a_line_break_is_still_word_for_word(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="squat"),
+            calling(entrance.CITE, passage=SQUAT, quote="«the trunk braced\nas the hips descend»"),
+            says("Tronco rigido."),
+        ]
+    )
+
+    final = graph_of(model).invoke(entrance.heard("come faccio lo squat?"))
+
+    assert [one["quote"] for one in final["cited"]] == ["the trunk braced\nas the hips descend"]
+
+
+def test_nothing_fitting_is_answered_not_covered_with_no_source(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="creatina monoidrato o HCL?"),
+            says("Non è nei miei testi.\nCopro come si eseguono gli esercizi e come prevenire gli infortuni."),
+        ]
+    )
+
+    final = graph_of(model).invoke(entrance.heard("meglio la creatina monoidrato o la HCL?"))
+
+    assert final["cited"] == []
+    assert final["sources"] == entrance.NOT_COVERED
+
+
+def test_sources_that_are_down_are_said_and_the_conversation_goes_on(
+    connection: sqlite3.Connection,
+) -> None:
+    """Qdrant gone mid-session: the tool says so, and the turn still ends in words."""
+    down = retrieval.Search(retrieval.Words(), Down(), 1, PASSAGES)
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="squat"),
+            says("Ora non riesco a rispondere dalle mie fonti."),
+        ]
+    )
+
+    with retrieval.installed(down):
+        final = graph_of(model).invoke(entrance.heard("come faccio lo squat?"))
+
+    assert told_by(final)[0].startswith("the sources are unavailable: Qdrant does not answer")
+    assert final["sources"] == entrance.UNAVAILABLE
+    assert final["answer"] == "Ora non riesco a rispondere dalle mie fonti."
+
+
+class Down(retrieval.Memory):
+    """A store whose server has gone away."""
+
+    def nearest(self, name: str, vector: Any, top: int) -> Any:
+        raise retrieval.QdrantDown("Qdrant does not answer at nowhere; start it")
+
+
+def test_only_a_passage_returned_this_turn_can_be_cited(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    """A passage from an earlier turn is not what this answer was searched on."""
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="squat"),
+            says("Talloni a terra."),
+            calling(entrance.CITE, passage=SQUAT, quote="the heels down"),
+            says("Talloni a terra."),
+        ]
+    )
+    graph = graph_of(model, checkpointer=InMemorySaver())
+
+    graph.invoke(entrance.heard("squat?"), ON_A_THREAD)
+    final = graph.invoke(entrance.heard("e i talloni?"), ON_A_THREAD)
+
+    assert told_by(final)[-1] == entrance.NOT_RETRIEVED.format(passage=SQUAT, ids="none")
+    assert final["cited"] == [] and final["sources"] == ""
+
+
+def test_the_prompt_keeps_a_current_pain_for_triage_and_answers_prevention() -> None:
+    """Which message is which is the model's to read; what it is told is fixed here."""
+    told = " ".join(entrance.TALKING.split())
+    assert entrance.SEARCH_SOURCES in told and entrance.CITE in told
+    assert "150-250 characters" in told
+    assert "two lines" in told
+    assert "never an ache" in told
+    assert "a sentence of its own" in told

@@ -3433,3 +3433,57 @@ def test_a_tool_call_written_as_text_never_reaches_the_chat() -> None:
 
     assert once.said == [SAYS]
     assert twice.said == [SAID.chat.failed]
+
+
+# -- an answer from sources ----------------------------------------------------
+
+QUOTED_SQUAT = {
+    "quote": "the trunk braced\nas the hips descend.",
+    "source": "wikipedia",
+    "language": "en",
+    "title": "Squat (exercise)",
+    "section": "Form",
+    "link": "https://en.wikipedia.org/w/index.php?title=Squat_(exercise)&oldid=7",
+}
+QUOTED_PLANK = {
+    "quote": "Tieni il tronco rigido.",
+    "source": "wger",
+    "language": "it",
+    "title": "Plank",
+    "section": "",
+    "link": "https://wger.de/exercise/1",
+}
+
+
+def test_a_cited_answer_quotes_each_passage_under_a_named_link() -> None:
+    """The answer first, each quote in an expandable blockquote, the source a text
+    link named for it; the language shown only when it is not the chat's."""
+    text = bot.sourced("Tronco rigido. Sì!", [QUOTED_SQUAT, QUOTED_PLANK], language.ITALIAN)
+
+    assert text == (
+        "Tronco rigido\. Sì\!\n"
+        "**>the trunk braced\n"
+        ">as the hips descend\.||\n"
+        "— [Wikipedia \(en\), «Squat \(exercise\)» § Form]"
+        "(https://en.wikipedia.org/w/index.php?title=Squat_(exercise\)&oldid=7)\n"
+        "**>Tieni il tronco rigido\.||\n"
+        "— [wger, «Plank»](https://wger.de/exercise/1)"
+    )
+
+
+def test_a_source_is_named_from_its_chunk() -> None:
+    army = {**QUOTED_PLANK, "source": "us-army", "language": "en", "title": "ATP 7-22.02", "section": "Chapter 3"}
+
+    text = bot.sourced("Ok.", [army], language.ENGLISH)
+
+    assert "[US Army, «ATP 7\-22\.02» § Chapter 3]" in text
+
+
+def test_a_cited_answer_goes_out_with_its_markup_and_an_uncited_one_escaped_whole() -> None:
+    watched = Channels()
+
+    asyncio.run(finished(bot._spoken({"answer": "Sì.", "cited": [QUOTED_PLANK]}, "t", watched.chat)))
+    asyncio.run(finished(bot._spoken({"answer": "Non è nei miei testi.\nCopro tecnica.", "cited": []}, "t", watched.chat)))
+
+    assert watched.offers == [(bot.sourced("Sì.", [QUOTED_PLANK], language.ITALIAN), [])]
+    assert watched.said == ["Non è nei miei testi.\nCopro tecnica."]
