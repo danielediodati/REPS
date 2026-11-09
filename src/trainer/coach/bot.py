@@ -1454,7 +1454,7 @@ WHY = "_{reason}_"
 NOTE = "⚠️ {note}"
 
 PARSE_MODE = "MarkdownV2"
-"""The dialect `proposal` writes and `_offering` sends a plan as."""
+"""The dialect every message to the chat is sent in; only the draft is plain."""
 
 
 def served(found: mesocycles.Today, budget_min: int, spoken: language.Language) -> str:
@@ -1723,8 +1723,15 @@ def chatting(
 
 
 def _saying(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> Say:
+    """One line, escaped whole and sent in the plan's dialect, so it reads as written."""
+    from telegram.helpers import escape_markdown
+
     async def say(line: str) -> None:
-        await context.bot.send_message(chat_id=chat_id, text=line)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=escape_markdown(line, version=2),
+            parse_mode=PARSE_MODE,
+        )
 
     return say
 

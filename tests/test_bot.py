@@ -10,6 +10,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import re
 import sqlite3
 import threading
 import types
@@ -1235,6 +1236,11 @@ def update_of(
     return Update(update_id=1, message=message)
 
 
+def unescaped(marked: str) -> str:
+    """A MarkdownV2 line with its escaping undone, as the owner sees it."""
+    return re.sub(r"\\(.)", r"\1", marked)
+
+
 class Sent:
     """The context a handler is passed, collecting what would have been sent.
 
@@ -1244,6 +1250,9 @@ class Sent:
 
     def __init__(self) -> None:
         self.lines: list[tuple[int, str]] = []
+        """What the owner reads, the escaping undone."""
+        self.wire: list[str] = []
+        """A line as Telegram receives it."""
         self.offers: list[tuple[int, str, Any]] = []
         self.drafts: list[tuple[int, int, str]] = []
         self.modes: list[str | None] = []
@@ -1260,7 +1269,8 @@ class Sent:
         parse_mode: str | None = None,
     ) -> None:
         if reply_markup is None:
-            self.lines.append((chat_id, text))
+            self.wire.append(text)
+            self.lines.append((chat_id, unescaped(text) if parse_mode == bot.PARSE_MODE else text))
         else:
             self.offers.append((chat_id, text, reply_markup))
         self.modes.append(parse_mode)
@@ -1955,6 +1965,19 @@ def test_a_plan_is_sent_in_the_dialect_it_was_written_in() -> None:
     offer = bot._offering(cast(Any, sent), CHAT)
     asyncio.run(finished(offer("il piano", [("ok|chat:1|abc", "Va bene")])))
 
+    assert sent.modes == [bot.PARSE_MODE]
+
+
+def test_a_line_is_sent_escaped_in_the_plans_dialect() -> None:
+    """A model's sentence full of dots, hyphens and parentheses reaches the
+    owner as written, in the parse mode a cited answer will need."""
+    sent = Sent()
+
+    say = bot._saying(cast(Any, sent), CHAT)
+    asyncio.run(finished(say("3-4 serie (non di più). *Piano*!")))
+
+    assert sent.wire == ["3\\-4 serie \\(non di più\\)\\. \\*Piano\\*\\!"]
+    assert sent.lines == [(CHAT, "3-4 serie (non di più). *Piano*!")]
     assert sent.modes == [bot.PARSE_MODE]
 
 
