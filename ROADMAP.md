@@ -49,7 +49,7 @@ Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 ## Later
 
 **Parked**:
-- exercise photos: a plan in Telegram shows each exercise's start and end photos, the two free-exercise-db has for 873 of 876 exercises; an exercise without photos is sent without; nothing is generated.
+- exercise photos: a plan in Telegram shows each exercise's pictures; an exercise without is sent without; nothing is generated. Not free-exercise-db's, which were taken from other sites; wger's, licensed per image, are the source to check first.
 
 **After 1.0.0**:
 - progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
