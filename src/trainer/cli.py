@@ -29,6 +29,8 @@ from trainer import (
     __version__,
     adapt_evaluation,
     adapt_set,
+    answer_evaluation,
+    answer_set,
     corpus,
     demo,
     eval_runner,
@@ -654,12 +656,13 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
-PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE = (
+PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE, ANSWER_SUITE = (
     "plan",
     "log",
     "onboard",
     "adapt",
     "supervise",
+    "answer",
 )
 """The two measurements, under one command.
 
@@ -681,6 +684,7 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
     ONBOARD_SUITE: lambda _: onboarding_evaluation.Onboard(onboarding_set.load()),
     ADAPT_SUITE: lambda _: adapt_evaluation.Adapt(adapt_set.load()),
     SUPERVISE_SUITE: lambda _: supervise_evaluation.Supervise(supervise_set.load()),
+    ANSWER_SUITE: lambda _: answer_evaluation.Answer(answer_set.load(), retrieval.current()),
 }
 """Each suite, built from its set; a set that cannot be read is refused here, before the provider."""
 
@@ -689,23 +693,23 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
 @click.option(
     "--suite",
     "suite",
-    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE)),
+    type=click.Choice(tuple(SUITES)),
     default=PLAN_SUITE,
     show_default=True,
     help="Which measurement to run: the six planning situations, the "
     "logging set's thirty hand-written reports, the onboarding set's "
-    "scripted users, the adaptation set's requests, or the supervisor's "
-    "histories.",
+    "scripted users, the adaptation set's requests, the supervisor's "
+    "histories, or the answer set's questions.",
 )
 @click.option(
     "--repetitions",
     "repetitions",
     metavar="N",
     type=click.IntRange(min=1),
-    default=eval_runner.REPETITIONS,
-    show_default=True,
+    default=None,
     help="How many times each situation or report runs. A model is a "
-    "distribution, so one run measures nothing.",
+    f"distribution, so one run measures little: {eval_runner.REPETITIONS} by "
+    "default, one for the answer suite, whose rows are many.",
 )
 @click.option(
     "--only",
@@ -733,12 +737,20 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
     show_default=True,
     help="Tool calls each run may make before it is asked to emit anyway.",
 )
+@click.option(
+    "--retrieval-only",
+    "retrieval_only",
+    is_flag=True,
+    help="With --suite answer: search each covered question and report "
+    "Recall@5, MRR and p95 retrieval time, running no chat model, at $0.",
+)
 def eval_command(
     suite: str,
-    repetitions: int,
+    repetitions: int | None,
     only: tuple[str, ...],
     records: Path,
     call_budget: int,
+    retrieval_only: bool,
 ) -> None:
     """Run a measurement against the real model, and check it by code.
 
@@ -766,6 +778,11 @@ def eval_command(
     copy, directs the next mesocycle on the supervisor's model, plans it on the
     planner's, and holds both to the row and to what the direction varies.
 
+    `--suite answer` searches each of the answer set's questions and asks it
+    of the entrance, then holds in code the retrieval, the quotes, the *not
+    covered* reply and the triage boundary. With `--retrieval-only` it runs
+    no chat model at all.
+
     No model judges another model's output in any of them.
 
     **This is the one command in the project that reaches a provider**, and
@@ -776,15 +793,22 @@ def eval_command(
     The plan suite's bar is 100%; the others' are the ones
     their sets declare. The command exits non-zero below any of them.
     """
+    if retrieval_only and suite != ANSWER_SUITE:
+        raise click.UsageError("--retrieval-only measures the answer suite; add --suite answer")
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
             try:
+                built = (
+                    answer_evaluation.Answer(answer_set.load(), retrieval.current(), retrieval_only=True)
+                    if retrieval_only
+                    else SUITES[suite](connection)
+                )
                 lines, report = eval_runner.run(
-                    SUITES[suite](connection),
+                    built,
                     connection,
                     only=only,
-                    repetitions=repetitions,
+                    repetitions=repetitions if repetitions is not None else built.repetitions,
                     records=records,
                     budget=call_budget,
                 )

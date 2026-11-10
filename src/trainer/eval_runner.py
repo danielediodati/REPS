@@ -371,6 +371,9 @@ class Suite(Generic[C, W]):
     what = "case"
     """What a case is called, in the message naming them when one is mistyped."""
 
+    repetitions = REPETITIONS
+    """How many times each case runs when the pass does not say."""
+
     def __init__(self, cases: Sequence[C]) -> None:
         self.cases = tuple(cases)
 
@@ -588,7 +591,28 @@ def _money(report: Report) -> str:
     return f"{spent}, ${report.dollars / priced:.4f} a run, {seconds}"
 
 
-def totals(report: Report, held: str) -> list[str]:
+Z95 = 1.959964
+"""The normal quantile a two-sided 95% interval stands on."""
+
+
+def interval(held: int, total: int) -> tuple[float, float]:
+    """Wilson's 95% interval on `held` of `total`, in percent."""
+    if not total:
+        return (0.0, 100.0)
+    share, z2 = held / total, Z95 * Z95
+    centre = (share + z2 / (2 * total)) / (1 + z2 / total)
+    margin = Z95 * math.sqrt(share * (1 - share) / total + z2 / (4 * total * total)) / (1 + z2 / total)
+    return (100 * max(0.0, centre - margin), 100 * min(1.0, centre + margin))
+
+
+def with_interval(held: int, total: int) -> str:
+    """`held of total -- n% [low%, high%]`, the percentage floored as `totals` floors it. ASCII."""
+    low, high = interval(held, total)
+    floored = math.floor(100 * held / total) if total else 0
+    return f"{held} of {total} -- {floored}% [{low:.0f}%, {high:.0f}%]"
+
+
+def totals(report: Report, held: str, *, intervals: bool = False) -> list[str]:
     """The number, what it cost, and the bar it is measured against.
 
     `held` is what holding meant -- every invariant, or the outcome the row
@@ -616,6 +640,9 @@ def totals(report: Report, held: str) -> list[str]:
             doubled = (
                 "" if part.against == part.total else f" ({part.against} counted)"
             )
+            if intervals:
+                lines.append(f"  {half.name}: {with_interval(part.held, part.against)}, the bar is {half.bar}%")
+                continue
             lines.append(
                 f"  {half.name}: {part.held} of {part.total}{doubled} -- "
                 f"{math.floor(part.percentage)}%, the bar is {half.bar}%"
