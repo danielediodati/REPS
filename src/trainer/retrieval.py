@@ -27,6 +27,9 @@ EMBEDDER = "bge-m3"
 TRANSLATOR_ENV = "CORPUS_TRANSLATOR"
 """The chat model on Ollama that also puts each question into English; unset, none does."""
 
+HYBRID_ENV = "CORPUS_HYBRID"
+"""Set to 1, the corpus is built and searched by its words beside its vectors."""
+
 OLLAMA_HOST_ENV = "OLLAMA_HOST"
 OLLAMA_PORT = 11434
 OLLAMA_HOST = f"http://localhost:{OLLAMA_PORT}"
@@ -112,20 +115,64 @@ class Store(Protocol):
     def count(self, name: str) -> int:
         """How many points a collection holds."""
 
-    def create(self, name: str, size: int) -> None:
-        """An empty collection of vectors of `size`, compared by cosine."""
+    def create(self, name: str, size: int, *, hybrid: bool = False) -> None:
+        """An empty collection of vectors of `size` by cosine; with `hybrid`, words weighted by IDF beside them."""
 
     def drop(self, name: str) -> None:
         """Delete a collection."""
 
-    def add(self, name: str, start: int, vectors: Sequence[Sequence[float]], payloads: Sequence[dict[str, Any]]) -> None:
-        """Store points numbered from `start`."""
+    def add(
+        self,
+        name: str,
+        start: int,
+        vectors: Sequence[Sequence[float]],
+        payloads: Sequence[dict[str, Any]],
+        words: Sequence[Sparse] | None = None,
+    ) -> None:
+        """Store points numbered from `start`, with their words in a hybrid collection."""
 
-    def nearest(self, name: str, vector: Sequence[float], top: int) -> list[tuple[dict[str, Any], float]]:
-        """The `top` payloads nearest to `vector`, nearest first, with their scores."""
+    def nearest(
+        self, name: str, vector: Sequence[float], top: int, words: Sparse | None = None
+    ) -> list[tuple[dict[str, Any], float]]:
+        """The `top` payloads nearest to `vector`, nearest first; with `words`, both rankings fused."""
+
+
+Sparse = dict[int, float]
+"""A text's words, each hashed to an index, with its weight."""
+
+BM25_K1 = 1.2
+BM25_B = 0.75
+PREFETCH = 20
+"""How many passages each ranking hands to the fusion in a hybrid search."""
+RRF_K = 2
+"""Reciprocal rank fusion's constant, Qdrant's default."""
+
+
+def _index(word: str) -> int:
+    return int.from_bytes(hashlib.sha256(word.encode("utf-8")).digest()[:4], "big")
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
+
+
+def passage_words(text: str, average: float) -> Sparse:
+    """A passage's words, each weighted by BM25's saturated term frequency; the IDF is the store's."""
+    found = _words(text)
+    counts: dict[int, int] = {}
+    for word in found:
+        counts[_index(word)] = counts.get(_index(word), 0) + 1
+    norm = BM25_K1 * (1 - BM25_B + BM25_B * len(found) / average) if average else BM25_K1
+    return {index: n * (BM25_K1 + 1) / (n + norm) for index, n in counts.items()}
+
+
+def question_words(text: str) -> Sparse:
+    """A question's words, each once."""
+    return {_index(word): 1.0 for word in _words(text)}
 
 
 _PREFIX = "reps-corpus-"
+_HYBRID = "-hybrid"
 
 
 def _slug(model: str) -> str:
@@ -143,12 +190,14 @@ class Search:
         chunks: Sequence[Chunk],
         *,
         translator: Translator | None = None,
+        hybrid: bool = False,
     ) -> None:
         self.embedder = embedder
         self.store = store
         self.version = version
         self.chunks = chunks
         self.translator = translator
+        self.hybrid = hybrid
 
     @property
     def described(self) -> str:
@@ -161,12 +210,16 @@ class Search:
 
     @property
     def collection(self) -> str:
-        """The collection this embedder's build of this corpus version lives in."""
-        return f"{_PREFIX}{_slug(self.embedder.model)}-v{self.version}"
+        """The collection this embedder's build of this corpus version lives in, dense or hybrid."""
+        return f"{self._stem}-v{self.version}"
+
+    @property
+    def _stem(self) -> str:
+        return _PREFIX + _slug(self.embedder.model) + (_HYBRID if self.hybrid else "")
 
     def _builds(self) -> dict[int, str]:
-        """This embedder's builds in the store, by corpus version."""
-        pattern = re.compile(rf"^{re.escape(_PREFIX + _slug(self.embedder.model))}-v(\d+)$")
+        """This embedder's builds of this kind in the store, by corpus version."""
+        pattern = re.compile(rf"^{re.escape(self._stem)}-v(\d+)$")
         found = {}
         for name in self.store.collections():
             matched = pattern.match(name)
@@ -214,14 +267,16 @@ class Search:
         if self.collection in stale.values():
             self.store.drop(self.collection)
         chunks = self.chunks
+        average = sum(len(_words(chunk.text)) for chunk in chunks) / len(chunks) if chunks else 0.0
         created = False
         for start in range(0, len(chunks), _BATCH):
             batch = chunks[start : start + _BATCH]
             vectors = self.embedder.embed([chunk.text for chunk in batch])
             if not created:
-                self.store.create(self.collection, len(vectors[0]))
+                self.store.create(self.collection, len(vectors[0]), hybrid=self.hybrid)
                 created = True
-            self.store.add(self.collection, start, vectors, [asdict(chunk) for chunk in batch])
+            words = [passage_words(chunk.text, average) for chunk in batch] if self.hybrid else None
+            self.store.add(self.collection, start, vectors, [asdict(chunk) for chunk in batch], words)
             if progress:
                 progress(start + len(batch), len(chunks))
         for version, name in stale.items():
@@ -237,8 +292,10 @@ class Search:
                 asked.append(english)
         instruction = QUERY_INSTRUCTIONS.get(self.embedder.model.split(":")[0], "")
         best: dict[str, Passage] = {}
-        for vector in self.embedder.embed([instruction + one for one in asked]):
-            for payload, score in self.store.nearest(self.collection, vector, top):
+        vectors = self.embedder.embed([instruction + one for one in asked])
+        for one, vector in zip(asked, vectors, strict=True):
+            words = question_words(one) if self.hybrid else None
+            for payload, score in self.store.nearest(self.collection, vector, top, words):
                 passage = Passage(Chunk(**payload), score)
                 if passage.chunk.id not in best or score > best[passage.chunk.id].score:
                     best[passage.chunk.id] = passage
@@ -367,30 +424,64 @@ class Qdrant:
         """How many points a collection holds."""
         return int(self._call("POST", f"/collections/{name}/points/count", {"exact": True}, built=True)["count"])
 
-    def create(self, name: str, size: int) -> None:
-        """An empty collection of vectors of `size`, compared by cosine."""
-        self._call("PUT", f"/collections/{name}", {"vectors": {"size": size, "distance": "Cosine"}})
+    def create(self, name: str, size: int, *, hybrid: bool = False) -> None:
+        """An empty collection of vectors of `size` by cosine; with `hybrid`, named, with words weighted by IDF."""
+        dense = {"size": size, "distance": "Cosine"}
+        body: dict[str, Any] = (
+            {"vectors": {_DENSE: dense}, "sparse_vectors": {_WORDS: {"modifier": "idf"}}} if hybrid else {"vectors": dense}
+        )
+        self._call("PUT", f"/collections/{name}", body)
 
     def drop(self, name: str) -> None:
         """Delete a collection."""
         self._call("DELETE", f"/collections/{name}")
 
-    def add(self, name: str, start: int, vectors: Sequence[Sequence[float]], payloads: Sequence[dict[str, Any]]) -> None:
+    def add(
+        self,
+        name: str,
+        start: int,
+        vectors: Sequence[Sequence[float]],
+        payloads: Sequence[dict[str, Any]],
+        words: Sequence[Sparse] | None = None,
+    ) -> None:
         """Store points numbered from `start`, waiting until they are searchable."""
         points = [
-            {"id": start + offset, "vector": list(vector), "payload": payload}
+            {
+                "id": start + offset,
+                "vector": {_DENSE: list(vector), _WORDS: _sparse(words[offset])} if words else list(vector),
+                "payload": payload,
+            }
             for offset, (vector, payload) in enumerate(zip(vectors, payloads, strict=True))
         ]
         self._call("PUT", f"/collections/{name}/points?wait=true", {"points": points})
 
-    def nearest(self, name: str, vector: Sequence[float], top: int) -> list[tuple[dict[str, Any], float]]:
-        """The `top` payloads nearest to `vector`, nearest first."""
+    def nearest(
+        self, name: str, vector: Sequence[float], top: int, words: Sparse | None = None
+    ) -> list[tuple[dict[str, Any], float]]:
+        """The `top` payloads nearest to `vector`, nearest first; with `words`, fused by reciprocal rank."""
+        body: dict[str, Any] = (
+            {
+                "prefetch": [
+                    {"query": list(vector), "using": _DENSE, "limit": PREFETCH},
+                    {"query": _sparse(words), "using": _WORDS, "limit": PREFETCH},
+                ],
+                "query": {"fusion": "rrf"},
+            }
+            if words is not None
+            else {"query": list(vector)}
+        )
         found = self._call(
-            "POST", f"/collections/{name}/points/query",
-            {"query": list(vector), "limit": top, "with_payload": True},
-            built=True,
+            "POST", f"/collections/{name}/points/query", {**body, "limit": top, "with_payload": True}, built=True
         )
         return [(point["payload"], float(point["score"])) for point in found["points"]]
+
+
+_DENSE = "dense"
+_WORDS = "words"
+
+
+def _sparse(words: Sparse) -> dict[str, list[Any]]:
+    return {"indices": list(words), "values": list(words.values())}
 
 
 class Words:
@@ -421,7 +512,7 @@ class Memory:
     where = "in memory"
 
     def __init__(self) -> None:
-        self._held: dict[str, dict[int, tuple[list[float], dict[str, Any]]]] = {}
+        self._held: dict[str, dict[int, tuple[list[float], dict[str, Any], Sparse]]] = {}
 
     def ready(self) -> None:
         """Always ready."""
@@ -434,7 +525,7 @@ class Memory:
         """How many points a collection holds."""
         return len(self._held[name])
 
-    def create(self, name: str, size: int) -> None:
+    def create(self, name: str, size: int, *, hybrid: bool = False) -> None:
         """An empty collection."""
         self._held[name] = {}
 
@@ -442,17 +533,41 @@ class Memory:
         """Delete a collection."""
         del self._held[name]
 
-    def add(self, name: str, start: int, vectors: Sequence[Sequence[float]], payloads: Sequence[dict[str, Any]]) -> None:
+    def add(
+        self,
+        name: str,
+        start: int,
+        vectors: Sequence[Sequence[float]],
+        payloads: Sequence[dict[str, Any]],
+        words: Sequence[Sparse] | None = None,
+    ) -> None:
         """Store points numbered from `start`."""
         for offset, (vector, payload) in enumerate(zip(vectors, payloads, strict=True)):
-            self._held[name][start + offset] = (list(vector), payload)
+            self._held[name][start + offset] = (list(vector), payload, words[offset] if words else {})
 
-    def nearest(self, name: str, vector: Sequence[float], top: int) -> list[tuple[dict[str, Any], float]]:
-        """The `top` payloads nearest by cosine."""
+    def nearest(
+        self, name: str, vector: Sequence[float], top: int, words: Sparse | None = None
+    ) -> list[tuple[dict[str, Any], float]]:
+        """The `top` payloads nearest by cosine; with `words`, fused by reciprocal rank with BM25 as Qdrant fuses them."""
         if name not in self._held:
             raise NotBuilt("the corpus is not built; run `trainer corpus build`")
-        scored = [(payload, _cosine(vector, held)) for held, payload in self._held[name].values()]
-        return sorted(scored, key=lambda pair: pair[1], reverse=True)[:top]
+        held = list(self._held[name].values())
+        dense = sorted(range(len(held)), key=lambda at: _cosine(vector, held[at][0]), reverse=True)
+        if words is None:
+            return [(held[at][1], _cosine(vector, held[at][0])) for at in dense[:top]]
+        seen = {index: sum(1 for _v, _p, theirs in held if index in theirs) for index in words}
+        idf = {index: math.log(1 + (len(held) - n + 0.5) / (n + 0.5)) for index, n in seen.items()}
+
+        def bm25(at: int) -> float:
+            return sum(weight * held[at][2].get(index, 0.0) * idf[index] for index, weight in words.items())
+
+        sparse = [at for at in sorted(range(len(held)), key=bm25, reverse=True) if bm25(at) > 0]
+        fused: dict[int, float] = {}
+        for ranking in (dense[:PREFETCH], sparse[:PREFETCH]):
+            for rank, at in enumerate(ranking):
+                fused[at] = fused.get(at, 0.0) + 1 / (RRF_K + rank)
+        best = sorted(fused, key=lambda at: fused[at], reverse=True)[:top]
+        return [(held[at][1], fused[at]) for at in best]
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -509,4 +624,5 @@ def served() -> Search:
         corpus.read_manifest().version,
         corpus.read_chunks(),
         translator=OllamaTranslator(translator, _ollama_host()) if translator else None,
+        hybrid=os.environ.get(HYBRID_ENV) == "1",
     )
