@@ -1,0 +1,798 @@
+# The answer suite's set: questions for `trainer eval --suite answer`.
+#
+# - `kind` is what the entrance must do:
+#   - `covered`: answer, quoting a labelled passage;
+#   - `near` (on or near a covered topic) and `off_topic`: the *not covered* reply;
+#   - `pain`: triage, no answer, no source;
+#   - `technique_pain`: the technique answered and cited, the pain to triage in its own sentence;
+#   - `prevention`: answered and cited, never triage.
+# - A passage is labelled by title, revision, section and a verbatim quote, never by how the
+#   index cuts the text. Retrieved text holding the quote is a hit; one hit among a row's
+#   labels is enough.
+# - Written in the owner's voice, in words other than the passage's.
+#
+# Frozen before any model ran. A row is corrected only where it misstates a fact about the
+# corpus, in a commit of its own; every pass names `version`. A pass against a corpus other
+# than `corpus` is refused.
+#
+# The bars, read on the observed score with its 95% interval: `recall` is Recall@5 on the
+# covered rows; `verbatim`, quotes found in the retrieved text; `faithful` and `relevant`, the
+# judge on the covered rows; `not_covered`, rows outside the corpus answered so;
+# `wrongly_not_covered`, covered rows answered so (at most); `triage`, the pain rows.
+
+version = 1
+corpus = 1
+
+[bars]
+recall = 80
+verbatim = 100
+faithful = 90
+relevant = 85
+not_covered = 90
+wrongly_not_covered = 10
+triage = 90
+
+# -- covered, Italian, with an Italian passage ---------------------------------------------
+
+[[cases]]
+name = "squat-knees-inward"
+kind = "covered"
+language = "it"
+question = "Quando scendo nello squat le ginocchia mi si stringono verso dentro: è un errore?"
+passages = [
+  { title = "Squat", revision = "150843803", section = "Errori tipici", quote = "Tutti gli altri errori, oltre a rappresentare delle scorrettezze sul piano tecnico, possono inoltre provocare infortuni anche gravi." },
+]
+
+[[cases]]
+name = "squat-bar-position"
+kind = "covered"
+language = "it"
+question = "Ho le gambe lunghe e le caviglie poco mobili: il bilanciere lo tengo alto sul collo o più giù sulla schiena?"
+passages = [
+  { title = "Squat", revision = "150843803", section = "Squat low-bar", quote = "Lo squat low-bar è da prediligere nei soggetti con femore lungo o con scarsa mobilità di caviglia" },
+]
+
+[[cases]]
+name = "squat-first-variant"
+kind = "covered"
+language = "it"
+question = "Non ho mai fatto accosciate con i pesi: da quale versione parto prima di mettermi il bilanciere sulle spalle?"
+passages = [
+  { title = "Squat", revision = "150843803", section = "Goblet squat", quote = "è un esercizio propedeutico per apprendere lo schema motorio, prima di caricare pesi maggiori col bilanciere" },
+]
+
+[[cases]]
+name = "deadlift-grip-slips"
+kind = "covered"
+language = "it"
+question = "Nello stacco pesante il bilanciere mi scappa dalle dita: come lo devo impugnare?"
+passages = [
+  { title = "Stacco da terra", revision = "152350358", section = "Impugnatura", quote = "La presa mista consente di caricare più peso proprio per il motivo sopracitato." },
+  { title = "Stacco da terra", revision = "152350358", section = "Impugnatura", quote = "L'impugnatura a gancio può rendere più semplice la presa di carichi più pesanti con meno forza di presa" },
+]
+
+[[cases]]
+name = "deadlift-lowering"
+kind = "covered"
+language = "it"
+question = "Quando rimetto giù il bilanciere dopo lo stacco, quando devo cominciare a piegare le gambe?"
+passages = [
+  { title = "Stacco da terra", revision = "152350358", section = "Errori comuni", quote = "Bisogna piegare le ginocchia solo quando il carico le ha oltrepassate durante la discesa." },
+]
+
+[[cases]]
+name = "deadlift-sumo-muscles"
+kind = "covered"
+language = "it"
+question = "Se allargo molto i piedi nello stacco, cosa cambia per i muscoli che lavorano?"
+passages = [
+  { title = "Stacco da terra", revision = "152350358", section = "Variazioni", quote = "il sumo pone maggiore sforzo sui glutei, i muscoli posteriori della coscia, i fianchi, i quadricipiti con un minore impatto sugli erettori spinali e sulla spina dorsale" },
+]
+
+[[cases]]
+name = "bench-shoulder-blades"
+kind = "covered"
+language = "it"
+question = "Alla panca piana cosa devo fare con le scapole per non rovinarmi le spalle?"
+passages = [
+  { title = "Distensioni su panca", revision = "149773765", section = "", quote = "Durante l'esecuzione dell'esercizio le scapole rimangono addotte così da preservare la salute della spalla" },
+]
+
+[[cases]]
+name = "bench-hips-rise"
+kind = "covered"
+language = "it"
+question = "Quando spingo forte alla panca mi si stacca il sedere dalla panca: va bene così?"
+passages = [
+  { title = "Distensioni su panca", revision = "149773765", section = "Esecuzione nel powerlifting", quote = "mantenere la testa, le spalle e le natiche a contatto con la panca" },
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Bench Press Cautions", quote = "Do not jerk the weight, shrug, arch the back, or allow the hips to rise off the bench during the exercise." },
+]
+
+[[cases]]
+name = "pullup-first-one"
+kind = "covered"
+language = "it"
+question = "Alla sbarra non riesco a tirarmi su neanche una volta: come ci arrivo?"
+passages = [
+  { title = "Trazioni alla sbarra", revision = "153249163", section = "Trazioni facilitate", quote = "le trazioni negative, nelle quali si esegue, in modo molto lento e controllato, soltanto la fase eccentrica del movimento" },
+]
+
+[[cases]]
+name = "pullup-joint-friendly-grip"
+kind = "covered"
+language = "it"
+question = "Alla sbarra quale impugnatura stressa meno polsi e gomiti?"
+passages = [
+  { title = "Trazioni alla sbarra", revision = "153249163", section = "Trazioni a presa neutra (neutral grip pull-up)", quote = "sono nettamente più naturali nella presa e quindi molto più sicure a livello articolare" },
+]
+
+[[cases]]
+name = "pullup-adding-weight"
+kind = "covered"
+language = "it"
+question = "Ormai faccio tante trazioni di fila: quando ha senso appendermi dei dischi in vita?"
+passages = [
+  { title = "Trazioni alla sbarra", revision = "153249163", section = "Trazioni zavorrate (con sovraccarico)", quote = "Quando si è in grado di eseguire correttamente parecchie trazioni (in genere almeno 15) a corpo libero, si può iniziare a sovraccaricare il gesto" },
+]
+
+[[cases]]
+name = "dips-where-to-start"
+kind = "covered"
+language = "it"
+question = "Alle parallele non riesco a fare i dip: c'è un modo più facile per cominciare?"
+passages = [
+  { title = "Dip (esercizio)", revision = "152255416", section = "Dip su panca", quote = "Le dip su panca sono suggerite come la prima variante da eseguire per abituarsi al movimento prima di passare alle più difficili dip alle parallele." },
+]
+
+[[cases]]
+name = "leg-press-back"
+kind = "covered"
+language = "it"
+question = "Alla pressa per le gambe con tanto peso, come evito di farmi male alla schiena?"
+passages = [
+  { title = "Leg press", revision = "142476082", section = "Gruppi di muscoli coinvolti", quote = "a patto che il busto rimanga saldamente appoggiato allo schienale per tutto l’arco del movimento" },
+]
+
+[[cases]]
+name = "leg-press-feet-glutes"
+kind = "covered"
+language = "it"
+question = "Alla pressa voglio far lavorare di più il sedere: dove metto i piedi sulla pedana?"
+passages = [
+  { title = "Leg press", revision = "142476082", section = "Gruppi di muscoli coinvolti", quote = "o più verso i glutei (piedi alti)" },
+]
+
+[[cases]]
+name = "plank-harder"
+kind = "covered"
+language = "it"
+question = "Tenere la tavola sugli avambracci ormai mi riesce facile: come la rendo più dura?"
+passages = [
+  { title = "Plank", revision = "2026-11-08", section = "", quote = "Per aumentare la difficoltà, è possibile sollevare un braccio o una gamba durante l'esecuzione di questo esercizio." },
+]
+
+[[cases]]
+name = "warmup-gap"
+kind = "covered"
+language = "it"
+question = "Finito di scaldarmi spesso mi perdo a chiacchierare: quanto posso aspettare prima di cominciare la scheda?"
+passages = [
+  { title = "Riscaldamento (sport)", revision = "149970064", section = "Definizione", quote = "Il tempo tra il riscaldamento e l'inizio dell'allenamento non dovrebbe superare i 15 minuti" },
+]
+
+[[cases]]
+name = "warmup-hot-shower"
+kind = "covered"
+language = "it"
+question = "Una doccia bollente prima di andare in palestra può bastare come riscaldamento?"
+passages = [
+  { title = "Riscaldamento (sport)", revision = "149970064", section = "Definizione", quote = "Quest'ultimo metodo è generalmente meno consigliato perché meno efficace rispetto alla variante attiva." },
+]
+
+[[cases]]
+name = "soreness-when-it-peaks"
+kind = "covered"
+language = "it"
+question = "Quel dolorino ai muscoli che arriva dopo l'allenamento, quando è al massimo e quanto ci mette a sparire?"
+passages = [
+  { title = "Indolenzimento muscolare a insorgenza ritardata", revision = "147628323", section = "", quote = "solitamente raggiunge il picco tra le 24 e le 48 ore a seguito dell'esercizio fisico, e si estingue entro 96 ore" },
+]
+
+[[cases]]
+name = "soreness-or-tear"
+kind = "covered"
+language = "it"
+question = "Come faccio a capire se è il solito indolenzimento dei giorni dopo o se mi sono strappato qualcosa?"
+passages = [
+  { title = "Indolenzimento muscolare a insorgenza ritardata", revision = "147628323", section = "Eziopatogenesi", quote = "riconoscendo che l'esercizio fisico costante è possibile con i DOMS, ma non con lo strappo muscolare" },
+]
+
+[[cases]]
+name = "overtraining-early-sign"
+kind = "covered"
+language = "it"
+question = "Qual è il primo campanello d'allarme che mi sto allenando più di quanto riesco a recuperare?"
+passages = [
+  { title = "Sovrallenamento", revision = "152374918", section = "Fattori fisiologici", quote = "I cambiamenti dell'umore sono un marker precoce e sensibile dell'OTS." },
+]
+
+[[cases]]
+name = "cramp-stop-it"
+kind = "covered"
+language = "it"
+question = "Se a metà serie mi prende un crampo al polpaccio, qual è il modo più rapido per farlo passare?"
+passages = [
+  { title = "Crampo", revision = "148171191", section = "Terapia", quote = "Il metodo più efficace e veloce nel risolvere un episodio di crampi a un muscolo consiste nel contrarre il muscolo antagonista a quello colpito." },
+]
+
+[[cases]]
+name = "rest-for-strength"
+kind = "covered"
+language = "it"
+question = "Voglio diventare più forte, non più grosso: quanto mi fermo tra una serie e l'altra?"
+passages = [
+  { title = "Tempo di recupero", revision = "146778352", section = "Tempi di recupero per la forza massimale", quote = "Viene segnalato che pause di 3-5 minuti tra le serie producono un maggiore incremento della forza massimale" },
+]
+
+[[cases]]
+name = "always-to-failure"
+kind = "covered"
+language = "it"
+question = "Ogni serie la devo portare finché non riesco più a fare neanche una ripetizione?"
+passages = [
+  { title = "Cedimento muscolare", revision = "140147262", section = "Caratteristiche", quote = "la ricerca ha stabilito che il cedimento non sia una strategia sempre valida" },
+]
+
+[[cases]]
+name = "holding-breath"
+kind = "covered"
+language = "it"
+question = "Nello stacco pesante devo trattenere il fiato o respirare durante la salita?"
+passages = [
+  { title = "Stacco da terra", revision = "152350358", section = "Esecuzione", quote = "Prendere un respiro diaframmatico profondo e mantenerlo durante il sollevamento del bilanciere" },
+  { title = "Valsalva maneuver", revision = "1372002675", section = "Strength training", quote = "It is frequently used in powerlifting to stabilize the trunk during exercises such as the squat, deadlift, and bench press" },
+]
+
+# -- covered, Italian, with the passage only in English -------------------------------------
+
+[[cases]]
+name = "face-pull-why"
+kind = "covered"
+language = "it"
+question = "A cosa serve tirare la corda del cavo verso la faccia con i gomiti larghi?"
+passages = [
+  { title = "Face pull (exercise)", revision = "1249899813", section = "", quote = "The face pull is considered an important exercise for shoulder health and stability." },
+]
+
+[[cases]]
+name = "hamstring-protect"
+kind = "covered"
+language = "it"
+question = "Gioco a calcetto e ho paura di farmi male dietro la coscia: c'è un esercizio fatto apposta?"
+passages = [
+  { title = "Nordic hamstring curl", revision = "1339171926", section = "", quote = "It reduces hamstring injuries in athletes, and is commonly used as a form of injury prevention." },
+]
+
+[[cases]]
+name = "nordic-easier"
+kind = "covered"
+language = "it"
+question = "In ginocchio con i piedi bloccati non riesco a scendere piano in avanti: come lo rendo più facile?"
+passages = [
+  { title = "Nordic hamstring curl", revision = "1339171926", section = "", quote = "Assisted versions—such as using resistance bands, elevated pads, or partner support—reduce the eccentric load" },
+]
+
+[[cases]]
+name = "upright-row-shoulders"
+kind = "covered"
+language = "it"
+question = "Tirare il bilanciere su fino al mento è pericoloso per le spalle?"
+passages = [
+  { title = "Upright row", revision = "1360432964", section = "Contraindication", quote = "Abstaining from raising the bar above the chest line will help in avoiding injury or symptoms related to rotator cuff impingement." },
+]
+
+[[cases]]
+name = "belt-what-for"
+kind = "covered"
+language = "it"
+question = "La cintura larga di cuoio che usano in palestra a cosa serve davvero?"
+passages = [
+  { title = "Weightlifting belt", revision = "1369359307", section = "", quote = "it reduces stress on the lower back muscles by allowing the lifter to safely increase intra-abdominal pressure" },
+]
+
+[[cases]]
+name = "squat-spotters"
+kind = "covered"
+language = "it"
+question = "Se nello squat pesante voglio qualcuno pronto ad aiutarmi, quanti ne servono e dove si mettono?"
+passages = [
+  { title = "Spotting (weight training)", revision = "1344121979", section = "Barbell Squat", quote = "Barbell squats should be spotted by two spotters, one at each end of the bar." },
+]
+
+[[cases]]
+name = "foam-roller-when"
+kind = "covered"
+language = "it"
+question = "Il rullo di gommapiuma conviene usarlo prima di allenarmi o dopo?"
+passages = [
+  { title = "Foam roller", revision = "1344188072", section = "", quote = "evidence seems to justify the widespread use of foam rolling as a warm-up activity rather than a recovery tool" },
+]
+
+[[cases]]
+name = "foam-roller-how-long"
+kind = "covered"
+language = "it"
+question = "Per sentire meno i muscoli indolenziti, quanto tempo devo passare sul rullo per ogni muscolo?"
+passages = [
+  { title = "Foam roller", revision = "1344188072", section = "", quote = "90 seconds of foam rolling per muscle group may be the minimum needed to achieve a reduction in muscle pain or soreness in the short term" },
+]
+
+[[cases]]
+name = "row-from-the-floor"
+kind = "covered"
+language = "it"
+question = "Che differenza c'è tra il rematore normale e quello col busto orizzontale che riparte ogni volta da terra?"
+passages = [
+  { title = "Bent-over row", revision = "1379612938", section = "Implements", quote = "the back is parallel to the ground and the weight lifted from the floor" },
+]
+
+[[cases]]
+name = "achilles-keep-safe"
+kind = "covered"
+language = "it"
+question = "Come tengo in salute il tendine dietro la caviglia adesso che sto aggiungendo salti alla scheda?"
+passages = [
+  { title = "Achilles tendinitis", revision = "1363667266", section = "Prevention", quote = "Performing consistent physical activity will improve the elasticity and strength of the tendon" },
+  { title = "Achilles tendinitis", revision = "1363667266", section = "Prevention", quote = "it is important to gradually adapt to exercise" },
+]
+
+[[cases]]
+name = "jumper-knee-risk"
+kind = "covered"
+language = "it"
+question = "Cosa mi espone di più all'infiammazione del tendine sotto la rotula quando faccio tanti salti?"
+passages = [
+  { title = "Patellar tendinitis", revision = "1369701697", section = "Causes", quote = "Risk factors for patellar tendonitis are low ankle dorsiflexion (stiff ankles) and ankle sprains, weak gluteal muscles, and muscle tightness" },
+]
+
+[[cases]]
+name = "ankle-sprain-comeback"
+kind = "covered"
+language = "it"
+question = "Perché dopo una storta alla caviglia è rischioso riprendere a saltare troppo presto?"
+passages = [
+  { title = "Sprained ankle", revision = "1378220647", section = "Cause", quote = "Returning to activity before the ligaments have fully healed may cause them to heal in a stretched position, resulting in less stability at the ankle joint." },
+]
+
+[[cases]]
+name = "bfr-how-tight"
+kind = "covered"
+language = "it"
+question = "Con le fasce che riducono il sangue ai muscoli durante l'allenamento, quanto le devo stringere?"
+passages = [
+  { title = "Blood flow restriction training", revision = "1373670728", section = "Application", quote = "BFR training using 40%–80% of limb occlusion pressure is safe and effective when supervised by experienced practitioners" },
+]
+
+[[cases]]
+name = "comeback-after-a-year"
+kind = "covered"
+language = "it"
+question = "Sono stato fermo un anno: i muscoli che avevo tornano più in fretta di quanto ci ho messo a farli?"
+passages = [
+  { title = "Muscle memory (strength training)", revision = "1369835720", section = "", quote = "a rapid return of muscle mass and strength after long periods of inactivity" },
+]
+
+[[cases]]
+name = "how-to-progress"
+kind = "covered"
+language = "it"
+question = "Per continuare a migliorare cosa devo aumentare nel tempo, solo i chili?"
+passages = [
+  { title = "Progressive overload", revision = "1377742591", section = "Methodology", quote = "Progressive overload requires a gradual increase in volume, intensity, frequency or time in order to achieve the targeted goal of the user." },
+]
+
+[[cases]]
+name = "lunge-step-length"
+kind = "covered"
+language = "it"
+question = "Negli affondi faccio il passo lungo o corto se voglio lavorare di più i glutei?"
+passages = [
+  { title = "Lunge (exercise)", revision = "1354123807", section = "Strength training", quote = "A long lunge emphasizes the use of the gluteals whereas a short lunge emphasizes the quadriceps." },
+]
+
+[[cases]]
+name = "lunge-forward-in-place"
+kind = "covered"
+language = "it"
+question = "Con il bilanciere sulle spalle va bene fare gli affondi in avanti restando sul posto?"
+passages = [
+  { title = "Lunge (exercise)", revision = "1354123807", section = "Strength training", quote = "With resistance training it's not recommended to do forward lunges in place" },
+]
+
+[[cases]]
+name = "bench-breathing"
+kind = "covered"
+language = "it"
+question = "Alla panca quando prendo aria e quando la butto fuori?"
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Bench Press Cautions", quote = "Inhale on the downward movement and exhale on the upward movement." },
+]
+
+[[cases]]
+name = "front-squat-knees-heels"
+kind = "covered"
+language = "it"
+question = "Nello squat col bilanciere davanti sulle clavicole, come devono stare ginocchia e talloni?"
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Front Squat Caution", quote = "The knees stay aligned over the feet and the heels stay on the ground." },
+]
+
+[[cases]]
+name = "bench-spotter-place"
+kind = "covered"
+language = "it"
+question = "Chi mi assiste alla panca dove si deve mettere?"
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Incline Bench", quote = "The spotter stands at the head of the bench in the Straddle Stance position with feet slightly staggered." },
+]
+
+[[cases]]
+name = "sumo-head-position"
+kind = "covered"
+language = "it"
+question = "Nello stacco a gambe larghe dove tengo la testa, alzo lo sguardo?"
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Sumo Deadlift", quote = "Maintain a natural arch in the lower back with the head and neck staying in alignment to avoid extending the neck." },
+]
+
+[[cases]]
+name = "kettlebell-swing-arms"
+kind = "covered"
+language = "it"
+question = "Quando faccio oscillare il kettlebell sento che lo tiro su con le braccia: dove sbaglio?"
+passages = [
+  { title = "Kettlebell swing", revision = "1374560331", section = "Overview", quote = "The key to a good kettlebell swing is effectively thrusting the hips, not bending too much at the knees and sending the weight forwards, as opposed to squatting the weight up, or lifting up with the arms." },
+]
+
+[[cases]]
+name = "max-without-testing"
+kind = "covered"
+language = "it"
+question = "Non ho voglia di provare il carico massimo vero: ha senso ricavarlo da una serie da dieci?"
+passages = [
+  { title = "One-repetition maximum", revision = "1380865315", section = "Estimating 1RM", quote = "Compared to a formal 1RM test, the submaximal estimation method is safer and quicker." },
+]
+
+[[cases]]
+name = "inverted-row-body"
+kind = "covered"
+language = "it"
+question = "Nel rematore a corpo libero sotto una sbarra bassa, come devo tenere il corpo?"
+passages = [
+  { title = "Inverted row", revision = "1339461644", section = "Form", quote = "Good form means that the body is kept straight throughout the movement." },
+]
+
+# -- covered, English -----------------------------------------------------------------------
+
+[[cases]]
+name = "static-stretch-in-warmup"
+kind = "covered"
+language = "en"
+question = "Should I hold long stretches as part of my warm-up before lifting?"
+passages = [
+  { title = "Warming up", revision = "1379958109", section = "Stretching", quote = "But it isn't recommended to do as part of a warmup" },
+  { title = "Stretching", revision = "1376433435", section = "", quote = "an active dynamic warm-up is recommended before exercise in place of static stretching" },
+]
+
+[[cases]]
+name = "bench-setup"
+kind = "covered"
+language = "en"
+question = "What should my shoulders be doing before I start lowering the bar on bench?"
+passages = [
+  { title = "Bench press", revision = "1383894009", section = "Movement", quote = "Before the bar is lowered, the scapulae are depressed and retracted to ensure stability and protect the shoulder joint." },
+]
+
+[[cases]]
+name = "deadlift-coming-down"
+kind = "covered"
+language = "en"
+question = "What's the cue for bringing a deadlift back to the floor?"
+passages = [
+  { title = "Deadlift", revision = "1384115374", section = "Form", quote = "one should simply hinge at the hips and knees to bring the weight down in powerlifting" },
+]
+
+[[cases]]
+name = "deadlift-spine-knees"
+kind = "covered"
+language = "en"
+question = "On the way up in a deadlift, what should my back and knees be doing?"
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Deadlift", quote = "Throughout the lift, do not let the spine or shoulders round forward. Keep knees in line over the feet." },
+]
+
+[[cases]]
+name = "pushup-sagging"
+kind = "covered"
+language = "en"
+question = "My hips sag halfway through a set of push-ups. What is supposed to hold me straight?"
+passages = [
+  { title = "Push-up", revision = "1383581531", section = "Abdominals", quote = "The rectus abdominis and transversus abdominis contract continually while performing push-ups to hold the body off the floor and keep the legs and torso aligned." },
+]
+
+[[cases]]
+name = "max-calculator-accuracy"
+kind = "covered"
+language = "en"
+question = "How far off can those online max calculators be?"
+passages = [
+  { title = "One-repetition maximum", revision = "1380865315", section = "Estimating 1RM", quote = "in other cases the estimate may vary by 10% or more from the actual 1RM" },
+]
+
+[[cases]]
+name = "press-standing-or-seated"
+kind = "covered"
+language = "en"
+question = "Is pressing a barbell overhead harder standing up than sitting down?"
+passages = [
+  { title = "Overhead press", revision = "1356984016", section = "", quote = "standing requires more muscles as more balancing is required in order to support the lift" },
+]
+
+[[cases]]
+name = "strength-days-per-week"
+kind = "covered"
+language = "en"
+question = "As an adult, on how many days a week should I be doing some kind of resistance work?"
+passages = [
+  { title = "How Much Exercise Do I Need?", revision = "2026-11-07", section = "For adults", quote = "Also, do strengthening activities two or more days per week:" },
+]
+
+[[cases]]
+name = "reps-per-movement"
+kind = "covered"
+language = "en"
+question = "When I'm just trying to stay strong, how many times should I repeat each movement?"
+passages = [
+  { title = "How Much Exercise Do I Need?", revision = "2026-11-07", section = "For adults", quote = "For each exercise, try repeating the movement 8 to 12 times." },
+]
+
+[[cases]]
+name = "hook-grip-small-hands"
+kind = "covered"
+language = "en"
+question = "My hands are on the small side. Will wrapping my thumb under my fingers on the bar work for me?"
+passages = [
+  { title = "Hook grip", revision = "1377609977", section = "Disadvantages", quote = "if the thumb cannot reach around the barbell due to the barbell size, the hook grip will be difficult to use" },
+]
+
+[[cases]]
+name = "swing-footwear"
+kind = "covered"
+language = "en"
+question = "What should I wear on my feet for hip-hinge kettlebell swings?"
+passages = [
+  { title = "Kettlebell swing", revision = "1374560331", section = "Types and variations", quote = "a flat sole shoe or barefoot is preferred when performing swings" },
+]
+
+[[cases]]
+name = "upright-row-impingement"
+kind = "covered"
+language = "en"
+question = "Can pulling a bar up to my chin with my arms turned in pinch something in the shoulder?"
+passages = [
+  { title = "Shoulder impingement syndrome", revision = "1379650167", section = "Causes", quote = "Weight training exercises where the arms are elevated above shoulder height but in an internally rotated position such as the upright row have been suggested as a cause of subacromial impingement." },
+]
+
+# -- not covered: on or near a covered topic ------------------------------------------------
+
+[[cases]]
+name = "pallof-press"
+kind = "near"
+language = "it"
+question = "Come si esegue il Pallof press al cavo per gli addominali?"
+
+[[cases]]
+name = "jefferson-curl"
+kind = "near"
+language = "it"
+question = "Il Jefferson curl, arrotolarsi in avanti vertebra per vertebra con un peso in mano, fa bene alla schiena?"
+
+[[cases]]
+name = "massage-gun"
+kind = "near"
+language = "it"
+question = "La pistola massaggiante è meglio del rullo per recuperare tra un allenamento e l'altro?"
+
+[[cases]]
+name = "wendler-531"
+kind = "near"
+language = "it"
+question = "Come funziona il programma 5/3/1 di Wendler per la forza?"
+
+[[cases]]
+name = "skater-squat"
+kind = "near"
+language = "it"
+question = "Come si fa lo skater squat su una gamba sola?"
+
+[[cases]]
+name = "monster-walk"
+kind = "near"
+language = "it"
+question = "Come si fa la camminata laterale con l'elastico intorno alle ginocchia per i glutei?"
+
+[[cases]]
+name = "creatine-dose"
+kind = "near"
+language = "it"
+question = "Quanti grammi di creatina devo prendere al giorno?"
+
+[[cases]]
+name = "turkish-get-up-steps"
+kind = "near"
+language = "it"
+question = "Mi spieghi passo per passo come ci si alza da terra col kettlebell sopra la testa nel Turkish get-up?"
+
+[[cases]]
+name = "hip-airplane"
+kind = "near"
+language = "it"
+question = "Come si fa l'hip airplane per la stabilità dell'anca?"
+
+[[cases]]
+name = "tibialis-raise"
+kind = "near"
+language = "it"
+question = "Come si allenano i muscoli davanti dello stinco sollevando le punte dei piedi contro il muro?"
+
+[[cases]]
+name = "running-shoes-mileage"
+kind = "near"
+language = "it"
+question = "Dopo quanti chilometri devo cambiare le scarpe da corsa?"
+
+[[cases]]
+name = "knee-wraps-tension"
+kind = "near"
+language = "it"
+question = "Le fasce elastiche per le ginocchia nello squat quanto le devo stringere?"
+
+[[cases]]
+name = "dead-hang-seconds"
+kind = "near"
+language = "it"
+question = "Per la salute delle spalle, quanti secondi devo restare appeso alla sbarra senza tirarmi su?"
+
+[[cases]]
+name = "ice-bath-minutes"
+kind = "near"
+language = "it"
+question = "Quanti minuti nel bagno di ghiaccio dopo le gambe per recuperare prima?"
+
+[[cases]]
+name = "gzcl-tiers"
+kind = "near"
+language = "en"
+question = "How does the GZCL method split exercises into tiers?"
+
+[[cases]]
+name = "dead-bug-progression"
+kind = "near"
+language = "en"
+question = "What's a step-by-step progression for the dead bug, from beginner to advanced?"
+
+# -- not covered: off topic -----------------------------------------------------------------
+
+[[cases]]
+name = "dinner-recipe"
+kind = "off_topic"
+language = "it"
+question = "Mi consigli una ricetta veloce per stasera con quello che ho in frigo?"
+
+[[cases]]
+name = "weather"
+kind = "off_topic"
+language = "it"
+question = "Che tempo farà domani pomeriggio a Torino?"
+
+[[cases]]
+name = "novel-author"
+kind = "off_topic"
+language = "it"
+question = "Chi ha scritto I promessi sposi?"
+
+[[cases]]
+name = "passport"
+kind = "off_topic"
+language = "en"
+question = "How do I renew my passport?"
+
+# -- a current pain, alone ------------------------------------------------------------------
+
+[[cases]]
+name = "pain-knee-stairs"
+kind = "pain"
+language = "it"
+question = "Da ieri sera ho una fitta al ginocchio destro ogni volta che scendo le scale."
+
+[[cases]]
+name = "pain-shoulder-morning"
+kind = "pain"
+language = "it"
+question = "Stamattina mi sono svegliato con la spalla sinistra che fa male e non riesco ad alzare il braccio."
+
+[[cases]]
+name = "pain-lower-back"
+kind = "pain"
+language = "en"
+question = "My lower back has been throbbing ever since this morning's deadlifts."
+
+# -- technique plus a current pain ----------------------------------------------------------
+
+[[cases]]
+name = "deadlift-back-and-pain"
+kind = "technique_pain"
+language = "it"
+question = "Come devo tenere la schiena nello stacco? Tra l'altro da due giorni mi fa male in basso a sinistra."
+passages = [
+  { title = "Stacco da terra", revision = "152350358", section = "Esecuzione", quote = "Mantenere la schiena contratta per mantenere la postura corretta durante il movimento." },
+  { title = "Deadlift", revision = "1384115374", section = "Form", quote = "They keep the muscles of the back contracted tightly in order to maintain a neutral spine throughout the motion." },
+]
+
+[[cases]]
+name = "pullup-grip-and-elbow"
+kind = "technique_pain"
+language = "it"
+question = "Che presa uso alla sbarra per non stressare le articolazioni? Ho il gomito destro dolorante da lunedì."
+passages = [
+  { title = "Trazioni alla sbarra", revision = "153249163", section = "Trazioni a presa neutra (neutral grip pull-up)", quote = "sono nettamente più naturali nella presa e quindi molto più sicure a livello articolare" },
+]
+
+[[cases]]
+name = "bench-blades-and-shoulder"
+kind = "technique_pain"
+language = "it"
+question = "Alla panca come sistemo le scapole? Adesso quando abbasso il bilanciere mi fa male la spalla."
+passages = [
+  { title = "Distensioni su panca", revision = "149773765", section = "", quote = "Durante l'esecuzione dell'esercizio le scapole rimangono addotte così da preservare la salute della spalla" },
+  { title = "Bench press", revision = "1383894009", section = "Movement", quote = "Before the bar is lowered, the scapulae are depressed and retracted to ensure stability and protect the shoulder joint." },
+]
+
+[[cases]]
+name = "squat-depth-and-knee"
+kind = "technique_pain"
+language = "en"
+question = "How deep should I go on a front squat? My left knee has been aching since yesterday's session."
+passages = [
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Front Squat Caution", quote = "Progress to deeper squat positions as strength improves." },
+]
+
+# -- general prevention ---------------------------------------------------------------------
+
+[[cases]]
+name = "prevention-in-general"
+kind = "prevention"
+language = "it"
+question = "In generale cosa posso fare per non infortunarmi quando mi alleno?"
+passages = [
+  { title = "Sports Safety", revision = "2026-11-07", section = "", quote = "You can help prevent injuries by:" },
+  { title = "Riscaldamento (sport)", revision = "149970064", section = "Definizione", quote = "Di conseguenza viene ritenuto un metodo indicato per prevenire gli infortuni grazie all'aumento dell'elasticità dei muscoli e tendini." },
+]
+
+[[cases]]
+name = "prevention-cramps"
+kind = "prevention"
+language = "it"
+question = "Negli allenamenti lunghi come evito che mi vengano i crampi?"
+passages = [
+  { title = "Crampo", revision = "148171191", section = "Prevenzione", quote = "Reintegrare i liquidi e i sali minerali durante uno sforzo prolungato" },
+]
+
+[[cases]]
+name = "prevention-starting-out"
+kind = "prevention"
+language = "en"
+question = "I'm new to lifting. How do I keep from getting hurt in the first months?"
+passages = [
+  { title = "Progressive overload", revision = "1377742591", section = "Methodology", quote = "In order to minimize injury and maximize results, a novice should begin at a comfortable level of muscular intensity and advance towards overload of the muscles over the course of an exercise program." },
+]
