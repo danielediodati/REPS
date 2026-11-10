@@ -10,6 +10,8 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Constraint from 04:** the entrance's final state says what the sources came to in `sources` (`cited`, `not_covered`: searched and cited nothing, `unavailable`, or empty when it did not search) and holds each quote with its source, title, section, language and link in `cited`. A quote is already refused in the graph unless it is word for word in a passage that run returned, whitespace aside.
 
+**Constraint from 05:** the set is `docs/answering/eval-set.toml`, read by `trainer.answer_set` (`version`, `corpus`, `bars`, and per row `kind`, `language`, `question`, `passages`). A row's `kind` is `covered`, `near`, `off_topic`, `pain`, `technique_pain` or `prevention`; the *not covered* bar counts `near` and `off_topic`, the triage bar `pain` and `technique_pain`. A label carries no language: the Italian-on-English rows are the Italian `covered` rows whose labels all name English pages, found by joining title and revision with the corpus. `answer_set.found` is the hit test for one label.
+
 - [ ] Recall@5 (bar 80%) and MRR (reported) on the covered rows; a hit is a retrieved chunk containing a labelled quote
 - [ ] Verbatim quote at 100%; the quoted passage is one the row labels
 - [ ] *Not covered* at least 90% on rows outside the corpus; at most 10% of covered rows answered *not covered*
