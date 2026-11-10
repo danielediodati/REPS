@@ -30,6 +30,12 @@ OLLAMA_HOST = f"http://localhost:{OLLAMA_PORT}"
 QDRANT_URL_ENV = "QDRANT_URL"
 QDRANT_URL = "http://localhost:6333"
 
+QUERY_INSTRUCTIONS = {
+    "qwen3-embedding": "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:",
+    "snowflake-arctic-embed2": "query: ",
+}
+"""What each embedder's model card puts before a question, by model name without its tag; passages go bare."""
+
 STORAGE = "qdrant"
 """Qdrant's storage, inside the home."""
 
@@ -197,7 +203,8 @@ class Search:
 
     def search(self, question: str, top: int = TOP) -> list[Passage]:
         """The `top` passages nearest the question, nearest first."""
-        [vector] = self.embedder.embed([question])
+        instruction = QUERY_INSTRUCTIONS.get(self.embedder.model.split(":")[0], "")
+        [vector] = self.embedder.embed([instruction + question])
         return [
             Passage(Chunk(**payload), score)
             for payload, score in self.store.nearest(self.collection, vector, top)

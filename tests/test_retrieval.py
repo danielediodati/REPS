@@ -117,7 +117,7 @@ def _ollama(pulled: list[str]) -> httpx2.MockTransport:
             return httpx2.Response(200, json={"models": [{"name": name} for name in pulled]})
         if request.url.path == "/api/embed":
             asked = json.loads(request.content)
-            if not any(name.split(":")[0] == asked["model"] for name in pulled):
+            if not any(asked["model"] in (name, name.split(":")[0]) for name in pulled):
                 return httpx2.Response(404, json={"error": f"model \"{asked['model']}\" not found"})
             return httpx2.Response(200, json={"embeddings": words.embed(asked["input"])})
         return httpx2.Response(404)
@@ -243,3 +243,45 @@ def test_corpus_build_with_a_server_down_names_the_fix(monkeypatch: pytest.Monke
     assert result.exit_code == 1
     assert "ollama serve" in result.output
     assert "Traceback" not in result.output
+
+
+def _heard(pulled: list[str], inputs: list[list[str]]) -> httpx2.MockTransport:
+    """Ollama as `_ollama`, keeping every input it was asked to embed."""
+    ollama = _ollama(pulled)
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/api/embed":
+            inputs.append(json.loads(request.content)["input"])
+        return ollama.handle_request(request)
+
+    return httpx2.MockTransport(answer)
+
+
+@pytest.mark.parametrize(
+    ("model", "asked"),
+    [
+        ("bge-m3", "squat heels down"),
+        (
+            "qwen3-embedding:0.6b",
+            "Instruct: Given a web search query, retrieve relevant passages that answer the query\n"
+            "Query:squat heels down",
+        ),
+        ("snowflake-arctic-embed2", "query: squat heels down"),
+    ],
+)
+def test_a_question_is_embedded_with_the_instruction_its_embedder_wants_and_passages_without(
+    model: str, asked: str
+) -> None:
+    inputs: list[list[str]] = []
+    search = retrieval.Search(
+        retrieval.Ollama(model, "http://ollama.test", _heard([model if ":" in model else f"{model}:latest"], inputs)),
+        retrieval.Qdrant("http://qdrant.test", httpx2.MockTransport(_FakeQdrant())),
+        version=3,
+        chunks=CHUNKS,
+    )
+    search.build()
+
+    search.search("squat heels down")
+
+    assert inputs[0] == [chunk.text for chunk in CHUNKS]
+    assert inputs[-1] == [asked]

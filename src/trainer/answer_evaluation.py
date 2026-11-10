@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -57,18 +58,43 @@ class Answer(eval_runner.Suite[Case, Fixture]):
     what = "question"
     repetitions = 1
 
-    def __init__(self, held: answer_set.AnswerSet, search: retrieval.Search, *, retrieval_only: bool = False) -> None:
+    def __init__(
+        self,
+        held: answer_set.AnswerSet,
+        search: retrieval.Search,
+        *,
+        retrieval_only: bool = False,
+        against: Path | None = None,
+    ) -> None:
         cases = [case for case in held.cases if case.kind == answer_set.COVERED] if retrieval_only else held.cases
         super().__init__(cases)
         self.held = held
         self.search = search
         self.retrieval_only = retrieval_only
+        self.against = against
         self.retrieved: dict[tuple[str, int], Retrieved] = {}
         self.english = english_pages(search)
         self.revisions = {chunk.id: chunk.revision for chunk in search.chunks}
+        self.records: Path | None = None
+        self.earlier: Ranks | None = None
 
     def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
-        return problems(self.held, self.search)
+        found = problems(self.held, self.search)
+        if self.against is None:
+            return found
+        try:
+            self.earlier = Ranks.read(self.against)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            return (*found, f"no earlier pass to compare with in {self.against} ({error})")
+        then = (self.earlier.set_version, self.earlier.corpus_version)
+        if then != (self.held.version, self.search.version):
+            return (
+                *found,
+                f"the earlier pass ran set version {then[0]} on corpus version {then[1]}, this one "
+                f"set version {self.held.version} on corpus version {self.search.version}; "
+                "rows are compared only on the same set and corpus",
+            )
+        return found
 
     @contextmanager
     def fixture(self, connection: sqlite3.Connection) -> Iterator[Fixture]:
@@ -80,6 +106,8 @@ class Answer(eval_runner.Suite[Case, Fixture]):
         return () if self.retrieval_only else ("entrance",)
 
     def runs(self, where: Fixture, chats: models.Roster, *, records: Path, budget: int) -> eval_runner.Once[Case]:
+        self.records = records
+
         def once(case: Case, attempt: int) -> Sequence[eval_runner.Outcome]:
             recalled = self.recall(case, attempt)
             if self.retrieval_only:
@@ -137,6 +165,45 @@ class Answer(eval_runner.Suite[Case, Fixture]):
 
     def render(self, report: eval_runner.Report, chosen: Sequence[Case]) -> list[str]:
         return render(self, report, chosen)
+
+
+@dataclass(frozen=True)
+class Ranks:
+    """A retrieval pass row by row: each covered row's rank, None for a miss, and what it ran on."""
+
+    set_version: int
+    corpus_version: int
+    described: str
+    ranks: dict[str, int | None]
+
+    @classmethod
+    def read(cls, path: Path) -> Ranks:
+        """The pass kept at `path`."""
+        kept = json.loads(path.read_text(encoding="utf-8"))
+        return cls(
+            int(kept["set_version"]), int(kept["corpus_version"]), str(kept["described"]), dict(kept["ranks"])
+        )
+
+    def write(self, path: Path) -> Path:
+        """Kept at `path`, its folder made."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(asdict(self), indent=1, ensure_ascii=False), encoding="utf-8")
+        return path
+
+
+def compared(now: Ranks, earlier: Ranks) -> list[str]:
+    """Recall row by row against an earlier pass: what each row did in both, and the difference with its interval."""
+    names = [name for name in now.ranks if name in earlier.ranks]
+    pairs = [(now.ranks[name] is not None, earlier.ranks[name] is not None) for name in names]
+    gained, lost = pairs.count((True, False)), pairs.count((False, True))
+    both, neither = pairs.count((True, True)), pairs.count((False, False))
+    low, high = eval_runner.paired_interval(both, gained, lost, neither)
+    points = 100 * (gained - lost) / len(pairs) if pairs else 0.0
+    return [
+        f"against {earlier.described}",
+        f"  {gained} gained, {lost} lost, {both} held by both, {neither} by neither",
+        f"  recall difference: {gained - lost:+d} of {len(pairs)} -- {points:+.0f} points [{low:+.0f}, {high:+.0f}]",
+    ]
 
 
 def english_pages(search: retrieval.Search) -> set[tuple[str, str]]:
@@ -274,8 +341,26 @@ def render(suite: Answer, report: eval_runner.Report, chosen: Sequence[Case]) ->
         answered = _ran(report, {case.name for case in apart})
         lines.append(f"  covered answered: {eval_runner.with_interval(answered.held, answered.total)}")
     lines.append("")
+    if suite.retrieval_only:
+        lines += _kept(suite, covered)
     lines += eval_runner.totals(report, "held what their row declares", intervals=True)
     return lines
+
+
+def _kept(suite: Answer, covered: Sequence[Case]) -> list[str]:
+    """The pass's ranks kept beside its records, then compared with the earlier pass, if one is named."""
+    now = Ranks(
+        suite.held.version,
+        suite.search.version,
+        suite.search.described,
+        {case.name: suite.retrieved[(case.name, 1)].rank if (case.name, 1) in suite.retrieved else None for case in covered},
+    )
+    records = suite.records if suite.records is not None else eval_runner.records_path()
+    lines = []
+    if suite.earlier is not None:
+        lines += [*compared(now, suite.earlier), ""]
+    kept = now.write(records / f"retrieval-{suite.search.collection}.json")
+    return [*lines, f"rows kept in {kept}", ""]
 
 
 def _ran(report: eval_runner.Report, cases: set[str]) -> eval_runner.Report:

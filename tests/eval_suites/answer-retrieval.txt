@@ -13,6 +13,8 @@ italian on english: 1 row, no bar
   recall: 1 of 1 -- 100% [21%, 100%]
   MRR: 1.00
 
+rows kept in <tmp>/records/retrieval-reps-corpus-words-v1.json
+
 2 of 2 runs held what their row declares -- 100%
   recall: 2 of 2 -- 100% [34%, 100%], the bar is 80%
 cost: 0 tool calls, 0 tokens in, 0 out

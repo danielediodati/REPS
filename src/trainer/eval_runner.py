@@ -605,6 +605,28 @@ def interval(held: int, total: int) -> tuple[float, float]:
     return (100 * max(0.0, centre - margin), 100 * min(1.0, centre + margin))
 
 
+def paired_interval(both: int, only_new: int, only_old: int, neither: int) -> tuple[float, float]:
+    """Newcombe's 95% interval (1998, method 10) on the new share held minus the old, in points, rows paired."""
+    total = both + only_new + only_old + neither
+    if not total:
+        return (-100.0, 100.0)
+    new, old = (both + only_new) / total, (both + only_old) / total
+    new_low, new_high = (bound / 100 for bound in interval(both + only_new, total))
+    old_low, old_high = (bound / 100 for bound in interval(both + only_old, total))
+    agreement = float(both * neither - only_new * only_old)
+    if agreement > 0:
+        agreement = max(agreement - total / 2, 0.0)
+    spread = math.sqrt(
+        (both + only_new) * (only_old + neither) * (both + only_old) * (only_new + neither)
+    )
+    phi = agreement / spread if spread else 0.0
+    below, above = new - new_low, new_high - new
+    old_below, old_above = old - old_low, old_high - old
+    lower = math.sqrt(below**2 - 2 * phi * below * old_above + old_above**2)
+    upper = math.sqrt(above**2 - 2 * phi * above * old_below + old_below**2)
+    return (100 * (new - old - lower), 100 * (new - old + upper))
+
+
 def with_interval(held: int, total: int) -> str:
     """`held of total -- n% [low%, high%]`, the percentage floored as `totals` floors it. ASCII."""
     low, high = interval(held, total)

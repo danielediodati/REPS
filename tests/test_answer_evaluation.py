@@ -215,3 +215,82 @@ def test_the_interval_is_wilsons_at_95_percent(held: int, total: int, low: float
     found = eval_runner.interval(held, total)
 
     assert found == pytest.approx((low, high), abs=0.1)
+
+
+@pytest.mark.parametrize(
+    ("both", "only_new", "only_old", "neither", "low", "high"),
+    # Newcombe (1998), Statist. Med. 17:2635, table III, method 10.
+    [
+        (36, 12, 2, 0, 5.69, 34.04),
+        (18, 12, 2, 18, 5.62, 32.90),
+        (35, 14, 0, 1, 14.61, 41.75),
+        (1, 97, 1, 1, 87.36, 98.50),
+        (54, 0, 0, 0, -6.64, 6.64),
+    ],
+)
+def test_the_paired_difference_interval_is_newcombes_hybrid_score(
+    both: int, only_new: int, only_old: int, neither: int, low: float, high: float
+) -> None:
+    found = eval_runner.paired_interval(both, only_new, only_old, neither)
+
+    assert found == pytest.approx((low, high), abs=0.01)
+
+
+class Blind(retrieval.Search):
+    """The same corpus, every search finding only the plank."""
+
+    def search(self, question: str, top: int = retrieval.TOP) -> list[retrieval.Passage]:
+        return [retrieval.Passage(PLANK, 1.0)]
+
+
+def test_a_retrieval_only_pass_is_compared_row_by_row_with_an_earlier_one(
+    runner: CliRunner,  # noqa: F811
+    enriched: Path,  # noqa: F811
+    sources: retrieval.Search,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(models, "chat_for", no_model)
+    with retrieval.installed(Blind(sources.embedder, sources.store, sources.version, sources.chunks)):
+        before = passed(runner, tmp_path, "--retrieval-only")
+    kept = before.output.split("rows kept in ")[1].splitlines()[0].strip()
+    earlier = tmp_path / "earlier.json"
+    Path(kept).replace(earlier)
+
+    result = passed(runner, tmp_path, "--retrieval-only", "--against", str(earlier))
+
+    assert result.exit_code == 0, result.output
+    assert "against words on in memory" in result.output
+    assert "2 gained, 0 lost, 0 held by both, 0 by neither" in result.output
+    assert f"recall difference: +2 of 2 -- {_points(0, 2, 0, 0)}" in result.output
+
+
+def _points(both: int, only_new: int, only_old: int, neither: int) -> str:
+    low, high = eval_runner.paired_interval(both, only_new, only_old, neither)
+    return f"+100 points [{low:+.0f}, {high:+.0f}]"
+
+
+def test_a_comparison_with_a_pass_on_another_set_is_refused_naming_both(
+    runner: CliRunner,  # noqa: F811
+    enriched: Path,  # noqa: F811
+    sources: retrieval.Search,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(models, "chat_for", no_model)
+    first = passed(runner, tmp_path, "--retrieval-only")
+    kept = Path(first.output.split("rows kept in ")[1].splitlines()[0].strip())
+    held = tmp_path / "answer-set.toml"
+    held.write_text(held.read_text(encoding="utf-8").replace("version = 4", "version = 5"), encoding="utf-8")
+
+    result = passed(runner, tmp_path, "--retrieval-only", "--against", str(kept))
+
+    assert result.exit_code == 1
+    assert "set version 4" in result.output and "set version 5" in result.output
+
+
+def test_a_comparison_belongs_to_a_retrieval_only_pass(runner: CliRunner, enriched: Path, tmp_path: Path) -> None:  # noqa: F811
+    result = runner.invoke(main, ["eval", "--suite", "answer", "--against", str(tmp_path / "x.json")])
+
+    assert result.exit_code == 2
+    assert "--against" in result.output

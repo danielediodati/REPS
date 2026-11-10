@@ -744,6 +744,15 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
     help="With --suite answer: search each covered question and report "
     "Recall@5, MRR and p95 retrieval time, running no chat model, at $0.",
 )
+@click.option(
+    "--against",
+    "against",
+    metavar="FILE",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="With --retrieval-only: compare recall row by row with the earlier "
+    "pass whose rows were kept in FILE, the difference with its 95% interval.",
+)
 def eval_command(
     suite: str,
     repetitions: int | None,
@@ -751,6 +760,7 @@ def eval_command(
     records: Path,
     call_budget: int,
     retrieval_only: bool,
+    against: Path | None,
 ) -> None:
     """Run a measurement against the real model, and check it by code.
 
@@ -795,12 +805,16 @@ def eval_command(
     """
     if retrieval_only and suite != ANSWER_SUITE:
         raise click.UsageError("--retrieval-only measures the answer suite; add --suite answer")
+    if against is not None and not retrieval_only:
+        raise click.UsageError("--against compares retrieval-only passes; add --retrieval-only")
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
             try:
                 built = (
-                    answer_evaluation.Answer(answer_set.load(), retrieval.current(), retrieval_only=True)
+                    answer_evaluation.Answer(
+                        answer_set.load(), retrieval.current(), retrieval_only=True, against=against
+                    )
                     if retrieval_only
                     else SUITES[suite](connection)
                 )
