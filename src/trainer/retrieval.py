@@ -21,11 +21,12 @@ TOP = 5
 """How many passages a search returns."""
 
 EMBEDDER_ENV = "CORPUS_EMBEDDER"
-EMBEDDER = "bge-m3"
+EMBEDDER = "snowflake-arctic-embed2"
 """The embedding model on Ollama, unless `CORPUS_EMBEDDER` names another."""
 
 TRANSLATOR_ENV = "CORPUS_TRANSLATOR"
-"""The chat model on Ollama that also puts each question into English; unset, none does."""
+TRANSLATOR = "gemma4:e2b"
+"""The chat model on Ollama that also puts each question into English, unless `CORPUS_TRANSLATOR` names another; set empty, none does."""
 
 OLLAMA_HOST_ENV = "OLLAMA_HOST"
 OLLAMA_PORT = 11434
@@ -502,7 +503,7 @@ def current() -> Search:
 def served() -> Search:
     """The committed corpus on Ollama and Qdrant, where the environment says they are."""
     model = os.environ.get(EMBEDDER_ENV) or EMBEDDER
-    translator = os.environ.get(TRANSLATOR_ENV)
+    translator = os.environ.get(TRANSLATOR_ENV, TRANSLATOR)
     return Search(
         Ollama(model, _ollama_host()),
         Qdrant(os.environ.get(QDRANT_URL_ENV) or QDRANT_URL),

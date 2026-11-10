@@ -88,7 +88,7 @@ uv run trainer enrich derive && uv run trainer enrich curated
 uv run trainer bot        # the first message starts the interview
 ```
 
-**Sources.** Answers on technique come from a corpus searched on the laptop ([ADR-0017](docs/adr/0017-retrieval-runs-on-the-laptop.md)): [Ollama](https://ollama.com) with `ollama pull bge-m3`, and the [Qdrant](https://github.com/qdrant/qdrant/releases) binary started with `QDRANT__STORAGE__STORAGE_PATH=~/.reps/qdrant`. Then `uv run trainer corpus build` embeds the committed chunks, at $0. The bot starts without them and says what is missing.
+**Sources.** Answers on technique come from a corpus searched on the laptop ([ADR-0017](docs/adr/0017-retrieval-runs-on-the-laptop.md)): [Ollama](https://ollama.com) with `ollama pull snowflake-arctic-embed2` and `ollama pull gemma4:e2b` (it puts each question into English too), and the [Qdrant](https://github.com/qdrant/qdrant/releases) binary started with `QDRANT__STORAGE__STORAGE_PATH=~/.reps/qdrant`. Then `uv run trainer corpus build` embeds the committed chunks, at $0. The bot starts without them and says what is missing.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, from @BotFather, and `TELEGRAM_OWNER_ID`, the only user it answers, from @userinfobot. It long-polls: no public IP, no tunnel. One chat is one thread, and the conversation survives a restart. Every model is checked before it starts.
 

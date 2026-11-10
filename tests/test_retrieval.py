@@ -350,9 +350,16 @@ def test_a_translator_not_pulled_names_pulling_it() -> None:
     assert "ollama pull qwen3.5:2b" in str(missing)
 
 
-def test_the_served_corpus_translates_only_when_the_environment_names_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_served_corpus_is_the_ladders_winner_unless_the_environment_names_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(retrieval.EMBEDDER_ENV, raising=False)
     monkeypatch.delenv(retrieval.TRANSLATOR_ENV, raising=False)
-    assert retrieval.served().translator is None
+    assert retrieval.served().described.startswith("snowflake-arctic-embed2 on ")
+    assert retrieval.served().described.endswith("questions also in English by gemma4:e2b")
 
     monkeypatch.setenv(retrieval.TRANSLATOR_ENV, "qwen3.5:2b")
-    assert "questions also in English by qwen3.5:2b" in retrieval.served().described
+    assert retrieval.served().described.endswith("questions also in English by qwen3.5:2b")
+
+    monkeypatch.setenv(retrieval.TRANSLATOR_ENV, "")
+    assert retrieval.served().translator is None
