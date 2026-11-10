@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from pathlib import Path
 
 import httpx2
@@ -126,10 +125,6 @@ def _ollama(pulled: list[str]) -> httpx2.MockTransport:
     return httpx2.MockTransport(answer)
 
 
-def _unsparse(sent: dict[str, list[Any]]) -> dict[int, float]:
-    return dict(zip(sent["indices"], sent["values"], strict=True))
-
-
 class _FakeQdrant:
     """Qdrant's REST surface, as much of it as the corpus uses, over the in-memory store."""
 
@@ -146,28 +141,18 @@ class _FakeQdrant:
         if name not in self.held.collections() and request.method != "PUT":
             return httpx2.Response(404, json={"status": {"error": f"Collection `{name}` doesn't exist!"}})
         if len(parts) == 2 and request.method == "PUT":
-            hybrid = "sparse_vectors" in body
-            self.held.create(name, (body["vectors"]["dense"] if hybrid else body["vectors"])["size"], hybrid=hybrid)
+            self.held.create(name, body["vectors"]["size"])
         elif len(parts) == 2 and request.method == "DELETE":
             self.held.drop(name)
         elif parts[2:] == ["points", "count"]:
             return httpx2.Response(200, json={"result": {"count": self.held.count(name)}})
         elif parts[2:] == ["points"]:
             points = body["points"]
-            named = isinstance(points[0]["vector"], dict)
             self.held.add(
-                name,
-                points[0]["id"],
-                [p["vector"]["dense"] if named else p["vector"] for p in points],
-                [p["payload"] for p in points],
-                [_unsparse(p["vector"]["words"]) for p in points] if named else None,
+                name, points[0]["id"], [p["vector"] for p in points], [p["payload"] for p in points]
             )
         elif parts[2:] == ["points", "query"]:
-            if "prefetch" in body:
-                dense, words = (one["query"] for one in body["prefetch"])
-                found = self.held.nearest(name, dense, body["limit"], _unsparse(words))
-            else:
-                found = self.held.nearest(name, body["query"], body["limit"])
+            found = self.held.nearest(name, body["query"], body["limit"])
             points = [{"id": 0, "score": score, "payload": payload} for payload, score in found]
             return httpx2.Response(200, json={"result": {"points": points}})
         return httpx2.Response(200, json={"result": True})
@@ -371,58 +356,3 @@ def test_the_served_corpus_translates_only_when_the_environment_names_a_model(mo
 
     monkeypatch.setenv(retrieval.TRANSLATOR_ENV, "qwen3.5:2b")
     assert "questions also in English by qwen3.5:2b" in retrieval.served().described
-
-
-class Blank:
-    """An embedder whose every vector is the same: dense search alone finds nothing in particular."""
-
-    model = "blank"
-    where = "in memory"
-
-    def ready(self) -> None:
-        """Always ready."""
-
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        return [[1.0, 0.0] for _ in texts]
-
-
-def test_a_hybrid_search_finds_by_its_words_what_the_dense_vectors_miss() -> None:
-    search = retrieval.Search(Blank(), retrieval.Memory(), 3, CHUNKS, hybrid=True)
-    search.build()
-
-    [found] = search.search("deadlift neutral spine", top=1)
-
-    assert found.chunk.title == "Deadlift"
-    assert search.state() is None
-
-
-def test_a_hybrid_build_lives_beside_the_dense_one() -> None:
-    store = retrieval.Memory()
-    dense = retrieval.Search(Blank(), store, 3, CHUNKS)
-    dense.build()
-    hybrid = retrieval.Search(Blank(), store, 3, CHUNKS, hybrid=True)
-
-    assert isinstance(hybrid.state(), retrieval.NotBuilt)
-    hybrid.build()
-    assert dense.state() is None and hybrid.state() is None
-
-
-def test_a_hybrid_corpus_built_through_ollama_into_qdrant_is_searched() -> None:
-    search = retrieval.Search(
-        retrieval.Ollama("bge-m3", "http://ollama.test", _ollama(["bge-m3:latest"])),
-        retrieval.Qdrant("http://qdrant.test", httpx2.MockTransport(_FakeQdrant())),
-        version=3,
-        chunks=CHUNKS,
-        hybrid=True,
-    )
-    search.build()
-
-    assert search.search("squat heels down")[0].chunk.title == "Squat (exercise)"
-
-
-def test_the_served_corpus_is_hybrid_only_when_the_environment_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(retrieval.HYBRID_ENV, raising=False)
-    assert not retrieval.served().hybrid
-
-    monkeypatch.setenv(retrieval.HYBRID_ENV, "1")
-    assert retrieval.served().collection.endswith("-hybrid-v" + str(retrieval.served().version))
