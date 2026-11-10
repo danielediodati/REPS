@@ -36,7 +36,6 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 
 Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
-6. **The answer suite, in code** - [ticket](docs/work/16.1-answer-from-sources/issues/06-the-answer-suite-in-code.md)
 7. **The embedders compared and the ladder** - [ticket](docs/work/16.1-answer-from-sources/issues/07-the-embedders-and-the-ladder.md)
 8. **The judge calibrated** - [ticket](docs/work/16.1-answer-from-sources/issues/08-the-judge-calibrated.md)
 9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)

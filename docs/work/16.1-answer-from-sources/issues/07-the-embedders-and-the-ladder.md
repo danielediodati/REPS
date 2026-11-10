@@ -8,6 +8,8 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Blocked by:** 06.
 
+**Constraint from 06:** `trainer eval --suite answer --retrieval-only` is the measurement, at $0 and with no chat model: it searches each covered row's question as written, and prints Recall@5 with Wilson's 95% interval (`eval_runner.interval`), MRR and p95 search time, with the Italian-on-English rows apart. Rung zero on `bge-m3`, dense, top 5 read Recall@5 20 of 60 (33%, [23%, 46%]), MRR 0.20, p95 0.07 s; Italian-on-English 5 of 24. The paired difference between two rungs is not computed yet.
+
 `CORPUS_EMBEDDER` picks the Ollama model; each embedder's build is its own Qdrant collection, kept beside the others, so the three can be built once and compared. `Search` sends the question as is: an embedder that wants a query instruction (`qwen3-embedding`) needs it added here.
 
 - [ ] The three embedders compared; highest Recall@5 wins, MRR breaks a tie; the corpus is built with the winner

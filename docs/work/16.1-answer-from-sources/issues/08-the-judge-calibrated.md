@@ -8,6 +8,8 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Blocked by:** 07.
 
+**Constraint from 06:** a full pass is `trainer eval --suite answer`, one rep per row by default; `--only` names rows. Each row's run is written under `--records` as `<row>-<attempt>.json`, its conversation holding the question, the reply and each quote with its title and section: the replies to draw from.
+
 - [ ] The first full pass on the 60 covered rows, asked for first with its estimate
 - [ ] 30 replies drawn at random from it; the owner labels each faithful yes/no and answers yes/no
 - [ ] 15 planted: real replies the agent alters with a claim the passage lacks or an answer to another question; the owner may read a random fifth
