@@ -24,6 +24,9 @@ EMBEDDER_ENV = "CORPUS_EMBEDDER"
 EMBEDDER = "bge-m3"
 """The embedding model on Ollama, unless `CORPUS_EMBEDDER` names another."""
 
+TRANSLATOR_ENV = "CORPUS_TRANSLATOR"
+"""The chat model on Ollama that also puts each question into English; unset, none does."""
+
 OLLAMA_HOST_ENV = "OLLAMA_HOST"
 OLLAMA_PORT = 11434
 OLLAMA_HOST = f"http://localhost:{OLLAMA_PORT}"
@@ -83,6 +86,18 @@ class Embedder(Protocol):
         """One vector per text, in order."""
 
 
+class Translator(Protocol):
+    """Puts a question into English."""
+
+    model: str
+
+    def ready(self) -> None:
+        """Raise the state that stops translating, if any."""
+
+    def english(self, question: str) -> str:
+        """The question in English."""
+
+
 class Store(Protocol):
     """Holds vectors in named collections and finds the nearest."""
 
@@ -120,18 +135,28 @@ def _slug(model: str) -> str:
 class Search:
     """The corpus as one interface: built into an index, searched, and its state read."""
 
-    def __init__(self, embedder: Embedder, store: Store, version: int, chunks: Sequence[Chunk]) -> None:
+    def __init__(
+        self,
+        embedder: Embedder,
+        store: Store,
+        version: int,
+        chunks: Sequence[Chunk],
+        *,
+        translator: Translator | None = None,
+    ) -> None:
         self.embedder = embedder
         self.store = store
         self.version = version
         self.chunks = chunks
+        self.translator = translator
 
     @property
     def described(self) -> str:
-        """The embedder and the collection, and where each runs."""
+        """The embedder and the collection, and where each runs; the translator, if any."""
+        translated = f", questions also in English by {self.translator.model}" if self.translator else ""
         return (
             f"{self.embedder.model} on {self.embedder.where}, "
-            f"{self.collection} on {self.store.where}"
+            f"{self.collection} on {self.store.where}{translated}"
         )
 
     @property
@@ -152,6 +177,8 @@ class Search:
     def check(self) -> None:
         """Raise the state that stops a search, naming its fix."""
         self.embedder.ready()
+        if self.translator:
+            self.translator.ready()
         self.store.ready()
         builds = self._builds()
         if self.version in builds:
@@ -202,13 +229,20 @@ class Search:
                 self.store.drop(name)
 
     def search(self, question: str, top: int = TOP) -> list[Passage]:
-        """The `top` passages nearest the question, nearest first."""
+        """The `top` passages nearest the question, or its English when translated, nearest first."""
+        asked = [question]
+        if self.translator:
+            english = self.translator.english(question)
+            if english and english != question:
+                asked.append(english)
         instruction = QUERY_INSTRUCTIONS.get(self.embedder.model.split(":")[0], "")
-        [vector] = self.embedder.embed([instruction + question])
-        return [
-            Passage(Chunk(**payload), score)
-            for payload, score in self.store.nearest(self.collection, vector, top)
-        ]
+        best: dict[str, Passage] = {}
+        for vector in self.embedder.embed([instruction + one for one in asked]):
+            for payload, score in self.store.nearest(self.collection, vector, top):
+                passage = Passage(Chunk(**payload), score)
+                if passage.chunk.id not in best or score > best[passage.chunk.id].score:
+                    best[passage.chunk.id] = passage
+        return sorted(best.values(), key=lambda one: one.score, reverse=True)[:top]
 
 
 _TIMEOUT_S = 300.0
@@ -258,6 +292,39 @@ class Ollama:
         except (httpx2.HTTPError, ValueError, KeyError) as error:
             raise self._down(error) from error
         return embeddings
+
+
+_TRANSLATE = (
+    "Translate this question about strength training into English. "
+    "Reply with the English question alone. If it is already English, repeat it.\n\n{question}"
+)
+
+
+class OllamaTranslator(Ollama):
+    """Questions put into English by a chat model on an Ollama server."""
+
+    def english(self, question: str) -> str:
+        """The question in English, as the model wrote it."""
+        try:
+            response = self._client.post(
+                "/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": _TRANSLATE.format(question=question),
+                    "stream": False,
+                    "think": False,
+                    "options": {"temperature": 0},
+                },
+            )
+        except httpx2.HTTPError as error:
+            raise self._down(error) from error
+        if response.status_code == 404:
+            raise self._not_pulled()
+        try:
+            response.raise_for_status()
+            return str(response.json()["response"]).strip()
+        except (httpx2.HTTPError, ValueError, KeyError) as error:
+            raise self._down(error) from error
 
 
 class Qdrant:
@@ -435,9 +502,11 @@ def current() -> Search:
 def served() -> Search:
     """The committed corpus on Ollama and Qdrant, where the environment says they are."""
     model = os.environ.get(EMBEDDER_ENV) or EMBEDDER
+    translator = os.environ.get(TRANSLATOR_ENV)
     return Search(
         Ollama(model, _ollama_host()),
         Qdrant(os.environ.get(QDRANT_URL_ENV) or QDRANT_URL),
         corpus.read_manifest().version,
         corpus.read_chunks(),
+        translator=OllamaTranslator(translator, _ollama_host()) if translator else None,
     )

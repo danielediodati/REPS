@@ -875,7 +875,7 @@ def test_sources_that_are_down_are_said_and_the_conversation_goes_on(
 class Down(retrieval.Memory):
     """A store whose server has gone away."""
 
-    def nearest(self, name: str, vector: Any, top: int) -> Any:
+    def nearest(self, *asked: Any) -> Any:
         raise retrieval.QdrantDown("Qdrant does not answer at nowhere; start it")
 
 

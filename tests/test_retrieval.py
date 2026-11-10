@@ -285,3 +285,74 @@ def test_a_question_is_embedded_with_the_instruction_its_embedder_wants_and_pass
 
     assert inputs[0] == [chunk.text for chunk in CHUNKS]
     assert inputs[-1] == [asked]
+
+
+class Glossary:
+    """A translator that knows a few words."""
+
+    model = "glossary"
+    where = "in memory"
+    WORDS = {"tallone": "heels", "accovacciata": "squat", "tronco": "trunk"}
+
+    def ready(self) -> None:
+        """Always ready."""
+
+    def english(self, question: str) -> str:
+        return " ".join(self.WORDS.get(word, word) for word in question.split())
+
+
+def test_a_question_is_also_searched_in_english_when_a_translator_is_set() -> None:
+    plain = retrieval.in_memory(CHUNKS, version=3)
+    plain.build()
+    translated = retrieval.Search(plain.embedder, plain.store, 3, CHUNKS, translator=Glossary())
+
+    assert plain.search("accovacciata tallone tronco", top=1)[0].score == 0
+    [found] = translated.search("accovacciata tallone tronco", top=1)
+    assert found.chunk.title == "Squat (exercise)" and found.score > 0
+
+
+def test_a_passage_found_in_both_languages_is_returned_once() -> None:
+    search = retrieval.Search(retrieval.Words(), retrieval.Memory(), 3, CHUNKS, translator=Glossary())
+    search.build()
+
+    found = search.search("squat heels trunk")
+
+    assert len({one.chunk.id for one in found}) == len(found) == 5
+
+
+def _talker(answer: str, pulled: list[str]) -> httpx2.MockTransport:
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/api/tags":
+            return httpx2.Response(200, json={"models": [{"name": name} for name in pulled]})
+        if request.url.path == "/api/generate":
+            return httpx2.Response(200, json={"response": answer})
+        return httpx2.Response(404)
+
+    return httpx2.MockTransport(respond)
+
+
+def test_an_ollama_translator_returns_the_english_alone() -> None:
+    translator = retrieval.OllamaTranslator("qwen3.5:2b", "http://ollama.test", _talker("  How deep should I squat?\n", ["qwen3.5:2b"]))
+
+    assert translator.english("quanto scendo nello squat?") == "How deep should I squat?"
+
+
+def test_a_translator_not_pulled_names_pulling_it() -> None:
+    search = retrieval.Search(
+        retrieval.Words(), retrieval.Memory(), 3, CHUNKS,
+        translator=retrieval.OllamaTranslator("qwen3.5:2b", "http://ollama.test", _talker("", ["bge-m3:latest"])),
+    )
+    search.build()
+
+    missing = search.state()
+
+    assert isinstance(missing, retrieval.ModelNotPulled)
+    assert "ollama pull qwen3.5:2b" in str(missing)
+
+
+def test_the_served_corpus_translates_only_when_the_environment_names_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(retrieval.TRANSLATOR_ENV, raising=False)
+    assert retrieval.served().translator is None
+
+    monkeypatch.setenv(retrieval.TRANSLATOR_ENV, "qwen3.5:2b")
+    assert "questions also in English by qwen3.5:2b" in retrieval.served().described
