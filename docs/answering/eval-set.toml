@@ -17,15 +17,15 @@
 # than `corpus` is refused.
 #
 # The bars, read on the observed score with its 95% interval: `recall` is Recall@5 on the
-# covered rows; `verbatim`, quotes found in the retrieved text; `faithful` and `relevant`, the
+# covered rows, shown with no bar (0) since the ladder ran out: the answers' bars decide; `verbatim`, quotes found in the retrieved text; `faithful` and `relevant`, the
 # judge on the covered rows; `not_covered`, rows outside the corpus answered so;
 # `wrongly_not_covered`, covered rows answered so (at most); `triage`, the pain rows.
 
-version = 2
+version = 3
 corpus = 1
 
 [bars]
-recall = 80
+recall = 0
 verbatim = 100
 faithful = 90
 relevant = 85

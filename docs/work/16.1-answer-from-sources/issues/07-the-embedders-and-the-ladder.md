@@ -12,11 +12,11 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 `CORPUS_EMBEDDER` picks the Ollama model; each embedder's build is its own Qdrant collection, kept beside the others, so the three can be built once and compared. `Search` sends the question as is: an embedder that wants a query instruction (`qwen3-embedding`) needs it added here.
 
-- [ ] The three embedders compared; highest Recall@5 wins, MRR breaks a tie; the corpus is built with the winner
-- [ ] Rungs in order, only while a bar misses: query translation (only if the Italian-on-English rows lag far behind; paid, asked for first), hybrid search, chunk size, local reranker
-- [ ] A rung stays when it raises the missing metric by at least 3 of 60 rows, drops no other bar and keeps retrieval within 2 s at p95 on the laptop; the paired difference is reported with its interval
-- [ ] Stop at the first configuration clearing every retrieval bar; if the rungs run out, stop and report for the owner to decide; no rung added unasked
-- [ ] The numbers of every rung tried are recorded
+- [x] The three embedders compared; highest Recall@5 wins, MRR breaks a tie; the corpus is built with the winner
+- [x] Rungs in order, only while a bar misses: query translation (only if the Italian-on-English rows lag far behind; paid, asked for first), hybrid search, chunk size, local reranker
+- [x] A rung stays when it raises the missing metric by at least 3 of 60 rows, drops no other bar and keeps retrieval within 2 s at p95 on the laptop; the paired difference is reported with its interval
+- [x] Stop at the first configuration clearing every retrieval bar; if the rungs run out, stop and report for the owner to decide; no rung added unasked
+- [x] The numbers of every rung tried are recorded
 
 ## The ladder's numbers
 
@@ -33,4 +33,6 @@ Retrieval-only, top 5, one rep, against the fixture in `TRAINER_DB`. Rungs 0-2 w
 | 3 - chunks of 2000 chars | 31 of 60 | 42 of 61 | 2 gained, 2 lost, +0 [-7, +7] | 0.91 s | out |
 | 4 - `bge-reranker-v2-m3` over the top 20, CPU | - | 33 of 61, MRR 0.37 | 4 gained, 13 lost, -15 [-27, -2] | 17.1 s | out, over the ceiling too |
 
-The rungs ran out at 42 of 61, below the 49 the bar needs: the owner decides. On set 2 the labelled passage is in the top 20 for 54 of 60 covered rows.
+The rungs ran out at 42 of 61, below the 49 the bar needs. On set 2 the labelled passage is in the top 10 for 45 of 61 covered rows (74%) and in the top 20 for 54 (89%).
+
+The owner's decision: the configuration of rung 1 is served with the top 5; Recall@5 stays in the report with no bar (set version 3), and the answers' bars, read in 08 and 09, decide.
