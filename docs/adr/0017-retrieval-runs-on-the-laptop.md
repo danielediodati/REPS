@@ -13,11 +13,13 @@ Milestone 16 gives the entrance a retrieval tool over a corpus of openly license
 
 - **Embeddings on OpenRouter**: same weights and a few cents, but the challengers to measure (`qwen3-embedding`, `snowflake-arctic-embed2`) exist only on Ollama.
 - **An embedded store** (a library writing a folder): no second process, but not the shape of a deployed RAG.
+- **Hybrid search, other chunk sizes, a local reranker** (amended 2026-11-11, ticket 16.1.7): measured on the answer set against `snowflake-arctic-embed2` dense with the question also in English, which is served at 1200 characters, top 5. Hybrid with RRF +0 rows of 61, 500 characters -6, 2000 characters +0, `bge-reranker-v2-m3` over the top 20 -9 and 17 s at p95.
 - **Chroma**: dense search only outside its cloud. **Milvus**: needs Docker, which this machine lacks. **LanceDB**: no open source server.
 
 ## Consequences
 
 - Two processes besides the bot, both the owner's to start.
 - The home is still the one directory to copy. The vectors are rebuilt from the committed chunks at $0.
-- Hybrid search (dense, sparse, RRF) stays possible in the same store, if a metric asks for it.
+- Hybrid search (dense, sparse, RRF) stays possible in the same store; measured once, it gained nothing.
+- Recall@5 stops at 42 of 61 covered rows, the passage being in the top 20 for 54: the answers' bars, not retrieval's, decide whether the replies hold.
 - **Amends ADR-0015**: Ollama returns, for embeddings and the question's translation. Milestone 17's ADR extends it to chat nodes.

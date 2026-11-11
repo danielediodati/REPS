@@ -8,10 +8,12 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 **Blocked by:** 07.
 
+**Constraint from 07:** set version 3 serves `snowflake-arctic-embed2` dense, the question also in English by `gemma4:e2b`, top 5; Recall@5 is 42 of 61 and carries no bar. The owner has no time to label: the 30 real replies are labelled blind by a sub-agent.
+
 **Constraint from 06:** a full pass is `trainer eval --suite answer`, one rep per row by default; `--only` names rows. Each row's run is written under `--records` as `<row>-<attempt>.json`, its conversation holding the question, the reply and each quote with its title and section: the replies to draw from.
 
-- [ ] The first full pass on the 60 covered rows, asked for first with its estimate
-- [ ] 30 replies drawn at random from it; the owner labels each faithful yes/no and answers yes/no
+- [ ] The first full pass on the 61 covered rows, asked for first with its estimate
+- [ ] 30 replies drawn at random from it; a sub-agent given no context but the reply, its quotes and the question labels each faithful yes/no and answers yes/no; the owner may read a random fifth
 - [ ] 15 planted: real replies the agent alters with a claim the passage lacks or an answer to another question; the owner may read a random fifth
 - [ ] Candidates in order `openai/gpt-oss-120b`, a mid-size Qwen, `anthropic/claude-haiku-4.5`, never the answering model's family; stop at the first that catches 13 of 15 planted and agrees on 27 of 30 real
 - [ ] The threshold turning RAGAS's score into yes or no is fixed here, on the owner's 30
