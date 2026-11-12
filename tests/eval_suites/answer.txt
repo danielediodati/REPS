@@ -1,5 +1,5 @@
 exit 1
-answer set version 4 on corpus version 1: words on in memory, reps-corpus-words-v1 on in memory
+answer set version 4 on corpus version 1: words on in memory, reps-corpus-words-v1 on in memory, top 5
 
 replies
            answered      not covered        triage         not run    

@@ -17,8 +17,9 @@ from trainer import corpus
 from trainer.corpus import Chunk
 from trainer.engine import home
 
+TOP_ENV = "CORPUS_TOP"
 TOP = 5
-"""How many passages a search returns."""
+"""How many passages a search returns, unless `CORPUS_TOP` says another number."""
 
 EMBEDDER_ENV = "CORPUS_EMBEDDER"
 EMBEDDER = "snowflake-arctic-embed2"
@@ -144,7 +145,9 @@ class Search:
         chunks: Sequence[Chunk],
         *,
         translator: Translator | None = None,
+        top: int = TOP,
     ) -> None:
+        self.top = top
         self.embedder = embedder
         self.store = store
         self.version = version
@@ -157,7 +160,7 @@ class Search:
         translated = f", questions also in English by {self.translator.model}" if self.translator else ""
         return (
             f"{self.embedder.model} on {self.embedder.where}, "
-            f"{self.collection} on {self.store.where}{translated}"
+            f"{self.collection} on {self.store.where}, top {self.top}{translated}"
         )
 
     @property
@@ -218,7 +221,7 @@ class Search:
         created = False
         for start in range(0, len(chunks), _BATCH):
             batch = chunks[start : start + _BATCH]
-            vectors = self.embedder.embed([chunk.text for chunk in batch])
+            vectors = self.embedder.embed([_headed(chunk) for chunk in batch])
             if not created:
                 self.store.create(self.collection, len(vectors[0]))
                 created = True
@@ -229,8 +232,9 @@ class Search:
             if version != self.version:
                 self.store.drop(name)
 
-    def search(self, question: str, top: int = TOP) -> list[Passage]:
+    def search(self, question: str, top: int | None = None) -> list[Passage]:
         """The `top` passages nearest the question, or its English when translated, nearest first."""
+        top = top or self.top
         asked = [question]
         if self.translator:
             english = self.translator.english(question)
@@ -461,6 +465,12 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return sum(x * y for x, y in zip(a, b, strict=True)) / norm if norm else 0.0
 
 
+def _headed(chunk: Chunk) -> str:
+    """The passage as embedded: under its title and section, which its text often leaves unsaid."""
+    heading = f"{chunk.title} - {chunk.section}" if chunk.section else chunk.title
+    return f"{heading}\n{chunk.text}"
+
+
 def in_memory(chunks: Sequence[Chunk], version: int) -> Search:
     """The corpus on the in-memory backend, not yet built."""
     return Search(Words(), Memory(), version, chunks)
@@ -510,4 +520,5 @@ def served() -> Search:
         corpus.read_manifest().version,
         corpus.read_chunks(),
         translator=OllamaTranslator(translator, _ollama_host()) if translator else None,
+        top=int(os.environ.get(TOP_ENV) or TOP),
     )

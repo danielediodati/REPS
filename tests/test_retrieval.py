@@ -269,7 +269,7 @@ def _heard(pulled: list[str], inputs: list[list[str]]) -> httpx2.MockTransport:
         ("snowflake-arctic-embed2", "query: squat heels down"),
     ],
 )
-def test_a_question_is_embedded_with_the_instruction_its_embedder_wants_and_passages_without(
+def test_a_question_is_embedded_with_its_embedders_instruction_and_a_passage_under_its_title_and_section(
     model: str, asked: str
 ) -> None:
     inputs: list[list[str]] = []
@@ -283,7 +283,8 @@ def test_a_question_is_embedded_with_the_instruction_its_embedder_wants_and_pass
 
     search.search("squat heels down")
 
-    assert inputs[0] == [chunk.text for chunk in CHUNKS]
+    assert inputs[0][0] == "Squat (exercise) - Form\n" + CHUNKS[0].text
+    assert inputs[0][2] == "Bench press\n" + CHUNKS[2].text
     assert inputs[-1] == [asked]
 
 
@@ -363,3 +364,16 @@ def test_the_served_corpus_is_the_ladders_winner_unless_the_environment_names_an
 
     monkeypatch.setenv(retrieval.TRANSLATOR_ENV, "")
     assert retrieval.served().translator is None
+
+
+def test_the_environment_sets_how_many_passages_a_search_returns(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(retrieval.TOP_ENV, raising=False)
+    assert retrieval.served().top == retrieval.TOP
+    monkeypatch.setenv(retrieval.TOP_ENV, "20")
+    assert retrieval.served().top == 20
+    assert ", top 20" in retrieval.served().described
+
+    search = retrieval.in_memory(CHUNKS, version=3)
+    search.top = 2
+    search.build()
+    assert len(search.search("squat heels down")) == 2
