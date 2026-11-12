@@ -10,6 +10,7 @@ decides how a person should read it.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import sqlite3
@@ -394,6 +395,54 @@ def corpus_build() -> None:
         search.build(progress)
         search.check()
     click.echo(f"built: {len(search.chunks)} passages, corpus version {search.version}")
+
+
+@main.group("judge")
+def judge_group() -> None:
+    """The model that reads faithfulness and relevance, held to its own bar first."""
+
+
+@judge_group.command("calibrate")
+@click.option("--model", "named", required=True, help="The OpenRouter model to calibrate as the judge.")
+@click.option("--records", type=click.Path(path_type=Path), default=None, help="Where each verdict is written as JSON.")
+def judge_calibrate(named: str, records: Path | None) -> None:
+    """Read the frozen calibration set with one judge: planted errors caught, real replies agreed, cost.
+
+    Reaches a provider and spends money: ask before running it.
+    """
+    from trainer import answer_judge
+    from trainer.coach import models
+
+    with reported():
+        calibration = answer_judge.load()
+        search = retrieval.served()
+        instruction = retrieval.QUERY_INSTRUCTIONS.get(search.embedder.model.split(":")[0], "")
+        judge = answer_judge.Judge(
+            models.openrouter_model(named, host=""),
+            lambda texts: search.embedder.embed([instruction + text for text in texts]),
+        )
+        texts = answer_judge.passages()
+        click.echo(f"judge {named} on calibration set {calibration.version} (answer set {calibration.answer_set})")
+        verdicts: dict[str, answer_judge.Verdict] = {}
+        for n, one in enumerate(calibration.replies, 1):
+            verdicts[one.reply.id] = judge.judge(one.reply, texts)
+            if n % 5 == 0:
+                click.echo(f"  read {n}/{len(calibration.replies)}, ${judge.dollars:.4f}")
+        reading = answer_judge.read(calibration, verdicts)
+    if records:
+        records.mkdir(parents=True, exist_ok=True)
+        (records / f"judge-{named.replace('/', '_')}.json").write_text(
+            json.dumps({k: dataclasses.asdict(v) for k, v in verdicts.items()}, indent=1, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    t = reading.thresholds
+    click.echo(f"thresholds: faithful at {t.faithful:.2f}, relevant at {t.relevant:.2f}")
+    click.echo(f"real agreed: {reading.agreed} of {reading.real} (bar {answer_judge.AGREED_BAR})")
+    click.echo(f"planted caught: {reading.caught} of {reading.planted} (bar {answer_judge.CAUGHT_BAR})")
+    for line in reading.disagreements:
+        click.echo(f"  {line}".encode("ascii", "replace").decode("ascii"))
+    click.echo(f"cost: ${reading.dollars:.4f}")
+    click.echo("clears the bar" if reading.clears else "does not clear the bar")
 
 
 @main.group()

@@ -1,0 +1,419 @@
+# The judge's calibration set: the replies a judge must read right before it judges a pass.
+#
+# - `real`: replies drawn at random from the first full answer pass on set version 3, at
+#   CORPUS_TOP 5 and 20, labelled blind by a reader given only the question, the reply and the
+#   passages it cited: faithful (every claim supported by them) and relevant (answers the question).
+# - `unsupported`: a real reply with one claim added that its passages lack; read faithful no.
+# - `off_question`: a real reply rewritten to answer another question; read relevant no.
+# - The bar (ADR-0018): 13 of 15 planted caught, 27 of 30 real agreed on both labels. The
+#   thresholds turning scores into yes or no are fitted on the real replies.
+#
+# Frozen with the answer set; a judge is recalibrated on it only when its model or prompt changes.
+
+version = 1
+answer_set = 3
+
+[[replies]]
+id = "top5/cramp-stop-it"
+kind = "real"
+faithful = true
+relevant = true
+question = "Se a metà serie mi prende un crampo al polpaccio, qual è il modo più rapido per farlo passare?"
+answer = "Tira su la punta del piede verso lo stinco — dorsiflettere contrae il muscolo antagonista e allunga il polpaccio, dà sollievo quasi immediato."
+passages = ["wikipedia/it/Crampo/4", "wikipedia/en/Skeletal muscle cramp/2"]
+
+[[replies]]
+id = "top5/pullup-first-one"
+kind = "real"
+faithful = false
+relevant = true
+question = "Alla sbarra non riesco a tirarmi su neanche una volta: come ci arrivo?"
+answer = "Il percorso più comune per arrivare alla prima trazione è iniziare con le **trazioni negative** (salti su e scendi il più lentamente possibile, anche 5-10 secondi) e le **trazioni con elastico** (un elastico ti aiuta nella salita). Col tempo riduci l'aiuto finché ce la fai da solo."
+passages = ["wikipedia/it/Trazioni alla sbarra/9"]
+
+[[replies]]
+id = "top5/deadlift-sumo-muscles"
+kind = "real"
+faithful = true
+relevant = true
+question = "Se allargo molto i piedi nello stacco, cosa cambia per i muscoli che lavorano?"
+answer = "Allargare i piedi (stacco sumo) sposta più lavoro sui glutei, i posteriori della coscia e i quadricipiti, mentre riduce lo stress sulla zona lombare perché il busto resta più eretto."
+passages = ["wikipedia/it/Stacco da terra/7", "wikipedia/en/Sumo deadlift/1"]
+
+[[replies]]
+id = "top5/kettlebell-swing-arms"
+kind = "real"
+faithful = true
+relevant = true
+question = "Quando faccio oscillare il kettlebell sento che lo tiro su con le braccia: dove sbaglio?"
+answer = "L'errore è che stai usando le braccia per sollevare il kettlebell, mentre il movimento deve venire dallo scatto dei fianchi. Non cercare di sollevarlo con le braccia: sono i fianchi che, spingendosi in avanti, generano lo slancio che fa oscillare il peso davanti a te."
+passages = ["wger/it/1971/0", "wikipedia/en/Kettlebell swing/1"]
+
+[[replies]]
+id = "top5/pullup-joint-friendly-grip"
+kind = "real"
+faithful = false
+relevant = true
+question = "Alla sbarra quale impugnatura stressa meno polsi e gomiti?"
+answer = "La presa neutra (palmi rivolti l'uno verso l'altro) è la più sicura a livello articolare tra tutte le impugnature alla sbarra, perché è più naturale e riduce lo stress su polsi e gomiti."
+passages = ["wikipedia/it/Trazioni alla sbarra/7"]
+
+[[replies]]
+id = "top5/swing-footwear"
+kind = "real"
+faithful = true
+relevant = true
+question = "What should I wear on my feet for hip-hinge kettlebell swings?"
+answer = "Per lo swing con kettlebell a cerniera d'anca, meglio una scarpa a suola piatta o scalzo — così hai una buona connessione col suolo per stabilità e potenza."
+passages = ["wikipedia/en/Kettlebell swing/3"]
+
+[[replies]]
+id = "top5/static-stretch-in-warmup"
+kind = "real"
+faithful = true
+relevant = true
+question = "Should I hold long stretches as part of my warm-up before lifting?"
+answer = "No, meglio evitare gli allungamenti statici lunghi prima dei pesi: lo stretching statico riduce la forza muscolare e può aumentare il rischio di infortuni per via dell'effetto analgesico e del danno cellulare. Meglio un riscaldamento dinamico, cioè muovere l'articolazione fino al suo range di movimento completo."
+passages = ["wikipedia/en/Strength training/6", "wikipedia/en/Strength training/5", "wikipedia/en/Warming up/2"]
+
+[[replies]]
+id = "top5/sumo-head-position"
+kind = "real"
+faithful = true
+relevant = true
+question = "Nello stacco a gambe larghe dove tengo la testa, alzo lo sguardo?"
+answer = "No, non alzare lo sguardo. Nello stacco sumo (gambe larghe) testa e collo restano allineati con la colonna per non estendere il collo — tieni lo sguardo neutro davanti a te, in linea con la schiena."
+passages = ["us-army/en/ATP 7-22.02/157"]
+
+[[replies]]
+id = "top5/squat-spotters"
+kind = "real"
+faithful = true
+relevant = true
+question = "Se nello squat pesante voglio qualcuno pronto ad aiutarmi, quanti ne servono e dove si mettono?"
+answer = "Per il bilanciere, l'ideale sono due assistenti, uno a ogni estremità del bilanciere: in caso di fallimento, ognuno infila un gomito sotto l'estremità e prende i pesi con due mani. Se ne hai uno solo, si mette dietro di te in posizione allargata, con le mani vicine ai fianchi tra vita e braccia, e ti segue per tutto il movimento."
+passages = ["wikipedia/en/Spotting (weight training)/2", "us-army/en/ATP 7-22.02/147"]
+
+[[replies]]
+id = "top5/lunge-step-length"
+kind = "real"
+faithful = true
+relevant = true
+question = "Negli affondi faccio il passo lungo o corto se voglio lavorare di più i glutei?"
+answer = "Passo lungo. Un affondo lungo enfatizza il lavoro dei glutei, mentre un passo corto sposta il carico più sui quadricipiti."
+passages = ["wikipedia/en/Lunge (exercise)/1"]
+
+[[replies]]
+id = "top5/soreness-or-tear"
+kind = "real"
+faithful = false
+relevant = true
+question = "Come faccio a capire se è il solito indolenzimento dei giorni dopo o se mi sono strappato qualcosa?"
+answer = "Con i DOMS (dolori post-allenamento) puoi comunque fare esercizio senza peggiorare la situazione, mentre con uno strappo l'attività lo aggrava. Se il dolore è acuto, localizzato e peggiora quando allunghi o contrai il muscolo, meglio far controllare con un'ecografia muscolotendinea."
+passages = ["wikipedia/it/Indolenzimento muscolare a insorgenza ritardata/4", "wikipedia/it/Strappo muscolare/1"]
+
+[[replies]]
+id = "top5/jumper-knee-risk"
+kind = "real"
+faithful = true
+relevant = true
+question = "Cosa mi espone di più all'infiammazione del tendine sotto la rotula quando faccio tanti salti?"
+answer = "I salti sovraccaricano ripetutamente il tendine rotuleo, e il rischio aumenta se hai caviglie rigide (scarsa dorsiflessione), glutei deboli o muscoli di polpacci, quadricipiti e femorali particolarmente contratti. Aggiungici sovrappeso, età e un alto volume di salti senza adeguato recupero, e il tendine non ha tempo di riparare i microstrappi."
+passages = ["wikipedia/en/Patellar tendinitis/3", "wikipedia/en/Patellar tendinitis/0"]
+
+[[replies]]
+id = "top5/upright-row-shoulders"
+kind = "real"
+faithful = true
+relevant = true
+question = "Tirare il bilanciere su fino al mento è pericoloso per le spalle?"
+answer = "Molti trainer e organizzazioni come ACSM e NFPT lo considerano un esercizio controindicato per tutti, a causa dell'eccessiva rotazione interna dell'omero che può peggiorare problemi di impingement alla spalla. Se alzi sopra il petto, il rischio aumenta."
+passages = ["wikipedia/en/Upright row/2"]
+
+[[replies]]
+id = "top5/nordic-easier"
+kind = "real"
+faithful = false
+relevant = true
+question = "In ginocchio con i piedi bloccati non riesco a scendere piano in avanti: come lo rendo più facile?"
+answer = "È un esercizio tosto. Per renderlo più facile puoi usare una fascia elastica fissata davanti a te che ti sostenga nella discesa, oppure partire da una superficie rialzata (panca o cuscino sotto le ginocchia) per ridurre l'escursione. Un'altra opzione è scendere solo a metà e poi aiutarti con le braccia, accorciando il movimento poco a poco."
+passages = ["wikipedia/en/Nordic hamstring curl/0", "wikipedia/it/Leg curl/17"]
+
+[[replies]]
+id = "top5/deadlift-lowering"
+kind = "real"
+faithful = false
+relevant = true
+question = "Quando rimetto giù il bilanciere dopo lo stacco, quando devo cominciare a piegare le gambe?"
+answer = "Sulla discesa, lascia che il bilanciere superi le ginocchia con il movimento dell'anca (spingendo indietro il sedere), e quando il bilanciere arriva all'altezza delle ginocchia, **inizia a piegare le gambe** per accompagnarlo giù mantenendo la schiena neutra."
+passages = ["wikipedia/en/Deadlift/18"]
+
+[[replies]]
+id = "top20/inverted-row-body"
+kind = "real"
+faithful = false
+relevant = true
+question = "Nel rematore a corpo libero sotto una sbarra bassa, come devo tenere il corpo?"
+answer = "Sdraiati a terra sotto la sbarra, prendila con presa in pronazione (palmi verso di te), gambe distese e talloni a terra. Tieni il corpo completamente dritto dalla testa ai talloni, mento leggermente raccolto, e tira il petto verso la sbarra senza inarcare la schiena o lasciare che i fianchi si abbassino."
+passages = ["wikipedia/en/Inverted row/1"]
+
+[[replies]]
+id = "top20/pullup-adding-weight"
+kind = "real"
+faithful = true
+relevant = true
+question = "Ormai faccio tante trazioni di fila: quando ha senso appendermi dei dischi in vita?"
+answer = "Ha senso quando arrivi a farne almeno 15 di fila con la tecnica pulita: a quel punto aggiungere peso sposta il lavoro sulla forza e sulla massa, invece che solo sulla resistenza."
+passages = ["wikipedia/it/Trazioni alla sbarra/8"]
+
+[[replies]]
+id = "top20/deadlift-spine-knees"
+kind = "real"
+faithful = true
+relevant = true
+question = "On the way up in a deadlift, what should my back and knees be doing?"
+answer = "Durante la salita la schiena va tenuta dritta e neutra, mai arrotondata, con i muscoli del dorso contratti per stabilizzare la colonna. Le ginocchia si estendono insieme ai fianchi — quando la barra supera le ginocchia, i glutei spingono i fianchi in avanti fino alla posizione eretta."
+passages = ["wikipedia/en/Deadlift/18", "wikipedia/en/Sumo deadlift/3"]
+
+[[replies]]
+id = "top20/dips-where-to-start"
+kind = "real"
+faithful = false
+relevant = true
+question = "Alle parallele non riesco a fare i dip: c'è un modo più facile per cominciare?"
+answer = "Certo, le dip su panca sono la variante da fare per prima — appoggi le mani su una panca dietro di te e tieni i piedi a terra, così sollevi molto meno del tuo peso e ti abitui al movimento."
+passages = ["wikipedia/it/Dip (esercizio)/9"]
+
+[[replies]]
+id = "top20/squat-bar-position"
+kind = "real"
+faithful = true
+relevant = true
+question = "Ho le gambe lunghe e le caviglie poco mobili: il bilanciere lo tengo alto sul collo o più giù sulla schiena?"
+answer = "Col bilanciere **più basso sulla schiena** (low-bar, all'altezza dei deltoidi posteriori). Lo squat low-bar è consigliato proprio per chi ha femore lungo o scarsa mobilità di caviglia, perché ti permette di inclinarti di più in avanti senza che il busto collassi. Quello alto (high-bar) invece funziona bene solo con caviglie mobili e femore corto."
+passages = ["wikipedia/it/Squat/8", "wikipedia/it/Squat/7"]
+
+[[replies]]
+id = "top20/hamstring-protect"
+kind = "real"
+faithful = false
+relevant = true
+question = "Gioco a calcetto e ho paura di farmi male dietro la coscia: c'è un esercizio fatto apposta?"
+answer = "Sì, il **Nordic hamstring curl** (il classico \"cucchiaro\" in cui qualcuno ti tiene le caviglie e tu scendi in avanti frenando) è l'esercizio più indicato per prevenire infortuni ai femorali, perché li rinforza in contrazione eccentrica — proprio il movimento in cui si infortunano nella corsa. Anche gli esercizi di forza isometrica come il *hamstring iso-hold* aiutano. Un femorale debole è il principale fattore di rischio, quindi inserire un lavoro specifico una o due volte a settimana può ridurre molto le probabilità di tirartelo."
+passages = ["wikipedia/en/Pulled hamstring/10", "wikipedia/en/Pulled hamstring/7"]
+
+[[replies]]
+id = "top20/achilles-keep-safe"
+kind = "real"
+faithful = false
+relevant = true
+question = "Come tengo in salute il tendine dietro la caviglia adesso che sto aggiungendo salti alla scheda?"
+answer = "La regola d'oro è aumentare il volume dei salti gradualmente — la maggior parte degli infortuni al tendine d'Achille capita quando si aumenta l'intensità dei salti troppo in fretta. Inserisci esercizi eccentrici di polpaccio (tipo calf raise con discesa lenta) per preparare il tendine al carico nuovo."
+passages = ["wikipedia/en/Achilles tendinitis/7", "wikipedia/en/Achilles tendinitis/4"]
+
+[[replies]]
+id = "top20/hook-grip-small-hands"
+kind = "real"
+faithful = true
+relevant = true
+question = "My hands are on the small side. Will wrapping my thumb under my fingers on the bar work for me?"
+answer = "Quella presa in cui il pollice passa sotto le dita si chiama **hook grip** (presa a uncino). I testi che ho dicono però che è **difficile con mani piccole**: se il pollice non riesce ad avvolgere bene il bilanciere per via del suo diametro, la presa a uncino risulta ostica da usare.\n\n*\"When the thumb tucks beneath the fingers this is called a hook grip.\"* (ATP 7-22.02)\n*\"Difficult with small hands: if the thumb cannot reach around the barbell due to the barbell size, the hook grip will be difficult to use.\"* (Wikipedia)"
+passages = ["us-army/en/ATP 7-22.02/15", "wikipedia/en/Hook grip/3"]
+
+[[replies]]
+id = "top20/leg-press-feet-glutes"
+kind = "real"
+faithful = false
+relevant = true
+question = "Alla pressa voglio far lavorare di più il sedere: dove metto i piedi sulla pedana?"
+answer = "Per i glutei, tieni i piedi alti sulla pedana, possibilmente con le gambe ben divaricate. Questa posizione sposta il carico dai quadricipiti verso glutei e femorali. Se puoi, abbassa anche lo schienale per aumentare l'inclinazione.\n\n<cite>wikipedia/it/Leg press/3</cite>\n<cite>wikipedia/it/Leg press/3</cite>"
+passages = ["wikipedia/it/Leg press/3"]
+
+[[replies]]
+id = "top20/always-to-failure"
+kind = "real"
+faithful = false
+relevant = true
+question = "Ogni serie la devo portare finché non riesco più a fare neanche una ripetizione?"
+answer = "No, non è necessario né sempre consigliabile: la ricerca mostra che il cedimento non è essenziale per forza e ipertrofia, e portarlo cronicamente a ogni serie può portare a sovrallenamento. L'ideale è fermarsi prima — una o due ripetizioni prima del cedimento — e arrestare la serie appena la tecnica inizia a compromettersi."
+passages = ["wikipedia/it/Cedimento muscolare/18", "wikipedia/it/Cedimento muscolare/4", "wikipedia/it/Cedimento muscolare/20"]
+
+[[replies]]
+id = "top20/overtraining-early-sign"
+kind = "real"
+faithful = false
+relevant = true
+question = "Qual è il primo campanello d'allarme che mi sto allenando più di quanto riesco a recuperare?"
+answer = "Il primo campanello d'allarme è un calo della prestazione che non passa con il riposo: ti stanchi prima, fatichi a completare gli allenamenti che prima facevi, o i progressi si fermano. Se lo cogli subito è solo *overreaching* e bastano pochi giorni per recuperare; se lo ignori può degenerare in sovrallenamento vero."
+passages = ["wikipedia/it/Sovrallenamento/6", "wikipedia/en/Overtraining/4"]
+
+[[replies]]
+id = "top20/bench-setup"
+kind = "real"
+faithful = false
+relevant = true
+question = "What should my shoulders be doing before I start lowering the bar on bench?"
+answer = "Prima di abbassare il bilanciere, devi deprimere e ritrarre le scapole (cioè tirarle indietro e in basso, come se le volessi infilare nelle tasche posteriori dei pantaloni) e tenerle così per tutta la serie. Questo stabilizza le spalle e protegge l'articolazione."
+passages = ["wikipedia/en/Bench press/1"]
+
+[[replies]]
+id = "top20/max-without-testing"
+kind = "real"
+faithful = true
+relevant = true
+question = "Non ho voglia di provare il carico massimo vero: ha senso ricavarlo da una serie da dieci?"
+answer = "Sì, ha senso. Usando formule come Epley o Brzycki, da una serie da 10 ripetizioni a cedimento ottieni una stima del tuo 1RM — per esempio, 100 kg x 10 danno circa 133 kg. Il metodo è più sicuro e veloce di un test diretto, anche se la stima può variare del 10% o più dal vero massimale."
+passages = ["wikipedia/en/One-repetition maximum/4", "wikipedia/en/One-repetition maximum/3"]
+
+[[replies]]
+id = "top20/how-to-progress"
+kind = "real"
+faithful = true
+relevant = true
+question = "Per continuare a migliorare cosa devo aumentare nel tempo, solo i chili?"
+answer = "No, non solo i chili. Il sovraccarico progressivo si applica aumentando gradualmente **volume** (più serie o ripetizioni), **intensità** (il carico), **frequenza** o anche cambiando la difficoltà dell'esercizio stesso. Il programma decide come gestirli in base ai tuoi obiettivi."
+passages = ["wikipedia/en/Progressive overload/4", "wikipedia/en/Calisthenics/9"]
+
+[[replies]]
+id = "top20/deadlift-grip-slips"
+kind = "real"
+faithful = false
+relevant = true
+question = "Nello stacco pesante il bilanciere mi scappa dalle dita: come lo devo impugnare?"
+answer = "Per carichi pesanti la presa prona (doppia sopina) è la più debole e lascia rotolare il bilanciere. Prova la **presa mista** (una mano in prona e l'altra in supina), che impedisce al bilanciere di scappare perché le mani premono in direzioni opposte, oppure l'**hook grip** (a uncino) — avvolgi il pollice intorno alla sbarra e chiudi indice e medio sopra il pollice, bloccandolo. All'inizio l'hook grip può essere scomodo, ma è simmetrico e molto sicuro."
+passages = ["wikipedia/en/Deadlift/7", "wikipedia/en/Hook grip/0"]
+
+[[replies]]
+id = "top5/leg-press-back+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Alla pressa per le gambe con tanto peso, come evito di farmi male alla schiena?"
+answer = "Il segreto è tenere fianchi e schiena ben piantati contro lo schienale per tutto il movimento, con un arco lombare naturale, e muovere il peso in modo lento e controllato, senza bloccare le ginocchia a fine corsa. Non scendere mai oltre i 100° di flessione del ginocchio: oltre quell'angolo il bacino si stacca dal sedile e la lombare si flette."
+passages = ["us-army/en/ATP 7-22.02/177"]
+
+[[replies]]
+id = "top5/lunge-forward-in-place+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Con il bilanciere sulle spalle va bene fare gli affondi in avanti restando sul posto?"
+answer = "Sì, l'affondo in avanti si fa proprio così: fai un passo avanti, pieghi entrambe le ginocchia a 90°, poi torni in posizione eretta facendo un passo indietro, senza camminare. Il bilanciere va appoggiato sui trapezi, non sul collo, e il passo ideale è lungo circa 70-80 cm. Tieni la schiena dritta."
+passages = ["wger/it/1548/0"]
+
+[[replies]]
+id = "top5/bench-shoulder-blades+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Alla panca piana cosa devo fare con le scapole per non rovinarmi le spalle?"
+answer = "Tieni le scapole retratte e depresse per tutta la serie, senza lasciarle scivolare in avanti mentre spingi, e tieni i gomiti a circa 45° dal busto, non allineati alle spalle. Così il rischio di lesione del sovraspinoso si riduce di circa il 40%."
+passages = ["wikipedia/en/Bench press/1"]
+
+[[replies]]
+id = "top5/holding-breath+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Nello stacco pesante devo trattenere il fiato o respirare durante la salita?"
+answer = "Nello stacco pesante si trattiene il fiato: fai un respiro diaframmatico profondo, blocchi l'aria e contrai l'addome per tutta la ripetizione, poi espiri a rep finita. Con questa manovra la pressione sistolica può superare i 300 mmHg durante lo sforzo, ma il tronco resta stabile e la colonna protetta."
+passages = ["wikipedia/en/Strength training/8", "wikipedia/en/Deadlift/2"]
+
+[[replies]]
+id = "top5/bfr-how-tight+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Con le fasce che riducono il sangue ai muscoli durante l'allenamento, quanto le devo stringere?"
+answer = "Le fasce improvvisate (cinture, cinghie) non vanno bene: la pressione non è controllabile e ci sono stati casi di rabdomiolisi. Per il BFR la pressione corretta è di solito intorno al 50-80% di quella che occlude del tutto l'arteria, e dipende dalla circonferenza dell'arto e dalla larghezza del bracciale; meglio dispositivi pneumatici."
+passages = ["wikipedia/en/Blood flow restriction training/9", "wikipedia/en/Blood flow restriction training/1"]
+
+[[replies]]
+id = "top5/strength-days-per-week+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "As an adult, on how many days a week should I be doing some kind of resistance work?"
+answer = "Per un adulto sano, le linee guida raccomandano 2 o più giorni a settimana di attività di rafforzamento muscolare, in sedute con almeno 8-10 esercizi che coinvolgano tutti i principali gruppi muscolari, idealmente non consecutive per permettere il recupero."
+passages = ["medlineplus/en/How Much Exercise Do I Need?/1", "wikipedia/it/Frequenza (esercizio coi pesi)/9"]
+
+[[replies]]
+id = "top5/squat-knees-inward+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Quando scendo nello squat le ginocchia mi si stringono verso dentro: è un errore?"
+answer = "Sì, è un errore tecnico: le ginocchia che collassano verso l'interno sono un difetto di esecuzione dovuto spesso a debolezza del gluteo medio, e oltre a essere scorrette possono provocare infortuni anche gravi. Hai dolore o fastidio al ginocchio quando succede, o è solo controllo del movimento?"
+passages = ["wikipedia/it/Squat/4"]
+
+[[replies]]
+id = "top5/soreness-when-it-peaks+planted"
+kind = "unsupported"
+faithful = false
+relevant = true
+question = "Quel dolorino ai muscoli che arriva dopo l'allenamento, quando è al massimo e quanto ci mette a sparire?"
+answer = "Quel dolorino è il DOMS (indolenzimento muscolare a insorgenza ritardata), causato dall'accumulo di acido lattico nei muscoli. Si fa sentire tra le 8-10 ore dopo l'allenamento, raggiunge il picco tra le 24 e le 72 ore, e sparisce da solo entro 5-7 giorni."
+passages = ["wikipedia/it/Indolenzimento muscolare a insorgenza ritardata/21"]
+
+[[replies]]
+id = "top20/belt-what-for+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "La cintura larga di cuoio che usano in palestra a cosa serve davvero?"
+answer = "Nei contesti industriali la cintura si chiama cintura di supporto lombare o back belt, e viene usata dai lavoratori. Non è dimostrato che riduca la frequenza o la gravità degli infortuni, eppure molte aziende ne impongono comunque l'uso."
+passages = ["wikipedia/en/Weightlifting belt/0", "wikipedia/en/Weightlifting belt/2"]
+
+[[replies]]
+id = "top20/upright-row-impingement+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "Can pulling a bar up to my chin with my arms turned in pinch something in the shoulder?"
+answer = "Per sostituire la tirata al mento ci sono alternative più comode: gli high pull e gli scrollate di spalle (shrug) lavorano la parte alta del trapezio, mentre le alzate laterali sviluppano i deltoidi laterali."
+passages = ["wikipedia/en/Upright row/2", "wikipedia/en/Shoulder impingement syndrome/3"]
+
+[[replies]]
+id = "top20/foam-roller-how-long+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "Per sentire meno i muscoli indolenziti, quanto tempo devo passare sul rullo per ogni muscolo?"
+answer = "Il rullo è utile soprattutto come riscaldamento: una meta-analisi del 2021 conclude che l'evidenza giustifica il suo uso prima dell'attività più che come strumento di recupero. Se lo si fa prima dello stretching, l'effetto sul range di movimento è leggermente migliore rispetto al solo stretching."
+passages = ["wikipedia/en/Foam roller/1"]
+
+[[replies]]
+id = "top20/rest-for-strength+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "Voglio diventare più forte, non più grosso: quanto mi fermo tra una serie e l'altra?"
+answer = "Con carichi pesanti e poche ripetizioni l'energia arriva dal metabolismo anaerobico alattacido, cioè dai fosfati: adenosina trifosfato (ATP) e fosfocreatina. È una via che fornisce energia immediata per sforzi massimali ed esplosivi di durata molto breve."
+passages = ["wikipedia/it/Tempo di recupero/5"]
+
+[[replies]]
+id = "top20/press-standing-or-seated+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "Is pressing a barbell overhead harder standing up than sitting down?"
+answer = "L'overhead press, detta anche shoulder press o military press, serve soprattutto a sviluppare il deltoide anteriore. Si può fare con bilanciere, manubri o kettlebell, anche con un braccio solo o alternando, e una variante è la push press, con una piccola flessione delle gambe per dare slancio."
+passages = ["wikipedia/en/Overhead press/0"]
+
+[[replies]]
+id = "top20/pushup-sagging+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "My hips sag halfway through a set of push-ups. What is supposed to hold me straight?"
+answer = "Il retto dell'addome è il più evidente dei muscoli addominali e copre la parte anteriore dell'addome; di solito flette la colonna in avanti, ma non svolge questa funzione durante i piegamenti. Il trasverso è invece profondo e avvolge tutta la zona addominale."
+passages = ["wikipedia/en/Push-up/4"]
+
+[[replies]]
+id = "top20/bench-spotter-place+planted"
+kind = "off_question"
+faithful = true
+relevant = false
+question = "Chi mi assiste alla panca dove si deve mettere?"
+answer = "Una volta che il sollevatore dà il segnale, lo spotter afferra il bilanciere con presa alternata chiusa, in mezzo alle mani dell'atleta, e lo aiuta a staccarlo dai supporti guidandolo sopra il petto. Poi segue il percorso del bilanciere flettendo leggermente ginocchia, anche e tronco, con la schiena piatta."
+passages = ["us-army/en/ATP 7-22.02/154"]
