@@ -1,4 +1,4 @@
-"""Faithfulness and answer relevance read by a model the way RAGAS reads them, and scored in code."""
+"""Faithfulness read by a model the way RAGAS reads it, relevance asked of it outright, both scored in code."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import math
 import re
 import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,9 +26,6 @@ CANDIDATES = ("openai/gpt-oss-120b", "qwen/qwen3-32b", "anthropic/claude-haiku-4
 
 CAUGHT_BAR, AGREED_BAR = 13, 27
 """Of the 15 planted, how many the judge must catch; of the 30 real, on how many it must agree."""
-
-QUESTIONS = 3
-"""How many questions the judge writes back from an answer, as RAGAS's strictness."""
 
 _STATEMENTS = """Break the answer below into short, self-contained factual statements, one claim each, \
 in the answer's language. Leave out courtesy, offers of help and restatements of the question.
@@ -50,12 +47,14 @@ Statements:
 
 Reply with JSON only: {{"verdicts": [{{"statement": "...", "verdict": 0 or 1}}, ...]}}, one per statement, in order."""
 
-_QUESTIONS = """Write {count} different questions, in the answer's language, that the answer below \
-answers. Also say whether the answer is noncommittal: evasive, vague, or declining to answer.
+_RELEVANT = """Does the answer below answer the question that was asked? 1 if it addresses that \
+question, even partly but on point; 0 if it answers a different question, even a closely related one \
+on the same topic, dodges, or only gives loosely related information.
 
+Question: {question}
 Answer: {answer}
 
-Reply with JSON only: {{"questions": ["...", ...], "noncommittal": 0 or 1}}"""
+Reply with JSON only: {{"reason": "<one short sentence>", "relevant": 0 or 1}}"""
 
 
 class JudgeError(RuntimeError):
@@ -80,21 +79,21 @@ class Verdict:
     faithfulness: float
     relevance: float
     statements: tuple[tuple[str, bool], ...]
-    questions: tuple[str, ...]
-    noncommittal: bool
+    reason: str
+    """Why the judge read the answer as relevant or not."""
+
     dollars: float
 
 
 class Judge:
-    """A chat model reading statements and questions, an embedder comparing questions."""
+    """A chat model reading an answer's statements against its passages, and whether it answers."""
 
-    def __init__(self, chat: BaseChatModel, embed: Callable[[Sequence[str]], list[list[float]]]) -> None:
+    def __init__(self, chat: BaseChatModel) -> None:
         self.chat = chat
-        self.embed = embed
         self.dollars = 0.0
 
     def judge(self, reply: Reply, texts: dict[str, str]) -> Verdict:
-        """Faithfulness as the share of statements the cited passages support; relevance as RAGAS's."""
+        """Faithfulness as the share of statements the cited passages support; relevance as 1 or 0."""
         spent = self.dollars
         statements = [str(s) for s in self._ask(_STATEMENTS.format(question=reply.question, answer=reply.answer))["statements"]]
         supported: list[bool] = []
@@ -105,19 +104,12 @@ class Judge:
             supported = [bool(int(v.get("verdict", 0))) for v in verdicts][: len(statements)]
             supported += [False] * (len(statements) - len(supported))
         faithfulness = sum(supported) / len(supported) if supported else 0.0
-        asked = self._ask(_QUESTIONS.format(count=QUESTIONS, answer=reply.answer))
-        questions = [str(q) for q in asked["questions"]][:QUESTIONS]
-        noncommittal = bool(int(asked.get("noncommittal", 0)))
-        relevance = 0.0
-        if questions and not noncommittal:
-            original, *written = self.embed([reply.question, *questions])
-            relevance = sum(_cosine(original, one) for one in written) / len(written)
+        asked = self._ask(_RELEVANT.format(question=reply.question, answer=reply.answer))
         return Verdict(
             faithfulness,
-            relevance,
+            float(bool(int(asked.get("relevant", 0)))),
             tuple(zip(statements, supported)),
-            tuple(questions),
-            noncommittal,
+            str(asked.get("reason", "")),
             self.dollars - spent,
         )
 
@@ -137,11 +129,6 @@ class Judge:
                 if isinstance(read, dict):
                     return read
         raise JudgeError(f"the judge did not reply with JSON: {said[:200]!r}")
-
-
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return sum(x * y for x, y in zip(a, b)) / norm if norm else 0.0
 
 
 @dataclass(frozen=True)

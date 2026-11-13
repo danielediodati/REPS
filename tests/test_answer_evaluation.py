@@ -239,7 +239,7 @@ def test_the_paired_difference_interval_is_newcombes_hybrid_score(
 class Blind(retrieval.Search):
     """The same corpus, every search finding only the plank."""
 
-    def search(self, question: str, top: int = retrieval.TOP) -> list[retrieval.Passage]:
+    def search(self, question: str, top: int | None = None) -> list[retrieval.Passage]:
         return [retrieval.Passage(PLANK, 1.0)]
 
 

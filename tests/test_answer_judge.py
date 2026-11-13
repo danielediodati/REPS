@@ -1,9 +1,9 @@
-"""The judge: statements and questions read from a model, scored and held to its bar in code."""
+"""The judge: statements and relevance read from a model, scored and held to its bar in code."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -22,39 +22,35 @@ def _said(*replies: object, cost: float = 0.001) -> FakeMessagesListChatModel:
     )
 
 
-def _embed(texts: Sequence[str]) -> list[list[float]]:
-    return [[1.0, 0.0] if "panca" in text else [0.0, 1.0] for text in texts]
-
-
 def test_faithfulness_is_the_share_of_statements_the_passages_support() -> None:
     chat = _said(
         {"statements": ["Inspira mentre scendi.", "Trattieni il fiato sui carichi pesanti."]},
         {"verdicts": [{"statement": "a", "verdict": 1}, {"statement": "b", "verdict": 0}]},
-        {"questions": ["Quando inspiro alla panca?", "Come respiro alla panca?", "Cosa faccio coi carichi?"], "noncommittal": 0},
+        {"reason": "it says when to inhale", "relevant": 1},
     )
 
-    verdict = answer_judge.Judge(chat, _embed).judge(REPLY, TEXTS)
+    verdict = answer_judge.Judge(chat).judge(REPLY, TEXTS)
 
     assert verdict.faithfulness == 0.5
     assert verdict.statements[1] == ("Trattieni il fiato sui carichi pesanti.", False)
-    assert verdict.relevance == pytest.approx(2 / 3)
+    assert verdict.relevance == 1.0 and verdict.reason == "it says when to inhale"
     assert verdict.dollars == pytest.approx(0.003)
 
 
-def test_a_noncommittal_answer_is_not_relevant() -> None:
-    chat = _said({"statements": []}, {"questions": ["Quando inspiro alla panca?"], "noncommittal": 1})
+def test_an_answer_to_another_question_is_not_relevant() -> None:
+    chat = _said({"statements": []}, {"reason": "it names the muscles, not when to breathe", "relevant": 0})
 
-    verdict = answer_judge.Judge(chat, _embed).judge(REPLY, TEXTS)
+    verdict = answer_judge.Judge(chat).judge(REPLY, TEXTS)
 
-    assert verdict.relevance == 0.0 and verdict.noncommittal
+    assert verdict.relevance == 0.0
 
 
 def test_a_reply_not_json_is_asked_again_once_then_named() -> None:
-    chat = _said("```json\n" + json.dumps({"statements": []}) + "\n```", {"questions": ["x"], "noncommittal": 0})
-    assert answer_judge.Judge(chat, _embed).judge(REPLY, TEXTS).faithfulness == 0.0
+    chat = _said("```json\n" + json.dumps({"statements": []}) + "\n```", {"relevant": 1})
+    assert answer_judge.Judge(chat).judge(REPLY, TEXTS).relevance == 1.0
 
     with pytest.raises(answer_judge.JudgeError, match="did not reply with JSON"):
-        answer_judge.Judge(_said("no", "still no"), _embed).judge(REPLY, TEXTS)
+        answer_judge.Judge(_said("no", "still no")).judge(REPLY, TEXTS)
 
 
 def test_the_threshold_agrees_with_the_most_labels_and_reads_a_tie_strictly() -> None:
@@ -67,7 +63,7 @@ def _calibrated(id: str, kind: str, faithful: bool = True, relevant: bool = True
 
 
 def _verdict(faithfulness: float, relevance: float) -> Verdict:
-    return Verdict(faithfulness, relevance, (), (), False, 0.01)
+    return Verdict(faithfulness, relevance, (), "", 0.01)
 
 
 def test_a_judge_clears_its_bar_only_catching_planted_errors_and_agreeing_with_the_reader(

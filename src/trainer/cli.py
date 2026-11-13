@@ -415,12 +415,7 @@ def judge_calibrate(named: str, records: Path | None) -> None:
 
     with reported():
         calibration = answer_judge.load()
-        search = retrieval.served()
-        instruction = retrieval.QUERY_INSTRUCTIONS.get(search.embedder.model.split(":")[0], "")
-        judge = answer_judge.Judge(
-            models.openrouter_model(named, host=""),
-            lambda texts: search.embedder.embed([instruction + text for text in texts]),
-        )
+        judge = answer_judge.Judge(models.openrouter_model(named, host=""))
         texts = answer_judge.passages()
         click.echo(f"judge {named} on calibration set {calibration.version} (answer set {calibration.answer_set})")
         verdicts: dict[str, answer_judge.Verdict] = {}
