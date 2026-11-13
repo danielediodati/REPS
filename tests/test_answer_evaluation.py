@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -9,11 +10,12 @@ from typing import Any
 
 import pytest
 from click.testing import CliRunner
-from langchain_core.messages import AIMessage
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, BaseMessage
 
 from test_cli import enriched, runner, stocked  # noqa: F401
 from test_planner import Scripted
-from trainer import corpus, eval_runner, retrieval
+from trainer import answer_evaluation, corpus, eval_runner, retrieval
 from trainer.cli import main
 from trainer.coach import entrance, models
 
@@ -104,6 +106,12 @@ def scripted(monkeypatch: pytest.MonkeyPatch, *turns: AIMessage) -> None:
     monkeypatch.setattr(models, "chat_for", lambda node: models.Chat(model, "scripted", "a-stand-in"))
 
 
+def judging(monkeypatch: pytest.MonkeyPatch, *said: object) -> None:
+    """The judge a stand-in saying these replies, a cent each, in order."""
+    replies: list[BaseMessage] = [AIMessage(json.dumps(one), response_metadata={"cost": 0.01}) for one in said]
+    monkeypatch.setattr(answer_evaluation, "judge_chat", lambda: FakeMessagesListChatModel(responses=replies))
+
+
 def calling(name: str, n: int, **args: Any) -> AIMessage:
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": f"c{n}", "type": "tool_call"}])
 
@@ -192,6 +200,12 @@ def test_a_full_pass_holds_each_row_to_its_kind_once_and_reports_each_bar(
         # knee: triage, a question and no search
         AIMessage(content="Dove ti fa male, e facendo cosa?"),
     )
+    judging(
+        monkeypatch,
+        {"statements": ["Talloni a terra.", "Sempre."]},
+        {"verdicts": [{"statement": "a", "verdict": 1}, {"statement": "b", "verdict": 0}]},
+        {"reason": "it answers about the heels", "relevant": 1},
+    )
 
     result = passed(runner, tmp_path)
 
@@ -202,8 +216,12 @@ def test_a_full_pass_holds_each_row_to_its_kind_once_and_reports_each_bar(
     assert "not covered: 1 of 1 -- 100% [21%, 100%], the bar is 90%" in result.output
     assert "covered answered (at most 10% not covered): 1 of 2 -- 50% [9%, 91%], the bar is 90%" in result.output
     assert "triage: 1 of 1 -- 100% [21%, 100%], the bar is 90%" in result.output
+    assert "judged by " in result.output and "calibration set " in result.output
+    assert "heels faithful #1 faithful: 0.50, unsupported: Sempre." in result.output
+    assert "faithful: 0 of 1 -- 0% [0%, 79%], the bar is 90%" in result.output
+    assert "relevant: 1 of 1 -- 100% [21%, 100%], the bar is 85%" in result.output
     assert sorted(path.name for path in (tmp_path / "records").iterdir()) == [
-        "depth-1.json", "heels-1.json", "knee-1.json", "pallof-1.json"
+        "depth-1.json", "heels-1-judged.json", "heels-1.json", "knee-1.json", "pallof-1.json"
     ]
 
 

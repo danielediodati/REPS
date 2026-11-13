@@ -141,7 +141,7 @@ def supervise_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str
 
 
 def answer_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
-    from test_answer_evaluation import CHUNKS, SQUAT_DEPTH, answer_set
+    from test_answer_evaluation import CHUNKS, SQUAT_DEPTH, answer_set, judging
 
     monkeypatch.setenv("TRAINER_ANSWER_SET", str(answer_set(tmp_path)))
     search = retrieval.in_memory(CHUNKS, version=1)
@@ -159,6 +159,12 @@ def answer_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
             says("Not in my texts.\nThey cover technique and prevention."),
             says("Dove ti fa male, e facendo cosa?"),
         ],
+    )
+    judging(
+        monkeypatch,
+        {"statements": ["Talloni a terra."]},
+        {"verdicts": [{"statement": "a", "verdict": 1}]},
+        {"reason": "it answers about the heels", "relevant": 1},
     )
     return ["--suite", "answer"]
 

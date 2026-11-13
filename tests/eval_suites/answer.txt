@@ -1,5 +1,6 @@
 exit 1
 answer set version 4 on corpus version 1: words on in memory, reps-corpus-words-v1 on in memory, top 5
+judged by anthropic/claude-haiku-4.5 at faithful 1.00, relevant 1.00, calibration set 2
 
 replies
            answered      not covered        triage         not run    
@@ -11,6 +12,11 @@ knee          ok              ok              ok              -
 quotes
                 verbatim        labelled   
 heels quote        ok           1 failed   
+
+judged
+                   faithful        relevant        not run    
+heels faithful        ok              ok              -       
+heels relevant        ok              ok              -       
 
 retrieval
                   recall         not run    
@@ -29,14 +35,18 @@ italian on english: 1 row, no bar
   recall: 1 of 1 -- 100% [21%, 100%]
   MRR: 1.00
   covered answered: 1 of 1 -- 100% [21%, 100%]
+  faithful: 1 of 1 -- 100% [21%, 100%]
+  relevant: 1 of 1 -- 100% [21%, 100%]
 
-5 of 7 runs held what their row declares -- 71%
+7 of 9 runs held what their row declares -- 77%
   recall: 2 of 2 -- 100% [34%, 100%], the bar is 80%
   verbatim: 0 of 1 -- 0% [0%, 79%], the bar is 100%
   not covered: 1 of 1 -- 100% [21%, 100%], the bar is 90%
   covered answered (at most 10% not covered): 1 of 2 -- 50% [9%, 91%], the bar is 90%
   triage: 1 of 1 -- 100% [21%, 100%], the bar is 90%
+  faithful: 1 of 1 -- 100% [21%, 100%], the bar is 90%
+  relevant: 1 of 1 -- 100% [21%, 100%], the bar is 85%
 cost: 6 tool calls, 0 tokens in, 0 out
-      dollars not reported by the provider, 0.0s a run
+      $0.0300 over 1 of 6 runs (5 not reported), $0.0300 a run, 0.0s a run
 
 Below the bar the set declares.

@@ -5,15 +5,16 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from langchain_core.language_models import BaseChatModel
 from langgraph.store.memory import InMemoryStore
 
-from trainer import answer_set, eval_runner, retrieval
+from trainer import answer_judge, answer_set, eval_runner, retrieval
 from trainer.answer_set import Case
 from trainer.coach import entrance, models
 from trainer.coach import record as run_record
@@ -24,6 +25,8 @@ NOT_COVERED = "not covered"
 TRIAGE = "triage"
 VERBATIM = "verbatim"
 LABELLED = "labelled"
+FAITHFUL = "faithful"
+RELEVANT = "relevant"
 
 RECALLED = " recall"
 """Appended to a case's name for whether its question retrieved a labelled passage."""
@@ -34,7 +37,24 @@ QUOTED = " quote"
 TRIAGED = (answer_set.PAIN, answer_set.TECHNIQUE_PAIN, answer_set.PREVENTION)
 """The rows on the boundary with triage: a current pain goes there, general prevention never does."""
 
+JUDGED_FAITHFUL, JUDGED_RELEVANT = " faithful", " relevant"
+"""Appended to a covered case's name for whether the judge read its cited reply faithful, and relevant."""
+
 OUTSIDE = (answer_set.NEAR, answer_set.OFF_TOPIC)
+
+
+def judge_chat() -> BaseChatModel:
+    """The roster's judge, on its own host setting and never the entrance's."""
+    return models.openrouter_model(models.JUDGE.model, models.JUDGE.effort, host=models.JUDGE.host)
+
+
+def judged_by() -> str:
+    """The judge's version: its model, its thresholds and the calibration set they were fitted on."""
+    t = answer_judge.THRESHOLDS
+    return (
+        f"judged by {models.JUDGE.model} at faithful {t.faithful:.2f}, relevant {t.relevant:.2f}, "
+        f"calibration set {answer_judge.FITTED_ON}"
+    )
 
 
 @dataclass(frozen=True)
@@ -77,6 +97,14 @@ class Answer(eval_runner.Suite[Case, Fixture]):
         self.revisions = {chunk.id: chunk.revision for chunk in search.chunks}
         self.records: Path | None = None
         self.earlier: Ranks | None = None
+        self._judge: answer_judge.Judge | None = None
+
+    @property
+    def judge(self) -> answer_judge.Judge:
+        """The judge, its chat opened on the first reply it reads."""
+        if self._judge is None:
+            self._judge = answer_judge.Judge(judge_chat())
+        return self._judge
 
     def problems(self, connection: sqlite3.Connection) -> Sequence[str]:
         found = problems(self.held, self.search)
@@ -112,7 +140,8 @@ class Answer(eval_runner.Suite[Case, Fixture]):
             recalled = self.recall(case, attempt)
             if self.retrieval_only:
                 return recalled
-            return (*_asked(case, attempt, chats["entrance"], budget, records, self.revisions), *recalled)
+            judged = self.judged if case.kind == answer_set.COVERED else None
+            return (*_asked(case, attempt, chats["entrance"], budget, records, self.revisions, judged), *recalled)
 
         return once
 
@@ -134,6 +163,35 @@ class Answer(eval_runner.Suite[Case, Fixture]):
             return (eval_runner.Outcome(named, attempt),)
         nearest = "; ".join(f"{one.chunk.title} / {one.chunk.section}" for one in found) or "nothing"
         return (eval_runner.Outcome(named, attempt, ((RECALL, f"no labelled passage in the top {len(found)}: {nearest}"),)),)
+
+    def judged(self, case: Case, attempt: int, final: Mapping[str, Any], records: Path) -> tuple[eval_runner.Outcome, ...]:
+        """The cited reply read by the judge against the passages it cited: faithful, and relevant."""
+        found: Mapping[str, Mapping[str, str]] = final.get("found", {})
+        cited = {(one["title"], one["section"], one["link"]) for one in final.get("cited", ())}
+        held = [p for p in found.values() if (p["title"], p["section"], p["link"]) in cited]
+        texts = {p["id"]: f"{p['title']} / {p['section']}\n{p['text']}" for p in held}
+        reply = answer_judge.Reply(case.name, case.question, str(final.get("answer", "")), tuple(texts))
+        faithful, relevant = case.name + JUDGED_FAITHFUL, case.name + JUDGED_RELEVANT
+        try:
+            verdict = self.judge.judge(reply, texts)
+        except Exception as error:
+            if (quota := models.spent(error)) is not None:
+                raise quota from error
+            said = f"the judge failed: {error}"
+            return (eval_runner.Outcome(faithful, attempt, error=said), eval_runner.Outcome(relevant, attempt, error=said))
+        written = eval_runner.write(
+            records, f"{case.name}-{attempt}-judged", json.dumps(asdict(verdict), indent=1, ensure_ascii=False)
+        )
+        bar = answer_judge.THRESHOLDS
+        unsupported = "; ".join(s for s, ok in verdict.statements if not ok) or "no statements"
+        cost = eval_runner.Recorded({"calls": [], "tokens": {"input": 0, "output": 0}, "dollars": verdict.dollars}, 0.0)
+        not_faithful = ((FAITHFUL, f"{verdict.faithfulness:.2f}, unsupported: {unsupported}"),)
+        return (
+            eval_runner.Outcome(faithful, attempt, () if verdict.faithfulness >= bar.faithful else not_faithful, cost, written),
+            eval_runner.Outcome(
+                relevant, attempt, () if verdict.relevance >= bar.relevant else ((RELEVANT, verdict.reason),), written=written
+            ),
+        )
 
     def ranked(self, cases: Sequence[Case]) -> list[Retrieved]:
         """Every search made for these rows."""
@@ -161,6 +219,8 @@ class Answer(eval_runner.Suite[Case, Fixture]):
                 100 - bars["wrongly_not_covered"],
             ),
             eval_runner.Half(TRIAGE, of(TRIAGED), bars["triage"]),
+            eval_runner.Half(FAITHFUL, of((answer_set.COVERED,), JUDGED_FAITHFUL), bars["faithful"]),
+            eval_runner.Half(RELEVANT, of((answer_set.COVERED,), JUDGED_RELEVANT), bars["relevant"]),
         )
 
     def render(self, report: eval_runner.Report, chosen: Sequence[Case]) -> list[str]:
@@ -235,9 +295,15 @@ def problems(held: answer_set.AnswerSet, search: retrieval.Search) -> tuple[str,
 
 
 def _asked(
-    case: Case, attempt: int, on: models.Chat, budget: int, records: Path, revisions: Mapping[str, str]
+    case: Case,
+    attempt: int,
+    on: models.Chat,
+    budget: int,
+    records: Path,
+    revisions: Mapping[str, str],
+    judged: Callable[[Case, int, Mapping[str, Any], Path], tuple[eval_runner.Outcome, ...]] | None = None,
 ) -> tuple[eval_runner.Outcome, ...]:
-    """The question asked of the entrance and held to its kind; then its quotes, when it cited any."""
+    """The question asked of the entrance and held to its kind; then its quotes and the judge's reading, when it cited any."""
     heard: dict[str, Any] = {}
 
     def ask() -> eval_runner.Scored:
@@ -261,7 +327,7 @@ def _asked(
     if asked.error is not None or not heard.get("cited"):
         return (asked,)
     quoted = eval_runner.Outcome(case.name + QUOTED, attempt, quotes_held(case, heard, revisions), asked.record, asked.written)
-    return (asked, quoted)
+    return (asked, quoted, *(judged(case, attempt, heard, records) if judged else ()))
 
 
 def kind_held(case: Case, final: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
@@ -320,11 +386,16 @@ def render(suite: Answer, report: eval_runner.Report, chosen: Sequence[Case]) ->
         "",
     ]
     if not suite.retrieval_only:
+        lines[-1:] = [judged_by(), ""]
         replies = [ANSWERED, NOT_COVERED, TRIAGE, eval_runner.NOT_RUN]
         lines += ["replies", *eval_runner.matrix(report, [case.name for case in chosen], replies), ""]
         quoted = [case.name + QUOTED for case in chosen if _ran(report, {case.name + QUOTED}).total]
         if quoted:
             lines += ["quotes", *eval_runner.matrix(report, quoted, [VERBATIM, LABELLED]), ""]
+        read = [case.name + JUDGED_FAITHFUL for case in chosen if _ran(report, {case.name + JUDGED_FAITHFUL}).total]
+        read += [case.name + JUDGED_RELEVANT for case in chosen if _ran(report, {case.name + JUDGED_RELEVANT}).total]
+        if read:
+            lines += ["judged", *eval_runner.matrix(report, read, [FAITHFUL, RELEVANT, eval_runner.NOT_RUN]), ""]
     recalled = [case.name + RECALLED for case in covered]
     lines += ["retrieval", *eval_runner.matrix(report, recalled, [RECALL, eval_runner.NOT_RUN]), ""]
     failed = eval_runner.failures(report)
@@ -340,6 +411,9 @@ def render(suite: Answer, report: eval_runner.Report, chosen: Sequence[Case]) ->
     if not suite.retrieval_only:
         answered = _ran(report, {case.name for case in apart})
         lines.append(f"  covered answered: {eval_runner.with_interval(answered.held, answered.total)}")
+        for column, suffix in ((FAITHFUL, JUDGED_FAITHFUL), (RELEVANT, JUDGED_RELEVANT)):
+            judged = _ran(report, {case.name + suffix for case in apart})
+            lines.append(f"  {column}: {eval_runner.with_interval(judged.held, judged.total)}")
     lines.append("")
     if suite.retrieval_only:
         lines += _kept(suite, covered)
