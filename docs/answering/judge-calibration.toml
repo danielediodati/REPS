@@ -9,8 +9,13 @@
 #   thresholds turning scores into yes or no are fitted on the real replies.
 #
 # Frozen with the answer set; a judge is recalibrated on it only when its model or prompt changes.
+# A label is corrected only where it misstates what the passages say, with the version bumped.
+#
+# - Version 2: top20/deadlift-spine-knees ("mai arrotondata"; the passage calls rounding
+#   controversial) and top20/squat-bar-position (high-bar "solo" with mobile ankles; the passage
+#   also recommends it to beginners) read faithful no.
 
-version = 1
+version = 2
 answer_set = 3
 
 [[replies]]
@@ -169,7 +174,7 @@ passages = ["wikipedia/it/Trazioni alla sbarra/8"]
 [[replies]]
 id = "top20/deadlift-spine-knees"
 kind = "real"
-faithful = true
+faithful = false
 relevant = true
 question = "On the way up in a deadlift, what should my back and knees be doing?"
 answer = "Durante la salita la schiena va tenuta dritta e neutra, mai arrotondata, con i muscoli del dorso contratti per stabilizzare la colonna. Le ginocchia si estendono insieme ai fianchi — quando la barra supera le ginocchia, i glutei spingono i fianchi in avanti fino alla posizione eretta."
@@ -187,7 +192,7 @@ passages = ["wikipedia/it/Dip (esercizio)/9"]
 [[replies]]
 id = "top20/squat-bar-position"
 kind = "real"
-faithful = true
+faithful = false
 relevant = true
 question = "Ho le gambe lunghe e le caviglie poco mobili: il bilanciere lo tengo alto sul collo o più giù sulla schiena?"
 answer = "Col bilanciere **più basso sulla schiena** (low-bar, all'altezza dei deltoidi posteriori). Lo squat low-bar è consigliato proprio per chi ha femore lungo o scarsa mobilità di caviglia, perché ti permette di inclinarti di più in avanti senza che il busto collassi. Quello alto (high-bar) invece funziona bene solo con caviglie mobili e femore corto."
