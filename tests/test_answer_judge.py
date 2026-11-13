@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 
 from trainer import answer_judge
 from trainer.answer_judge import Calibrated, Calibration, Reply, Verdict
+from trainer.coach import models
 
 REPLY = Reply("r", "Quando inspiro alla panca?", "Inspira mentre scendi. Trattieni il fiato sui carichi pesanti.", ("c",))
 TEXTS = {"c": "Bench Press / Cautions\nInhale on the downward movement and exhale on the upward movement."}
@@ -108,3 +109,13 @@ def test_the_committed_calibration_set_holds_30_real_and_15_planted_on_cited_pas
     assert len(kinds) - kinds.count(answer_judge.REAL) == 15
     texts = answer_judge.passages()
     assert all(cited in texts for one in calibration.replies for cited in one.reply.passages)
+
+
+def test_the_roster_judge_is_of_another_family_than_the_answering_model() -> None:
+    family = models.JUDGE.model.split("/")[0]
+
+    assert family != models.NODES["entrance"].choice.model.split("/")[0]
+
+
+def test_the_roster_judge_thresholds_were_fitted_on_the_committed_calibration_set() -> None:
+    assert answer_judge.load().version == answer_judge.FITTED_ON

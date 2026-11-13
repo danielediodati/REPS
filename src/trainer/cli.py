@@ -403,9 +403,9 @@ def judge_group() -> None:
 
 
 @judge_group.command("calibrate")
-@click.option("--model", "named", required=True, help="The OpenRouter model to calibrate as the judge.")
+@click.option("--model", "named", default=None, help="The OpenRouter model to calibrate; the roster's judge by default.")
 @click.option("--records", type=click.Path(path_type=Path), default=None, help="Where each verdict is written as JSON.")
-def judge_calibrate(named: str, records: Path | None) -> None:
+def judge_calibrate(named: str | None, records: Path | None) -> None:
     """Read the frozen calibration set with one judge: planted errors caught, real replies agreed, cost.
 
     Reaches a provider and spends money: ask before running it.
@@ -413,6 +413,7 @@ def judge_calibrate(named: str, records: Path | None) -> None:
     from trainer import answer_judge
     from trainer.coach import models
 
+    named = named or models.JUDGE.model
     with reported():
         calibration = answer_judge.load()
         judge = answer_judge.Judge(models.openrouter_model(named, host=""))

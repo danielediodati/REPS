@@ -181,6 +181,10 @@ class Thresholds:
     relevant: float
 
 
+THRESHOLDS, FITTED_ON = Thresholds(1.0, 1.0), 2
+"""The roster judge's thresholds, and the calibration set version they were fitted on."""
+
+
 def fitted(scores: Sequence[float], labels: Sequence[bool]) -> float:
     """The threshold agreeing with the most labels; the highest such, so a tie is read strictly.
 
