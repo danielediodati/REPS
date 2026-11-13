@@ -16,7 +16,7 @@ For each source give its licence, attribution duties, coverage, format and how t
 
 ## Answer
 
-Researched 2026-11-08 on branches `research/more-open-sources` and `research/open-fitness-textbooks`; licences read on the publishers' own pages.
+Researched 2026-11-08 in [more open sources](../../../research/more-open-sources.md) and [open fitness textbooks](../../../research/open-fitness-textbooks.md); licences read on the publishers' own pages.
 
 | Source | Licence | Verdict |
 |---|---|---|

@@ -112,5 +112,5 @@ Bars are read on the observed score, the 95% interval beside it. Retrieval start
 
 ## Further Notes
 
-- Sources, embeddings and stores were researched on the branches `research/answer-sources`, `research/answer-embeddings` and `research/vector-stores`; the citation prototype is on `prototype/citation-looks`.
+- Sources, embeddings and stores are researched in [answer sources](../../research/answer-sources.md), [answer embeddings](../../research/answer-embeddings.md) and [vector stores](../../research/vector-stores.md); the citation prototype is on `prototype/citation-looks`.
 - Every measurement runs against a fixture named in `TRAINER_DB`.

@@ -21,4 +21,4 @@ Grilled 2026-11-07. Recorded in [ADR-0017](../../../adr/0017-retrieval-runs-on-t
 | Down mid-session | The retrieval tool answers that the sources are unavailable; the entrance says it cannot answer from sources; the conversation goes on. |
 | Latency | Estimated, not measured: ~0.1-0.3 s to embed a question on CPU, milliseconds to search a few thousand points. |
 
-The store comparison (Qdrant, Chroma, LanceDB, Milvus, sqlite-vec) is in `research/vector-stores.md` on branch `research/vector-stores`.
+The store comparison (Qdrant, Chroma, LanceDB, Milvus, sqlite-vec) is in [vector stores](../../../research/vector-stores.md).
