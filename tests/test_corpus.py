@@ -356,7 +356,14 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
         assert chunk.source in {
-            "wikipedia", "medlineplus", "wger", "us-army", "hhs", "usuhs", "us-air-force"
+            "wikipedia",
+            "medlineplus",
+            "wger",
+            "us-army",
+            "hhs",
+            "usuhs",
+            "us-air-force",
+            "europe-pmc",
         }, chunk.id
         assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
@@ -1122,3 +1129,123 @@ def test_the_notice_says_the_playbook_is_public_domain_by_authorship_and_only_it
         f"(sha256 `{hashlib.sha256(PLAYBOOK_BYTES).hexdigest()}`), parts "
         "Understanding Workout Programs, Appendix B Dynamic Warm-Up, Appendix H"
     ) in notice
+
+
+ARTICLE_DOI = "10.1000/squat.1"
+ARTICLE_XML = """<article xmlns:xlink="http://www.w3.org/1999/xlink">
+<front><article-meta>
+<article-id pub-id-type="pmcid">PMC111</article-id>
+<article-id pub-id-type="doi">10.1000/squat.1</article-id>
+<title-group><article-title>Deep squats and the <italic>knee</italic></article-title></title-group>
+<contrib-group>
+<contrib contrib-type="author"><name><surname>Rossi</surname><given-names>Anna</given-names></name></contrib>
+<contrib contrib-type="author"><name><surname>Bianchi</surname><given-names>Luca M.</given-names></name></contrib>
+</contrib-group>
+<contrib-group content-type="editor">
+<contrib><name><surname>Verdi</surname><given-names>Ed</given-names></name></contrib>
+</contrib-group>
+<permissions>LICENCE</permissions>
+</article-meta></front>
+<body>
+<boxed-text><p>What is already known on this topic.</p></boxed-text>
+<sec sec-type="intro"><title>1. Introduction</title>
+<p>Deep squats load the knee [<xref ref-type="bibr" rid="B1">1</xref>,<xref ref-type="bibr" rid="B2">2</xref>].
+Depth matters (<xref ref-type="fig" rid="F1">Figure 1</xref>).</p>
+<fig id="F1"><label>Figure 1</label><caption><p>A squat at three depths.</p></caption></fig>
+</sec>
+<sec><title>Methods</title>
+<sec><title>Search strategy</title>
+<p>We searched three databases.<sup><xref ref-type="bibr" rid="B3">3</xref></sup></p>
+<table-wrap><label>Table 1</label><table><tr><td>a cell</td></tr></table></table-wrap>
+<list><list-item><p>Trials of adults.</p></list-item><list-item><p>Squats below parallel.</p></list-item></list>
+</sec>
+</sec>
+<sec sec-type="supplementary-material"><title>Supplementary Information</title><p>Below is the link.</p></sec>
+<sec><title>Acknowledgments</title><p>We thank the laboratory.</p></sec>
+<sec sec-type="ref-list"><title>References</title><p>1. A reference.</p></sec>
+</body>
+<back><ack><p>Thanks again.</p></ack><ref-list><ref><mixed-citation>A reference.</mixed-citation></ref></ref-list></back>
+</article>"""
+CC_BY = (
+    '<license xlink:href="https://creativecommons.org/licenses/by/4.0/"><license-p>This '
+    "article is distributed under the Creative Commons Attribution License (CC BY).</license-p>"
+    "</license>"
+)
+
+
+def _article(licence: str = CC_BY) -> Callable[[str], bytes]:
+    return _getter({"rest/PMC111/fullTextXML": ARTICLE_XML.replace("LICENCE", licence).encode()})
+
+
+def _article_manifest(doi: str = ARTICLE_DOI) -> corpus.Manifest:
+    return _manifest(wikipedia=(), article=(corpus.Article(doi, "PMC111"),))
+
+
+def test_an_article_is_fetched_as_full_text_and_cut_by_its_sections() -> None:
+    chunks = corpus.fetch(_article_manifest(), _article())
+
+    assert [(c.section, c.text) for c in chunks] == [
+        ("Introduction", "Deep squats load the knee. Depth matters (Figure 1)."),
+        (
+            "Methods: Search strategy",
+            "We searched three databases.\nTrials of adults.\nSquats below parallel.",
+        ),
+    ]
+    assert {c.title for c in chunks} == {"Deep squats and the knee"}
+    assert {c.author for c in chunks} == {"Anna Rossi, Luca M. Bianchi"}
+    assert {c.link for c in chunks} == {"https://doi.org/10.1000/squat.1"}
+    assert {c.licence for c in chunks} == {"CC BY 4.0"}
+    assert {(c.source, c.language, c.revision) for c in chunks} == {("europe-pmc", "en", "PMC111")}
+
+
+@pytest.mark.parametrize(
+    ("licence", "said"),
+    [
+        ('<license xlink:href="https://creativecommons.org/licenses/by-nc/4.0/"/>', "by-nc"),
+        ('<license xlink:href="https://creativecommons.org/licenses/by-nd/4.0/"/>', "by-nd"),
+        ("<copyright-statement>(c) The Publisher 2015</copyright-statement>", "no licence"),
+    ],
+)
+def test_an_article_whose_own_licence_is_not_cc_by_or_cc0_stops_the_fetch(
+    licence: str, said: str
+) -> None:
+    with pytest.raises(corpus.CorpusError) as refused:
+        corpus.fetch(_article_manifest(), _article(licence))
+
+    assert ARTICLE_DOI in str(refused.value)
+    assert said in str(refused.value)
+
+
+def test_an_article_in_the_public_domain_is_taken_as_cc0() -> None:
+    cc0 = '<license xlink:href="https://creativecommons.org/publicdomain/zero/1.0/"/>'
+
+    chunks = corpus.fetch(_article_manifest(), _article(cc0))
+
+    assert {c.licence for c in chunks} == {"CC0 1.0"}
+
+
+def test_a_full_text_that_is_not_the_pinned_article_is_refused() -> None:
+    with pytest.raises(corpus.CorpusError, match=r"10\.1000/another.*10\.1000/squat\.1"):
+        corpus.fetch(_article_manifest("10.1000/another"), _article())
+
+
+def test_the_notice_lists_each_article_with_its_authors_link_and_licence() -> None:
+    manifest = _article_manifest()
+
+    notice = corpus.notice(manifest, corpus.fetch(manifest, _article()))
+
+    assert "## Europe PMC" in notice
+    assert (
+        "- *Deep squats and the knee*, by Anna Rossi, Luca M. Bianchi, "
+        "https://doi.org/10.1000/squat.1 (PMC111), "
+        "[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)"
+    ) in notice
+
+
+def test_the_manifest_pins_an_article_by_its_doi_and_its_pmc_id(tmp_path: Path) -> None:
+    (tmp_path / "manifest.toml").write_text(
+        'version = 1\n\n[[article]]\ndoi = "10.1000/squat.1"\npmcid = "PMC111"\n',
+        encoding="utf-8",
+    )
+
+    assert corpus.read_manifest(tmp_path).article == (corpus.Article(ARTICLE_DOI, "PMC111"),)

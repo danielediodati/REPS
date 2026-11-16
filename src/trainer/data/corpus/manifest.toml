@@ -66,6 +66,50 @@ parts = [
     "Appendix H",
 ]
 
+# Open-access articles, as full text from Europe PMC. The fetch reads each article's own
+# licence and stops at anything but CC BY or CC0, so an article enters here only once its
+# licence has also been read on its publisher's page.
+
+# Range of motion from resistance training
+[[article]]
+doi = "10.1007/s40279-022-01804-x"
+pmcid = "PMC9935664"
+
+# Foam rolling, performance and recovery
+[[article]]
+doi = "10.3389/fphys.2019.00376"
+pmcid = "PMC6465761"
+
+# Deep squat and the knee
+[[article]]
+doi = "10.3389/fspor.2024.1477796"
+pmcid = "PMC11618833"
+
+# EMG of the deadlift and its variants
+[[article]]
+doi = "10.1371/journal.pone.0229507"
+pmcid = "PMC7046193"
+
+# Bench press grip width
+[[article]]
+doi = "10.3390/ijerph18126444"
+pmcid = "PMC8296276"
+
+# Neuromuscular warm-ups against injury
+[[article]]
+doi = "10.1186/1741-7015-10-75"
+pmcid = "PMC3408383"
+
+# Resistance exercise dose for tendinopathy
+[[article]]
+doi = "10.1136/bjsports-2022-105754"
+pmcid = "PMC10579176"
+
+# Isometric exercise for tendinopathy
+[[article]]
+doi = "10.1136/bmjsem-2020-000760"
+pmcid = "PMC7406028"
+
 [medlineplus]
 date = "2026-11-07"
 topics = [

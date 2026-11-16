@@ -110,13 +110,25 @@ AIR_FORCE = Source(
     "Force Personnel Center; the playbook carries no licence statement of its own. Only its "
     "text is taken: it does not say where its pictures come from.",
 )
+EUROPE_PMC = Source(
+    "europe-pmc",
+    "the authors of each article",
+    {
+        **{
+            f"CC BY {version}": f"https://creativecommons.org/licenses/by/{version}/"
+            for version in ("2.0", "2.5", "3.0", "4.0")
+        },
+        **_CC0,
+    },
+    "Europe PMC",
+)
 SOURCES = {
     source.name: source
-    for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS, USUHS, AIR_FORCE)
+    for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS, USUHS, AIR_FORCE, EUROPE_PMC)
 }
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
 
-_MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "pdf"}
+_MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "pdf", "article"}
 """What a manifest may name: the sources the corpus may hold, and its version."""
 
 _WGER_LICENCES = {
@@ -181,6 +193,14 @@ class Pdf:
 
 
 @dataclass(frozen=True)
+class Article:
+    """An open-access article pinned by its DOI and by the PMC id of its full text."""
+
+    doi: str
+    pmcid: str
+
+
+@dataclass(frozen=True)
 class Manifest:
     """The corpus version and the pinned list it is cut from."""
 
@@ -190,6 +210,7 @@ class Manifest:
     medlineplus_topics: tuple[str, ...]
     wger: tuple[Wger, ...] = ()
     pdf: tuple[Pdf, ...] = ()
+    article: tuple[Article, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,6 +259,8 @@ def fetch(manifest: Manifest, get: Getter, supplied: Path | None = None) -> list
             chunks.extend(_wger(pin, get, borrowed))
     for pinned in manifest.pdf:
         chunks.extend(_pdf(pinned, get, supplied or supplied_directory()))
+    for article in manifest.article:
+        chunks.extend(_article(article, get))
     return chunks
 
 
@@ -261,6 +284,10 @@ def read_manifest(directory: Path | None = None) -> Manifest:
                 for pin in data.get("wger", [])
             ),
             pdf=tuple(_pdf_pin(entry, path) for entry in data.get("pdf", [])),
+            article=tuple(
+                Article(str(entry["doi"]), str(entry["pmcid"]))
+                for entry in data.get("article", [])
+            ),
             version=int(data["version"]),
             wikipedia=tuple(
                 Page(str(page["language"]), str(page["title"]), int(page["revision"]))
@@ -413,6 +440,26 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             f"- *{pin.title}*, {pin.url} (sha256 `{pin.sha256}`), {division} "
             f"{', '.join(pin.parts or [str(chapter) for chapter in pin.chapters])}"
             for pin in pins
+        )
+    if manifest.article:
+        lines += [
+            "",
+            f"## {EUROPE_PMC.label}",
+            "",
+            "Open-access articles, taken as full text from Europe PMC (https://europepmc.org). "
+            "Each keeps the licence its publisher gave it, read from the article at every "
+            "fetch; only CC BY and CC0 articles are taken. Each, with its authors and licence:",
+            "",
+        ]
+        articles = dict.fromkeys(
+            (chunk.title, chunk.author, chunk.link, chunk.revision, chunk.licence)
+            for chunk in chunks
+            if chunk.source == EUROPE_PMC.name
+        )
+        lines.extend(
+            f"- *{title}*, by {author}, {link} ({revision}), "
+            f"[{licence}]({EUROPE_PMC.licences[licence]})"
+            for title, author, link, revision, licence in articles
         )
     return "\n".join(lines) + "\n"
 
@@ -622,6 +669,201 @@ def _borrowed_phrases(get: Getter) -> set[tuple[str, ...]]:
 def _phrases(text: str) -> list[tuple[str, ...]]:
     words = re.findall(r"[a-z0-9']+", re.sub(r"<[^>]+>", " ", text).lower())
     return [tuple(words[i : i + _PHRASE_WORDS]) for i in range(len(words) - _PHRASE_WORDS + 1)]
+
+
+_CC_LICENCE = re.compile(r"creativecommons\.org/(?:licenses|publicdomain)/([a-z-]+)/(\d\.\d)")
+_ARTICLE_DROPPED = {
+    "table-wrap",
+    "table-wrap-foot",
+    "fig",
+    "boxed-text",
+    "supplementary-material",
+    "disp-formula",
+    "fn-group",
+    "ref-list",
+    "def-list",
+    "graphic",
+    "media",
+    "label",
+}
+"""What an article's prose leaves out: tables, figures, boxes, formulas, notes and list marks."""
+_ARTICLE_BACK_TYPES = {
+    "supplementary-material",
+    "supplementary-materials",
+    "associated-data",
+    "ack",
+    "fn-group",
+    "ref-list",
+    "glossary",
+    "COI-statement",
+    "data-availability",
+}
+_ARTICLE_BACK_TITLES = {
+    "acknowledgments",
+    "acknowledgements",
+    "acknowledgment",
+    "acknowledgement",
+    "footnotes",
+    "references",
+    "competinginterests",
+    "conflictofinterest",
+    "conflictsofinterest",
+    "authorscontributions",
+    "authorcontributions",
+    "prepublicationhistory",
+    "supportinginformation",
+    "supplementaryinformation",
+    "supplementarymaterial",
+    "supplementarymaterials",
+    "electronicsupplementarymaterial",
+    "abbreviations",
+    "dataavailability",
+    "dataavailabilitystatement",
+    "funding",
+    "fundingstatement",
+    "ethicsstatements",
+    "associateddata",
+    "publishersnote",
+}
+"""An article's sections that are not its prose, by their titles' letters."""
+_SECTION_NUMBER = re.compile(r"^\d+(\.\d+)*\.?\s+")
+_EMPTIED_CITATION = re.compile(r"\s*[\[(][\s,;\u2013\u2014-]*[\])]")
+
+
+def _article(pin: Article, get: Getter) -> list[Chunk]:
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pin.pmcid}/fullTextXML"
+    try:
+        root = ElementTree.fromstring(get(url))
+    except NotPublished as error:
+        raise CorpusError(
+            f"Europe PMC holds no full text of {pin.pmcid}, pinned for the article {pin.doi} "
+            f"({url}); check the PMC id, or unpin the article"
+        ) from error
+    except ElementTree.ParseError as error:
+        raise CorpusError(f"{url} is not the XML of an article: {error}") from error
+    meta, body = root.find("front/article-meta"), root.find("body")
+    if meta is None or body is None:
+        raise CorpusError(f"{url} holds no full text of the article {pin.doi}")
+    held = [
+        (found.text or "").strip()
+        for found in meta.findall("article-id")
+        if found.get("pub-id-type") == "doi"
+    ]
+    if pin.doi.lower() not in (doi.lower() for doi in held):
+        raise CorpusError(
+            f"the manifest pins the article {pin.doi} as {pin.pmcid}, but Europe PMC's "
+            f"{pin.pmcid} is {', '.join(held) or 'an article with no DOI'}; correct the pin"
+        )
+    title = meta.find("title-group/article-title")
+    return _cut(
+        EUROPE_PMC,
+        "en",
+        _clean(_article_text(title)) if title is not None else pin.doi,
+        pin.pmcid,
+        pin.pmcid,
+        _article_sections(body),
+        lambda _: f"https://doi.org/{pin.doi}",
+        licence=_article_licence(meta, pin),
+        author=_article_authors(meta, pin),
+    )
+
+
+def _article_licence(meta: ElementTree.Element, pin: Article) -> str:
+    """The licence the article states for itself; anything but CC BY or CC0 stops the fetch."""
+    stated = "".join(
+        ElementTree.tostring(licence, encoding="unicode") for licence in meta.iter("license")
+    )
+    found = sorted(set(_CC_LICENCE.findall(stated)))
+    only = "only articles under CC BY or CC0 are taken, so unpin it"
+    if not found:
+        raise CorpusError(
+            f"the article {pin.doi} ({pin.pmcid}) states no licence of its own in its full "
+            f"text; {only}"
+        )
+    names = [
+        "CC0 1.0" if kind == "zero" else f"CC BY {version}" if kind == "by" else f"{kind} {version}"
+        for kind, version in found
+    ]
+    if len(names) != 1 or names[0] not in EUROPE_PMC.licences:
+        raise CorpusError(
+            f"the article {pin.doi} ({pin.pmcid}) states the licence {', '.join(names)}; {only}"
+        )
+    return names[0]
+
+
+def _article_authors(meta: ElementTree.Element, pin: Article) -> str:
+    names = []
+    for group in meta.findall("contrib-group"):
+        for contrib in group.findall("contrib"):
+            if contrib.get("contrib-type", group.get("content-type", "author")) != "author":
+                continue
+            name = contrib.find("name")
+            if name is None:
+                name = contrib.find("name-alternatives/name")
+            written = (
+                f"{name.findtext('given-names') or ''} {name.findtext('surname') or ''}"
+                if name is not None
+                else contrib.findtext("collab") or ""
+            )
+            if _clean(written):
+                names.append(_clean(written))
+    if not names:
+        raise CorpusError(
+            f"the article {pin.doi} ({pin.pmcid}) names no author in its full text, and its "
+            "licence asks that they be credited; unpin it"
+        )
+    return ", ".join(names)
+
+
+def _article_sections(body: ElementTree.Element) -> Sections:
+    """An article's prose as (section titles from the outermost, no anchor, paragraphs)."""
+    sections: Sections = []
+
+    def walk(section: ElementTree.Element, above: list[str]) -> None:
+        heading = section.find("title")
+        named = _clean(_article_text(heading)) if heading is not None else ""
+        title = _SECTION_NUMBER.sub("", named)
+        if (
+            section.get("sec-type") in _ARTICLE_BACK_TYPES
+            or _letters(title).lower() in _ARTICLE_BACK_TITLES
+        ):
+            return
+        path = [*above, title] if title else above
+        paragraphs: list[str] = []
+        sections.append((": ".join(path), "", paragraphs))
+        for child in section:
+            if child.tag == "p":
+                paragraphs.append(_article_prose(child))
+            elif child.tag == "list":
+                paragraphs.extend(_article_prose(item) for item in child.findall("list-item"))
+            elif child.tag == "sec":
+                walk(child, path)
+
+    for section in body.findall("sec"):
+        walk(section, [])
+    return [
+        (heading, anchor, [paragraph for paragraph in paragraphs if paragraph])
+        for heading, anchor, paragraphs in sections
+        if any(paragraphs)
+    ]
+
+
+def _article_prose(element: ElementTree.Element) -> str:
+    """An element's text with its citations gone, and the brackets and spaces they leave."""
+    text = _EMPTIED_CITATION.sub("", _article_text(element))
+    return re.sub(r"\s+([.,;:])", r"\1", _clean(text))
+
+
+def _article_text(element: ElementTree.Element) -> str:
+    """An element's text without what `_ARTICLE_DROPPED` names or a citation of the references."""
+    parts = [element.text or ""]
+    for child in element:
+        cited = child.tag == "xref" and child.get("ref-type") == "bibr"
+        raised = child.tag == "sup" and child.find("xref[@ref-type='bibr']") is not None
+        if child.tag not in _ARTICLE_DROPPED and not cited and not raised:
+            parts.append(_article_text(child))
+        parts.append(child.tail or "")
+    return "".join(parts)
 
 
 def pdf_pages(data: bytes) -> list[str]:
@@ -865,7 +1107,9 @@ def _indented(data: bytes, pin: Pdf) -> Sections:
         dropping = False
         for number in range(part.page, end):
             lines, _ = _page_lines(pages[number - 1], pin)
-            margin = min((len(line) - len(line.lstrip()) for line in lines if line.strip()), default=0)
+            margin = min(
+                (len(line) - len(line.lstrip()) for line in lines if line.strip()), default=0
+            )
             open_as: str | None = None
             hanging = 0
             at_top = True
@@ -886,7 +1130,8 @@ def _indented(data: bytes, pin: Pdf) -> Sections:
                     open_as, dropping, at_top = None, False, False
                     continue
                 index += 1
-                carried = at_top and bool(sections[-1][2]) and _UNFINISHED.search(sections[-1][2][-1])
+                written = sections[-1][2]
+                carried = at_top and bool(written) and _UNFINISHED.search(written[-1])
                 at_top = False
                 if left_out:
                     continue
@@ -989,7 +1234,9 @@ def _playbook(data: bytes, pin: Pdf) -> Sections:
     sections: Sections = []
     for number, spans in enumerate(pdf_spans(data), start=1):
         label = _clean(
-            " ".join(text for _, _, size, face, text in spans if face == _PLAYBOOK_LABEL and size < 1)
+            " ".join(
+                text for _, _, size, face, text in spans if face == _PLAYBOOK_LABEL and size < 1
+            )
         )
         if not any(label.startswith(part) for part in pin.parts):
             continue
@@ -1071,7 +1318,8 @@ def _playbook_prose(spans: list[Span], label: str, number: int) -> Sections:
             sections.append((above, f"page={number}", []))
         paragraphs = sections[-1][2]
         item = text.lstrip(_PLAYBOOK_BULLETS + " ")
-        labelled = bool(paragraphs) and text[0] in _PLAYBOOK_BULLETS[1:] and paragraphs[-1][-1] == ":"
+        nested = text[0] in _PLAYBOOK_BULLETS[1:]
+        labelled = nested and bool(paragraphs) and paragraphs[-1][-1] == ":"
         if text[0] in _PLAYBOOK_BULLETS and not labelled:
             if item:
                 paragraphs.append(item)
