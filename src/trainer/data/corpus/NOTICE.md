@@ -443,3 +443,9 @@ Licence: [Public domain (US government work)](https://www.copyright.gov/title17/
 Licence: [Public domain (US government work)](https://odphp.health.gov/copyright-policy): ODPHP's copyright policy says its content "is in the public domain. This means it may be freely distributed and copied — but please include a link to our website and acknowledge ODPHP as the source." Source: ODPHP, https://odphp.health.gov. Author: Office of Disease Prevention and Health Promotion, U.S. Department of Health and Human Services. Only the chapters named are used, and no figure:
 
 - *Physical Activity Guidelines for Americans, 2nd edition*, https://odphp.health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf (sha256 `0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5`), chapters 2, 4, 5, 6, 7
+
+## USUHS
+
+Licence: [Public domain (US government work)](https://www.copyright.gov/title17/92chap1.html#105): a US government work by authorship (17 U.S.C. 105), inferred from the authors the PDF names, a federal university's faculty and Navy medical officers; the guide carries no licence statement of its own. Material it prints from other publishers is left out. Author: Uniformed Services University of the Health Sciences. Only the chapters named are used, and no figure:
+
+- *The Navy SEAL Physical Fitness Guide*, https://champ.usuhs.edu/sites/default/files/2020-03/navysealfitnessguide.pdf (sha256 `f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40`), chapters 6, 7, 8, 9, 12

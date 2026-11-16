@@ -32,6 +32,19 @@ sha256 = "0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5"
 cut = "bookmarks"
 chapters = [2, 4, 5, 6, 7]
 
+# The Navy SEAL Physical Fitness Guide (USUHS, 1997): chapters 6 (strength training),
+# 7 (flexibility), 8 (calisthenics), 9 (plyometrics), 12 (training injuries). Left out:
+# every table and figure, the tables of chapter 6 and Appendix A among them, which the
+# guide prints from another publisher with permission.
+[[pdf]]
+source = "usuhs"
+key = "navy-seal-physical-fitness-guide"
+title = "The Navy SEAL Physical Fitness Guide"
+url = "https://champ.usuhs.edu/sites/default/files/2020-03/navysealfitnessguide.pdf"
+sha256 = "f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40"
+cut = "indented"
+chapters = [6, 7, 8, 9, 12]
+
 [medlineplus]
 date = "2026-11-07"
 topics = [

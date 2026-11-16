@@ -356,7 +356,7 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
         assert chunk.source in {
-            "wikipedia", "medlineplus", "wger", "us-army", "hhs"
+            "wikipedia", "medlineplus", "wger", "us-army", "hhs", "usuhs"
         }, chunk.id
         assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
@@ -663,15 +663,15 @@ def test_an_army_manual_other_than_the_pinned_file_is_refused(army_pages: str) -
     assert hashlib.sha256(b"%PDF-another").hexdigest() in str(refused.value)
 
 
-HHS_OUTLINE = [
-    (0, "Physical Activity Guidelines"),
-    (1, "Table of Contents"),
-    (1, "Chapter 3. Active Children"),
-    (2, "Aerobic Activity"),
-    (1, "Chapter 4. Active Adults"),
-    (2, "Explaining the Key Guidelines"),
-    (3, "Muscle-Strengthening Activity"),
-    (1, "Glossary"),
+HHS_OUTLINE: list[tuple[int, str, int | None]] = [
+    (0, "Physical Activity Guidelines", 1),
+    (1, "Table of Contents", 1),
+    (1, "Chapter 3. Active Children", 2),
+    (2, "Aerobic Activity", 3),
+    (1, "Chapter 4. Active Adults", None),
+    (2, "Explaining the Key Guidelines", 5),
+    (3, "Muscle-Strengthening Activity", 5),
+    (1, "Glossary", 7),
 ]
 HHS_PAGES = [
     "Table of Contents\nChapter 4. Active Adults ........ 55\n",
@@ -798,3 +798,146 @@ def test_the_notice_lists_the_guidelines_with_the_wording_of_their_publisher() -
         f"- *Physical Activity Guidelines for Americans, 2nd edition*, {HHS_URL} "
         f"(sha256 `{hashlib.sha256(HHS_BYTES).hexdigest()}`), chapters 4"
     ) in notice
+
+
+SEAL_OUTLINE: list[tuple[int, str, int | None]] = [
+    (0, "SEALFITNESS.pdf", None),
+    (1, "Chapter 5 Swimming for Fitness", 1),
+    (1, "Chapter 6 Strength Training", 2),
+    (2, "Repetition Maximum or RM", 2),
+    (2, "Periodization", 3),
+    (2, "Resource", 4),
+    (1, "Appendix A Weight Lifting Techniques", 5),
+]
+SEAL_PAGES = [
+    "        Swimming is an excellent exercise\n"
+    "for overall fitness.\n"
+    "\n\n"
+    "72                         Swimming for Fitness\n",
+    "                                      Chapters\n"
+    "          Strength Training\n"
+    "\n\n\n"
+    "        Muscular strength and endurance training enhance agility,\n"
+    "speed, strength, and endurance. Pure strength alone will\n"
+    "not improve mission perfor-\n"
+    "mance.\n"
+    "Repetition Maximum or\n"
+    "RM\n"
+    "\n"
+    "         A repetition maximum or RM is the maximum amount of weight you can lift for a given\n"
+    "number of repetitions.                    For example, your 1RM would be the amount of weight\n"
+    "you could lift for only 1 repetition.\n"
+    "\n"
+    "           Your 1RM would be the amount of weight you\n"
+    "                            can lift for only 1 repetition\n"
+    "         To find your 5RM:\n"
+    "         •   Select a weight you know is light enough for 10\n"
+    "               repetitions.\n"
+    "         •   Rest for two minutes.\n"
+    "                   Multiply your 5RM times 1.15\n"
+    "                          to establish your 1RM.\n"
+    "Figure 6-2.   Determining Your 1RM from 5RM\n"
+    "\n"
+    "                   5RM = 75\n"
+    "         1RM = 75 X 1.15 = 86\n"
+    "\n"
+    "The Navy SEAL Physical Fitness Guide                                        \n",
+    "Table 6-4. Intensity Levels Relative to a 1RM*\n"
+    "      % of 1RM                           Number of Repetitions\n"
+    "           80 - 95                                           2 - 5\n"
+    "                     Lift the load in good form using the\n"
+    " Heavy Lifts         weight slowly, then lower it.                  Hips\n"
+    "   *Adapted with permission from Strength Training for Sports; Applied Futuristics, Inc.\n"
+    "Periodization\n"
+    "\n"
+    "         Periodization of training is a technique that involves altering training variables\n"
+    "to achieve well-defined gains. Your schedule would be adapted to\n"
+    "\n\n"
+    "100                                                          Strength Training\n",
+    "achieve that goal.\n"
+    "   The goal of the muscular endurance phase\n"
+    "    is to take strength gains and convert them.\n"
+    "\n"
+    "Resource\n"
+    "\n"
+    "        Bompa, T. Strength Training for Sports. Applied Futuristics,\n"
+    "1993.\n"
+    "\n\n"
+    "The Navy SEAL Physical Fitness Guide                                        \n",
+    "                Appendix A\n"
+    "   Weight Lifting Techniques\n"
+    "\n"
+    "        Squats: keep the back straight\n"
+    "and the head up.\n",
+]
+SEAL_URL = "https://champ.usuhs.edu/navysealfitnessguide.pdf"
+SEAL_BYTES = b"%PDF-seal"
+
+
+def _seal_manifest() -> corpus.Manifest:
+    return _manifest(
+        wikipedia=(),
+        pdf=(
+            corpus.Pdf(
+                "usuhs",
+                "navy-seal-physical-fitness-guide",
+                "The Navy SEAL Physical Fitness Guide",
+                SEAL_URL,
+                hashlib.sha256(SEAL_BYTES).hexdigest(),
+                "indented",
+                (6,),
+            ),
+        ),
+    )
+
+
+@pytest.fixture()
+def seal_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        corpus, "pdf_bookmarked", lambda data: (list(SEAL_PAGES), list(SEAL_OUTLINE))
+    )
+
+
+def test_an_indented_pdf_gives_its_chosen_chapters_and_no_table_or_appendix(
+    seal_pdf: None,
+) -> None:
+    chunks = corpus.fetch(_seal_manifest(), _getter({SEAL_URL: SEAL_BYTES}))
+
+    assert [(c.section, c.text) for c in chunks] == [
+        (
+            "Chapter 6 Strength Training",
+            "Muscular strength and endurance training enhance agility, speed, strength, "
+            "and endurance. Pure strength alone will not improve mission performance.",
+        ),
+        (
+            "Chapter 6 Strength Training: Repetition Maximum or RM",
+            "A repetition maximum or RM is the maximum amount of weight you can lift for "
+            "a given number of repetitions. For example, your 1RM would be the amount of "
+            "weight you could lift for only 1 repetition.\n"
+            "To find your 5RM:\n"
+            "Select a weight you know is light enough for 10 repetitions.\n"
+            "Rest for two minutes.",
+        ),
+        (
+            "Chapter 6 Strength Training: Periodization",
+            "Periodization of training is a technique that involves altering training "
+            "variables to achieve well-defined gains. Your schedule would be adapted to "
+            "achieve that goal.",
+        ),
+    ]
+    assert [c.link for c in chunks] == [f"{SEAL_URL}#page={n}" for n in (2, 2, 3)]
+    assert {c.source for c in chunks} == {"usuhs"}
+    assert {c.author for c in chunks} == {
+        "Uniformed Services University of the Health Sciences"
+    }
+    assert {c.licence for c in chunks} == {"Public domain (US government work)"}
+
+
+def test_the_notice_says_the_seal_guide_is_public_domain_by_authorship_inferred() -> None:
+    notice = corpus.notice(_seal_manifest(), [])
+
+    assert "## USUHS" in notice
+    assert "17 U.S.C. 105" in notice
+    assert "inferred from the authors the PDF names" in notice
+    assert "no licence statement of its own" in notice
+    assert f"- *The Navy SEAL Physical Fitness Guide*, {SEAL_URL}" in notice

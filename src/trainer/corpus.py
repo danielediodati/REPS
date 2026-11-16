@@ -91,7 +91,18 @@ HHS = Source(
     "be freely distributed and copied \u2014 but please include a link to our website and "
     "acknowledge ODPHP as the source.\" Source: ODPHP, https://odphp.health.gov.",
 )
-SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS)}
+USUHS = Source(
+    "usuhs",
+    "Uniformed Services University of the Health Sciences",
+    {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
+    "USUHS",
+    "a US government work by authorship (17 U.S.C. 105), inferred from the authors the PDF "
+    "names, a federal university's faculty and Navy medical officers; the guide carries no "
+    "licence statement of its own. Material it prints from other publishers is left out.",
+)
+SOURCES = {
+    source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS, USUHS)
+}
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
 
 _MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "pdf"}
@@ -611,31 +622,47 @@ def _pdf(pin: Pdf, get: Getter) -> list[Chunk]:
     )
 
 
-def pdf_bookmarked(data: bytes) -> tuple[list[str], list[tuple[int, str]]]:
-    """Each page of a PDF as it is laid out, and its bookmarks as (depth, title)."""
+Bookmark = tuple[int, str, int | None]
+"""A PDF bookmark: its depth, its title and the page it opens, when the file says which."""
+
+
+def pdf_bookmarked(data: bytes) -> tuple[list[str], list[Bookmark]]:
+    """Each page of a PDF as it is laid out, and its bookmarks."""
     reader = PdfReader(io.BytesIO(data))
-    bookmarks: list[tuple[int, str]] = []
+    bookmarks: list[Bookmark] = []
 
     def walk(entries: list[object], depth: int) -> None:
         for entry in entries:
             if isinstance(entry, list):
                 walk(entry, depth + 1)
-            else:
-                bookmarks.append((depth, _clean(str(getattr(entry, "title", "")))))
+                continue
+            try:
+                opened = reader.get_destination_page_number(entry)  # type: ignore[arg-type]
+            except Exception:  # noqa: BLE001 - a bookmark that opens nothing has no page
+                opened = None
+            page = None if opened is None else opened + 1
+            bookmarks.append((depth, _clean(str(getattr(entry, "title", ""))), page))
 
     walk(list(reader.outline), 0)
     pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
     return pages, bookmarks
 
 
-_BULLETS = "⚫•●▪"
-_CHAPTER = re.compile(r"^Chapter (\d+)\.")
-_CAPTION = re.compile(r"^(Table|Figure) [A-Z]?\d*-\d+\. ")
+_BULLETS = "⚫•●▪"
+_CHAPTER = re.compile(r"^Chapter (\d+)\b")
+_CAPTION = re.compile(r"^(Table|Figure) [A-Z]?\d*-\d+\.\s")
 _CAPTION_NOTE = re.compile(r"^(Note:|Source:|\*)")
-_FOLIO = re.compile(r"^\d+\S|\s{2,}\d+$")
+_FOLIO = re.compile(r"^\d+(?=\S|\s{3})|\s{2,}\d+$")
 _COLUMN_GAP = re.compile(r"\s{5,}")
+_CELL_GAP = re.compile(r"\s{4,}")
+"""The space between two cells of a table row, once a table is being left out."""
 _BULLET = re.compile(rf"^[{_BULLETS}]\s*")
-_UNFINISHED = re.compile(r"[^.!?:;\"\u201d)]$")
+_UNFINISHED = re.compile(r"[^.!?:;\"”)]$")
+_BACK_MATTER = {"Resource", "Resources", "References", "Acknowledgment", "Acknowledgments"}
+"""Headings inside a chapter that hold citations and thanks rather than prose."""
+
+Sections = list[tuple[str, str, list[str]]]
+"""A text as (heading, anchor, paragraphs)."""
 
 
 def _letters(text: str) -> str:
@@ -643,37 +670,91 @@ def _letters(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "", text)
 
 
-def _bookmarked(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
+@dataclass(frozen=True)
+class _Part:
+    """A bookmark at the chapters' depth, with the headings bookmarked under it."""
+
+    title: str
+    page: int | None
+    headings: frozenset[str]
+
+    @property
+    def chapter(self) -> int | None:
+        """The chapter's number; None for a part that is not a chapter."""
+        found = _CHAPTER.match(self.title)
+        return int(found.group(1)) if found else None
+
+
+def _parts(bookmarks: list[Bookmark], pin: Pdf) -> list[_Part]:
+    depths = [depth for depth, title, _ in bookmarks if _CHAPTER.match(title)]
+    if not depths:
+        raise CorpusError(f"{pin.url} has no bookmark named as a chapter; it cannot be cut by them")
+    parts: list[tuple[str, int | None, set[str]]] = []
+    for depth, title, page in bookmarks:
+        if depth == min(depths):
+            parts.append((title, page, set()))
+        elif depth > min(depths) and parts:
+            parts[-1][2].add(_letters(title))
+    return [_Part(title, page, frozenset(headings)) for title, page, headings in parts]
+
+
+def _page_lines(page: str, pin: Pdf) -> tuple[list[str], str]:
+    """A page's lines and its folio, the last line when it is a page number or a running title."""
+    lines = [line.rstrip() for line in page.splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    if not lines:
+        return [], ""
+    last = lines[-1].strip()
+    if _FOLIO.search(last) or _letters(pin.title).startswith(_letters(last)):
+        return lines[:-1], _FOLIO.sub("", last).strip()
+    return lines, ""
+
+
+def _titled(lines: list[str], index: int, titles: frozenset[str] | set[str]) -> tuple[str, int]:
+    """The title that starts at `lines[index]`, alone or with the next line, and how many lines it takes."""
+    text = lines[index].strip()
+    following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+    if _letters(text) in titles:
+        return _clean(text), 1
+    if following and _letters(f"{text}{following}") in titles:
+        return _clean(f"{text} {following}"), 2
+    return "", 0
+
+
+def _joined(paragraph: str, text: str, *, hyphenated: bool) -> str:
+    """A paragraph with its next line; `hyphenated` says a line-end hyphen breaks a word."""
+    if re.search(r"[A-Za-z0-9]-$", paragraph):
+        if hyphenated and text[0].islower() and paragraph[-2].isalpha():
+            return f"{paragraph[:-1]}{text}"
+        return f"{paragraph}{text}"
+    return f"{paragraph} {text}"
+
+
+def _written(sections: Sections) -> Sections:
+    return [
+        (heading, anchor, [_clean(p) for p in paragraphs])
+        for heading, anchor, paragraphs in sections
+        if paragraphs
+    ]
+
+
+def _bookmarked(data: bytes, pin: Pdf) -> Sections:
     """A bookmarked PDF's chosen chapters as (bookmark, page anchor, paragraphs).
 
     Left out: the folio, the boxes set beside the text, and each table or figure from its
     caption to the next paragraph at the margin.
     """
     pages, bookmarks = pdf_bookmarked(data)
-    depths = [depth for depth, title in bookmarks if _CHAPTER.match(title)]
-    if not depths:
-        raise CorpusError(f"{pin.url} has no bookmark named as a chapter; it cannot be cut by them")
-    parts: dict[str, set[str]] = {}
-    """Each bookmark at the chapters' depth, with the headings bookmarked under it."""
-    for depth, title in bookmarks:
-        if depth == min(depths):
-            part = title
-            parts[part] = set()
-        elif depth > min(depths) and parts:
-            parts[part].add(_letters(title))
-    named = {_letters(part): part for part in parts}
-
-    sections: list[tuple[str, str, list[str]]] = []
-    part = ""
+    named = {_letters(part.title): part for part in _parts(bookmarks, pin)}
+    sections: Sections = []
+    part: _Part | None = None
     for number, page in enumerate(pages, start=1):
-        lines = [line.rstrip() for line in page.splitlines()]
-        while lines and not lines[-1]:
-            lines.pop()
-        if lines and _FOLIO.search(lines[-1]):
-            running = named.get(_letters(re.sub(r"\s{2,}\d+$", "", lines.pop())), part)
-            if running != part:
-                part = running
-                sections.append((part, f"page={number}", []))
+        lines, folio = _page_lines(page, pin)
+        running = named.get(_letters(folio), part)
+        if running is not part:
+            part = running
+            sections.append((running.title if running else "", f"page={number}", []))
         box: int | None = None
         skipping = False
         after_blank = True
@@ -681,22 +762,20 @@ def _bookmarked(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
         index = 0
         while index < len(lines):
             line = lines[index]
-            index += 1
             text = line.strip()
             if not text:
                 after_blank = True
+                index += 1
                 continue
-            following = lines[index].strip() if index < len(lines) else ""
-            two_lines = f"{text} {following}"
-            opened = next((c for c in (text, two_lines) if _letters(c) in named), None)
+            opened, taken = _titled(lines, index, set(named))
             if opened:
                 part = named[_letters(opened)]
-                sections.append((part, f"page={number}", []))
-                index += opened is two_lines
+                sections.append((part.title, f"page={number}", []))
+                index += taken
                 after_blank, continues = True, False
                 continue
-            found = _CHAPTER.match(part)
-            if not found or int(found.group(1)) not in pin.chapters:
+            index += 1
+            if part is None or part.chapter not in pin.chapters:
                 continue
             indent = len(line) - len(line.lstrip())
             if box is not None and indent >= box - 3:
@@ -711,12 +790,11 @@ def _bookmarked(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
             gap = _COLUMN_GAP.search(text)
             if gap and not _BULLET.match(text):
                 box = indent + gap.end()
-                text = text[: gap.start()]
-            two_lines = f"{text} {following}"
-            heading = next((c for c in (text, two_lines) if _letters(c) in parts[part]), None)
+                lines[index - 1] = text = text[: gap.start()]
+            heading, taken = _titled(lines, index - 1, part.headings)
             if heading:
-                sections.append((f"{part}: {_clean(heading)}", f"page={number}", []))
-                index += heading is two_lines
+                sections.append((f"{part.title}: {heading}", f"page={number}", []))
+                index += taken - 1
                 after_blank, continues = True, False
                 continue
             if not sections[-1][2]:
@@ -726,19 +804,106 @@ def _bookmarked(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
             text = _BULLET.sub("", text)
             broken = paragraphs and _UNFINISHED.search(paragraphs[-1]) and text[0].islower()
             if paragraphs and not bullet and (continues or broken or not after_blank):
-                joint = "" if re.search(r"[a-z]-$", paragraphs[-1]) else " "
-                paragraphs[-1] = f"{paragraphs[-1]}{joint}{text}"
+                paragraphs[-1] = _joined(paragraphs[-1], text, hyphenated=False)
             else:
                 paragraphs.append(text)
             after_blank, continues = False, False
-    return [
-        (heading, anchor, [_clean(p) for p in paragraphs])
-        for heading, anchor, paragraphs in sections
-        if paragraphs
-    ]
+    return _written(sections)
 
 
-def _army_manual(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
+def _indented(data: bytes, pin: Pdf) -> Sections:
+    """A PDF set with indented paragraphs: its chosen chapters as (bookmark, page anchor, paragraphs).
+
+    Prose is a line indented to open a paragraph and the lines at the margin after it, or a
+    bulleted list. Everything else set in from the margin is a table, a figure or a pull
+    quote, and is left out with its caption; so are a chapter's resources and thanks.
+    """
+    pages, bookmarks = pdf_bookmarked(data)
+    parts = _parts(bookmarks, pin)
+    sections: Sections = []
+    for position, part in enumerate(parts):
+        if part.chapter not in pin.chapters:
+            continue
+        end = next((later.page for later in parts[position + 1 :] if later.page), len(pages) + 1)
+        if part.page is None:
+            raise CorpusError(f"{pin.url} does not say which page opens {part.title!r}")
+        sections.append((part.title, f"page={part.page}", []))
+        left_out = False
+        dropping = False
+        for number in range(part.page, end):
+            lines, _ = _page_lines(pages[number - 1], pin)
+            margin = min((len(line) - len(line.lstrip()) for line in lines if line.strip()), default=0)
+            open_as: str | None = None
+            hanging = 0
+            at_top = True
+            index = 0
+            while index < len(lines):
+                line = lines[index]
+                text = line.strip()
+                if not text:
+                    open_as = None
+                    index += 1
+                    continue
+                indent = len(line) - len(line.lstrip()) - margin
+                heading, taken = _titled(lines, index, part.headings) if indent <= 1 else ("", 0)
+                if heading:
+                    sections.append((f"{part.title}: {heading}", f"page={number}", []))
+                    left_out = heading in _BACK_MATTER
+                    index += taken
+                    open_as, dropping, at_top = None, False, False
+                    continue
+                index += 1
+                carried = at_top and bool(sections[-1][2]) and _UNFINISHED.search(sections[-1][2][-1])
+                at_top = False
+                if left_out:
+                    continue
+                if _CAPTION.match(text):
+                    open_as, dropping = None, True
+                    continue
+                if not sections[-1][2]:
+                    sections[-1] = (sections[-1][0], f"page={number}", [])
+                paragraphs = sections[-1][2]
+                if _BULLET.match(text):
+                    paragraphs.extend(
+                        item.strip() for item in re.split(rf"[{_BULLETS}]", text) if item.strip()
+                    )
+                    open_as, hanging, dropping = "bullet", indent, False
+                elif indent <= 1:
+                    if open_as or carried:
+                        paragraphs[-1] = _joined(paragraphs[-1], text, hyphenated=True)
+                        open_as = open_as or "paragraph"
+                    elif not dropping:
+                        paragraphs.append(text)
+                        open_as = "paragraph"
+                elif open_as == "bullet" and hanging + 3 <= indent <= hanging + 8:
+                    paragraphs[-1] = _joined(paragraphs[-1], text, hyphenated=True)
+                elif not (dropping and _in_cells(lines, index)) and _opens_paragraph(
+                    lines, index, margin, part
+                ):
+                    paragraphs.append(text)
+                    open_as, dropping = "paragraph", False
+                else:
+                    open_as, dropping = None, True
+    return _written(sections)
+
+
+def _in_cells(lines: list[str], index: int) -> bool:
+    """Whether `lines[index]` is split into a table's cells."""
+    return index < len(lines) and bool(_CELL_GAP.search(lines[index].strip()))
+
+
+def _opens_paragraph(lines: list[str], index: int, margin: int, part: _Part) -> bool:
+    """Whether the indented line before `lines[index]` opens a paragraph: prose or a list follows it."""
+    if index >= len(lines) or not lines[index].strip():
+        return False
+    following = lines[index].strip()
+    if _CAPTION.match(following) or _titled(lines, index, part.headings)[0]:
+        return False
+    indent = len(lines[index]) - len(lines[index].lstrip()) - margin
+    return indent <= 1 or bool(_BULLET.match(following))
+
+
+def _army_manual(data: bytes, pin: Pdf) -> Sections:
     return _army_sections(pdf_pages(data), pin)
 
 
@@ -746,7 +911,7 @@ _PARAGRAPH_NUMBER = re.compile(r"^\+?\d+-\d+\.\s*")
 _PAGE_ID = re.compile(r"(?:^|\s)(\d+)-\d+(?=\s|$)")
 
 
-def _army_sections(pages: list[str], pin: Pdf) -> list[tuple[str, str, list[str]]]:
+def _army_sections(pages: list[str], pin: Pdf) -> Sections:
     """A manual's chosen chapters as (heading, page anchor, paragraphs), running heads dropped."""
     sections: list[tuple[str, str, list[str]]] = []
     titles: dict[int, str] = {}
@@ -810,9 +975,10 @@ def _heading(line: str) -> str:
     return string.capwords(re.sub(r"^\d+\.\s*", "", _clean(line.lstrip("+"))))
 
 
-_PDF_CUTS: dict[str, Callable[[bytes, Pdf], list[tuple[str, str, list[str]]]]] = {
+_PDF_CUTS: dict[str, Callable[[bytes, Pdf], Sections]] = {
     "army-manual": _army_manual,
     "bookmarks": _bookmarked,
+    "indented": _indented,
 }
 """How a pinned PDF is read into (heading, page anchor, paragraphs), by the name its pin gives."""
 
