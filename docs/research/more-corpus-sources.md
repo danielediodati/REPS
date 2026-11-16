@@ -132,3 +132,29 @@ Read from a copy the owner downloaded by hand (kept outside the repo); the publi
 | Gap | G1 (short execution text for common exercises), G4 (recovery), G5 (programming); nothing for G2 or G3 |
 | Size | 72 pages, about 18k words. `pdftotext` output is dirty: page headers and step numbers bleed into the text, so it needs cleaning |
 | Pin | SHA-256 `57535a935dba673861f86a13eb0b8ead1001dc1d9e5f9c6fe1a8cd1b44cf4c6f` |
+
+## 7. Wikipedia, checked 2026-11-17
+
+Checked against the `en.wikipedia.org` and `it.wikipedia.org` APIs, by title, redirect and search.
+
+**The `near` rows.** Only one finds a page that answers it:
+
+| Gap | Row | English | Italian |
+|---|---|---|---|
+| G4 | `ice-bath-minutes` | *Ice bath*, pinned | none (*Immersione in ghiaccio* is ice diving; *Crioterapia* is a stub) |
+| G4 | `massage-gun` | none (*Massage gun* redirects to *Massage*, which does not treat it; *Vibromassage* is a stub) | none |
+| G4 | `running-shoes-mileage` | none (*Running shoe* redirects to *Sneakers*, off topic) | none |
+| G4 | `knee-wraps-tension` | none beyond *Powerlifting*, already pinned | none beyond *Powerlifting*, already pinned |
+| G3 | `pallof-press` | none (the title redirects to *Exercise*) | none |
+| G3 | `jefferson-curl`, `skater-squat`, `monster-walk`, `turkish-get-up-steps`, `hip-airplane`, `tibialis-raise`, `dead-bug-progression` | none | none |
+| G3 | `dead-hang-seconds` | none beyond *Pull-up*, already pinned | none beyond *Trazioni alla sbarra*, already pinned |
+| G6 | `wendler-531`, `gzcl-tiers` | none | none |
+
+**Italian counterparts.** Of the 168 English pages pinned, 88 link an Italian page and 62 of those were pinned already.
+
+| Italian page | Of | Verdict |
+|---|---|---|
+| *Piegamento*, *Croci*, *Croci inverse*, *Kettlebell lifting*, *Remoergometro* | technique and equipment pages | pinned: each holds technique text |
+| *Trap bar*, *Palla medica*, *Palla da ginnastica* | technique and equipment pages | not pinned: stubs with no technique text |
+| *Carico massimale*, *Ripetizioni eccentriche*, *High Intensity Interval Training*, *Super slow*, *Peripheral Heart Action*, *Stripping (culturismo)*, *Stabilità del core*, *Tendinite della cuffia dei rotatori*, *Strongman*, *Tronco (anatomia)*, *Contrazione isotonica* | training, physiology and injury pages | not checked for pinning: outside technique; each is a full page |
+| *Tendinopatia*, *Epitrocleite*, *Sindrome da conflitto della cuffia dei rotatori*, *Ginocchio del corridore*, *Tendinopatia achillea*, *Peritendite rotulea* | injury pages | stubs |

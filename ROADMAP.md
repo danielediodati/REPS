@@ -43,7 +43,6 @@ Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
 Source: [more corpus sources](docs/research/more-corpus-sources.md)
 
-5. **More Wikipedia pages** - [ticket](docs/work/16.2-a-wider-corpus/issues/05-more-wikipedia-pages.md)
 6. **Corpus version 2, measured** - [ticket](docs/work/16.2-a-wider-corpus/issues/06-corpus-version-2-measured.md)
 
 ## Later

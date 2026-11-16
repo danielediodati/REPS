@@ -18,3 +18,5 @@ Source: [more corpus sources](../../../research/more-corpus-sources.md). Glossar
 
 - Owner's decision, 2026-11-16: the sources of 01 to 05 enter the committed corpus as each ticket closes, under version 1. The version 1 reading this ticket compares against is therefore whatever 16.1.9 reads on the corpus as it stands then; a reading of the original 3868 chunks needs the corpus at `25d8247`.
 - The index is built per corpus version: after a ticket adds chunks under version 1, run `trainer corpus build` again before a pass.
+- `near` rows whose topic gained a text in 01 to 05, to look at first when relabelling: `ice-bath-minutes` (English *Ice bath*), `monster-walk` and `dead-bug-progression` (the Air Force playbook's library entries *Mini-band Monster Walk* and *Deadbug*, execution only), `massage-gun` (the foam rolling meta-analysis, on the roller alone).
+- The corpus grew from 3868 to 4750 chunks under version 1: HHS 157, SEAL guide 101, Air Force playbook 116, Europe PMC articles 331, six more Wikipedia pages 177.
