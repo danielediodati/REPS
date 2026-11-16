@@ -1508,3 +1508,37 @@ revision = 1382911247
 language = "en"
 title = "Inguinal hernia"
 revision = 1382441004
+
+# English Wikipedia: rows the eval set marks as nearly covered
+
+[[wikipedia]]
+language = "en"
+title = "Ice bath"
+revision = 1375101307
+
+# Italian Wikipedia: counterparts of pinned English technique pages
+
+[[wikipedia]]
+language = "it"
+title = "Piegamento"
+revision = 150003871
+
+[[wikipedia]]
+language = "it"
+title = "Croci"
+revision = 147924933
+
+[[wikipedia]]
+language = "it"
+title = "Croci inverse"
+revision = 149369068
+
+[[wikipedia]]
+language = "it"
+title = "Kettlebell lifting"
+revision = 152879939
+
+[[wikipedia]]
+language = "it"
+title = "Remoergometro"
+revision = 147699299

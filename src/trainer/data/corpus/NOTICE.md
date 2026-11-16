@@ -277,6 +277,12 @@ Licence: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Author
 - it: [Riatletizzazione](https://it.wikipedia.org/w/index.php?title=Riatletizzazione&oldid=143999051)
 - en: [Strength athletics](https://en.wikipedia.org/w/index.php?title=Strength_athletics&oldid=1382911247)
 - en: [Inguinal hernia](https://en.wikipedia.org/w/index.php?title=Inguinal_hernia&oldid=1382441004)
+- en: [Ice bath](https://en.wikipedia.org/w/index.php?title=Ice_bath&oldid=1375101307)
+- it: [Piegamento](https://it.wikipedia.org/w/index.php?title=Piegamento&oldid=150003871)
+- it: [Croci](https://it.wikipedia.org/w/index.php?title=Croci&oldid=147924933)
+- it: [Croci inverse](https://it.wikipedia.org/w/index.php?title=Croci_inverse&oldid=149369068)
+- it: [Kettlebell lifting](https://it.wikipedia.org/w/index.php?title=Kettlebell_lifting&oldid=152879939)
+- it: [Remoergometro](https://it.wikipedia.org/w/index.php?title=Remoergometro&oldid=147699299)
 
 ## MedlinePlus
 
