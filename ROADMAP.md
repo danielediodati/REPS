@@ -43,7 +43,6 @@ Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
 Source: [more corpus sources](docs/research/more-corpus-sources.md)
 
-1. **A public-domain PDF as a source** - [ticket](docs/work/16.2-a-wider-corpus/issues/01-a-public-domain-pdf-as-a-source.md)
 2. **The SEAL guide, by chapter** - [ticket](docs/work/16.2-a-wider-corpus/issues/02-the-seal-guide-by-chapter.md)
 3. **A file supplied by hand** - [ticket](docs/work/16.2-a-wider-corpus/issues/03-a-file-supplied-by-hand.md)
 4. **CC BY articles** - [ticket](docs/work/16.2-a-wider-corpus/issues/04-cc-by-articles.md)

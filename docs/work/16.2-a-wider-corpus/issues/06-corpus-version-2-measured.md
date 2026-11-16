@@ -13,3 +13,8 @@ Source: [more corpus sources](../../../research/more-corpus-sources.md). Glossar
 - [ ] Once they are settled the set's version bumps and names corpus version 2
 - [ ] The pass is asked for first, with its estimated cost, and run only once approved
 - [ ] The report sets every bar beside its version 1 reading, and counts the retrieved passages by source
+
+## Comments
+
+- Owner's decision, 2026-11-16: the sources of 01 to 05 enter the committed corpus as each ticket closes, under version 1. The version 1 reading this ticket compares against is therefore whatever 16.1.9 reads on the corpus as it stands then; a reading of the original 3868 chunks needs the corpus at `25d8247`.
+- The index is built per corpus version: after a ticket adds chunks under version 1, run `trainer corpus build` again before a pass.
