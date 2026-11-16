@@ -1229,6 +1229,14 @@ def test_a_full_text_that_is_not_the_pinned_article_is_refused() -> None:
         corpus.fetch(_article_manifest("10.1000/another"), _article())
 
 
+def test_an_article_with_no_prose_under_a_section_stops_the_fetch() -> None:
+    bare = ARTICLE_XML.replace("LICENCE", CC_BY)
+    bare = bare[: bare.index("<body>")] + "<body><p>Only a letter.</p></body></article>"
+
+    with pytest.raises(corpus.CorpusError, match="no prose under a section"):
+        corpus.fetch(_article_manifest(), _getter({"PMC111": bare.encode()}))
+
+
 def test_the_notice_lists_each_article_with_its_authors_link_and_licence() -> None:
     manifest = _article_manifest()
 

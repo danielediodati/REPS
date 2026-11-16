@@ -755,13 +755,19 @@ def _article(pin: Article, get: Getter) -> list[Chunk]:
             f"{pin.pmcid} is {', '.join(held) or 'an article with no DOI'}; correct the pin"
         )
     title = meta.find("title-group/article-title")
+    sections = _article_sections(body)
+    if not sections:
+        raise CorpusError(
+            f"the full text of the article {pin.doi} ({pin.pmcid}) holds no prose under a "
+            "section, so nothing can be cut from it; unpin it"
+        )
     return _cut(
         EUROPE_PMC,
         "en",
         _clean(_article_text(title)) if title is not None else pin.doi,
         pin.pmcid,
         pin.pmcid,
-        _article_sections(body),
+        sections,
         lambda _: f"https://doi.org/{pin.doi}",
         licence=_article_licence(meta, pin),
         author=_article_authors(meta, pin),
@@ -1015,11 +1021,7 @@ def _written(sections: Sections) -> Sections:
 
 
 def _bookmarked(data: bytes, pin: Pdf) -> Sections:
-    """A bookmarked PDF's chosen chapters as (bookmark, page anchor, paragraphs).
-
-    Left out: the folio, the boxes set beside the text, and each table or figure from its
-    caption to the next paragraph at the margin.
-    """
+    """A bookmarked PDF's chosen chapters as (bookmark, page anchor, paragraphs), prose only."""
     pages, bookmarks = pdf_bookmarked(data)
     named = {_letters(part.title): part for part in _parts(bookmarks, pin)}
     sections: Sections = []
@@ -1077,7 +1079,7 @@ def _bookmarked(data: bytes, pin: Pdf) -> Sections:
             paragraphs = sections[-1][2]
             bullet = _BULLET.match(text)
             text = _BULLET.sub("", text)
-            broken = paragraphs and _UNFINISHED.search(paragraphs[-1]) and text[0].islower()
+            broken = paragraphs and _UNFINISHED.search(paragraphs[-1]) and text[:1].islower()
             if paragraphs and not bullet and (continues or broken or not after_blank):
                 paragraphs[-1] = _joined(paragraphs[-1], text, hyphenated=False)
             else:
@@ -1087,12 +1089,7 @@ def _bookmarked(data: bytes, pin: Pdf) -> Sections:
 
 
 def _indented(data: bytes, pin: Pdf) -> Sections:
-    """A PDF set with indented paragraphs: its chosen chapters as (bookmark, page anchor, paragraphs).
-
-    Prose is a line indented to open a paragraph and the lines at the margin after it, or a
-    bulleted list. Everything else set in from the margin is a table, a figure or a pull
-    quote, and is left out with its caption; so are a chapter's resources and thanks.
-    """
+    """A PDF of indented paragraphs: its chosen chapters as (bookmark, page anchor, paragraphs)."""
     pages, bookmarks = pdf_bookmarked(data)
     parts = _parts(bookmarks, pin)
     sections: Sections = []
@@ -1224,13 +1221,7 @@ _PLAYBOOK_BULLETS = "•◦▪"
 
 
 def _playbook(data: bytes, pin: Pdf) -> Sections:
-    """The Air Force playbook's chosen parts as (heading, page anchor, paragraphs), by typeface.
-
-    A page names its part in the label set sideways at its foot. An exercise library page
-    gives each entry under its own name; any other gives the prose of its main column under
-    its headings. Left out: tables, boxes, captions and page furniture, set in other faces
-    or sizes.
-    """
+    """The Air Force playbook's chosen parts as (heading, page anchor, paragraphs), by typeface."""
     sections: Sections = []
     for number, spans in enumerate(pdf_spans(data), start=1):
         label = _clean(
