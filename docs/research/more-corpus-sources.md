@@ -48,7 +48,7 @@ Articles checked on the publisher's page (licence read) and worth a look, each b
 | EMG of the deadlift and its variants | 10.1371/journal.pone.0229507 | PLOS |
 | Bench press grip width | 10.3390/ijerph18126444 | PMC copy of the MDPI notice |
 | Neuromuscular warm-ups against injury | 10.1186/1741-7015-10-75 | BMC (CC BY 2.0) |
-| Cold water immersion and soreness | 10.1007/s40279-015-0431-7 | Springer |
+| Cold water immersion and soreness | 10.1007/s40279-015-0431-7 | Springer; but the full text Europe PMC serves (PMC4802003) states no licence, only a Springer copyright line, so the fetch refuses it and it is not pinned |
 | Resistance exercise dose for tendinopathy | 10.1136/bjsports-2022-105754 | PMC copy of the BMJ notice |
 | Isometric exercise for tendinopathy | 10.1136/bmjsem-2020-000760 | PMC copy of the BMJ notice |
 | Nordic hamstring volume | 10.1007/s40279-019-01178-7 | Europe PMC licence field only; open the Springer page before use |
