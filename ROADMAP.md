@@ -39,6 +39,17 @@ Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)
 10. **The corpus refreshed** - [ticket](docs/work/16.1-answer-from-sources/issues/10-the-corpus-refreshed.md)
 
+### Feature 16.2 - A wider corpus
+
+Source: [more corpus sources](docs/research/more-corpus-sources.md)
+
+1. **A public-domain PDF as a source** - [ticket](docs/work/16.2-a-wider-corpus/issues/01-a-public-domain-pdf-as-a-source.md)
+2. **The SEAL guide, by chapter** - [ticket](docs/work/16.2-a-wider-corpus/issues/02-the-seal-guide-by-chapter.md)
+3. **A file supplied by hand** - [ticket](docs/work/16.2-a-wider-corpus/issues/03-a-file-supplied-by-hand.md)
+4. **CC BY articles** - [ticket](docs/work/16.2-a-wider-corpus/issues/04-cc-by-articles.md)
+5. **More Wikipedia pages** - [ticket](docs/work/16.2-a-wider-corpus/issues/05-more-wikipedia-pages.md)
+6. **Corpus version 2, measured** - [ticket](docs/work/16.2-a-wider-corpus/issues/06-corpus-version-2-measured.md)
+
 ## Later
 
 **Parked**:
