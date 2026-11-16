@@ -128,7 +128,7 @@ Read from a copy the owner downloaded by hand (kept outside the repo); the publi
 |---|---|
 | Licence | No statement in the PDF: no copyright line, distribution statement, author or third-party credit. Published by the Air Force Personnel Center as Tab 4 of its fitness programme, so a US government work by authorship (17 U.S.C. 105), inferred as for the SEAL guide. Text only; the pictures' origin is not stated |
 | Verdict | In |
-| Content | Fitness principles, resistance and endurance programming, measuring intensity, reconditioning, working around an injury profile, a 12-week programme; Appendix B, an exercise library of 64 entries (warm-up, training, recovery), each two to five sentences of execution; Appendix H, warm-ups and cooldown stretches described in full |
+| Content | Fitness principles, resistance and endurance programming, measuring intensity, reconditioning, working around an injury profile, a 12-week programme; Appendix B, an exercise library of 70 entries (warm-up, training, recovery), each two to five sentences of execution; Appendix H, warm-ups and cooldown stretches described in full |
 | Gap | G1 (short execution text for common exercises), G4 (recovery), G5 (programming); nothing for G2 or G3 |
 | Size | 72 pages, about 18k words. `pdftotext` output is dirty: page headers and step numbers bleed into the text, so it needs cleaning |
 | Pin | SHA-256 `57535a935dba673861f86a13eb0b8ead1001dc1d9e5f9c6fe1a8cd1b44cf4c6f` |
