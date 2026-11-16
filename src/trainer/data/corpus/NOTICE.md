@@ -436,4 +436,10 @@ The it exercise descriptions of https://wger.de as taken on 2026-11-08 (sha256 `
 
 Licence: [Public domain (US government work)](https://www.copyright.gov/title17/92chap1.html#105): works of the US Government carry no copyright (17 U.S.C. 105). Approved for public release; distribution is unlimited. Author: Headquarters, Department of the Army. Only the chapters named are used, and no figure:
 
-- ATP 7-22.02, *Holistic Health and Fitness Drills and Exercises*, https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN45013-ATP_7-22.02-001-WEB-4.pdf (sha256 `58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a`), chapters 2, 3, 4, 5, 9, 10, 11, 13, 14, 15, 16
+- *ATP 7-22.02, Holistic Health and Fitness Drills and Exercises*, https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN45013-ATP_7-22.02-001-WEB-4.pdf (sha256 `58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a`), chapters 2, 3, 4, 5, 9, 10, 11, 13, 14, 15, 16
+
+## HHS
+
+Licence: [Public domain (US government work)](https://odphp.health.gov/copyright-policy): ODPHP's copyright policy says its content "is in the public domain. This means it may be freely distributed and copied — but please include a link to our website and acknowledge ODPHP as the source." Source: ODPHP, https://odphp.health.gov. Author: Office of Disease Prevention and Health Promotion, U.S. Department of Health and Human Services. Only the chapters named are used, and no figure:
+
+- *Physical Activity Guidelines for Americans, 2nd edition*, https://odphp.health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf (sha256 `0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5`), chapters 2, 4, 5, 6, 7

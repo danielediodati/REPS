@@ -183,11 +183,13 @@ language = "en"
 date = "2026-11-08"
 sha256 = "ghi"
 
-[[army]]
-publication = "ATP 7-22.02"
-title = "Holistic Health and Fitness Drills and Exercises"
+[[pdf]]
+source = "us-army"
+key = "ATP 7-22.02"
+title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises"
 url = "https://armypubs.army.mil/x.pdf"
 sha256 = "def"
+cut = "army-manual"
 chapters = [3, 14]
 
 [[wikipedia]]
@@ -216,12 +218,14 @@ def test_the_manifest_names_the_version_and_the_pinned_list(tmp_path: Path) -> N
         medlineplus_date="2026-11-07",
         medlineplus_topics=("Sprains and Strains",),
         wger=(corpus.Wger("it", "2026-11-08", "abc"), corpus.Wger("en", "2026-11-08", "ghi")),
-        army=(
-            corpus.ArmyPublication(
+        pdf=(
+            corpus.Pdf(
+                "us-army",
                 "ATP 7-22.02",
-                "Holistic Health and Fitness Drills and Exercises",
+                "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises",
                 "https://armypubs.army.mil/x.pdf",
                 "def",
+                "army-manual",
                 (3, 14),
             ),
         ),
@@ -352,7 +356,7 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
         assert chunk.source in {
-            "wikipedia", "medlineplus", "wger", "us-army"
+            "wikipedia", "medlineplus", "wger", "us-army", "hhs"
         }, chunk.id
         assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
@@ -601,12 +605,14 @@ ARMY_BYTES = b"%PDF-fake"
 def _army_manifest(sha256: str, chapters: tuple[int, ...] = (14,)) -> corpus.Manifest:
     return _manifest(
         wikipedia=(),
-        army=(
-            corpus.ArmyPublication(
+        pdf=(
+            corpus.Pdf(
+                "us-army",
                 "ATP 7-22.02",
-                "Holistic Health and Fitness Drills and Exercises",
+                "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises",
                 ARMY_URL,
                 sha256,
+                "army-manual",
                 chapters,
             ),
         ),
@@ -650,5 +656,145 @@ def test_an_army_manual_is_cut_by_heading_within_its_chosen_chapters(army_pages:
 def test_an_army_manual_other_than_the_pinned_file_is_refused(army_pages: str) -> None:
     get = _getter({ARMY_URL: b"%PDF-another"})
 
-    with pytest.raises(corpus.CorpusError, match="not the pinned file"):
+    with pytest.raises(corpus.CorpusError, match="not the pinned file") as refused:
         corpus.fetch(_army_manifest(army_pages), get)
+
+    assert army_pages in str(refused.value)
+    assert hashlib.sha256(b"%PDF-another").hexdigest() in str(refused.value)
+
+
+HHS_OUTLINE = [
+    (0, "Physical Activity Guidelines"),
+    (1, "Table of Contents"),
+    (1, "Chapter 3. Active Children"),
+    (2, "Aerobic Activity"),
+    (1, "Chapter 4. Active Adults"),
+    (2, "Explaining the Key Guidelines"),
+    (3, "Muscle-Strengthening Activity"),
+    (1, "Glossary"),
+]
+HHS_PAGES = [
+    "Table of Contents\nChapter 4. Active Adults ........ 55\n",
+    "Chapter 3. Active Children\n",
+    "Aerobic Activity\nChildren play.\n\n\n\n46Physical Activity Guidelines",
+    "Chapter 4. Active Adults\n",
+    "Adults who are active are healthier, feel better,\n"
+    "and are less likely to develop disease.                         Learn More\n"
+    "They sleep better.                                              See Chapter 6.\n"
+    "                                                                It says more.\n"
+    "Explaining the Key Guidelines\n"
+    "The guidelines focus on two types of activity.\n"
+    "Muscle-Strengthening Activity\n"
+    "Muscle-strengthening activities include lifting weights. A warm-up for muscle-\n"
+    "strengthening activity involves lighter weight (see Table 4-1).\n"
+    "\n"
+    "Table 4-1. Examples of Activities,\n"
+    "Based on Intensity\n"
+    "\n"
+    "  Moderate          Walking briskly\n"
+    "  Vigorous          Running\n"
+    "\n"
+    "Note: Only strong evidence is included.\n"
+    "\n"
+    "The best strategies are to:\n"
+    "      •     Be regularly active; and\n"
+    "      •     Follow the other guidance\n"
+    "         in this chapter.\n"
+    "\n"
+    "One set of 8 to 12 repetitions is effective, although 2 or 3 sets may\n"
+    "\n\n\n"
+    "                                                    Chapter 4. Active Adults      57\n",
+    "be more effective.\n"
+    "\n"
+    "Figure 4-1. Benefit by Amount\n"
+    "    1.1\n"
+    "      1      No lower threshold\n"
+    "\n"
+    "Source: Adapted from Moore SC.\n"
+    "\n"
+    "Increases in weight will result in stronger muscles.\n"
+    "\n\n\n"
+    "58Physical Activity Guidelines\n",
+    "Glossary\nAerobic: with oxygen.\n",
+]
+HHS_URL = "https://odphp.health.gov/guidelines.pdf"
+HHS_BYTES = b"%PDF-guidelines"
+
+
+def _hhs_manifest() -> corpus.Manifest:
+    return _manifest(
+        wikipedia=(),
+        pdf=(
+            corpus.Pdf(
+                "hhs",
+                "physical-activity-guidelines-2",
+                "Physical Activity Guidelines for Americans, 2nd edition",
+                HHS_URL,
+                hashlib.sha256(HHS_BYTES).hexdigest(),
+                "bookmarks",
+                (4,),
+            ),
+        ),
+    )
+
+
+@pytest.fixture()
+def hhs_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        corpus, "pdf_bookmarked", lambda data: (list(HHS_PAGES), list(HHS_OUTLINE))
+    )
+
+
+def test_a_bookmarked_pdf_is_cut_by_its_bookmarks_within_its_chosen_chapters(
+    hhs_pdf: None,
+) -> None:
+    chunks = corpus.fetch(_hhs_manifest(), _getter({HHS_URL: HHS_BYTES}))
+
+    assert [(c.section, c.text) for c in chunks] == [
+        (
+            "Chapter 4. Active Adults",
+            "Adults who are active are healthier, feel better, and are less likely to "
+            "develop disease. They sleep better.",
+        ),
+        (
+            "Chapter 4. Active Adults: Explaining the Key Guidelines",
+            "The guidelines focus on two types of activity.",
+        ),
+        (
+            "Chapter 4. Active Adults: Muscle-Strengthening Activity",
+            "Muscle-strengthening activities include lifting weights. A warm-up for "
+            "muscle-strengthening activity involves lighter weight (see Table 4-1).\n"
+            "The best strategies are to:\n"
+            "Be regularly active; and\n"
+            "Follow the other guidance in this chapter.\n"
+            "One set of 8 to 12 repetitions is effective, although 2 or 3 sets may be "
+            "more effective.\n"
+            "Increases in weight will result in stronger muscles.",
+        ),
+    ]
+    first, _, last = chunks
+    assert first.id == "hhs/en/physical-activity-guidelines-2/0"
+    assert first.source == "hhs"
+    assert first.title == "Physical Activity Guidelines for Americans, 2nd edition"
+    assert first.licence == "Public domain (US government work)"
+    assert first.author == (
+        "Office of Disease Prevention and Health Promotion, "
+        "U.S. Department of Health and Human Services"
+    )
+    assert first.link == f"{HHS_URL}#page=5"
+    assert last.link == f"{HHS_URL}#page=5"
+
+
+def test_the_notice_lists_the_guidelines_with_the_wording_of_their_publisher() -> None:
+    notice = corpus.notice(_hhs_manifest(), [])
+
+    assert "## HHS" in notice
+    assert (
+        '"is in the public domain. This means it may be freely distributed and copied — '
+        'but please include a link to our website and acknowledge ODPHP as the source."'
+    ) in notice
+    assert "https://odphp.health.gov/copyright-policy" in notice
+    assert (
+        f"- *Physical Activity Guidelines for Americans, 2nd edition*, {HHS_URL} "
+        f"(sha256 `{hashlib.sha256(HHS_BYTES).hexdigest()}`), chapters 4"
+    ) in notice

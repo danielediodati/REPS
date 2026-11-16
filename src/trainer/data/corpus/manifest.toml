@@ -12,12 +12,25 @@ sha256 = "ab65be4c822477423c40ff82b67f449e5d6e4f26677d1b01423049a45ff93c09"
 # https://armypubs.army.mil/ProductMaps/PubForm/Details.aspx?PUB_ID=1020967
 # Chapters: 2-5 (positions and grips, preparation, stability, conditioning), 9-11 (medicine
 # ball, suspension, landmine), 13-16 (strength circuit, free weights, machines, recovery).
-[[army]]
-publication = "ATP 7-22.02"
-title = "Holistic Health and Fitness Drills and Exercises"
+[[pdf]]
+source = "us-army"
+key = "ATP 7-22.02"
+title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises"
 url = "https://armypubs.army.mil/epubs/DR_pubs/DR_a/ARN45013-ATP_7-22.02-001-WEB-4.pdf"
 sha256 = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a"
+cut = "army-manual"
 chapters = [2, 3, 4, 5, 9, 10, 11, 13, 14, 15, 16]
+
+# HHS Physical Activity Guidelines for Americans, 2nd edition (2018). Chapters: 2 (activity
+# and health), 4-5 (adults, older adults), 6 (pregnancy, chronic conditions), 7 (safety).
+[[pdf]]
+source = "hhs"
+key = "physical-activity-guidelines-2"
+title = "Physical Activity Guidelines for Americans, 2nd edition"
+url = "https://odphp.health.gov/sites/default/files/2019-09/Physical_Activity_Guidelines_2nd_edition.pdf"
+sha256 = "0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5"
+cut = "bookmarks"
+chapters = [2, 4, 5, 6, 7]
 
 [medlineplus]
 date = "2026-11-07"

@@ -45,6 +45,8 @@ class Source:
     """Each licence allowed for this source, with the address of its terms."""
     label: str
     """The source as a citation names it."""
+    terms: str = ""
+    """What the notice says of the licence: where it is stated, and what it asks."""
 
     @property
     def licence(self) -> str:
@@ -76,11 +78,23 @@ ARMY = Source(
     "Headquarters, Department of the Army",
     {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
     "US Army",
+    "works of the US Government carry no copyright (17 U.S.C. 105). Approved for public "
+    "release; distribution is unlimited.",
 )
-SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY)}
+HHS = Source(
+    "hhs",
+    "Office of Disease Prevention and Health Promotion, "
+    "U.S. Department of Health and Human Services",
+    {"Public domain (US government work)": "https://odphp.health.gov/copyright-policy"},
+    "HHS",
+    "ODPHP's copyright policy says its content \"is in the public domain. This means it may "
+    "be freely distributed and copied \u2014 but please include a link to our website and "
+    "acknowledge ODPHP as the source.\" Source: ODPHP, https://odphp.health.gov.",
+)
+SOURCES = {source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS)}
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
 
-_MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "army"}
+_MANIFEST_KEYS = {"version", "wikipedia", "medlineplus", "wger", "pdf"}
 """What a manifest may name: the sources the corpus may hold, and its version."""
 
 _WGER_LICENCES = {
@@ -127,13 +141,16 @@ class Wger:
 
 
 @dataclass(frozen=True)
-class ArmyPublication:
-    """A US Army manual pinned by the hash of its PDF, with the chapters taken from it."""
+class Pdf:
+    """A PDF pinned by the hash of its file, with how it is cut and the chapters taken."""
 
-    publication: str
+    source: str
+    key: str
+    """What names the text in its chunks' ids; an Army manual's is its publication number."""
     title: str
     url: str
     sha256: str
+    cut: str
     chapters: tuple[int, ...]
 
 
@@ -146,7 +163,7 @@ class Manifest:
     medlineplus_date: str | None
     medlineplus_topics: tuple[str, ...]
     wger: tuple[Wger, ...] = ()
-    army: tuple[ArmyPublication, ...] = ()
+    pdf: tuple[Pdf, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -184,8 +201,8 @@ def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
         borrowed = _borrowed_phrases(get)
         for pin in manifest.wger:
             chunks.extend(_wger(pin, get, borrowed))
-    for publication in manifest.army:
-        chunks.extend(_army(publication, get))
+    for pinned in manifest.pdf:
+        chunks.extend(_pdf(pinned, get))
     return chunks
 
 
@@ -208,16 +225,7 @@ def read_manifest(directory: Path | None = None) -> Manifest:
                 Wger(str(pin["language"]), str(pin["date"]), str(pin["sha256"]))
                 for pin in data.get("wger", [])
             ),
-            army=tuple(
-                ArmyPublication(
-                    str(entry["publication"]),
-                    str(entry["title"]),
-                    str(entry["url"]),
-                    str(entry["sha256"]),
-                    tuple(int(chapter) for chapter in entry["chapters"]),
-                )
-                for entry in data.get("army", [])
-            ),
+            pdf=tuple(_pdf_pin(entry, path) for entry in data.get("pdf", [])),
             version=int(data["version"]),
             wikipedia=tuple(
                 Page(str(page["language"]), str(page["title"]), int(page["revision"]))
@@ -228,6 +236,32 @@ def read_manifest(directory: Path | None = None) -> Manifest:
         )
     except (tomllib.TOMLDecodeError, KeyError, TypeError, ValueError) as error:
         raise CorpusError(f"the corpus manifest {path} is unusable: {error}") from error
+
+
+def _pdf_pin(entry: dict[str, object], path: Path) -> Pdf:
+    source, cut = str(entry["source"]), str(entry["cut"])
+    if source not in SOURCES:
+        raise CorpusError(
+            f"the corpus manifest {path} pins a PDF of {source!r}, which is not a source the "
+            f"corpus may hold ({', '.join(sorted(SOURCES))})"
+        )
+    if cut not in _PDF_CUTS:
+        raise CorpusError(
+            f"the corpus manifest {path} cuts a PDF as {cut!r}; the cuts are "
+            f"{', '.join(sorted(_PDF_CUTS))}"
+        )
+    chapters = entry["chapters"]
+    if not isinstance(chapters, list):
+        raise TypeError("a PDF's chapters are a list of numbers")
+    return Pdf(
+        source,
+        str(entry["key"]),
+        str(entry["title"]),
+        str(entry["url"]),
+        str(entry["sha256"]),
+        cut,
+        tuple(int(chapter) for chapter in chapters),
+    )
 
 
 def read_chunks(directory: Path | None = None) -> list[Chunk]:
@@ -326,22 +360,21 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
             f"- [{title}]({link}), by {author}, {licence}"
             for title, author, licence, link in credited
         )
-    if manifest.army:
+    for name in dict.fromkeys(pin.source for pin in manifest.pdf):
+        source = SOURCES[name]
         lines += [
             "",
-            "## US Army",
+            f"## {source.label}",
             "",
-            f"Licence: [{ARMY.licence}]({ARMY.licence_url}): works of the US "
-            "Government carry no copyright (17 U.S.C. 105). Approved for public release; "
-            f"distribution is unlimited. Author: {ARMY.author}. Only the chapters named are "
-            "used, and no figure:",
+            f"Licence: [{source.licence}]({source.licence_url}): {source.terms} "
+            f"Author: {source.author}. Only the chapters named are used, and no figure:",
             "",
         ]
         lines.extend(
-            f"- {publication.publication}, *{publication.title}*, {publication.url} "
-            f"(sha256 `{publication.sha256}`), chapters "
-            f"{', '.join(str(chapter) for chapter in publication.chapters)}"
-            for publication in manifest.army
+            f"- *{pin.title}*, {pin.url} (sha256 `{pin.sha256}`), chapters "
+            f"{', '.join(str(chapter) for chapter in pin.chapters)}"
+            for pin in manifest.pdf
+            if pin.source == name
         )
     return "\n".join(lines) + "\n"
 
@@ -558,43 +591,171 @@ def pdf_pages(data: bytes) -> list[str]:
     return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
 
 
-def _army(publication: ArmyPublication, get: Getter) -> list[Chunk]:
-    data = get(publication.url)
+def _pdf(pin: Pdf, get: Getter) -> list[Chunk]:
+    data = get(pin.url)
     digest = hashlib.sha256(data).hexdigest()
-    if digest != publication.sha256:
+    if digest != pin.sha256:
         raise CorpusError(
-            f"{publication.url} is not the pinned file of {publication.publication} (sha256 "
-            f"{digest}); the Army may have issued a change, so refresh the manifest from the "
-            "publication's details page"
+            f"{pin.url} is not the pinned file of {pin.title}: its sha256 is {digest}, the "
+            f"manifest pins {pin.sha256}; if the publisher has issued a new edition, read it "
+            "and refresh the pin"
         )
     return _cut(
-        ARMY,
+        SOURCES[pin.source],
         "en",
-        f"{publication.publication}, {publication.title}",
-        publication.publication,
+        pin.title,
+        pin.key,
         digest,
-        _army_sections(pdf_pages(data), publication),
-        lambda anchor: f"{publication.url}#{anchor}",
+        _PDF_CUTS[pin.cut](data, pin),
+        lambda anchor: f"{pin.url}#{anchor}",
     )
 
 
+def pdf_bookmarked(data: bytes) -> tuple[list[str], list[tuple[int, str]]]:
+    """Each page of a PDF as it is laid out, and its bookmarks as (depth, title)."""
+    reader = PdfReader(io.BytesIO(data))
+    bookmarks: list[tuple[int, str]] = []
+
+    def walk(entries: list[object], depth: int) -> None:
+        for entry in entries:
+            if isinstance(entry, list):
+                walk(entry, depth + 1)
+            else:
+                bookmarks.append((depth, _clean(str(getattr(entry, "title", "")))))
+
+    walk(list(reader.outline), 0)
+    pages = [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
+    return pages, bookmarks
+
+
 _BULLETS = "⚫•●▪"
+_CHAPTER = re.compile(r"^Chapter (\d+)\.")
+_CAPTION = re.compile(r"^(Table|Figure) [A-Z]?\d*-\d+\. ")
+_CAPTION_NOTE = re.compile(r"^(Note:|Source:|\*)")
+_FOLIO = re.compile(r"^\d+\S|\s{2,}\d+$")
+_COLUMN_GAP = re.compile(r"\s{5,}")
+_BULLET = re.compile(rf"^[{_BULLETS}]\s*")
+_UNFINISHED = re.compile(r"[^.!?:;\"\u201d)]$")
+
+
+def _letters(text: str) -> str:
+    """A title as it is compared: its letters and digits, whatever its spacing and punctuation."""
+    return re.sub(r"[^A-Za-z0-9]", "", text)
+
+
+def _bookmarked(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
+    """A bookmarked PDF's chosen chapters as (bookmark, page anchor, paragraphs).
+
+    Left out: the folio, the boxes set beside the text, and each table or figure from its
+    caption to the next paragraph at the margin.
+    """
+    pages, bookmarks = pdf_bookmarked(data)
+    depths = [depth for depth, title in bookmarks if _CHAPTER.match(title)]
+    if not depths:
+        raise CorpusError(f"{pin.url} has no bookmark named as a chapter; it cannot be cut by them")
+    parts: dict[str, set[str]] = {}
+    """Each bookmark at the chapters' depth, with the headings bookmarked under it."""
+    for depth, title in bookmarks:
+        if depth == min(depths):
+            part = title
+            parts[part] = set()
+        elif depth > min(depths) and parts:
+            parts[part].add(_letters(title))
+    named = {_letters(part): part for part in parts}
+
+    sections: list[tuple[str, str, list[str]]] = []
+    part = ""
+    for number, page in enumerate(pages, start=1):
+        lines = [line.rstrip() for line in page.splitlines()]
+        while lines and not lines[-1]:
+            lines.pop()
+        if lines and _FOLIO.search(lines[-1]):
+            running = named.get(_letters(re.sub(r"\s{2,}\d+$", "", lines.pop())), part)
+            if running != part:
+                part = running
+                sections.append((part, f"page={number}", []))
+        box: int | None = None
+        skipping = False
+        after_blank = True
+        continues = bool(sections and sections[-1][2] and _UNFINISHED.search(sections[-1][2][-1]))
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            index += 1
+            text = line.strip()
+            if not text:
+                after_blank = True
+                continue
+            following = lines[index].strip() if index < len(lines) else ""
+            two_lines = f"{text} {following}"
+            opened = next((c for c in (text, two_lines) if _letters(c) in named), None)
+            if opened:
+                part = named[_letters(opened)]
+                sections.append((part, f"page={number}", []))
+                index += opened is two_lines
+                after_blank, continues = True, False
+                continue
+            found = _CHAPTER.match(part)
+            if not found or int(found.group(1)) not in pin.chapters:
+                continue
+            indent = len(line) - len(line.lstrip())
+            if box is not None and indent >= box - 3:
+                continue
+            if _CAPTION.match(text):
+                skipping = True
+            elif skipping and after_blank and indent == 0 and not _CAPTION_NOTE.match(text):
+                skipping = False
+            if skipping:
+                after_blank = False
+                continue
+            gap = _COLUMN_GAP.search(text)
+            if gap and not _BULLET.match(text):
+                box = indent + gap.end()
+                text = text[: gap.start()]
+            two_lines = f"{text} {following}"
+            heading = next((c for c in (text, two_lines) if _letters(c) in parts[part]), None)
+            if heading:
+                sections.append((f"{part}: {_clean(heading)}", f"page={number}", []))
+                index += heading is two_lines
+                after_blank, continues = True, False
+                continue
+            if not sections[-1][2]:
+                sections[-1] = (sections[-1][0], f"page={number}", [])
+            paragraphs = sections[-1][2]
+            bullet = _BULLET.match(text)
+            text = _BULLET.sub("", text)
+            broken = paragraphs and _UNFINISHED.search(paragraphs[-1]) and text[0].islower()
+            if paragraphs and not bullet and (continues or broken or not after_blank):
+                joint = "" if re.search(r"[a-z]-$", paragraphs[-1]) else " "
+                paragraphs[-1] = f"{paragraphs[-1]}{joint}{text}"
+            else:
+                paragraphs.append(text)
+            after_blank, continues = False, False
+    return [
+        (heading, anchor, [_clean(p) for p in paragraphs])
+        for heading, anchor, paragraphs in sections
+        if paragraphs
+    ]
+
+
+def _army_manual(data: bytes, pin: Pdf) -> list[tuple[str, str, list[str]]]:
+    return _army_sections(pdf_pages(data), pin)
+
+
 _PARAGRAPH_NUMBER = re.compile(r"^\+?\d+-\d+\.\s*")
 _PAGE_ID = re.compile(r"(?:^|\s)(\d+)-\d+(?=\s|$)")
 
 
-def _army_sections(
-    pages: list[str], publication: ArmyPublication
-) -> list[tuple[str, str, list[str]]]:
+def _army_sections(pages: list[str], pin: Pdf) -> list[tuple[str, str, list[str]]]:
     """A manual's chosen chapters as (heading, page anchor, paragraphs), running heads dropped."""
     sections: list[tuple[str, str, list[str]]] = []
     titles: dict[int, str] = {}
     for number, page in enumerate(pages, start=1):
         lines = [line.strip() for line in page.splitlines()]
-        header = next((line for line in lines if publication.publication in line), None)
+        header = next((line for line in lines if pin.key in line), None)
         found = _PAGE_ID.search(header) if header else None
         chapter = int(found.group(1)) if found else None
-        if chapter not in publication.chapters:
+        if chapter not in pin.chapters:
             continue
         running = {f"Chapter {chapter}"}
         for index, line in enumerate(lines[:-1]):
@@ -605,7 +766,7 @@ def _army_sections(
         for line in lines:
             if (
                 not line
-                or publication.publication in line
+                or pin.key in line
                 or line.lstrip("+").strip() in running
                 or re.match(r"^Figure \d+-\d+\.", line)
             ):
@@ -647,6 +808,13 @@ def _is_heading(line: str) -> bool:
 def _heading(line: str) -> str:
     """An all-capitals heading, written the way a title reads."""
     return string.capwords(re.sub(r"^\d+\.\s*", "", _clean(line.lstrip("+"))))
+
+
+_PDF_CUTS: dict[str, Callable[[bytes, Pdf], list[tuple[str, str, list[str]]]]] = {
+    "army-manual": _army_manual,
+    "bookmarks": _bookmarked,
+}
+"""How a pinned PDF is read into (heading, page anchor, paragraphs), by the name its pin gives."""
 
 
 def _page_link(page: Page) -> str:
