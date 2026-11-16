@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import string
 import time
@@ -100,8 +101,18 @@ USUHS = Source(
     "names, a federal university's faculty and Navy medical officers; the guide carries no "
     "licence statement of its own. Material it prints from other publishers is left out.",
 )
+AIR_FORCE = Source(
+    "us-air-force",
+    "Air Force Personnel Center, U.S. Department of the Air Force",
+    {"Public domain (US government work)": "https://www.copyright.gov/title17/92chap1.html#105"},
+    "US Air Force",
+    "a US government work by authorship (17 U.S.C. 105), inferred from its publisher, the Air "
+    "Force Personnel Center; the playbook carries no licence statement of its own. Only its "
+    "text is taken: it does not say where its pictures come from.",
+)
 SOURCES = {
-    source.name: source for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS, USUHS)
+    source.name: source
+    for source in (WIKIPEDIA, MEDLINEPLUS, WGER, ARMY, HHS, USUHS, AIR_FORCE)
 }
 """The only sources the corpus may hold; anything NonCommercial or copyrighted stays out."""
 
@@ -163,6 +174,10 @@ class Pdf:
     sha256: str
     cut: str
     chapters: tuple[int, ...]
+    parts: tuple[str, ...] = ()
+    """The parts taken from a PDF that numbers no chapter, as its pages name them."""
+    file: str = ""
+    """The file's name in the folder of files supplied by hand, when no script may fetch it."""
 
 
 @dataclass(frozen=True)
@@ -201,7 +216,16 @@ class NotPublished(Exception):
     """The address answered that it holds nothing (HTTP 404)."""
 
 
-def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
+SUPPLIED_ENV_VAR = "TRAINER_SOURCES"
+
+
+def supplied_directory() -> Path:
+    """The folder of files supplied by hand: the one the environment names, or one beside the repo."""
+    override = os.environ.get(SUPPLIED_ENV_VAR)
+    return Path(override) if override else Path(__file__).parents[3] / "reps-sources"
+
+
+def fetch(manifest: Manifest, get: Getter, supplied: Path | None = None) -> list[Chunk]:
     """Fetch every pinned text and cut it into chunks, in manifest order."""
     chunks: list[Chunk] = []
     for page in manifest.wikipedia:
@@ -213,7 +237,7 @@ def fetch(manifest: Manifest, get: Getter) -> list[Chunk]:
         for pin in manifest.wger:
             chunks.extend(_wger(pin, get, borrowed))
     for pinned in manifest.pdf:
-        chunks.extend(_pdf(pinned, get))
+        chunks.extend(_pdf(pinned, get, supplied or supplied_directory()))
     return chunks
 
 
@@ -261,9 +285,9 @@ def _pdf_pin(entry: dict[str, object], path: Path) -> Pdf:
             f"the corpus manifest {path} cuts a PDF as {cut!r}; the cuts are "
             f"{', '.join(sorted(_PDF_CUTS))}"
         )
-    chapters = entry["chapters"]
-    if not isinstance(chapters, list):
-        raise TypeError("a PDF's chapters are a list of numbers")
+    chapters, parts = entry.get("chapters", []), entry.get("parts", [])
+    if not isinstance(chapters, list) or not isinstance(parts, list):
+        raise TypeError("a PDF's chapters are a list of numbers, its parts a list of names")
     return Pdf(
         source,
         str(entry["key"]),
@@ -272,6 +296,8 @@ def _pdf_pin(entry: dict[str, object], path: Path) -> Pdf:
         str(entry["sha256"]),
         cut,
         tuple(int(chapter) for chapter in chapters),
+        tuple(str(part) for part in parts),
+        str(entry.get("file", "")),
     )
 
 
@@ -373,19 +399,20 @@ def notice(manifest: Manifest, chunks: list[Chunk]) -> str:
         )
     for name in dict.fromkeys(pin.source for pin in manifest.pdf):
         source = SOURCES[name]
+        pins = [pin for pin in manifest.pdf if pin.source == name]
+        division = "parts" if any(pin.parts for pin in pins) else "chapters"
         lines += [
             "",
             f"## {source.label}",
             "",
             f"Licence: [{source.licence}]({source.licence_url}): {source.terms} "
-            f"Author: {source.author}. Only the chapters named are used, and no figure:",
+            f"Author: {source.author}. Only the {division} named are used, and no figure:",
             "",
         ]
         lines.extend(
-            f"- *{pin.title}*, {pin.url} (sha256 `{pin.sha256}`), chapters "
-            f"{', '.join(str(chapter) for chapter in pin.chapters)}"
-            for pin in manifest.pdf
-            if pin.source == name
+            f"- *{pin.title}*, {pin.url} (sha256 `{pin.sha256}`), {division} "
+            f"{', '.join(pin.parts or [str(chapter) for chapter in pin.chapters])}"
+            for pin in pins
         )
     return "\n".join(lines) + "\n"
 
@@ -602,12 +629,18 @@ def pdf_pages(data: bytes) -> list[str]:
     return [page.extract_text() or "" for page in PdfReader(io.BytesIO(data)).pages]
 
 
-def _pdf(pin: Pdf, get: Getter) -> list[Chunk]:
-    data = get(pin.url)
+def _pdf(pin: Pdf, get: Getter, supplied: Path) -> list[Chunk]:
+    origin = str(supplied / pin.file) if pin.file else pin.url
+    if pin.file and not Path(origin).is_file():
+        raise CorpusError(
+            f"{pin.title} is supplied by hand and is not there yet: its publisher gives it "
+            f"to no script, so open {pin.url} in a browser and save the file as {origin}"
+        )
+    data = Path(origin).read_bytes() if pin.file else get(pin.url)
     digest = hashlib.sha256(data).hexdigest()
     if digest != pin.sha256:
         raise CorpusError(
-            f"{pin.url} is not the pinned file of {pin.title}: its sha256 is {digest}, the "
+            f"{origin} is not the pinned file of {pin.title}: its sha256 is {digest}, the "
             f"manifest pins {pin.sha256}; if the publisher has issued a new edition, read it "
             "and refresh the pin"
         )
@@ -903,6 +936,153 @@ def _opens_paragraph(lines: list[str], index: int, margin: int, part: _Part) -> 
     return indent <= 1 or bool(_BULLET.match(following))
 
 
+Span = tuple[float, float, float, str, str]
+"""A run of a PDF's text: its x and y from the page's bottom left, its size, typeface and text."""
+
+
+def pdf_spans(data: bytes) -> list[list[Span]]:
+    """Each page of a PDF as its runs of text; one set sideways has no size."""
+    pages: list[list[Span]] = []
+    for page in PdfReader(io.BytesIO(data)).pages:
+        spans: list[Span] = []
+
+        def visit(
+            text: str,
+            cm: list[float],
+            tm: list[float],
+            font: dict[str, object] | None,
+            size: float,
+            spans: list[Span] = spans,
+        ) -> None:
+            if text.strip():
+                face = str((font or {}).get("/BaseFont", "")).lstrip("/").split("+")[-1]
+                x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+                y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+                spans.append((x, y, abs(tm[0] * cm[0]) * size, face, text))
+
+        page.extract_text(visitor_text=visit)
+        pages.append(spans)
+    return pages
+
+
+_PLAYBOOK_LABEL = "NunitoSans-Regular"
+_PLAYBOOK_HEADING = "NunitoSans-BoldItalic"
+_PLAYBOOK_ENTRY = "SourceSansPro"
+_PLAYBOOK_PROSE = "TimesNewRoman"
+_PLAYBOOK_PROSE_SIZES = {11.0, 11.6, 12.0}
+_PLAYBOOK_COLUMN = 400
+"""Where the playbook's main column ends; what starts past it is a box beside the text."""
+_PARAGRAPH_GAP = 20
+_NUMBERED = re.compile(r"^\d+\.\s+(?=\S)")
+_PLAYBOOK_BULLETS = "•◦▪"
+"""The marks of a list item, the outermost first."""
+
+
+def _playbook(data: bytes, pin: Pdf) -> Sections:
+    """The Air Force playbook's chosen parts as (heading, page anchor, paragraphs), by typeface.
+
+    A page names its part in the label set sideways at its foot. An exercise library page
+    gives each entry under its own name; any other gives the prose of its main column under
+    its headings. Left out: tables, boxes, captions and page furniture, set in other faces
+    or sizes.
+    """
+    sections: Sections = []
+    for number, spans in enumerate(pdf_spans(data), start=1):
+        label = _clean(
+            " ".join(text for _, _, size, face, text in spans if face == _PLAYBOOK_LABEL and size < 1)
+        )
+        if not any(label.startswith(part) for part in pin.parts):
+            continue
+        if any(face.startswith(_PLAYBOOK_ENTRY) for _, _, _, face, _ in spans):
+            sections += _playbook_entries(spans, number)
+        else:
+            sections += _playbook_prose(spans, label, number)
+    return _written(sections)
+
+
+def _set_lines(spans: list[Span]) -> list[tuple[float, str, float, str]]:
+    """Runs gathered into lines, top to bottom, as (y, the face and size of its first run, text)."""
+    lines: list[list[Span]] = []
+    for span in sorted(spans, key=lambda span: -span[1]):
+        if lines and abs(lines[-1][0][1] - span[1]) <= 2:
+            lines[-1].append(span)
+        else:
+            lines.append([span])
+    return [
+        (
+            line[0][1],
+            line[0][3] if len({face for _, _, _, face, _ in line}) == 1 else "",
+            line[0][2],
+            _clean("".join(text for *_, text in line).replace("ﬁ", "fi").replace("ﬀ", "ff")),
+        )
+        for line in (sorted(line, key=lambda span: span[0]) for line in lines)
+    ]
+
+
+def _playbook_entries(spans: list[Span], number: int) -> Sections:
+    """An exercise library page: each entry's name, then what it trains and how it is done."""
+    entries: list[tuple[list[str], list[str], list[str]]] = []
+    for _, face, _, text in _set_lines(
+        [span for span in spans if span[3].startswith((_PLAYBOOK_ENTRY, _PLAYBOOK_PROSE))]
+    ):
+        if face.endswith("-Bold"):
+            if entries and not entries[-1][1] and not entries[-1][2]:
+                entries[-1][0].append(text)
+            else:
+                entries.append(([text], [], []))
+        elif entries:
+            entries[-1][1 if face.endswith("-It") else 2].append(text)
+    return [
+        (" ".join(name), f"page={number}", [" ".join(trains), " ".join(done)])
+        for name, trains, done in entries
+        if done
+    ]
+
+
+def _playbook_prose(spans: list[Span], label: str, number: int) -> Sections:
+    """A page of prose: its main column's paragraphs under the page's title and headings."""
+    kept = [
+        span
+        for span in spans
+        if (span[3] == _PLAYBOOK_HEADING and span[2] >= 15)
+        or (
+            span[3].startswith(_PLAYBOOK_PROSE)
+            and round(span[2], 1) in _PLAYBOOK_PROSE_SIZES
+            and span[0] < _PLAYBOOK_COLUMN
+        )
+    ]
+    sections: Sections = []
+    title: list[str] = []
+    titled = False
+    last = 0.0
+    for y, face, size, text in _set_lines(kept):
+        numbered = _NUMBERED.match(text) if face.endswith("-BoldMT") else None
+        if face == _PLAYBOOK_HEADING and size >= 20:
+            title = [*title, text] if titled else [text]
+            titled = True
+            continue
+        titled = False
+        above = " ".join(title).rstrip(": ") or label
+        if face == _PLAYBOOK_HEADING or numbered:
+            heading = text[numbered.end() :] if numbered else text
+            sections.append((f"{above}: {heading.rstrip(': ')}", f"page={number}", []))
+            continue
+        if not sections:
+            sections.append((above, f"page={number}", []))
+        paragraphs = sections[-1][2]
+        item = text.lstrip(_PLAYBOOK_BULLETS + " ")
+        labelled = bool(paragraphs) and text[0] in _PLAYBOOK_BULLETS[1:] and paragraphs[-1][-1] == ":"
+        if text[0] in _PLAYBOOK_BULLETS and not labelled:
+            if item:
+                paragraphs.append(item)
+        elif paragraphs and (labelled or last - y <= _PARAGRAPH_GAP):
+            paragraphs[-1] = f"{paragraphs[-1]} {item}"
+        else:
+            paragraphs.append(text)
+        last = y
+    return sections
+
+
 def _army_manual(data: bytes, pin: Pdf) -> Sections:
     return _army_sections(pdf_pages(data), pin)
 
@@ -979,6 +1159,7 @@ _PDF_CUTS: dict[str, Callable[[bytes, Pdf], Sections]] = {
     "army-manual": _army_manual,
     "bookmarks": _bookmarked,
     "indented": _indented,
+    "playbook": _playbook,
 }
 """How a pinned PDF is read into (heading, page anchor, paragraphs), by the name its pin gives."""
 

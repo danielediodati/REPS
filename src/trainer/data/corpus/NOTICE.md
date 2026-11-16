@@ -449,3 +449,9 @@ Licence: [Public domain (US government work)](https://odphp.health.gov/copyright
 Licence: [Public domain (US government work)](https://www.copyright.gov/title17/92chap1.html#105): a US government work by authorship (17 U.S.C. 105), inferred from the authors the PDF names, a federal university's faculty and Navy medical officers; the guide carries no licence statement of its own. Material it prints from other publishers is left out. Author: Uniformed Services University of the Health Sciences. Only the chapters named are used, and no figure:
 
 - *The Navy SEAL Physical Fitness Guide*, https://champ.usuhs.edu/sites/default/files/2020-03/navysealfitnessguide.pdf (sha256 `f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40`), chapters 6, 7, 8, 9, 12
+
+## US Air Force
+
+Licence: [Public domain (US government work)](https://www.copyright.gov/title17/92chap1.html#105): a US government work by authorship (17 U.S.C. 105), inferred from its publisher, the Air Force Personnel Center; the playbook carries no licence statement of its own. Only its text is taken: it does not say where its pictures come from. Author: Air Force Personnel Center, U.S. Department of the Air Force. Only the parts named are used, and no figure:
+
+- *The Warfighter's Fitness Playbook 2.0*, https://www.afpc.af.mil/Portals/70/documents/FITNESS/Tab%204.%20The%20Warfighter's%20Fitness%20Playbook%20%202.0%20Feb%202026.pdf (sha256 `57535a935dba673861f86a13eb0b8ead1001dc1d9e5f9c6fe1a8cd1b44cf4c6f`), parts Understanding Workout Programs, Adaptive Programming, Appendix B Dynamic Warm-Up, Appendix B Physical Training, Appendix B Recovery Training, Appendix H

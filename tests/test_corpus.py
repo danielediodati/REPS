@@ -356,7 +356,7 @@ def test_a_fetch_that_fails_is_a_message_not_a_traceback(
 def test_the_committed_corpus_holds_only_allowed_sources_under_their_licence() -> None:
     for chunk in corpus.read_chunks():
         assert chunk.source in {
-            "wikipedia", "medlineplus", "wger", "us-army", "hhs", "usuhs"
+            "wikipedia", "medlineplus", "wger", "us-army", "hhs", "usuhs", "us-air-force"
         }, chunk.id
         assert chunk.licence in corpus.SOURCES[chunk.source].licences, chunk.id
 
@@ -941,3 +941,184 @@ def test_the_notice_says_the_seal_guide_is_public_domain_by_authorship_inferred(
     assert "inferred from the authors the PDF names" in notice
     assert "no licence statement of its own" in notice
     assert f"- *The Navy SEAL Physical Fitness Guide*, {SEAL_URL}" in notice
+
+
+PLAYBOOK_URL = "https://www.afpc.af.mil/Portals/70/documents/FITNESS/playbook.pdf"
+PLAYBOOK_FILE = "The Warfighter's Fitness Playbook.pdf"
+PLAYBOOK_BYTES = b"%PDF-playbook"
+_TIMES, _TIMES_BOLD = "TimesNewRomanPSMT", "TimesNewRomanPS-BoldMT"
+_NUNITO, _SOURCE = "NunitoSans-BoldItalic", "SourceSansPro-Regular"
+
+
+def _furniture(label: str, folio: str) -> list[tuple[float, float, float, str, str]]:
+    return [
+        (574.0, 20.6, 13.0, "Poppins-Regular", folio),
+        (272.8, 768.4, 8.0, _NUNITO, "The Warﬁghter's Fitness Playbook"),
+        (39.6, 28.8, 0.0, "Poppins-Regular", "Appendix Title"),
+        (39.6, 23.2, 0.0, "NunitoSans-Regular", label),
+    ]
+
+
+PLAYBOOK_SPANS: list[list[tuple[float, float, float, str, str]]] = [
+    [
+        *_furniture("Understanding Workout Programs", "13"),
+        (89.2, 714.4, 21.6, _NUNITO, "Understanding Workout Programs: \n"),
+        (89.2, 688.4, 21.6, _NUNITO, "Resistance/Strength Training "),
+        (89.2, 651.6, 15.6, _NUNITO, "Repetitions, Volume, and Intensity "),
+        (89.2, 625.0, 11.0, _TIMES, "Workout sessions are built around reps and sets. Lower \n"),
+        (89.2, 609.2, 11.0, _TIMES, "reps use higher weight. \n"),
+        (89.2, 577.5, 11.0, _TIMES, "Repetition ranges are also linked to eﬀort. "),
+        (249.9, 469.9, 12.4, _TIMES_BOLD, "Exercise Prescription Guidelines: "),
+        (77.7, 402.6, 11.3, _TIMES_BOLD, "Muscular Endurance "),
+        (224.0, 402.6, 11.3, _TIMES, "12+ 2-3 5.5-6.5 30 seconds or less "),
+        (76.6, 345.0, 10.2, _TIMES_BOLD, "Position "),
+        (93.3, 178.4, 11.0, _TIMES, "•"),
+        (102.7, 178.4, 11.0, _TIMES_BOLD, " Muscular Endurance: "),
+        (102.7, 178.4, 11.0, _TIMES, "The ability to repeatedly contract a muscle \n"),
+        (102.7, 165.2, 11.0, _TIMES, "over time. "),
+        (93.3, 149.3, 11.0, _TIMES, "•"),
+        (102.7, 149.3, 11.0, _TIMES_BOLD, " Resistance Training: "),
+        (111.0, 133.5, 11.0, _TIMES, "◦"),
+        (120.0, 133.5, 11.0, _TIMES, " Uses external load or bodyweight. "),
+        (461.3, 178.4, 11.0, _TIMES_BOLD, "Fatigue Accumulation: "),
+        (461.3, 165.2, 11.0, _TIMES, "Remember that fatigue builds up. "),
+    ],
+    [
+        *_furniture("Appendix B Dynamic Warm-Up", " B3"),
+        (121.4, 772.3, 17.0, "Poppins-Regular", "1\n"),
+        (119.2, 540.0, 17.0, "Poppins-Regular", "2"),
+        (83.2, 732.6, 11.6, _SOURCE, "Stand with feet shoulder width apart and \n"),
+        (83.2, 718.7, 11.6, _SOURCE, "arms straight out from the body. Make small arm circles. "),
+        (89.4, 576.7, 17.5, "SourceSansPro-Bold", "Bird Dog"),
+        (89.4, 566.3, 11.5, "SourceSansPro-It", "Upper and Lower Extremity, Core: Low Demand"),
+        (83.2, 766.4, 17.5, "SourceSansPro-Bold", "Arm Circles"),
+        (83.2, 756.0, 11.5, "SourceSansPro-It", "Upper Extremity: Low Demand"),
+        (89.4, 544.3, 11.6, _SOURCE, "Start with hands and knees on the \n"),
+        (89.4, 529.9, 11.6, _SOURCE, "ground. Switch sides."),
+    ],
+    [
+        *_furniture("Appendix H", "H1"),
+        (39.6, 193.0, 0.0, "NunitoSans-Regular", " Warmups"),
+        (89.2, 718.6, 21.6, _NUNITO, "Warmups"),
+        (92.3, 587.8, 12.0, _TIMES_BOLD, "2. Arm Rotations (5x) "),
+        (92.3, 563.4, 12.0, _TIMES, "Face forward with feet shoulder width apart. Raise \n"),
+        (92.3, 549.0, 12.0, _TIMES, "your right arm. "),
+    ],
+    [
+        *_furniture("Appendix A Sample Workouts", "A7"),
+        (89.2, 625.0, 11.0, _TIMES, "Walking Knee Hugs x 10 yds "),
+    ],
+]
+
+
+def _playbook_manifest() -> corpus.Manifest:
+    return _manifest(
+        wikipedia=(),
+        pdf=(
+            corpus.Pdf(
+                "us-air-force",
+                "warfighters-fitness-playbook-2",
+                "The Warfighter's Fitness Playbook 2.0",
+                PLAYBOOK_URL,
+                hashlib.sha256(PLAYBOOK_BYTES).hexdigest(),
+                "playbook",
+                (),
+                ("Understanding Workout Programs", "Appendix B Dynamic Warm-Up", "Appendix H"),
+                PLAYBOOK_FILE,
+            ),
+        ),
+    )
+
+
+@pytest.fixture
+def playbook_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(corpus, "pdf_spans", lambda data: [list(p) for p in PLAYBOOK_SPANS])
+
+
+def test_a_pdf_supplied_by_hand_is_read_from_its_folder_and_never_fetched(
+    playbook_pdf: None, tmp_path: Path
+) -> None:
+    (tmp_path / PLAYBOOK_FILE).write_bytes(PLAYBOOK_BYTES)
+
+    chunks = corpus.fetch(_playbook_manifest(), _getter({}), tmp_path)
+
+    assert [(c.section, c.text) for c in chunks] == [
+        (
+            "Understanding Workout Programs: Resistance/Strength Training: "
+            "Repetitions, Volume, and Intensity",
+            "Workout sessions are built around reps and sets. Lower reps use higher weight.\n"
+            "Repetition ranges are also linked to effort.\n"
+            "Muscular Endurance: The ability to repeatedly contract a muscle over time.\n"
+            "Resistance Training: Uses external load or bodyweight.",
+        ),
+        (
+            "Arm Circles",
+            "Upper Extremity: Low Demand\n"
+            "Stand with feet shoulder width apart and arms straight out from the body. "
+            "Make small arm circles.",
+        ),
+        (
+            "Bird Dog",
+            "Upper and Lower Extremity, Core: Low Demand\n"
+            "Start with hands and knees on the ground. Switch sides.",
+        ),
+        (
+            "Warmups: Arm Rotations (5x)",
+            "Face forward with feet shoulder width apart. Raise your right arm.",
+        ),
+    ]
+    assert [c.link for c in chunks] == [f"{PLAYBOOK_URL}#page={n}" for n in (1, 2, 2, 3)]
+    assert {c.source for c in chunks} == {"us-air-force"}
+    assert {c.licence for c in chunks} == {"Public domain (US government work)"}
+
+
+def test_a_file_not_yet_supplied_is_reported_with_where_to_put_it_and_where_it_is_published(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(corpus.CorpusError) as missing:
+        corpus.fetch(_playbook_manifest(), _getter({}), tmp_path)
+
+    assert "supplied by hand" in str(missing.value)
+    assert str(tmp_path / PLAYBOOK_FILE) in str(missing.value)
+    assert PLAYBOOK_URL in str(missing.value)
+
+
+def test_a_supplied_file_that_is_not_the_pinned_one_is_refused_with_both_hashes(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / PLAYBOOK_FILE).write_bytes(b"%PDF-another-edition")
+
+    with pytest.raises(corpus.CorpusError) as refused:
+        corpus.fetch(_playbook_manifest(), _getter({}), tmp_path)
+
+    assert hashlib.sha256(b"%PDF-another-edition").hexdigest() in str(refused.value)
+    assert hashlib.sha256(PLAYBOOK_BYTES).hexdigest() in str(refused.value)
+
+
+def test_the_manifest_names_a_supplied_file_and_the_parts_taken_from_it(tmp_path: Path) -> None:
+    (tmp_path / "manifest.toml").write_text(
+        "version = 1\n\n[[pdf]]\n"
+        'source = "us-air-force"\nkey = "playbook"\ntitle = "The Playbook"\n'
+        f'url = "{PLAYBOOK_URL}"\nsha256 = "abc"\ncut = "playbook"\n'
+        f'parts = ["Appendix H"]\nfile = "{PLAYBOOK_FILE}"\n',
+        encoding="utf-8",
+    )
+
+    (pin,) = corpus.read_manifest(tmp_path).pdf
+
+    assert (pin.parts, pin.file, pin.chapters) == (("Appendix H",), PLAYBOOK_FILE, ())
+
+
+def test_the_notice_says_the_playbook_is_public_domain_by_authorship_and_only_its_text() -> None:
+    notice = corpus.notice(_playbook_manifest(), [])
+
+    assert "## US Air Force" in notice
+    assert "17 U.S.C. 105" in notice
+    assert "inferred from its publisher" in notice
+    assert "Only its text is taken" in notice
+    assert "Only the parts named are used" in notice
+    assert (
+        f"- *The Warfighter's Fitness Playbook 2.0*, {PLAYBOOK_URL} "
+        f"(sha256 `{hashlib.sha256(PLAYBOOK_BYTES).hexdigest()}`), parts "
+        "Understanding Workout Programs, Appendix B Dynamic Warm-Up, Appendix H"
+    ) in notice

@@ -45,6 +45,27 @@ sha256 = "f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40"
 cut = "indented"
 chapters = [6, 7, 8, 9, 12]
 
+# The Warfighter's Fitness Playbook 2.0 (US Air Force, Feb 2026). Its publisher answers no
+# script, so the file is supplied by hand: saved under the name below in the folder
+# TRAINER_SOURCES names, or in reps-sources beside the repository. Taken: programming,
+# training around a duty-limiting profile, the exercise library, the warm-ups and cooldowns.
+[[pdf]]
+source = "us-air-force"
+key = "warfighters-fitness-playbook-2"
+title = "The Warfighter's Fitness Playbook 2.0"
+url = "https://www.afpc.af.mil/Portals/70/documents/FITNESS/Tab%204.%20The%20Warfighter's%20Fitness%20Playbook%20%202.0%20Feb%202026.pdf"
+file = "Tab 4. The Warfighter's Fitness Playbook  2.0 Feb 2026.pdf"
+sha256 = "57535a935dba673861f86a13eb0b8ead1001dc1d9e5f9c6fe1a8cd1b44cf4c6f"
+cut = "playbook"
+parts = [
+    "Understanding Workout Programs",
+    "Adaptive Programming",
+    "Appendix B Dynamic Warm-Up",
+    "Appendix B Physical Training",
+    "Appendix B Recovery Training",
+    "Appendix H",
+]
+
 [medlineplus]
 date = "2026-11-07"
 topics = [
