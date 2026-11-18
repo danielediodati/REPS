@@ -757,10 +757,11 @@ def _passage(source: str, language: str, title: str, section: str, text: str) ->
 
 PASSAGES = [
     _passage("wikipedia", "en", "Squat (exercise)", "Form", SQUAT_FORM),
-    _passage("wikipedia", "it", "Stacco da terra", "", "Lo stacco solleva il bilanciere da terra con la schiena neutra."),
+    _passage("wikipedia", "it", "Stacco da terra", "", "Lo stacco solleva il bilanciere da terra con la schiena neutra e l’addome rigido."),
     _passage("wger", "it", "Plank", "", "Tieni il tronco rigido su avambracci e punte dei piedi."),
 ]
 SQUAT = PASSAGES[0].id
+DEADLIFT = PASSAGES[1].id
 
 
 @pytest.fixture()
@@ -833,7 +834,25 @@ def test_a_quote_across_a_line_break_is_still_word_for_word(
 
     final = graph_of(model).invoke(entrance.heard("come faccio lo squat?"))
 
-    assert [one["quote"] for one in final["cited"]] == ["the trunk braced\nas the hips descend"]
+    assert [one["quote"] for one in final["cited"]] == ["the trunk braced as the hips descend"]
+
+
+def test_a_quote_typed_with_plain_quote_marks_is_kept_with_the_passage_s_own(
+    connection: sqlite3.Connection, sources: retrieval.Search
+) -> None:
+    """A model types l'addome for the page's l’addome: the same words, kept as the page writes them."""
+    model = Scripted(
+        turns=[
+            calling(entrance.SEARCH_SOURCES, question="stacco"),
+            calling(entrance.CITE, passage=DEADLIFT, quote="con la schiena neutra e l'addome rigido"),
+            says("Schiena neutra e addome rigido."),
+        ]
+    )
+
+    final = graph_of(model).invoke(entrance.heard("come faccio lo stacco?"))
+
+    assert [one["quote"] for one in final["cited"]] == ["con la schiena neutra e l’addome rigido"]
+    assert final["sources"] == entrance.CITED
 
 
 def test_nothing_fitting_is_answered_not_covered_with_no_source(

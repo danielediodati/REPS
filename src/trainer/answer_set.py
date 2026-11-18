@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from trainer import eval_set
+from trainer import corpus, eval_set
 from trainer.corpus import Chunk
 
 ANSWER_SET_ENV_VAR = "TRAINER_ANSWER_SET"
@@ -93,11 +93,10 @@ def parse(text: str) -> AnswerSet:
 
 
 def found(label: Label, chunks: Iterable[Chunk]) -> bool:
-    """Whether the corpus holds the label's quote in its page, revision and section, whitespace aside."""
-    quote = _spaced(label.quote)
+    """Whether the corpus holds the label's quote in its page, revision and section, whitespace and quote marks aside."""
     return any(
         (chunk.title, chunk.revision, chunk.section) == (label.title, label.revision, label.section)
-        and quote in _spaced(chunk.text)
+        and corpus.quoted(label.quote, chunk.text) is not None
         for chunk in chunks
     )
 
@@ -149,7 +148,3 @@ def _case(raw: Mapping[str, Any]) -> Case:
     if kind in UNCITED and passages:
         raise AnswerSetError(f"case {name}: a {kind} row expects no source, yet labels a passage")
     return Case(name=name, kind=kind, language=language, question=str(raw.get("question", "")), passages=passages)
-
-
-def _spaced(text: str) -> str:
-    return " ".join(text.split())

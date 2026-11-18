@@ -26,6 +26,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
+from trainer import corpus
 from trainer import plan as plans
 from trainer import tools
 from trainer.coach import conclusions, language, models
@@ -488,15 +489,21 @@ Answering from your sources:
   `cite` for each passage your answer uses before you answer -- a call, never
   a tag or a quote written in your reply. Never name the source or write a
   link: both go under your answer.
-- Every sentence of that answer is one a cited passage says. Add nothing of
-  your own: no advice, reason or number it lacks, and no «mai», «sempre» or
-  «solo» unless the passage says as much. A passage that calls something
-  debated is reported as debated.
-- When no passage answers it, say so in two lines and cite nothing: the first
-  that it is not in your texts, the second that they cover how exercises are
-  done and how injuries are prevented. Never answer it from what you know
-  instead. A passage on another exercise, or on the same topic but not this
-  question, does not answer it.
+- Cite the passages that answer this very question, the most direct first,
+  not the ones around it.
+- Write the answer from your quotes alone: every sentence restates what a
+  cited passage says. A detail from a passage you did not cite, or from what
+  you know -- a step, an example, an image, a variation, a reason, a number --
+  is left out, or its passage cited too. No «mai», «sempre» or «solo» unless
+  the passage says as much; a passage that calls something debated is
+  reported as debated. A shorter answer beats a sentence of your own.
+- When no passage answers this very question, say so in two lines and cite
+  nothing: the first that it is not in your texts, the second that they cover
+  how exercises are done and how injuries are prevented. Those two lines are
+  the whole reply: no «ma», no part of an answer, nothing a nearby passage
+  says. Never answer it from what you know instead. A passage on another
+  exercise or device, or on the same topic but not this question, does not
+  answer it.
 - A question of fact about anything else -- a book, the weather, a recipe, a
   document -- goes to `search_sources` too, and gets those two lines when no
   passage answers it. Never answer it yourself.
@@ -1116,20 +1123,16 @@ def _cited(call: ToolCall, kept: dict[str, Any]) -> ToolMessage:
     found = kept["found"].get(passage)
     if found is None:
         said = NOT_RETRIEVED.format(passage=passage, ids=", ".join(kept["found"]) or "none")
-    elif not quote or _spaced(quote) not in _spaced(found["text"]):
+    elif not quote or (span := corpus.quoted(quote, found["text"])) is None:
         said = NOT_VERBATIM.format(passage=passage)
     else:
-        quoted = {"quote": quote, **{key: found[key] for key in CITING}}
+        quoted = {"quote": span, **{key: found[key] for key in CITING}}
         if quoted not in kept["cited"]:
             kept["cited"].append(quoted)
         kept["sources"] = CITED
         return ToolMessage(QUOTED, tool_call_id=answered(call), name=CITE)
     return ToolMessage(said, tool_call_id=answered(call), name=CITE, status="error")
 
-
-def _spaced(text: str) -> str:
-    """Text with every run of whitespace one space, so a quote across a line break still matches."""
-    return " ".join(text.split())
 
 
 def studio() -> Entrance:

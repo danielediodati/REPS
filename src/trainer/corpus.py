@@ -237,6 +237,21 @@ class NotPublished(Exception):
     """The address answered that it holds nothing (HTTP 404)."""
 
 
+_SINGLE, _DOUBLE = "'‘’", '"“”'
+_MARK = re.compile(f"[{_SINGLE}{_DOUBLE}]")
+
+
+def quoted(quote: str, text: str) -> str | None:
+    """The span of `text` that `quote` copies word for word, whitespace and typographic quote marks aside."""
+    words = [_MARK.sub(_either, re.escape(word)) for word in quote.split()]
+    found = re.search(r"\s+".join(words), text) if words else None
+    return found.group() if found else None
+
+
+def _either(mark: re.Match[str]) -> str:
+    return f"[{_SINGLE}]" if mark.group() in _SINGLE else f"[{_DOUBLE}]"
+
+
 SUPPLIED_ENV_VAR = "TRAINER_SOURCES"
 
 

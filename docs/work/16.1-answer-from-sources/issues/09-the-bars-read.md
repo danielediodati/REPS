@@ -37,3 +37,5 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - Set 4 labels 25 more passages that answer, and `ice-bath-minutes` is covered on English *Ice bath*.
 - Passages retrieved for the 62 covered rows on corpus 2, by source: Wikipedia 224, wger 24, US Army 17, SEAL guide 12, HHS 11, Air Force 10, Europe PMC 9, MedlinePlus 3 (310 in all).
 - p95 retrieval was 11 to 13 s with three blocks in parallel, against about 1.3 s in the ladder.
+- The owner chose to tighten the entrance prompt, bars and set untouched. A screen of the 41 rows that missed on set 4 ($0.31, one rep), before the fix below: faithful 17 of 30 where most had failed; massage-gun and dead-bug-progression now *not covered*; turkish-get-up-steps still answers from a near passage; 7 covered rows now *not covered*, five of them with no labelled passage in the top 5.
+- The screen found the cite check refusing quotes typed with `'` where the page has `’`: 8 rows of the set 4 pass lost cites to it (up to 11 in one run). A quote now matches whitespace and typographic quote marks aside, and the passage's own span is what is kept and shown.

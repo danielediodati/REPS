@@ -14,7 +14,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langgraph.store.memory import InMemoryStore
 
-from trainer import answer_judge, answer_set, eval_runner, retrieval
+from trainer import answer_judge, answer_set, corpus, eval_runner, retrieval
 from trainer.answer_set import Case
 from trainer.coach import entrance, models
 from trainer.coach import record as run_record
@@ -364,12 +364,11 @@ def quotes_held(case: Case, final: Mapping[str, Any], revisions: Mapping[str, st
     labelled = {(label.title, label.revision, label.section) for label in case.passages}
     failures: list[tuple[str, str]] = []
     for one in final.get("cited", ()):
-        quote = _spaced(one["quote"])
         held = [
             passage
             for passage in found.values()
             if (passage["title"], passage["section"], passage["link"]) == (one["title"], one["section"], one["link"])
-            and quote in _spaced(passage["text"])
+            and corpus.quoted(one["quote"], passage["text"]) is not None
         ]
         where = f"{one['title']} / {one['section']}: {one['quote']!r}"
         if not held:
@@ -377,10 +376,6 @@ def quotes_held(case: Case, final: Mapping[str, Any], revisions: Mapping[str, st
         elif not any((passage["title"], revisions.get(passage["id"], ""), passage["section"]) in labelled for passage in held):
             failures.append((LABELLED, f"a passage the row does not label: {where}"))
     return tuple(failures)
-
-
-def _spaced(text: str) -> str:
-    return " ".join(text.split())
 
 
 def render(suite: Answer, report: eval_runner.Report, chosen: Sequence[Case]) -> list[str]:

@@ -1387,3 +1387,13 @@ def test_settling_keeps_the_sets_line_endings(corpus_directory: Path, held_set: 
     written = held_set.read_bytes()
     assert b"version = 2\r\ncorpus = 2\r\n" in written
     assert written.count(b"\n") == written.count(b"\r\n")
+
+
+def test_a_quote_is_found_as_the_passage_writes_it_whitespace_and_typographic_quote_marks_aside() -> None:
+    text = "Riguardo all’altezza dei piedi,\nil “focus” cambia (sempre)."
+
+    assert corpus.quoted("all'altezza dei piedi, il \"focus\" cambia (sempre)", text) == (
+        "all’altezza dei piedi,\nil “focus” cambia (sempre)"
+    )
+    assert corpus.quoted("all'altezza delle mani", text) is None
+    assert corpus.quoted("", text) is None
