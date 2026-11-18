@@ -41,3 +41,18 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - The screen found the cite check refusing quotes typed with `'` where the page has `’`: 8 rows of the set 4 pass lost cites to it (up to 11 in one run). A quote now matches whitespace and typographic quote marks aside, and the passage's own span is what is kept and shown.
 - The third reading, tight prompt and the quote-mark fix, 2026-11-18, nine blocks, one rep: faithful does not move (55%, against 59%), not covered misses by one row (16 of 18), verbatim-and-labelled holds at 76%. The work stops for the owner again; the ticket spent $0.82 of the $0.85 agreed.
 - Of the 25 unfaithful replies, 15 fail on one statement (0.67 to 0.88), often a paraphrase the passage carries (`belt-what-for`: "exercises where the lower back gets a heavy load"), and the judge counts the *not covered* lines as claims (`hook-grip-small-hands`). At threshold 1.00 one such statement fails the row.
+- The owner named the model as the problem. `openai/gpt-6-luna`, default effort, OpenAI, on the same prompt, 2026-11-18: a screen of the 41 rows deepseek missed ($0.10), then a full pass, nine blocks, one rep ($0.17). The ticket has spent $1.09.
+
+| Bar | deepseek-v4-flash high | gpt-6-luna | Bar |
+|---|---|---|---|
+| Recall@5 | 47 of 62, 75% [64, 85] | 47 of 62, 76% [64, 85] | none |
+| Verbatim and labelled | 50 of 65, 76% [65, 85] | 53 of 60, 88% [78, 94] | 100% |
+| Covered answered | 57 of 62, 91% [82, 97] | 52 of 62, 84% [73, 91] | 90% |
+| Faithful | 31 of 56, 55% [42, 68] | 42 of 52, 81% [68, 89] | 90% |
+| Relevant | 54 of 56, 96% [88, 99] | 49 of 52, 94% [84, 98] | 85% |
+| Not covered | 16 of 18, 88% [67, 97] | 17 of 18, 94% [74, 99] | 90% |
+| Triage | 10 of 10, 100% [72, 100] | 10 of 10, 100% [72, 100] | 90% |
+| $ a pass | 0.510 | 0.172 | |
+
+- All ten covered rows luna answered *not covered* had no labelled passage in the top 5: what misses there is retrieval, not the answer.
+- Luna is not measured on the entrance's routing (`--suite adapt`, ADR-0011); deepseek is.
