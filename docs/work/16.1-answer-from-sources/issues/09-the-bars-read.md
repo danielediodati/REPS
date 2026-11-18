@@ -22,16 +22,16 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 - Two full readings, 2026-11-18, one rep each, nine `--only` blocks added up: snowflake-arctic-embed2 top 5 with the question also in English, entrance `deepseek/deepseek-v4-flash` high, judged by Haiku 4.5 at 1.00/1.00 on calibration set 2. The bars are now read on set 4 and corpus 2; three miss, so the work stops for the owner.
 
-| Bar | Set 3, corpus 1 ($0.546) | Set 4, corpus 2 ($0.514) | Bar |
-|---|---|---|---|
-| Recall@5 | 41 of 61, 67% [55, 78]; MRR 0.49 | 47 of 62, 75% [64, 85]; MRR 0.58 | none |
-| Verbatim and labelled | 42 of 67, 62% [51, 73] | 52 of 67, 77% [66, 86] | 100% |
-| Covered answered | 58 of 61, 95% [87, 98] | 57 of 62, 91% [82, 97] | 90% |
-| Faithful | 36 of 57, 63% [50, 74] | 34 of 57, 59% [47, 71] | 90% |
-| Relevant | 53 of 57, 92% [83, 97] | 52 of 57, 91% [81, 96] | 85% |
-| Not covered | 15 of 19, 78% [57, 91] | 15 of 18, 83% [61, 94] | 90% |
-| Triage | 9 of 10, 90% [60, 98] | 10 of 10, 100% [72, 100] | 90% |
-| Italian on English | 21 rows: recall 61%, faithful 13 of 18; MRR 0.42 | 20 rows: recall 70%, faithful 13 of 18; MRR 0.54 | none |
+| Bar | Set 3, corpus 1 ($0.546) | Set 4, corpus 2 ($0.514) | Set 4, tight prompt ($0.510) | Bar |
+|---|---|---|---|---|
+| Recall@5 | 41 of 61, 67% [55, 78]; MRR 0.49 | 47 of 62, 75% [64, 85]; MRR 0.58 | 47 of 62, 75% [64, 85]; MRR about 0.57 | none |
+| Verbatim and labelled | 42 of 67, 62% [51, 73] | 52 of 67, 77% [66, 86] | 50 of 65, 76% [65, 85] | 100% |
+| Covered answered | 58 of 61, 95% [87, 98] | 57 of 62, 91% [82, 97] | 57 of 62, 91% [82, 97] | 90% |
+| Faithful | 36 of 57, 63% [50, 74] | 34 of 57, 59% [47, 71] | 31 of 56, 55% [42, 68] | 90% |
+| Relevant | 53 of 57, 92% [83, 97] | 52 of 57, 91% [81, 96] | 54 of 56, 96% [88, 99] | 85% |
+| Not covered | 15 of 19, 78% [57, 91] | 15 of 18, 83% [61, 94] | 16 of 18, 88% [67, 97] | 90% |
+| Triage | 9 of 10, 90% [60, 98] | 10 of 10, 100% [72, 100] | 10 of 10, 100% [72, 100] | 90% |
+| Italian on English | 21 rows: recall 61%, faithful 13 of 18; MRR 0.42 | 20 rows: recall 70%, faithful 13 of 18; MRR 0.54 | 20 rows: recall 70%, faithful 11 of 17 | none |
 
 - Every quote is word for word in both readings; the verbatim misses are passages the row does not label.
 - Set 4 labels 25 more passages that answer, and `ice-bath-minutes` is covered on English *Ice bath*.
@@ -39,3 +39,5 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - p95 retrieval was 11 to 13 s with three blocks in parallel, against about 1.3 s in the ladder.
 - The owner chose to tighten the entrance prompt, bars and set untouched. A screen of the 41 rows that missed on set 4 ($0.31, one rep), before the fix below: faithful 17 of 30 where most had failed; massage-gun and dead-bug-progression now *not covered*; turkish-get-up-steps still answers from a near passage; 7 covered rows now *not covered*, five of them with no labelled passage in the top 5.
 - The screen found the cite check refusing quotes typed with `'` where the page has `’`: 8 rows of the set 4 pass lost cites to it (up to 11 in one run). A quote now matches whitespace and typographic quote marks aside, and the passage's own span is what is kept and shown.
+- The third reading, tight prompt and the quote-mark fix, 2026-11-18, nine blocks, one rep: faithful does not move (55%, against 59%), not covered misses by one row (16 of 18), verbatim-and-labelled holds at 76%. The work stops for the owner again; the ticket spent $0.82 of the $0.85 agreed.
+- Of the 25 unfaithful replies, 15 fail on one statement (0.67 to 0.88), often a paraphrase the passage carries (`belt-what-for`: "exercises where the lower back gets a heavy load"), and the judge counts the *not covered* lines as claims (`hook-grip-small-hands`). At threshold 1.00 one such statement fails the row.
