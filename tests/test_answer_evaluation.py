@@ -312,3 +312,23 @@ def test_a_comparison_belongs_to_a_retrieval_only_pass(runner: CliRunner, enrich
 
     assert result.exit_code == 2
     assert "--against" in result.output
+
+
+def test_a_pass_against_a_refreshed_corpus_is_refused_until_the_set_is_settled(
+    runner: CliRunner,  # noqa: F811
+    enriched: Path,  # noqa: F811
+    sources: retrieval.Search,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(models, "chat_for", no_model)
+    refreshed = retrieval.in_memory(CHUNKS, version=2)
+    refreshed.build()
+
+    with retrieval.installed(refreshed):
+        result = passed(runner, tmp_path, "--retrieval-only")
+
+    assert result.exit_code == 1
+    assert "labelled on corpus version 1" in result.output and "the corpus is version 2" in result.output
+    assert "trainer corpus settle" in result.output
+    assert not (tmp_path / "records").exists()

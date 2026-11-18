@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +109,24 @@ def lost(held: AnswerSet, chunks: Sequence[Chunk]) -> list[str]:
         for case in held.cases
         if case.passages and not any(found(label, chunks) for label in case.passages)
     ]
+
+
+def settle(corpus: int, chunks: Sequence[Chunk], where: Path | None = None) -> AnswerSet:
+    """Bump the set's version and name `corpus`, its rows as they stand; refused while a row has lost its quote."""
+    where = where or path()
+    held = load(where)
+    missing = lost(held, chunks)
+    if missing:
+        raise AnswerSetError(
+            f"corpus version {corpus} holds none of the labelled quotes of {', '.join(missing)}; "
+            f"relabel or drop each in {where}, then settle again"
+        )
+    settled = replace(held, version=held.version + 1, corpus=corpus)
+    text = where.read_bytes().decode("utf-8")
+    for key, value in (("version", settled.version), ("corpus", settled.corpus)):
+        text = re.sub(rf"^{key} = \d+", f"{key} = {value}", text, count=1, flags=re.MULTILINE)
+    where.write_bytes(text.encode("utf-8"))
+    return settled
 
 
 def _case(raw: Mapping[str, Any]) -> Case:

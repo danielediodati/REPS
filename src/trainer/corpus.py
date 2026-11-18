@@ -300,6 +300,18 @@ def read_manifest(directory: Path | None = None) -> Manifest:
         raise CorpusError(f"the corpus manifest {path} is unusable: {error}") from error
 
 
+_VERSION_LINE = re.compile(r"^version = (\d+)$", re.MULTILINE)
+
+
+def bump(directory: Path | None = None) -> int:
+    """Raise the manifest's version by one, keeping the rest of the file as written; the new version."""
+    path = (directory or CORPUS_DIRECTORY) / _MANIFEST
+    version = read_manifest(directory).version + 1
+    text = path.read_text(encoding="utf-8")
+    path.write_bytes(_VERSION_LINE.sub(f"version = {version}", text, count=1).encode("utf-8"))
+    return version
+
+
 def _pdf_pin(entry: dict[str, object], path: Path) -> Pdf:
     source, cut = str(entry["source"]), str(entry["cut"])
     if source not in SOURCES:

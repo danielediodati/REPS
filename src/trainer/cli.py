@@ -96,6 +96,8 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the reference set is unusable: {error}") from error
     except log_set.LogSetError as error:
         raise click.ClickException(f"the log set is unusable: {error}") from error
+    except eval_set.SetError as error:
+        raise click.ClickException(str(error)) from error
     except residue.ResidueError as error:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
@@ -376,6 +378,51 @@ def corpus_fetch() -> None:
     texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
     click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {manifest.version}")
     click.echo("written" if changed else "unchanged, nothing to commit")
+
+
+@corpus_group.command("refresh")
+def corpus_refresh() -> None:
+    """Cut the manifest's pins as the owner edited them into a new corpus version."""
+    directory = corpus.CORPUS_DIRECTORY
+    click.echo(f"corpus: {directory}")
+
+    def get(url: str) -> bytes:
+        click.echo(f"  fetching {url}")
+        return corpus.http_get(url)
+
+    with reported():
+        held = answer_set.load()
+        chunks = corpus.fetch(corpus.read_manifest(directory), get)
+        version = corpus.bump(directory)
+        corpus.write(chunks, directory)
+
+    texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
+    click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {version}")
+    lost = answer_set.lost(held, chunks)
+    if lost:
+        click.echo(f"lost their quote: {', '.join(lost)}")
+        click.echo(f"  relabel or drop each in {answer_set.path()}, then `trainer corpus settle`")
+    else:
+        click.echo(f"every row of answer set version {held.version} keeps its quote: `trainer corpus settle`")
+    click.echo("next: `trainer corpus build` to index it")
+
+
+@corpus_group.command("settle")
+def corpus_settle() -> None:
+    """Move the answer set onto the corpus version, once every row finds its quote."""
+    with reported():
+        version = corpus.read_manifest().version
+        held = answer_set.load()
+        if held.corpus == version:
+            click.echo(f"answer set version {held.version} is already on corpus version {version}")
+            return
+        if held.corpus > version:
+            raise click.ClickException(
+                f"answer set version {held.version} was labelled on corpus version {held.corpus}, newer "
+                f"than the corpus here, corpus version {version}; settle it only onto a refreshed corpus"
+            )
+        settled = answer_set.settle(version, corpus.read_chunks())
+    click.echo(f"settled: answer set version {settled.version} on corpus version {settled.corpus}")
 
 
 @corpus_group.command("build")

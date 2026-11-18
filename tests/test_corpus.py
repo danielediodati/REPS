@@ -1257,3 +1257,133 @@ def test_the_manifest_pins_an_article_by_its_doi_and_its_pmc_id(tmp_path: Path) 
     )
 
     assert corpus.read_manifest(tmp_path).article == (corpus.Article(ARTICLE_DOI, "PMC111"),)
+
+
+def _answer_set(tmp_path: Path, *quotes: str, version: int = 1, corpus_version: int = 1) -> Path:
+    rows = "".join(
+        f'\n[[cases]]\nname = "row-{number}"\nkind = "covered"\nlanguage = "en"\nquestion = "how?"\n'
+        f'passages = [{{ title = "Squat (exercise)", revision = "1383893983", section = "Form", '
+        f'quote = "{quote}" }}]\n'
+        for number, quote in enumerate(quotes, 1)
+    )
+    path = tmp_path / "eval-set.toml"
+    path.write_text(
+        f"# The set.\n\nversion = {version}\ncorpus = {corpus_version}\n\n[bars]\nrecall = 80\nverbatim = 100\n"
+        "faithful = 90\nrelevant = 85\nnot_covered = 90\nwrongly_not_covered = 10\ntriage = 90\n" + rows,
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture()
+def held_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = _answer_set(tmp_path, "Keep the heels down.")
+    monkeypatch.setenv("TRAINER_ANSWER_SET", str(path))
+    return path
+
+
+def test_a_refresh_cuts_the_pinned_revisions_and_bumps_the_corpus_version(
+    corpus_directory: Path, held_set: Path
+) -> None:
+    result = CliRunner().invoke(main, ["corpus", "refresh"])
+
+    assert result.exit_code == 0, result.output
+    assert corpus.read_manifest(corpus_directory).version == 2
+    assert len(corpus.read_chunks(corpus_directory)) == 2
+    assert "corpus version 2" in (corpus_directory / "NOTICE.md").read_text(encoding="utf-8")
+    assert "corpus version: 2" in result.output
+    assert "trainer corpus build" in result.output
+    assert result.output.isascii()
+
+
+def test_a_refresh_lists_the_rows_that_lost_their_quote_for_the_owner(
+    corpus_directory: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _answer_set(tmp_path, "Keep the heels down.", "Keep the bar over mid-foot.")
+    monkeypatch.setenv("TRAINER_ANSWER_SET", str(path))
+
+    result = CliRunner().invoke(main, ["corpus", "refresh"])
+
+    assert result.exit_code == 0, result.output
+    assert "lost their quote: row-2" in result.output
+    assert "row-1" not in result.output
+    assert "relabel or drop" in result.output
+    assert "trainer corpus settle" in result.output
+
+
+def test_a_refresh_where_every_row_keeps_its_quote_says_the_set_carries_over(
+    corpus_directory: Path, held_set: Path
+) -> None:
+    result = CliRunner().invoke(main, ["corpus", "refresh"])
+
+    assert "every row of answer set version 1 keeps its quote" in result.output
+    assert "trainer corpus settle" in result.output
+
+
+def test_settling_bumps_the_sets_version_and_names_the_new_corpus_rows_unchanged(
+    corpus_directory: Path, held_set: Path
+) -> None:
+    CliRunner().invoke(main, ["corpus", "refresh"])
+    before = held_set.read_text(encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["corpus", "settle"])
+
+    assert result.exit_code == 0, result.output
+    after = held_set.read_text(encoding="utf-8")
+    assert after == before.replace("version = 1\ncorpus = 1\n", "version = 2\ncorpus = 2\n")
+    assert "answer set version 2 on corpus version 2" in result.output
+
+
+def test_settling_while_a_row_has_lost_its_quote_is_refused_naming_it(
+    corpus_directory: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _answer_set(tmp_path, "Keep the heels down.", "Keep the bar over mid-foot.")
+    monkeypatch.setenv("TRAINER_ANSWER_SET", str(path))
+    CliRunner().invoke(main, ["corpus", "refresh"])
+    before = path.read_text(encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["corpus", "settle"])
+
+    assert result.exit_code == 1
+    assert "row-2" in result.output
+    assert "relabel or drop" in result.output
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_settling_a_set_already_on_the_corpus_changes_nothing(
+    corpus_directory: Path, held_set: Path
+) -> None:
+    CliRunner().invoke(main, ["corpus", "fetch"])
+    before = held_set.read_text(encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["corpus", "settle"])
+
+    assert result.exit_code == 0, result.output
+    assert "already on corpus version 1" in result.output
+    assert held_set.read_text(encoding="utf-8") == before
+
+
+def test_settling_a_set_labelled_on_a_newer_corpus_is_refused(
+    corpus_directory: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _answer_set(tmp_path, "Keep the heels down.", corpus_version=3)
+    monkeypatch.setenv("TRAINER_ANSWER_SET", str(path))
+    CliRunner().invoke(main, ["corpus", "fetch"])
+    before = path.read_text(encoding="utf-8")
+
+    result = CliRunner().invoke(main, ["corpus", "settle"])
+
+    assert result.exit_code == 1
+    assert "labelled on corpus version 3" in result.output and "corpus version 1" in result.output
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_settling_keeps_the_sets_line_endings(corpus_directory: Path, held_set: Path) -> None:
+    held_set.write_bytes(held_set.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    CliRunner().invoke(main, ["corpus", "refresh"])
+
+    CliRunner().invoke(main, ["corpus", "settle"])
+
+    written = held_set.read_bytes()
+    assert b"version = 2\r\ncorpus = 2\r\n" in written
+    assert written.count(b"\n") == written.count(b"\r\n")

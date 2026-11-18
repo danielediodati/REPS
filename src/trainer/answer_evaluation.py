@@ -283,9 +283,14 @@ def on_english(case: Case, english: set[tuple[str, str]]) -> bool:
 def problems(held: answer_set.AnswerSet, search: retrieval.Search) -> tuple[str, ...]:
     """The set and the corpus disagreeing, or the corpus not searchable, before anything is paid for."""
     if held.corpus != search.version:
+        fix = (
+            "relabel or drop the rows that lost their quote, then `trainer corpus settle`"
+            if held.corpus < search.version
+            else "pass on the corpus the set was labelled on"
+        )
         return (
             f"the answer set was labelled on corpus version {held.corpus} and the corpus is version "
-            f"{search.version}; scores are never read across versions, so refresh the set to the corpus first",
+            f"{search.version}; scores are never read across versions: {fix}",
         )
     lost = answer_set.lost(held, search.chunks)
     if lost:
