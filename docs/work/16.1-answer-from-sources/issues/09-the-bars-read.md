@@ -17,3 +17,22 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - [ ] Three reps only if two identical passes swing across a bar
 - [ ] The pass's record names the set, corpus and judge versions and its cost
 - [ ] A bar missed stops the work with the numbers for the owner; bars and set untouched
+
+## Comments
+
+- The first full reading, 2026-11-18: answer set 3 on corpus version 1 (4750 chunks, index rebuilt), snowflake-arctic-embed2 top 5 with the question also in English, entrance `deepseek/deepseek-v4-flash` high, judged by Haiku 4.5 at 1.00/1.00 on calibration set 2. One rep, nine `--only` blocks added up; $0.546 in all. Three bars missed, so the work stops for the owner.
+
+| Bar | Read | Bar | |
+|---|---|---|---|
+| Recall@5 | 41 of 61, 67% [55%, 78%]; MRR 0.49 | none | |
+| Verbatim and labelled | 42 of 67, 62% [51%, 73%] | 100% | missed |
+| Covered answered | 58 of 61, 95% [87%, 98%] | 90% | held |
+| Faithful | 36 of 57, 63% [50%, 74%] | 90% | missed |
+| Relevant | 53 of 57, 92% [83%, 97%] | 85% | held |
+| Not covered | 15 of 19, 78% [57%, 91%] | 90% | missed |
+| Triage | 9 of 10, 90% [60%, 98%] | 90% | held |
+| Italian on English, 21 rows | recall 61%, answered 90%, faithful 13 of 18, relevant 17 of 18; MRR 0.42 | none | |
+
+- Every quote was word for word: all 25 quote failures are passages the row does not label, none invented.
+- Two of the four outside rows answered, `massage-gun` and `ice-bath-minutes`, are `near` rows 16.2.6 already names as gaining a text from 16.2's sources.
+- p95 retrieval reached 13 s in the first block, against about 1.3 s in the ladder.

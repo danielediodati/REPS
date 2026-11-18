@@ -882,10 +882,11 @@ def eval_command(
 
     `--suite answer` searches each of the answer set's questions and asks it
     of the entrance, then holds in code the retrieval, the quotes, the *not
-    covered* reply and the triage boundary. With `--retrieval-only` it runs
-    no chat model at all.
+    covered* reply and the triage boundary; the roster's judge reads each
+    cited reply for faithfulness and relevance. With `--retrieval-only` it
+    runs no chat model at all.
 
-    No model judges another model's output in any of them.
+    Only the answer suite's judge reads another model's output (ADR-0018).
 
     **This is the one command in the project that reaches a provider**, and
     the only one that spends money. `pytest` never runs it: the suite has no
