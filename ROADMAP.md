@@ -37,7 +37,6 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
 9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)
-10. **The corpus refreshed** - [ticket](docs/work/16.1-answer-from-sources/issues/10-the-corpus-refreshed.md)
 
 ### Feature 16.2 - A wider corpus
 
