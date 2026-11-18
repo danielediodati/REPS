@@ -21,8 +21,8 @@
 # judge on the covered rows; `not_covered`, rows outside the corpus answered so;
 # `wrongly_not_covered`, covered rows answered so (at most); `triage`, the pain rows.
 
-version = 3
-corpus = 1
+version = 4
+corpus = 2
 
 [bars]
 recall = 0
@@ -52,6 +52,7 @@ language = "it"
 question = "Ho le gambe lunghe e le caviglie poco mobili: il bilanciere lo tengo alto sul collo o più giù sulla schiena?"
 passages = [
   { title = "Squat", revision = "150843803", section = "Squat low-bar", quote = "Lo squat low-bar è da prediligere nei soggetti con femore lungo o con scarsa mobilità di caviglia" },
+  { title = "Squat", revision = "150843803", section = "Squat high-bar", quote = "Questa variante dello squat classico è da prediligere quando si ha una forte mobilità di caviglia ed un femore corto" },
 ]
 
 [[cases]]
@@ -82,6 +83,7 @@ language = "it"
 question = "Quando rimetto giù il bilanciere dopo lo stacco, quando devo cominciare a piegare le gambe?"
 passages = [
   { title = "Stacco da terra", revision = "152350358", section = "Errori comuni", quote = "Bisogna piegare le ginocchia solo quando il carico le ha oltrepassate durante la discesa." },
+  { title = "Deadlift", revision = "1384115374", section = "Common errors", quote = "The knees should be bent more fully on the descent of the bar to preserve a neutral spine." },
 ]
 
 [[cases]]
@@ -203,6 +205,8 @@ language = "it"
 question = "Una doccia bollente prima di andare in palestra può bastare come riscaldamento?"
 passages = [
   { title = "Riscaldamento (sport)", revision = "149970064", section = "Definizione", quote = "Quest'ultimo metodo è generalmente meno consigliato perché meno efficace rispetto alla variante attiva." },
+  { title = "Strength training", revision = "1383897566", section = "Stretching and warm-up", quote = "A warm-up may include cardiovascular activity such as light stationary biking (a \"pulse raiser\"), flexibility and joint mobility exercises, static and/or dynamic stretching, \"passive warm up\" such as applying heat pads or taking a hot shower, and workout-specific warm-up, such as rehearsal of the intended exercise with no weights or light weights." },
+  { title = "The Navy SEAL Physical Fitness Guide", revision = "f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40", section = "Chapter 6 Strength Training: Warming Up", quote = "An active and dynamic warm-up will elevate the body temperature so that the muscles respond better to the training. An increase in circulation to the joints and tissues allow more elasticity and may decrease the risk of injury." },
 ]
 
 [[cases]]
@@ -224,6 +228,7 @@ language = "it"
 question = "Come faccio a capire se è il solito indolenzimento dei giorni dopo o se mi sono strappato qualcosa?"
 passages = [
   { title = "Indolenzimento muscolare a insorgenza ritardata", revision = "147628323", section = "Eziopatogenesi", quote = "riconoscendo che l'esercizio fisico costante è possibile con i DOMS, ma non con lo strappo muscolare" },
+  { title = "Strain (injury)", revision = "1384303597", section = "Signs and symptoms", quote = "The symptoms of strain are pain and interference with activities and difficulty generating strength due to pain." },
 ]
 
 [[cases]]
@@ -234,6 +239,8 @@ question = "Qual è il primo campanello d'allarme che mi sto allenando più di q
 passages = [
   { title = "Sovrallenamento", revision = "152374918", section = "Fattori fisiologici", quote = "I cambiamenti dell'umore sono un marker precoce e sensibile dell'OTS." },
   { title = "Overtraining", revision = "1354542406", section = "Signs and symptoms", quote = "a persistently high heart-rate after adequate rest, such as in the morning after sleep, can indicate overtraining" },
+  { title = "Sovrallenamento", revision = "152374918", section = "Sovrallenamento e sistema immunitario", quote = "Un segnale del sovrallenamento è l'immunosoppressione espressa in un aumento dei tassi di malattia (in particolare infezioni delle vie aeree superiori), un rigonfiamento delle ghiandole linfatiche, sintomi simil-influenzali (dolori muscolari, disturbi gastrici), contusioni e guarigione rallentata da graffi e ferite." },
+  { title = "Overtraining", revision = "1354542406", section = "", quote = "People who are overtrained cease making progress, and can even begin to lose strength and fitness." },
 ]
 
 [[cases]]
@@ -245,7 +252,7 @@ passages = [
   { title = "Crampo", revision = "148171191", section = "Terapia", quote = "Il metodo più efficace e veloce nel risolvere un episodio di crampi a un muscolo consiste nel contrarre il muscolo antagonista a quello colpito." },
   { title = "Skeletal muscle cramp", revision = "1357387177", section = "", quote = "If the cramp is in the calf muscle, dorsiflexing the foot (lifting the toes back toward the shins) will stretch the muscle and provide almost immediate relief." },
   { title = "Exercise-associated muscle cramps", revision = "1368852658", section = "Treatment and prevention", quote = "athletes are recommended to stretch, stop movement and rest, massaging the area that is cramping, or drink fluids." },
-  { title = "Muscle Cramps", revision = "2026-11-07", section = "What are the treatments for muscle cramps?", quote = "Stretching or gently massaging the muscle" },
+  { title = "Muscle Cramps", revision = "2026-11-18", section = "What are the treatments for muscle cramps?", quote = "Stretching or gently massaging the muscle" },
 ]
 
 [[cases]]
@@ -298,6 +305,8 @@ passages = [
   { title = "Nordic hamstring curl", revision = "1339171926", section = "", quote = "It reduces hamstring injuries in athletes, and is commonly used as a form of injury prevention." },
   { title = "Leg curl", revision = "152966327", section = "Russian leg curl", quote = "hanno rilevato univocamente dei notevoli benefici nell'allenamento eccentrico degli ischio-crurali per ridurne o prevenirne gli infortuni nei calciatori e nei velocisti." },
   { title = "Leg curl", revision = "152966327", section = "Rapporto ischio-crurali:quadricipiti (H:Q)", quote = "eseguire allenamenti per gli ischio-crurali che enfatizzano la fase eccentrica - come il russian leg curl - che hanno dimostrato di ridurre l'incidenza di infortuni" },
+  { title = "The effectiveness of neuromuscular warm-up strategies, that require no additional equipment, for preventing lower limb injuries during sports participation: a systematic review", revision = "PMC3408383", section = "Discussion: Hip and thigh injuries", quote = "A recent review of hamstring injury prevention demonstrates that isometric warm-up exercises, hamstring flexibility and concentric and eccentric strength training may be protective against hamstring injuries." },
+  { title = "Pulled hamstring", revision = "1374892449", section = "Epidemiology", quote = "strengthening programs should target exercises associated with horizontal force production and high levels of hamstring activity" },
 ]
 
 [[cases]]
@@ -385,6 +394,7 @@ language = "it"
 question = "Il rullo di gommapiuma conviene usarlo prima di allenarmi o dopo?"
 passages = [
   { title = "Foam roller", revision = "1344188072", section = "", quote = "evidence seems to justify the widespread use of foam rolling as a warm-up activity rather than a recovery tool" },
+  { title = "A Meta-Analysis of the Effects of Foam Rolling on Performance and Recovery", revision = "PMC6465761", section = "Discussion", quote = "The results indicate that pre-rolling causes a small acute improvement in sprint performance and flexibility, while its effect on jump and strength performance was negligible. Second, when foam rolling is used as a recovery tool, participants experience slightly reduced decrements in sprint and strength performance and a small reduction in the severity of muscle pain." },
 ]
 
 [[cases]]
@@ -433,6 +443,8 @@ language = "it"
 question = "Perché dopo una storta alla caviglia è rischioso riprendere a saltare troppo presto?"
 passages = [
   { title = "Sprained ankle", revision = "1378220647", section = "Cause", quote = "Returning to activity before the ligaments have fully healed may cause them to heal in a stretched position, resulting in less stability at the ankle joint." },
+  { title = "Sprained ankle", revision = "1378220647", section = "Agility exercises", quote = "Plyometrics exercises such as squat jumps and power skipping should not be implemented until the ankle has regained full agility." },
+  { title = "Sprained ankle", revision = "1378220647", section = "Ankle immobilization", quote = "It is not recommended to return to sports or extreme physical activities until hopping on the ankle is possible without pain." },
 ]
 
 [[cases]]
@@ -494,6 +506,8 @@ passages = [
   { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Front Squat Caution", quote = "The knees stay aligned over the feet and the heels stay on the ground." },
   { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Back Squat", quote = "Keep the knees stay aligned over the feet and the heels on the ground." },
   { title = "Squat (exercise)", revision = "1383893983", section = "Form", quote = "Another error is when the knee is not aligned with the direction of the toes, entering a valgus position, which can adversely stress the knee joint." },
+  { title = "Squat", revision = "150843803", section = "Front squat", quote = "La distanza dei piedi deve essere abbastanza corta (non oltre la larghezza delle spalle), con le punte sempre leggermente extraruotate. Questa tipologia permette una verticalità quasi totale del busto ed una flessione massima di ginocchia" },
+  { title = "ATP 7-22.02, Holistic Health and Fitness Drills and Exercises", revision = "58c715b52df72c5d1fbdee2a1ca2dd9e6fa3b5b66cc1d88042aba895b0875d8a", section = "Front Squat", quote = "The starting position for the Front Squat is the Straddle Stance position with the toes pointed slightly outward." },
 ]
 
 [[cases]]
@@ -522,6 +536,7 @@ question = "Non ho voglia di provare il carico massimo vero: ha senso ricavarlo 
 passages = [
   { title = "One-repetition maximum", revision = "1380865315", section = "Estimating 1RM", quote = "The 1RM can also be estimated indirectly using repetition testing on submaximal loads, as popularized by the use of 1RM calculators." },
   { title = "One-repetition maximum", revision = "1380865315", section = "Estimating 1RM", quote = "Compared to a formal 1RM test, the submaximal estimation method is safer and quicker." },
+  { title = "Sistema piramidale (esercizio coi pesi)", revision = "148358143", section = "Piramide crescente o ascendente: Light to heavy", quote = "10 RM, ovvero 10 ripetizioni massime (Repetition maximum), significa che il carico scelto deve permettere all'atleta di eseguire non più di 10 ripetizioni, che equivalgono circa al 75% di 1 RM." },
 ]
 
 [[cases]]
@@ -575,6 +590,7 @@ question = "What's the cue for bringing a deadlift back to the floor?"
 passages = [
   { title = "Deadlift", revision = "1384115374", section = "Form", quote = "one should simply hinge at the hips and knees to bring the weight down in powerlifting" },
   { title = "Stacco da terra", revision = "152350358", section = "Errori comuni", quote = "Bisogna piegare le ginocchia solo quando il carico le ha oltrepassate durante la discesa." },
+  { title = "Deadlift", revision = "1384115374", section = "Common errors", quote = "The knees should be bent more fully on the descent of the bar to preserve a neutral spine." },
 ]
 
 [[cases]]
@@ -624,8 +640,9 @@ kind = "covered"
 language = "en"
 question = "As an adult, on how many days a week should I be doing some kind of resistance work?"
 passages = [
-  { title = "How Much Exercise Do I Need?", revision = "2026-11-07", section = "For adults", quote = "Also, do strengthening activities two or more days per week:" },
+  { title = "How Much Exercise Do I Need?", revision = "2026-11-18", section = "For adults", quote = "Also, do strengthening activities two or more days per week:" },
   { title = "Frequenza (esercizio coi pesi)", revision = "141291902", section = "La ricerca e indicazioni generali", quote = "Per le persone sane, l'American College of Sports Medicine (ACSM) nel 2006 raccomanda di svolgere tra le 2 e le 3 sedute settimanali non consecutive a settimana." },
+  { title = "Physical Activity Guidelines for Americans, 2nd edition", revision = "0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5", section = "Chapter 4. Active Adults: Active Adults", quote = "Adults should also do muscle-strengthening activities on at least 2 days each week." },
 ]
 
 [[cases]]
@@ -634,7 +651,8 @@ kind = "covered"
 language = "en"
 question = "When I'm just trying to stay strong, how many times should I repeat each movement?"
 passages = [
-  { title = "How Much Exercise Do I Need?", revision = "2026-11-07", section = "For adults", quote = "For each exercise, try repeating the movement 8 to 12 times." },
+  { title = "How Much Exercise Do I Need?", revision = "2026-11-18", section = "For adults", quote = "For each exercise, try repeating the movement 8 to 12 times." },
+  { title = "Physical Activity Guidelines for Americans, 2nd edition", revision = "0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5", section = "Chapter 4. Active Adults: Muscle-Strengthening Activity", quote = "When resistance training is used to enhance muscle strength, one set of 8 to 12 repetitions of each exercise is effective, although 2 or 3 sets may be more effective." },
 ]
 
 [[cases]]
@@ -742,9 +760,12 @@ question = "Per la salute delle spalle, quanti secondi devo restare appeso alla 
 
 [[cases]]
 name = "ice-bath-minutes"
-kind = "near"
+kind = "covered"
 language = "it"
 question = "Quanti minuti nel bagno di ghiaccio dopo le gambe per recuperare prima?"
+passages = [
+  { title = "Ice bath", revision = "1375101307", section = "Temperature and timing", quote = "Accounts vary about how long to be immersed and how often to do them. One adviser suggested that an athlete should take ten two-minute ice bath treatments over a two-week period. One account suggested immersion times should be between ten and twenty minutes. Another suggested that immersion run from five to ten minutes, and sometimes to twenty minutes. There were no sources advocating being immersed for longer than twenty minutes." },
+]
 
 [[cases]]
 name = "gzcl-tiers"
@@ -863,12 +884,14 @@ kind = "prevention"
 language = "it"
 question = "In generale cosa posso fare per non infortunarmi quando mi alleno?"
 passages = [
-  { title = "Sports Safety", revision = "2026-11-07", section = "", quote = "You can help prevent injuries by:" },
-  { title = "Exercise and Physical Fitness", revision = "2026-11-07", section = "What are the basics of exercise and physical fitness?", quote = "Build up your activity level slowly to help you continue to get stronger, faster, or more flexible without pushing too hard all at once." },
+  { title = "Sports Safety", revision = "2026-11-18", section = "", quote = "You can help prevent injuries by:" },
+  { title = "Exercise and Physical Fitness", revision = "2026-11-18", section = "What are the basics of exercise and physical fitness?", quote = "Build up your activity level slowly to help you continue to get stronger, faster, or more flexible without pushing too hard all at once." },
   { title = "Riscaldamento (sport)", revision = "149970064", section = "Definizione", quote = "Di conseguenza viene ritenuto un metodo indicato per prevenire gli infortuni grazie all'aumento dell'elasticità dei muscoli e tendini." },
   { title = "Riscaldamento (sport)", revision = "149970064", section = "Benefici del riscaldamento", quote = "migliora l'elasticità muscolare;\naumenta l'estendibilità del tessuto connettivo;\nriduce il rischio di infortuni;" },
   { title = "Strength training", revision = "1383897566", section = "Stretching and warm-up", quote = "The intended purpose of warming up is to enhance exercise effectiveness and reduce the risk of injury." },
   { title = "Frequenza (esercizio coi pesi)", revision = "141291902", section = "La ricerca e indicazioni generali", quote = "Si dovrebbero lasciar correre 48 ore di riposo tra gli allenamenti per permettere ai muscoli coinvolti di recuperare e per prevenire infortuni dovuti al sovrallenamento." },
+  { title = "Physical Activity Guidelines for Americans, 2nd edition", revision = "0147d4dfc5ae76613a8b8d9d1c95244477527989f1d841845866ae5b5340cda5", section = "Chapter 7. Active and Safe: Be Confident That Physical Activity Is Safe for Almost Everyone", quote = "The best strategies are to: Be regularly physically active to increase physical fitness; and Follow the other guidance in this chapter (especially increasing physical activity gradually over time) to minimize the risk of injury." },
+  { title = "Musculoskeletal injury", revision = "1317036092", section = "Injury prevention", quote = "Injuries can be prevented by understanding proper body mechanics. Correcting one's postures, avoiding abrupt and awkward movements will avoid acute injury. Taking breaks to change your position and moving about instead of remaining static can also reduce risk of injury." },
 ]
 
 [[cases]]
@@ -880,7 +903,7 @@ passages = [
   { title = "Crampo", revision = "148171191", section = "Prevenzione", quote = "Reintegrare i liquidi e i sali minerali durante uno sforzo prolungato" },
   { title = "Skeletal muscle cramp", revision = "1357387177", section = "Prevention", quote = "Adequate conditioning, stretching, mental preparation, hydration, and electrolyte balance are likely helpful in preventing muscle cramps." },
   { title = "Exercise-associated muscle cramps", revision = "1368852658", section = "Treatment and prevention", quote = "To prevent or treat, athletes are recommended to stretch, stop movement and rest, massaging the area that is cramping, or drink fluids." },
-  { title = "Muscle Cramps", revision = "2026-11-07", section = "Can muscle cramps be prevented?", quote = "If you do intense exercise or exercise in the heat, sports drinks can help you replace electrolytes." },
+  { title = "Muscle Cramps", revision = "2026-11-18", section = "Can muscle cramps be prevented?", quote = "If you do intense exercise or exercise in the heat, sports drinks can help you replace electrolytes." },
   { title = "Strength training", revision = "1383897566", section = "Hydration", quote = "sports drinks containing electrolytes and carbohydrates may help replenish lost salts and provide an energy boost." },
 ]
 
@@ -891,8 +914,11 @@ language = "en"
 question = "I'm new to lifting. How do I keep from getting hurt in the first months?"
 passages = [
   { title = "Progressive overload", revision = "1377742591", section = "Methodology", quote = "In order to minimize injury and maximize results, a novice should begin at a comfortable level of muscular intensity and advance towards overload of the muscles over the course of an exercise program." },
-  { title = "Exercise and Physical Fitness", revision = "2026-11-07", section = "What are the basics of exercise and physical fitness?", quote = "Build up your activity level slowly to help you continue to get stronger, faster, or more flexible without pushing too hard all at once." },
+  { title = "Exercise and Physical Fitness", revision = "2026-11-18", section = "What are the basics of exercise and physical fitness?", quote = "Build up your activity level slowly to help you continue to get stronger, faster, or more flexible without pushing too hard all at once." },
   { title = "Periodizzazione dell'allenamento sportivo", revision = "127160133", section = "Adattamento anatomico", quote = "Lo scopo di questa fase iniziale è quello di portare l'atleta a un graduale assestamento della propria struttura anatomica in modo da ridurre il rischio di infortuni" },
   { title = "Frequenza (esercizio coi pesi)", revision = "141291902", section = "La ricerca e indicazioni generali", quote = "La National Strength and Conditioning Association (NSCA) raccomanda una frequenza di 2 o 3 giorni alla settimana per i neofiti." },
   { title = "Bilanciere", revision = "151501377", section = "Livelli di utilizzo", quote = "Di conseguenza è spesso richiesta l'assistenza di allenatori o comunque di personale esperto, al fine di insegnare le corrette posizioni" },
+  { title = "The Navy SEAL Physical Fitness Guide", revision = "f80847e912d53f07d5480a080d4348fc07cac2aedbd75095177e00fdac12ca40", section = "Chapter 6 Strength Training: Common Problems", quote = "Proper technique, progression, variation, rest and recovery will minimize training related injuries." },
+  { title = "Sports Safety", revision = "2026-11-18", section = "", quote = "Warming up and stretching" },
+  { title = "Musculoskeletal injury", revision = "1317036092", section = "Injury prevention", quote = "Correcting one's postures, avoiding abrupt and awkward movements will avoid acute injury." },
 ]

@@ -1,7 +1,7 @@
 # The corpus the entrance answers from: its version and the pinned list it is cut from.
 # Changed only by `trainer corpus refresh`, which bumps the version; `trainer corpus fetch` recuts it in place.
 
-version = 1
+version = 2
 
 [[wger]]
 language = "it"
@@ -111,7 +111,7 @@ doi = "10.1136/bmjsem-2020-000760"
 pmcid = "PMC7406028"
 
 [medlineplus]
-date = "2026-11-07"
+date = "2026-11-18"
 topics = [
     "Exercise and Physical Fitness",
     "Benefits of Exercise",
