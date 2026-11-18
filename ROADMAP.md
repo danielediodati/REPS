@@ -38,11 +38,9 @@ Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
 9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)
 
-### Feature 16.2 - A wider corpus
+### Feature 16.2 - A wider corpus **done** `40bfdc7`
 
 Source: [more corpus sources](docs/research/more-corpus-sources.md)
-
-6. **Corpus version 2, measured** - [ticket](docs/work/16.2-a-wider-corpus/issues/06-corpus-version-2-measured.md)
 
 ## Later
 
