@@ -32,10 +32,7 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 
 **Goal**: the entrance answers a question on technique or injury prevention from a corpus of openly licensed texts, cites the passage, and says so when the corpus does not cover it; retrieval, faithfulness and refusal are measured. Charted in [the map](docs/work/answer-from-sources/map.md).
 
-### Feature 16.1 - Answer from sources
-
-Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
-
+- **done** 16.1 `answer-from-sources`: the entrance answers technique and prevention from a corpus, quoting its passage under a link, says when the corpus does not cover it, and the answer suite measures it with a calibrated judge
 - **done** 16.2 `a-wider-corpus`: the entrance answers from US military and HHS guides, open-access reviews and more Wikipedia beside the first sources, on corpus version 2
 
 ## Later

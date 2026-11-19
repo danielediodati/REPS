@@ -49,7 +49,7 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## What it does
 
-In the chat you declare what you have, ask for today's workout, report it in your own words, and change a plan by saying so, even while it is being written; when a mesocycle ends, the next one arrives with its reason.
+In the chat you declare what you have, ask for today's workout, report it in your own words, and change a plan by saying so, even while it is being written; when a mesocycle ends, the next one arrives with its reason. Ask how an exercise is done or how to avoid getting hurt, and the answer comes from a text, its passage quoted under a link to the source, or the bot says its texts do not cover it.
 
 ## How it works
 
@@ -68,14 +68,15 @@ flowchart LR
 | Part | What it is |
 |---|---|
 | engine | a pure library: the catalog, what is admissible, what a workout costs in minutes, the log. No model, no network |
-| entrance | the chat model you talk to; it reaches the subgraphs as tools (ADR-0006) |
+| entrance | the chat model you talk to; it reaches the subgraphs as tools (ADR-0006), and answers technique from the corpus |
+| corpus | openly licensed texts on technique and prevention, searched on the laptop (ADR-0017) |
 | planner | plans a mesocycle, or adapts one workout; checked by the validator, accepted by you (ADR-0008) |
 | logger | turns a report into a performed workout (ADR-0009) |
 | onboarding | the interview that writes your declarations (ADR-0012, ADR-0013) |
 | supervisor | between mesocycles: a theme, what changes in exercises, reps or rest, and why, from [variation.md](src/trainer/data/variation.md) and its own past directions (ADR-0014) |
 | memory store | what the entrance and the logger concluded about you; the planner and the supervisor read it |
 
-Every node has an eval suite with a bar declared before its first run (ADR-0010): `trainer eval --suite plan`, `log`, `onboard`, `adapt`, `supervise`. Legality is held at 100% by code; judgement is measured.
+Every node has an eval suite with a bar declared before its first run (ADR-0010): `trainer eval --suite plan`, `log`, `onboard`, `adapt`, `supervise`, `answer`. Legality is held at 100% by code; judgement is measured, and where code cannot read an answer, a calibrated judge model does (ADR-0018).
 
 ## Getting started
 
@@ -123,6 +124,7 @@ Each node runs the cheapest configuration that cleared its suite's bar ([ADR-001
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80% |
 | entrance | `openai/gpt-6-luna`, default, OpenAI | routed 93% against 80%, plans held 100% against 90%; answers 81% faithful |
 | supervisor | `openai/gpt-6-luna`, default, OpenAI | held 88% against 80%, followed 100% against 80% |
+| answer judge | `anthropic/claude-haiku-4.5`, default, OpenRouter's routing | 28 of 30 agreed against 27, 15 of 15 caught against 13 |
 
 `PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. A missing key, an unreachable OpenRouter or a model it does not route to is reported before the run starts, with the fix.
 
