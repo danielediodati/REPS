@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage
 from test_cli import LOG_SET, enriched, runner, stocked  # noqa: F401
 from test_planner import Scripted, plan_of
 from trainer import plan as plans
+from trainer import retrieval
 from trainer.cli import main
 from trainer.coach import entrance, models, onboarding, supervisor
 
@@ -139,12 +140,48 @@ def supervise_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str
     return ["--suite", "supervise", "--only", "loves-the-hinge", "--only", "alike-twice"]
 
 
+def answer_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
+    from test_answer_evaluation import CHUNKS, SQUAT_DEPTH, answer_set, judging
+
+    monkeypatch.setenv("TRAINER_ANSWER_SET", str(answer_set(tmp_path)))
+    search = retrieval.in_memory(CHUNKS, version=1)
+    search.build()
+    monkeypatch.setattr(retrieval, "_installed", search)
+    scripted(
+        monkeypatch,
+        turns=[
+            calls(entrance.SEARCH_SOURCES, {"question": "talloni nello squat"}, 1),
+            calls(entrance.CITE, {"passage": SQUAT_DEPTH.id, "quote": "i talloni a terra"}, 2),
+            says("Talloni a terra."),
+            calls(entrance.SEARCH_SOURCES, {"question": "profondita squat"}, 3),
+            says("Non e nei miei testi.\nCopro tecnica e prevenzione."),
+            calls(entrance.SEARCH_SOURCES, {"question": "Pallof press"}, 4),
+            says("Not in my texts.\nThey cover technique and prevention."),
+            says("Dove ti fa male, e facendo cosa?"),
+        ],
+    )
+    judging(
+        monkeypatch,
+        {"statements": ["Talloni a terra."]},
+        {"verdicts": [{"statement": "a", "verdict": 1}]},
+        {"reason": "it answers about the heels", "relevant": 1},
+    )
+    return ["--suite", "answer"]
+
+
+def answer_retrieval_suite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
+    answer_suite(monkeypatch, tmp_path)
+    return ["--suite", "answer", "--retrieval-only"]
+
+
 SUITES: dict[str, Callable[[pytest.MonkeyPatch, Path], list[str]]] = {
     "plan": plan_suite,
     "log": log_suite,
     "onboard": onboard_suite,
     "adapt": adapt_suite,
     "supervise": supervise_suite,
+    "answer": answer_suite,
+    "answer-retrieval": answer_retrieval_suite,
 }
 
 

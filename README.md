@@ -45,11 +45,11 @@ TRAINER_HOME=~/reps-demo uv run trainer bot
 
 ## Status
 
-**`1.0.0`**: the loop above, recorded. A plan can be answered in words as well as with its buttons, and the chat speaks the language its Telegram app is set to.
+**`1.1.0`**: the loop above, recorded, and answers on technique and injury prevention from cited sources. A plan can be answered in words as well as with its buttons, and the chat speaks the language its Telegram app is set to.
 
 ## What it does
 
-In the chat you declare what you have, ask for today's workout, report it in your own words, and change a plan by saying so, even while it is being written; when a mesocycle ends, the next one arrives with its reason.
+In the chat you declare what you have, ask for today's workout, report it in your own words, and change a plan by saying so, even while it is being written; when a mesocycle ends, the next one arrives with its reason. Ask how an exercise is done or how to avoid getting hurt, and the answer comes from a text, its passage quoted under a link to the source, or the bot says its texts do not cover it.
 
 ## How it works
 
@@ -68,14 +68,15 @@ flowchart LR
 | Part | What it is |
 |---|---|
 | engine | a pure library: the catalog, what is admissible, what a workout costs in minutes, the log. No model, no network |
-| entrance | the chat model you talk to; it reaches the subgraphs as tools (ADR-0006) |
+| entrance | the chat model you talk to; it reaches the subgraphs as tools (ADR-0006), and answers technique from the corpus |
+| corpus | openly licensed texts on technique and prevention, searched on the laptop (ADR-0017) |
 | planner | plans a mesocycle, or adapts one workout; checked by the validator, accepted by you (ADR-0008) |
 | logger | turns a report into a performed workout (ADR-0009) |
 | onboarding | the interview that writes your declarations (ADR-0012, ADR-0013) |
 | supervisor | between mesocycles: a theme, what changes in exercises, reps or rest, and why, from [variation.md](src/trainer/data/variation.md) and its own past directions (ADR-0014) |
 | memory store | what the entrance and the logger concluded about you; the planner and the supervisor read it |
 
-Every node has an eval suite with a bar declared before its first run (ADR-0010): `trainer eval --suite plan`, `log`, `onboard`, `adapt`, `supervise`. Legality is held at 100% by code; judgement is measured.
+Every node has an eval suite with a bar declared before its first run (ADR-0010): `trainer eval --suite plan`, `log`, `onboard`, `adapt`, `supervise`, `answer`. Legality is held at 100% by code; judgement is measured, and where code cannot read an answer, a calibrated judge model does (ADR-0018).
 
 ## Getting started
 
@@ -87,6 +88,8 @@ uv run trainer db init && uv run trainer db import
 uv run trainer enrich derive && uv run trainer enrich curated
 uv run trainer bot        # the first message starts the interview
 ```
+
+**Sources.** Answers on technique come from a corpus searched on the laptop ([ADR-0017](docs/adr/0017-retrieval-runs-on-the-laptop.md)): [Ollama](https://ollama.com) with `ollama pull snowflake-arctic-embed2` and `ollama pull gemma4:e2b` (it puts each question into English too), and the [Qdrant](https://github.com/qdrant/qdrant/releases) binary started with `QDRANT__STORAGE__STORAGE_PATH=~/.reps/qdrant`. Then `uv run trainer corpus build` embeds the committed chunks, at $0. The bot starts without them and says what is missing. The texts are Wikipedia in English and Italian pinned by revision, wger, MedlinePlus, US Army, Navy and Air Force fitness guides, the HHS activity guidelines and open-access reviews from Europe PMC. The corpus changes only by hand: edit the pins in `manifest.toml` (a PDF its publisher will not serve to a script goes in `../reps-sources`, or the folder `TRAINER_SOURCES` names, and the refresh says which), run `trainer corpus refresh` (a new corpus version, and the answer set's rows that lost their quote), relabel or drop those rows, then `trainer corpus settle`.
 
 **Telegram.** `trainer bot` needs `TELEGRAM_BOT_TOKEN`, from @BotFather, and `TELEGRAM_OWNER_ID`, the only user it answers, from @userinfobot. It long-polls: no public IP, no tunnel. One chat is one thread, and the conversation survives a restart. Every model is checked before it starts.
 
@@ -119,8 +122,9 @@ Each node runs the cheapest configuration that cleared its suite's bar ([ADR-001
 | planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles |
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60% |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80% |
-| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routed 84% against 80%, plans held 96% against 90% |
+| entrance | `openai/gpt-6-luna`, default, OpenAI | routed 93% against 80%, plans held 100% against 90%; answers 81% faithful |
 | supervisor | `openai/gpt-6-luna`, default, OpenAI | held 88% against 80%, followed 100% against 80% |
+| answer judge | `anthropic/claude-haiku-4.5`, default, OpenRouter's routing | 28 of 30 agreed against 27, 15 of 15 caught against 13 |
 
 `PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. A missing key, an unreachable OpenRouter or a model it does not route to is reported before the run starts, with the fix.
 
@@ -154,7 +158,9 @@ In Studio the planner takes a request: `{"request": {"equipment": ["dumbbell"], 
 src/trainer/
   engine/     pure library: no LLM, no network, no knowledge of any client
   coach/      the LangGraph agent: entrance, planner, logger, onboarding and supervisor graphs, the Telegram bot, the run archive
-  data/       vendored catalog, muscle-group mapping, methodology.md and variation.md
+  data/       vendored catalog, muscle-group mapping, methodology.md, variation.md and the answer corpus
+  corpus.py   the answer corpus: pinned texts fetched and cut into committed chunks
+  retrieval.py the corpus searched: embedded on Ollama into Qdrant, and the states that stop it
   demo.py     the demo's home
   tools.py    the tool surface, shared by the graphs and the MCP server
   plan.py     the plan's shape, validator and renderer
@@ -169,4 +175,4 @@ docs/
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE), except the corpus texts in `src/trainer/data/corpus/`, which keep their own licences ([NOTICE](src/trainer/data/corpus/NOTICE.md)).

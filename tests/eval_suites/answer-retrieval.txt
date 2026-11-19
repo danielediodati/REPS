@@ -1,0 +1,20 @@
+exit 0
+answer set version 4 on corpus version 1: words on in memory, reps-corpus-words-v1 on in memory, top 5
+
+retrieval
+                  recall         not run    
+heels recall        ok              -       
+depth recall        ok              -       
+
+MRR: 1.00
+p95 retrieval: 0.00s over 2 searches
+
+italian on english: 1 row, no bar
+  recall: 1 of 1 -- 100% [21%, 100%]
+  MRR: 1.00
+
+rows kept in <tmp>/records/retrieval-reps-corpus-words-v1.json
+
+2 of 2 runs held what their row declares -- 100%
+  recall: 2 of 2 -- 100% [34%, 100%], the bar is 80%
+cost: 0 tool calls, 0 tokens in, 0 out

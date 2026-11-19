@@ -10,6 +10,7 @@ decides how a person should read it.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import sqlite3
@@ -29,6 +30,9 @@ from trainer import (
     __version__,
     adapt_evaluation,
     adapt_set,
+    answer_evaluation,
+    answer_set,
+    corpus,
     demo,
     eval_runner,
     eval_set,
@@ -39,6 +43,7 @@ from trainer import (
     onboarding_evaluation,
     onboarding_set,
     plan,
+    retrieval,
     supervise_evaluation,
     supervise_set,
     tools,
@@ -91,6 +96,8 @@ def reported() -> Iterator[None]:
         raise click.ClickException(f"the reference set is unusable: {error}") from error
     except log_set.LogSetError as error:
         raise click.ClickException(f"the log set is unusable: {error}") from error
+    except eval_set.SetError as error:
+        raise click.ClickException(str(error)) from error
     except residue.ResidueError as error:
         raise click.ClickException(f"the residue file is unusable: {error}") from error
     except graph.GraphError as error:
@@ -162,6 +169,11 @@ def reported() -> Iterator[None]:
     except models.ModelError as error:
         # The provider the graph runs on: a server nobody started, a model
         # nobody pulled, a backend nobody built. Each already carries its fix.
+        raise click.ClickException(str(error)) from error
+    except corpus.CorpusError as error:
+        raise click.ClickException(str(error)) from error
+    except retrieval.Unavailable as error:
+        # Ollama, the embedding model, Qdrant or the build: each names its fix.
         raise click.ClickException(str(error)) from error
     except bot.BotError as error:
         # The Telegram settings: a token nobody set, an owner id given as the
@@ -341,6 +353,139 @@ def db_snapshot() -> None:
         # The normal outcome, and the one worth naming: an unchanged file is
         # the evidence that the snapshot does not churn.
         click.echo("unchanged, nothing to commit")
+
+
+@main.group("corpus")
+def corpus_group() -> None:
+    """Fetch, cut and index the texts the entrance answers from."""
+
+
+@corpus_group.command("fetch")
+def corpus_fetch() -> None:
+    """Fetch the manifest's pinned texts and cut them into the committed chunks."""
+    directory = corpus.CORPUS_DIRECTORY
+    click.echo(f"corpus: {directory}")
+
+    def get(url: str) -> bytes:
+        click.echo(f"  fetching {url}")
+        return corpus.http_get(url)
+
+    with reported():
+        manifest = corpus.read_manifest(directory)
+        chunks = corpus.fetch(manifest, get)
+        changed = corpus.write(chunks, directory)
+
+    texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
+    click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {manifest.version}")
+    click.echo("written" if changed else "unchanged, nothing to commit")
+
+
+@corpus_group.command("refresh")
+def corpus_refresh() -> None:
+    """Cut the manifest's pins as the owner edited them into a new corpus version."""
+    directory = corpus.CORPUS_DIRECTORY
+    click.echo(f"corpus: {directory}")
+
+    def get(url: str) -> bytes:
+        click.echo(f"  fetching {url}")
+        return corpus.http_get(url)
+
+    with reported():
+        held = answer_set.load()
+        chunks = corpus.fetch(corpus.read_manifest(directory), get)
+        version = corpus.bump(directory)
+        corpus.write(chunks, directory)
+
+    texts = len({(chunk.source, chunk.language, chunk.title) for chunk in chunks})
+    click.echo(f"chunks: {len(chunks)}, texts: {texts}, corpus version: {version}")
+    lost = answer_set.lost(held, chunks)
+    if lost:
+        click.echo(f"lost their quote: {', '.join(lost)}")
+        click.echo(f"  relabel or drop each in {answer_set.path()}, then `trainer corpus settle`")
+    else:
+        click.echo(f"every row of answer set version {held.version} keeps its quote: `trainer corpus settle`")
+    click.echo("next: `trainer corpus build` to index it")
+
+
+@corpus_group.command("settle")
+def corpus_settle() -> None:
+    """Move the answer set onto the corpus version, once every row finds its quote."""
+    with reported():
+        version = corpus.read_manifest().version
+        held = answer_set.load()
+        if held.corpus == version:
+            click.echo(f"answer set version {held.version} is already on corpus version {version}")
+            return
+        if held.corpus > version:
+            raise click.ClickException(
+                f"answer set version {held.version} was labelled on corpus version {held.corpus}, newer "
+                f"than the corpus here, corpus version {version}; settle it only onto a refreshed corpus"
+            )
+        settled = answer_set.settle(version, corpus.read_chunks())
+    click.echo(f"settled: answer set version {settled.version} on corpus version {settled.corpus}")
+
+
+@corpus_group.command("build")
+def corpus_build() -> None:
+    """Embed the committed chunks on Ollama into Qdrant, at the corpus's version."""
+    with reported():
+        search = retrieval.served()
+        click.echo(f"building: {search.described}")
+        tenths: set[int] = set()
+
+        def progress(done: int, total: int) -> None:
+            tenth = done * 10 // total
+            if tenth not in tenths:
+                tenths.add(tenth)
+                click.echo(f"  embedded {done}/{total}")
+
+        search.build(progress)
+        search.check()
+    click.echo(f"built: {len(search.chunks)} passages, corpus version {search.version}")
+
+
+@main.group("judge")
+def judge_group() -> None:
+    """The model that reads faithfulness and relevance, held to its own bar first."""
+
+
+@judge_group.command("calibrate")
+@click.option("--model", "named", default=None, help="The OpenRouter model to calibrate; the roster's judge by default.")
+@click.option("--records", type=click.Path(path_type=Path), default=None, help="Where each verdict is written as JSON.")
+def judge_calibrate(named: str | None, records: Path | None) -> None:
+    """Read the frozen calibration set with one judge: planted errors caught, real replies agreed, cost.
+
+    Reaches a provider and spends money: ask before running it.
+    """
+    from trainer import answer_judge
+    from trainer.coach import models
+
+    named = named or models.JUDGE.model
+    with reported():
+        calibration = answer_judge.load()
+        judge = answer_judge.Judge(models.openrouter_model(named, host=""))
+        texts = answer_judge.passages()
+        click.echo(f"judge {named} on calibration set {calibration.version} (answer set {calibration.answer_set})")
+        verdicts: dict[str, answer_judge.Verdict] = {}
+        for n, one in enumerate(calibration.replies, 1):
+            verdicts[one.reply.id] = judge.judge(one.reply, texts)
+            if n % 5 == 0:
+                click.echo(f"  read {n}/{len(calibration.replies)}, ${judge.dollars:.4f}")
+        reading = answer_judge.read(calibration, verdicts)
+    if records:
+        records.mkdir(parents=True, exist_ok=True)
+        (records / f"judge-{named.replace('/', '_')}.json").write_text(
+            json.dumps({k: dataclasses.asdict(v) for k, v in verdicts.items()}, indent=1, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    t = reading.thresholds
+    click.echo(f"thresholds: faithful at {t.faithful:.2f}, relevant at {t.relevant:.2f}")
+    click.echo(f"real agreed: {reading.agreed} of {reading.real} (bar {answer_judge.AGREED_BAR})")
+    click.echo(f"planted caught: {reading.caught} of {reading.planted} (bar {answer_judge.CAUGHT_BAR})")
+    for line in reading.disagreements:
+        click.echo(f"  {line}".encode("ascii", "replace").decode("ascii"))
+    click.echo(f"cost: ${reading.dollars:.4f}")
+    click.echo("clears the bar" if reading.clears else "does not clear the bar")
 
 
 @main.group()
@@ -603,12 +748,13 @@ def catalog_command(
             click.echo(f"showing {shown}")
 
 
-PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE = (
+PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE, ANSWER_SUITE = (
     "plan",
     "log",
     "onboard",
     "adapt",
     "supervise",
+    "answer",
 )
 """The two measurements, under one command.
 
@@ -630,6 +776,7 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
     ONBOARD_SUITE: lambda _: onboarding_evaluation.Onboard(onboarding_set.load()),
     ADAPT_SUITE: lambda _: adapt_evaluation.Adapt(adapt_set.load()),
     SUPERVISE_SUITE: lambda _: supervise_evaluation.Supervise(supervise_set.load()),
+    ANSWER_SUITE: lambda _: answer_evaluation.Answer(answer_set.load(), retrieval.current()),
 }
 """Each suite, built from its set; a set that cannot be read is refused here, before the provider."""
 
@@ -638,23 +785,23 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
 @click.option(
     "--suite",
     "suite",
-    type=click.Choice((PLAN_SUITE, LOG_SUITE, ONBOARD_SUITE, ADAPT_SUITE, SUPERVISE_SUITE)),
+    type=click.Choice(tuple(SUITES)),
     default=PLAN_SUITE,
     show_default=True,
     help="Which measurement to run: the six planning situations, the "
     "logging set's thirty hand-written reports, the onboarding set's "
-    "scripted users, the adaptation set's requests, or the supervisor's "
-    "histories.",
+    "scripted users, the adaptation set's requests, the supervisor's "
+    "histories, or the answer set's questions.",
 )
 @click.option(
     "--repetitions",
     "repetitions",
     metavar="N",
     type=click.IntRange(min=1),
-    default=eval_runner.REPETITIONS,
-    show_default=True,
+    default=None,
     help="How many times each situation or report runs. A model is a "
-    "distribution, so one run measures nothing.",
+    f"distribution, so one run measures little: {eval_runner.REPETITIONS} by "
+    "default, one for the answer suite, whose rows are many.",
 )
 @click.option(
     "--only",
@@ -682,12 +829,30 @@ SUITES: dict[str, Callable[[sqlite3.Connection], eval_runner.Suite[Any, Any]]] =
     show_default=True,
     help="Tool calls each run may make before it is asked to emit anyway.",
 )
+@click.option(
+    "--retrieval-only",
+    "retrieval_only",
+    is_flag=True,
+    help="With --suite answer: search each covered question and report "
+    "Recall@5, MRR and p95 retrieval time, running no chat model, at $0.",
+)
+@click.option(
+    "--against",
+    "against",
+    metavar="FILE",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="With --retrieval-only: compare recall row by row with the earlier "
+    "pass whose rows were kept in FILE, the difference with its 95% interval.",
+)
 def eval_command(
     suite: str,
-    repetitions: int,
+    repetitions: int | None,
     only: tuple[str, ...],
     records: Path,
     call_budget: int,
+    retrieval_only: bool,
+    against: Path | None,
 ) -> None:
     """Run a measurement against the real model, and check it by code.
 
@@ -715,7 +880,13 @@ def eval_command(
     copy, directs the next mesocycle on the supervisor's model, plans it on the
     planner's, and holds both to the row and to what the direction varies.
 
-    No model judges another model's output in any of them.
+    `--suite answer` searches each of the answer set's questions and asks it
+    of the entrance, then holds in code the retrieval, the quotes, the *not
+    covered* reply and the triage boundary; the roster's judge reads each
+    cited reply for faithfulness and relevance. With `--retrieval-only` it
+    runs no chat model at all.
+
+    Only the answer suite's judge reads another model's output (ADR-0018).
 
     **This is the one command in the project that reaches a provider**, and
     the only one that spends money. `pytest` never runs it: the suite has no
@@ -725,15 +896,26 @@ def eval_command(
     The plan suite's bar is 100%; the others' are the ones
     their sets declare. The command exits non-zero below any of them.
     """
+    if retrieval_only and suite != ANSWER_SUITE:
+        raise click.UsageError("--retrieval-only measures the answer suite; add --suite answer")
+    if against is not None and not retrieval_only:
+        raise click.UsageError("--against compares retrieval-only passes; add --retrieval-only")
     with _opened() as connection:
         _require_enrichment(connection)
         with reported():
             try:
+                built = (
+                    answer_evaluation.Answer(
+                        answer_set.load(), retrieval.current(), retrieval_only=True, against=against
+                    )
+                    if retrieval_only
+                    else SUITES[suite](connection)
+                )
                 lines, report = eval_runner.run(
-                    SUITES[suite](connection),
+                    built,
                     connection,
                     only=only,
-                    repetitions=repetitions,
+                    repetitions=repetitions if repetitions is not None else built.repetitions,
                     records=records,
                     budget=call_budget,
                 )
@@ -783,7 +965,9 @@ def bot_command() -> None:
     Each node answers on its own model, all of them on OpenRouter.
 
     Everything the bot needs is checked before it starts: the OpenRouter key
-    and each model's listing, and the token, with Telegram.
+    and each model's listing, and the token, with Telegram. The sources the
+    entrance answers from are checked too, and named when not ready, but the
+    bot starts without them.
 
     What happens then goes to a rotating log in the home, never to the token or
     the owner id, and it is the file the chat names when a run cannot start or
@@ -801,6 +985,12 @@ def bot_command() -> None:
         models.ready_all(cast)
         on = cast["planner"]
         name = bot.identified(declared)
+        # Read, never required: without the sources everything else still works.
+        try:
+            sources = retrieval.served()
+            missing: Exception | None = sources.state()
+        except corpus.CorpusError as unreadable:
+            missing = unreadable
 
         # Opened before the block is printed, not after: a block that says
         # where the checkpoints go, immediately before saying they cannot go
@@ -812,6 +1002,10 @@ def bot_command() -> None:
             click.echo(f"entrance:    {cast['entrance'].described}")
             click.echo(f"onboarding:  {cast['onboarding'].described}")
             click.echo(f"supervisor:  {cast['supervisor'].described}")
+            click.echo(
+                f"sources:     not ready: {missing}" if missing
+                else f"sources:     corpus version {sources.version} on {sources.embedder.model}"
+            )
             click.echo(f"checkpoints: {checkpoints.checkpoints_path()}")
             click.echo(f"memory:      {conclusions.store_path()}")
             click.echo(f"log:         {log_file}")

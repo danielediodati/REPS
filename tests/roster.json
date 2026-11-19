@@ -5,22 +5,19 @@
     "provider": {
      "allow_fallbacks": false,
      "order": [
-      "parasail"
+      "openai"
      ],
      "require_parameters": true
-    },
-    "reasoning": {
-     "effort": "high"
     },
     "usage": {
      "include": true
     }
    },
-   "host": "parasail",
-   "model": "deepseek/deepseek-v4-flash",
-   "name": "deepseek/deepseek-v4-flash",
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
    "provider": "openrouter",
-   "reasoning": "high",
+   "reasoning": "",
    "reasoning_setting": "ENTRANCE_REASONING",
    "setting": "ENTRANCE_MODEL"
   },
@@ -122,24 +119,17 @@
   "entrance": {
    "extra_body": {
     "provider": {
-     "allow_fallbacks": false,
-     "order": [
-      "parasail"
-     ],
      "require_parameters": true
-    },
-    "reasoning": {
-     "effort": "high"
     },
     "usage": {
      "include": true
     }
    },
-   "host": "parasail",
+   "host": "",
    "model": "deepseek/deepseek-v4-flash",
    "name": "deepseek/deepseek-v4-flash",
    "provider": "openrouter",
-   "reasoning": "high",
+   "reasoning": "",
    "reasoning_setting": "ENTRANCE_REASONING",
    "setting": "OPENROUTER_MODEL"
   },
@@ -323,18 +313,15 @@
      ],
      "require_parameters": true
     },
-    "reasoning": {
-     "effort": "high"
-    },
     "usage": {
      "include": true
     }
    },
    "host": "everyone",
-   "model": "deepseek/deepseek-v4-flash",
-   "name": "deepseek/deepseek-v4-flash",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
    "provider": "openrouter",
-   "reasoning": "high",
+   "reasoning": "",
    "reasoning_setting": "ENTRANCE_REASONING",
    "setting": "ENTRANCE_MODEL"
   },
@@ -525,7 +512,7 @@
     "provider": {
      "allow_fallbacks": false,
      "order": [
-      "parasail"
+      "openai"
      ],
      "require_parameters": true
     },
@@ -536,9 +523,9 @@
      "include": true
     }
    },
-   "host": "parasail",
-   "model": "deepseek/deepseek-v4-flash",
-   "name": "deepseek/deepseek-v4-flash",
+   "host": "openai",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
    "provider": "openrouter",
    "reasoning": "medium",
    "reasoning_setting": "ENTRANCE_REASONING",
@@ -651,18 +638,15 @@
      ],
      "require_parameters": true
     },
-    "reasoning": {
-     "effort": "high"
-    },
     "usage": {
      "include": true
     }
    },
    "host": "host-entrance",
-   "model": "deepseek/deepseek-v4-flash",
-   "name": "deepseek/deepseek-v4-flash",
+   "model": "openai/gpt-6-luna",
+   "name": "openai/gpt-6-luna",
    "provider": "openrouter",
-   "reasoning": "high",
+   "reasoning": "",
    "reasoning_setting": "ENTRANCE_REASONING",
    "setting": "ENTRANCE_MODEL"
   },

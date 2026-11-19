@@ -8,3 +8,6 @@ src/trainer/data/free-exercise-db/** -text
 # `trainer db snapshot` would then rewrite the whole file -- the churn the
 # snapshot exists to avoid.
 snapshots/*.md text eol=lf
+
+# The corpus is written with LF, and its chunks are quoted verbatim.
+src/trainer/data/corpus/** text eol=lf

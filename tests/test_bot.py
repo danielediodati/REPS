@@ -10,6 +10,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import re
 import sqlite3
 import threading
 import types
@@ -1235,6 +1236,11 @@ def update_of(
     return Update(update_id=1, message=message)
 
 
+def unescaped(marked: str) -> str:
+    """A MarkdownV2 line with its escaping undone, as the owner sees it."""
+    return re.sub(r"\\(.)", r"\1", marked)
+
+
 class Sent:
     """The context a handler is passed, collecting what would have been sent.
 
@@ -1244,6 +1250,9 @@ class Sent:
 
     def __init__(self) -> None:
         self.lines: list[tuple[int, str]] = []
+        """What the owner reads, the escaping undone."""
+        self.wire: list[str] = []
+        """A line as Telegram receives it."""
         self.offers: list[tuple[int, str, Any]] = []
         self.drafts: list[tuple[int, int, str]] = []
         self.modes: list[str | None] = []
@@ -1260,7 +1269,8 @@ class Sent:
         parse_mode: str | None = None,
     ) -> None:
         if reply_markup is None:
-            self.lines.append((chat_id, text))
+            self.wire.append(text)
+            self.lines.append((chat_id, unescaped(text) if parse_mode == bot.PARSE_MODE else text))
         else:
             self.offers.append((chat_id, text, reply_markup))
         self.modes.append(parse_mode)
@@ -1955,6 +1965,19 @@ def test_a_plan_is_sent_in_the_dialect_it_was_written_in() -> None:
     offer = bot._offering(cast(Any, sent), CHAT)
     asyncio.run(finished(offer("il piano", [("ok|chat:1|abc", "Va bene")])))
 
+    assert sent.modes == [bot.PARSE_MODE]
+
+
+def test_a_line_is_sent_escaped_in_the_plans_dialect() -> None:
+    """A model's sentence full of dots, hyphens and parentheses reaches the
+    owner as written, in the parse mode a cited answer will need."""
+    sent = Sent()
+
+    say = bot._saying(cast(Any, sent), CHAT)
+    asyncio.run(finished(say("3-4 serie (non di più). *Piano*!")))
+
+    assert sent.wire == ["3\\-4 serie \\(non di più\\)\\. \\*Piano\\*\\!"]
+    assert sent.lines == [(CHAT, "3-4 serie (non di più). *Piano*!")]
     assert sent.modes == [bot.PARSE_MODE]
 
 
@@ -3410,3 +3433,57 @@ def test_a_tool_call_written_as_text_never_reaches_the_chat() -> None:
 
     assert once.said == [SAYS]
     assert twice.said == [SAID.chat.failed]
+
+
+# -- an answer from sources ----------------------------------------------------
+
+QUOTED_SQUAT = {
+    "quote": "the trunk braced\nas the hips descend.",
+    "source": "wikipedia",
+    "language": "en",
+    "title": "Squat (exercise)",
+    "section": "Form",
+    "link": "https://en.wikipedia.org/w/index.php?title=Squat_(exercise)&oldid=7",
+}
+QUOTED_PLANK = {
+    "quote": "Tieni il tronco rigido.",
+    "source": "wger",
+    "language": "it",
+    "title": "Plank",
+    "section": "",
+    "link": "https://wger.de/exercise/1",
+}
+
+
+def test_a_cited_answer_quotes_each_passage_under_a_named_link() -> None:
+    """The answer first, each quote in an expandable blockquote, the source a text
+    link named for it; the language shown only when it is not the chat's."""
+    text = bot.sourced("Tronco rigido. Sì!", [QUOTED_SQUAT, QUOTED_PLANK], language.ITALIAN)
+
+    assert text == (
+        "Tronco rigido\. Sì\!\n"
+        "**>the trunk braced\n"
+        ">as the hips descend\.||\n"
+        "— [Wikipedia \(en\), «Squat \(exercise\)» § Form]"
+        "(https://en.wikipedia.org/w/index.php?title=Squat_(exercise\)&oldid=7)\n"
+        "**>Tieni il tronco rigido\.||\n"
+        "— [wger, «Plank»](https://wger.de/exercise/1)"
+    )
+
+
+def test_a_source_is_named_from_its_chunk() -> None:
+    army = {**QUOTED_PLANK, "source": "us-army", "language": "en", "title": "ATP 7-22.02", "section": "Chapter 3"}
+
+    text = bot.sourced("Ok.", [army], language.ENGLISH)
+
+    assert "[US Army, «ATP 7\-22\.02» § Chapter 3]" in text
+
+
+def test_a_cited_answer_goes_out_with_its_markup_and_an_uncited_one_escaped_whole() -> None:
+    watched = Channels()
+
+    asyncio.run(finished(bot._spoken({"answer": "Sì.", "cited": [QUOTED_PLANK]}, "t", watched.chat)))
+    asyncio.run(finished(bot._spoken({"answer": "Non è nei miei testi.\nCopro tecnica.", "cited": []}, "t", watched.chat)))
+
+    assert watched.offers == [(bot.sourced("Sì.", [QUOTED_PLANK], language.ITALIAN), [])]
+    assert watched.said == ["Non è nei miei testi.\nCopro tecnica."]

@@ -77,7 +77,7 @@ NODES: dict[Node, Seat] = {
         "ENTRANCE_MODEL",
         "ENTRANCE_REASONING",
         "ENTRANCE_HOST",
-        Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
+        Choice("openai/gpt-6-luna", "", "openai"),
     ),
     "onboarding": Seat(
         "ONBOARDING_MODEL",
@@ -94,6 +94,9 @@ NODES: dict[Node, Seat] = {
     ),
 }
 """Every node the coach runs, by name: the one place a node's model is configured (ADR-0011)."""
+
+JUDGE = Choice("anthropic/claude-haiku-4.5", "", "")
+"""The answer judge as calibrated: default effort, OpenRouter's routing (ADR-0018)."""
 
 NO_OPENROUTER_CREDENTIALS = (
     f"no OpenRouter credentials: set {OPENROUTER_KEY_ENV} in .env (copy "

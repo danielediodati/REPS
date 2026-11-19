@@ -13,6 +13,8 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter
 
+from trainer import corpus, retrieval
+
 from trainer.engine import (
     admissible,
     budget,
@@ -565,6 +567,39 @@ def mesocycle_volume(mesocycle_id: int) -> list[dict[str, Any]]:
     return [asdict(one) for one in found]
 
 
+def search_sources(question: str) -> dict[str, Any]:
+    """Search openly licensed texts on how exercises are done and how injuries are prevented.
+
+    The texts are Wikipedia in English and Italian, the US Army's ATP 7-22.02,
+    wger's exercise descriptions and MedlinePlus. `question` is what they
+    asked, in their words and language: a passage in another language is
+    still found.
+
+    `passages` are the nearest, nearest first, each with its id, source,
+    language, title, section, link and text. They are the only thing a
+    technique or prevention answer may stand on. When they do not answer the
+    question, the texts do not cover it.
+    """
+    try:
+        found = retrieval.current().search(question)
+    except (retrieval.Unavailable, corpus.CorpusError) as missing:
+        raise ToolFailure(f"the sources are unavailable: {missing}") from missing
+    return {
+        "passages": [
+            {
+                "id": one.chunk.id,
+                "source": one.chunk.source,
+                "language": one.chunk.language,
+                "title": one.chunk.title,
+                "section": one.chunk.section,
+                "link": one.chunk.link,
+                "text": one.chunk.text,
+            }
+            for one in found
+        ]
+    }
+
+
 TOOLS: tuple[Callable[..., Any], ...] = (
     admissible_set,
     remaining_budget,
@@ -581,6 +616,7 @@ TOOLS: tuple[Callable[..., Any], ...] = (
     mesocycle_history,
     mesocycle_held,
     mesocycle_volume,
+    search_sources,
 )
 """The surface, enumerated once.
 

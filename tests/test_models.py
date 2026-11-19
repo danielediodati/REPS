@@ -730,7 +730,7 @@ def test_the_default_backend_starts_every_node_on_the_key_alone(
             choice.model,
             choice.effort,
         )
-        assert built.extra_body["reasoning"] == {"effort": choice.effort}
+        assert built.extra_body.get("reasoning") == ({"effort": choice.effort} if choice.effort else None)
         assert built.extra_body["provider"]["order"] == [choice.host]
         assert built.extra_body["provider"]["allow_fallbacks"] is False
 
@@ -738,7 +738,7 @@ def test_the_default_backend_starts_every_node_on_the_key_alone(
 def test_the_choices_are_the_ones_adr_0011_records() -> None:
     assert models.NODES["planner"].choice == models.Choice("anthropic/claude-haiku-4.5", "none", "anthropic")
     assert models.NODES["logger"].choice == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
-    assert models.NODES["entrance"].choice == models.Choice("deepseek/deepseek-v4-flash", "high", "parasail")
+    assert models.NODES["entrance"].choice == models.Choice("openai/gpt-6-luna", "", "openai")
     assert models.NODES["supervisor"].choice == models.Choice("openai/gpt-6-luna", "", "openai")
 
 
