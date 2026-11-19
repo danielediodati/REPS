@@ -121,7 +121,7 @@ Each node runs the cheapest configuration that cleared its suite's bar ([ADR-001
 | planner | `anthropic/claude-haiku-4.5`, none, Anthropic | 18 of 18 mesocycles |
 | logger | `deepseek/deepseek-v4-flash`, high, Parasail | 83% / 92% against 80% / 60% |
 | onboarding | `deepseek/deepseek-v4-flash`, high, Parasail | 100% held, 96% on time and 100% remembered against 80% |
-| entrance | `deepseek/deepseek-v4-flash`, high, Parasail | routed 84% against 80%, plans held 96% against 90% |
+| entrance | `openai/gpt-6-luna`, default, OpenAI | routed 93% against 80%, plans held 100% against 90%; answers 81% faithful |
 | supervisor | `openai/gpt-6-luna`, default, OpenAI | held 88% against 80%, followed 100% against 80% |
 
 `PLANNER_MODEL`, `LOGGER_MODEL`, `ONBOARDING_MODEL`, `SUPERVISOR_MODEL` and `ENTRANCE_MODEL` give a node another model; `_REASONING` another effort (`none`, `low`, `medium`, `high`), checked against what the model takes; `_HOST` another host. A missing key, an unreachable OpenRouter or a model it does not route to is reported before the run starts, with the fix.

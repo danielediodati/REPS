@@ -12,7 +12,7 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
    | Planner | `anthropic/claude-haiku-4.5` | none | `anthropic` | plan suite, 100% | ~0.13 a mesocycle | ~47 |
    | Logger | `deepseek/deepseek-v4-flash` | high | `parasail` | log suite, 80% / 60% | ~0.003 a report | 8–200 |
    | Onboarding | `deepseek/deepseek-v4-flash` | high | `parasail` | onboard suite, 100% held / 80% on time, remembered, routed | ~0.0015 an onboarding | 3–150 |
-   | Entrance | `deepseek/deepseek-v4-flash` | high | `parasail` | adapt suite, 80% routed / 90% held | 0.0003–0.001 a turn | 1–6 |
+   | Entrance | `openai/gpt-6-luna` | default | `openai` | adapt suite, 80% routed / 90% held; answer suite's bars | 0.0001–0.001 a turn | 2–9 |
    | Supervisor | `openai/gpt-6-luna` | default | `openai` | supervise suite, 80% held / 80% followed | ~0.0015 a direction | ~20 |
 
 3. **The default provider is OpenRouter.** `LLM_BACKEND` empty is `openrouter`, so the key alone runs every choice. Ollama and Groq stay selectable.
@@ -80,10 +80,12 @@ Session 12 measured models by reasoning effort and host on OpenRouter, against t
 | `openai/gpt-oss-120b` medium, Cerebras | 16 / 19 | 9 / 10 | 0.001–0.003 | 0–2 |
 | **`deepseek/deepseek-v4-flash` high, Parasail** | **17 / 19** | **11 / 11** | **0.0003–0.001** | **1–6** |
 | `anthropic/claude-haiku-4.5` none, Anthropic | 9 / 19 | 4 / 4 | 0.006–0.008 | 1–3 |
+| **`openai/gpt-6-luna` default, OpenAI** (2026-11-19, 29 messages) | **27 / 29** | **11 / 11** | **0.0001–0.0007** | **2–4** |
 
 - Haiku asks «solo oggi o d'ora in poi?» even after «oggi», and started `set_up` and `change_declaration` for this workout.
 - All four sent «oggi vorrei fare trazioni» to `todays_workout`, gpt-oss-120b also «oggi stacchi rumeni».
 - Plans held differ because the entrance decides which messages get planned; the planner is the same in every row.
+- deepseek's entrance read 55% faithful on the answer suite and luna 81%, at a third of the cost (ticket 16.1.9); luna replaced it, and its routing was measured at 1 rep.
 - The closing pass on deepseek, 3 reps (2026-10-03): routed 48 / 57 (84%), plans 30 / 31 (96%), $1.22, 14 s a run.
 - With a plan waiting on an answer (ticket 15c.1, 2026-10-08), 29 messages at 3 reps: routed 77 / 87 (88%), the ten new rows 30 / 30, plans 29 / 30, $1.26. The note that a plan waits had to sit just before the user's message: in the system prompt, a bare «no» read as a greeting.
 

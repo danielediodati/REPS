@@ -77,7 +77,7 @@ NODES: dict[Node, Seat] = {
         "ENTRANCE_MODEL",
         "ENTRANCE_REASONING",
         "ENTRANCE_HOST",
-        Choice("deepseek/deepseek-v4-flash", "high", "parasail"),
+        Choice("openai/gpt-6-luna", "", "openai"),
     ),
     "onboarding": Seat(
         "ONBOARDING_MODEL",

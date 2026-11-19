@@ -3892,7 +3892,8 @@ def test_bot_starts_on_the_key_and_telegram_alone(
     assert result.exit_code == 0, result.output
     assert "provider:    openrouter" in result.output
     for choice in chosen:
-        assert f"{choice.model} at {choice.effort} effort via {choice.host}" in result.output
+        effort = f" at {choice.effort} effort" if choice.effort else ""
+        assert f"{choice.model}{effort} via {choice.host}" in result.output
     assert result.output.isascii()
 
 

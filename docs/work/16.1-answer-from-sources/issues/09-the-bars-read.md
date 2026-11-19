@@ -56,3 +56,4 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 
 - All ten covered rows luna answered *not covered* had no labelled passage in the top 5: what misses there is retrieval, not the answer.
 - Luna is not measured on the entrance's routing (`--suite adapt`, ADR-0011); deepseek is.
+- The owner chose luna. Its routing, `--suite adapt`, 1 rep, 2026-11-19 ($0.49): routed 27 of 29 (93%, deepseek's closing pass 88%), plans held 11 of 11. The entrance now runs on `openai/gpt-6-luna` (ADR-0011). The ticket has spent $1.58. Still missing: faithful 81%, verbatim-and-labelled 88%, covered answered 84%, the last on rows whose labelled passage retrieval does not return.
