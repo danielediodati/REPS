@@ -35,15 +35,8 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 - exercise photos: a plan in Telegram shows each exercise's pictures; an exercise without is sent without; nothing is generated. Not free-exercise-db's, which were taken from other sites; wger's, licensed per image, are the source to check first.
 
 **After 1.0.0**:
-- progression and return from a break (the mesocycle's scheme, ramp-in by dates, the methodology document); until then a cycle repeats with the last load shown and the user raises it;
-- Level 2, a simulated user with hidden truths;
-- the drift guard: observations pointing at a measure, an engine constraint when one is ignored twice (TRAINER.md before ADR-0014);
-- the memory gate: the supervisor marking a conclusion suspect or retiring it, e.g. *«this suits me»* after six weeks of falling volume;
-- diagnosed pathologies;
-- an on-device feature, if a phone model ever earns one.
 - secrets out of `.env`: one file per key in a directory under `TRAINER_HOME` (Docker's `/run/secrets` layout), the environment still winning; no OS keychain, which differs per OS and is absent in a container;
 - a Docker image and a compose file for the bot, the keys passed as Docker secrets.
-- the planner's `emit` read from the cache (ADR-0011, 14.5: $0.015 of a $0.052 mesocycle). Keeping the tools and setting `tool_choice: "none"` recovers only tools and system, ~$0.004, since `tool_choice` invalidates the messages; the history needs the emission as a call to a tool already in the list.
 
 ## Risks
 
