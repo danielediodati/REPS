@@ -57,3 +57,16 @@ Spec: [16.1](../spec.md). Map: [answer from sources](../../answer-from-sources/m
 - All ten covered rows luna answered *not covered* had no labelled passage in the top 5: what misses there is retrieval, not the answer.
 - Luna is not measured on the entrance's routing (`--suite adapt`, ADR-0011); deepseek is.
 - The owner chose luna. Its routing, `--suite adapt`, 1 rep, 2026-11-19 ($0.49): routed 27 of 29 (93%, deepseek's closing pass 88%), plans held 11 of 11. The entrance now runs on `openai/gpt-6-luna` (ADR-0011). The ticket has spent $1.58. Still missing: faithful 81%, verbatim-and-labelled 88%, covered answered 84%, the last on rows whose labelled passage retrieval does not return.
+- The last trial, the owner's: luna reading the top 10 and the top 15 passages, 2026-11-19, nine blocks each, one rep ($0.70; the ticket has spent $2.28). Recall@k from one retrieval-only pass at top 20 ($0): 5 77%, 8 82%, 10 84%, 15 90%, 20 92%.
+
+| Bar | Top 5 | Top 10 ($0.355) | Top 15 ($0.340) | Bar |
+|---|---|---|---|---|
+| Recall | 47 of 62, 76% [64, 85] | 53 of 62, 85% [75, 92] | 56 of 62, 90% [80, 95] | none |
+| Verbatim and labelled | 53 of 60, 88% [78, 94] | 42 of 61, 69% [56, 79] | 43 of 58, 74% [62, 84] | 100% |
+| Covered answered | 52 of 62, 84% [73, 91] | 56 of 62, 90% [80, 95] | 60 of 62, 97% [89, 99] | 90% |
+| Faithful | 42 of 52, 81% [68, 89] | 29 of 52, 56% [42, 68] | 30 of 50, 60% [46, 72] | 90% |
+| Relevant | 49 of 52, 94% [84, 98] | 52 of 52, 100% [93, 100] | 49 of 50, 98% [90, 100] | 85% |
+| Not covered | 17 of 18, 94% [74, 99] | 14 of 18, 78% [55, 91] | 16 of 18, 89% [67, 97] | 90% |
+| Triage | 10 of 10 | 10 of 10 | 10 of 10 | 90% |
+
+- More passages let the entrance answer more rows and hold to them less: no top clears every bar.
