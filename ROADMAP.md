@@ -36,8 +36,6 @@ The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and t
 
 Spec: [spec](docs/work/16.1-answer-from-sources/spec.md)
 
-9. **The bars read** - [ticket](docs/work/16.1-answer-from-sources/issues/09-the-bars-read.md)
-
 - **done** 16.2 `a-wider-corpus`: the entrance answers from US military and HHS guides, open-access reviews and more Wikipedia beside the first sources, on corpus version 2
 
 ## Later

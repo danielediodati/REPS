@@ -24,3 +24,21 @@ Until milestone 16 no model judged another model's output: every check in the su
 | `openai/gpt-oss-120b`, `qwen/qwen3-32b` | Did not clear: 24 and 27 of 30 agreed, 13 and 8 of 15 caught. |
 
 `anthropic/claude-haiku-4.5` clears on calibration set 2: 28 of 30 agreed, 15 of 15 caught, both thresholds at 1.0, about $0.14 a calibration.
+
+## Read in ticket 16.1.9
+
+The answer suite's bars, set 4 on corpus 2, one rep, the entrance on `openai/gpt-6-luna` with the prompt held to its quotes, top 5 (2026-11-19, $0.17 a pass):
+
+| Bar | Read | Bar |
+|---|---|---|
+| Recall@5 | 47 of 62, 76% [64, 85] | none |
+| Verbatim and labelled | 53 of 60, 88% [78, 94] | 100% |
+| Covered answered | 52 of 62, 84% [73, 91] | 90% |
+| Faithful | 42 of 52, 81% [68, 89] | 90% |
+| Relevant | 49 of 52, 94% [84, 98] | 85% |
+| Not covered | 17 of 18, 94% [74, 99] | 90% |
+| Triage | 10 of 10, 100% [72, 100] | 90% |
+
+- Three bars miss; the owner closed the milestone on them, bars and set untouched.
+- `deepseek/deepseek-v4-flash` high read 55% faithful on the same prompt. At threshold 1.00 one statement the judge does not find in the passage fails the row, often a paraphrase it carries.
+- Every quote is word for word; the labelled misses are passages the row does not label. Luna's covered rows answered *not covered* all lacked a labelled passage in the top 5.

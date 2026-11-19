@@ -22,4 +22,5 @@ Milestone 16 gives the entrance a retrieval tool over a corpus of openly license
 - The home is still the one directory to copy. The vectors are rebuilt from the committed chunks at $0.
 - Hybrid search (dense, sparse, RRF) stays possible in the same store; measured once, it gained nothing.
 - Recall@5 stops at 42 of 61 covered rows, the passage being in the top 20 for 54: the answers' bars, not retrieval's, decide whether the replies hold.
+- More passages to the entrance (ticket 16.1.9, luna, one rep): top 10 and top 15 raised covered answered from 84% to 90% and 97%, but faithful fell from 81% to 56% and 60% and verbatim-and-labelled from 88% to 69% and 74%. Top 5 stays.
 - **Amends ADR-0015**: Ollama returns, for embeddings and the question's translation. Milestone 17's ADR extends it to chat nodes.
