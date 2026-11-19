@@ -25,15 +25,9 @@ The order things get built in. [TRAINER.md](TRAINER.md) is the design; [ADR-0004
 | 15 - The supervisor | `0.15.0` | the supervisor (ADR-0014) and `variation.md`: the next mesocycle arrives with its reason; the demo's home |
 | 15b - A message mid-plan | `1.0.0rc1` | a message mid-plan is read: one suite runner, one negotiation for the bot and the CLI, one roster of node models, the front page |
 | 15c - Portfolio-ready | `1.0.0` | portfolio-ready: a plan answered in words, the chat in Telegram's language and one progress line, the demo recorded with its GIF, the repository public |
+| 16 - Answer from sources | `1.1.0` | the entrance answers technique and prevention from openly licensed texts, quoting its passage under a link, or says they do not cover it; the `answer` suite with a calibrated judge (ADR-0017, ADR-0018) |
 
 The details are in `git show v<version>`. Milestones 1-5 predate ADR-0004, and their agent layer is what 6-9 replace.
-
-## Milestone 16 - Answer from sources
-
-**Goal**: the entrance answers a question on technique or injury prevention from a corpus of openly licensed texts, cites the passage, and says so when the corpus does not cover it; retrieval, faithfulness and refusal are measured. Charted in [the map](docs/work/answer-from-sources/map.md).
-
-- **done** 16.1 `answer-from-sources`: the entrance answers technique and prevention from a corpus, quoting its passage under a link, says when the corpus does not cover it, and the answer suite measures it with a calibrated judge
-- **done** 16.2 `a-wider-corpus`: the entrance answers from US military and HHS guides, open-access reviews and more Wikipedia beside the first sources, on corpus version 2
 
 ## Later
 
